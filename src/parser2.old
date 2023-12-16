@@ -1,0 +1,291 @@
+type NodeType = 'Number' | 'Symbol' | 'String' | 'Parens' | 'Invalid';
+
+interface SourceLocation {
+  line: number;
+  column: number;
+}
+type TokenPos = { token: string, location: SourceLocation }
+
+
+function isNumber(value: string): boolean {
+  return !isNaN(Number(value));
+}
+
+interface ParserGenerator {
+  beginChild(index: number, expr: TokenPos): void
+  beginLet(expr: TokenPos): void
+  endLet(expr: TokenPos): void
+  beginMeta(): void
+  endMeta(): void
+  beginOperator(expr: TokenPos): void
+  endOperator(expr: TokenPos): void
+  beginLetConst(expr: TokenPos): void
+  endLetConst(expr: TokenPos): void
+  
+  beginStatements(expr: TokenPos): void
+  endStatement(expr: TokenPos): void
+  endStatements(expr: TokenPos): void
+  endChild(): void
+  symbol(expr: TokenPos)
+  name(expr: TokenPos)
+  number(expr: TokenPos)
+}
+
+let allTokens: TokenPos[] = []
+let tokenId = 0
+function parse(tokenizer: Generator<TokenPos, void, unknown>, generator: ParserGenerator): void {
+
+  function nextToken() {
+    previous = currentToken?.value
+    currentToken = tokenizer.next();
+    allTokens.push(currentToken)
+    tokenId ++
+    return currentToken
+  }
+  
+  let previous;
+  let currentToken;
+  nextToken()
+
+  const expect = (str: string) => {
+    if (currentToken.value.token === str) return nextToken()
+    throw new Error(`Expected ${str} got ${currentToken.value.token}`)
+  }
+
+  const match = (str: string) => {
+    if (currentToken.value.token === str) return nextToken()
+    return false;
+  }
+
+  function parseSExpr(): void {
+
+    if (currentToken.done) {
+      return;
+    }
+    const { token, location } = currentToken.value;
+    
+
+    if (token === '(') {
+      console.log("(")
+      nextToken();
+      if (currentToken.done) return;
+      generator.beginChild(0, currentToken.value);
+      const token = currentToken.value.token;
+      
+      if (match('statements')) {
+        generator.beginStatements(currentToken.value)
+
+        while (!currentToken.done && currentToken.value.token !== ')') {
+          // console.log("Statement", currentToken)
+          parseSExpr();
+          generator.endStatement(currentToken.value!)
+          // console.log("after Statement", currentToken)
+        }
+        generator.endStatements(currentToken.value!)
+        expect(")")
+
+        
+      }
+      else if (match('let')) {
+        generator.beginLet(currentToken.value)
+
+        parseName();
+        generator.beginMeta()
+        parseSExpr();
+        generator.endMeta()
+        parseSExpr();
+        generator.endLet(currentToken.value!)
+        expect(")")
+
+      }
+      else if (match('+')) {
+        generator.beginOperator(currentToken.value);
+        const op = previous
+
+        parseSExpr();
+        parseSExpr();
+        expect(")")
+        
+        generator.endOperator(op);
+      } else if (match('letconst')) {
+
+        generator.beginMeta()
+        generator.beginLetConst(currentToken.value)
+        parseName();
+        parseSExpr();
+        generator.endLetConst(currentToken.value!)
+        generator.endMeta()
+        expect(")")
+
+      } else {
+        throw new Error(`Not found ${currentToken.value.token}`)
+      }
+      // nextToken();
+      // let childIndex = 0
+      // while (!currentToken.done && currentToken.value.token !== ')') {
+      //   parseSExpr(childIndex++);
+      // }
+      // nextToken();
+      
+      
+    } else {
+      const current = currentToken.value;
+      nextToken();
+      if (currentToken.done) return;
+      if (isNumber(token)) generator.number(current)
+      else generator.symbol(current);
+    }
+  }
+  const parseName = () => {
+    const current = currentToken.value;
+    if (!current) throw new Error()
+    if (current.token === '(' || isNumber(current.token)) throw new Error();
+    generator.name(current);
+    nextToken();
+  }
+
+  return parseSExpr();
+}
+
+function* tokenizeWithLocation(input: string): Generator<TokenPos, void, unknown> {
+  let currentToken = '';
+  let line = 1;
+  let column = 1;
+
+  for (let ch of input) {
+    if (ch === '\n') {
+      line++;
+      column = 1;
+      continue;
+    }
+
+    if (ch === '(' || ch === ')') {
+      if (currentToken) {
+        yield { token: currentToken, location: { line, column: column - currentToken.length } };
+        currentToken = '';
+      }
+      yield { token: ch, location: { line, column } };
+    } else if (ch === ' ') {
+      if (currentToken) {
+        yield { token: currentToken, location: { line, column: column - currentToken.length } };
+        currentToken = '';
+      }
+    } else {
+      currentToken += ch;
+    }
+    column++;
+  }
+
+  if (currentToken) {
+    yield { token: currentToken, location: { line, column: column - currentToken.length } };
+  }
+}
+
+
+let isSecondOrder = true;
+
+const stack: TokenPos[] = []
+const gen: ParserGenerator = {
+  beginChild: (index, tokenPos) => {
+    // const parent = stack[stack.length - 1];
+
+    // if (parent) {
+    //   if (parent.token === 'statement') {
+
+    //   } else if (parent.token === 'let') {
+    //     // if (index === 2) 
+    //   }
+    //   console.log("beginChild",parent?.token, index, tokenPos.token)
+    // }
+    // stack.push(tokenPos)
+  },
+  beginMeta: () => {
+    console.log('beginMeta');
+    isSecondOrder = false;
+  },
+  endMeta: () => {
+    console.log('endMeta');
+    isSecondOrder = true;
+  },
+  beginStatements: (tokenPos) => {
+    if (isSecondOrder) {
+      console.log("## pushqs", tokenId, printLocation(tokenPos.location))
+    }
+    // console.log('statements', tokenPos.token);
+  },
+  endStatement: (tokenPos) => {
+    if (isSecondOrder) {
+      console.log("## appendq", printLocation(tokenPos.location))
+      console.log("## pop", printLocation(tokenPos.location))
+    }
+  },
+  endStatements: (tokenPos) => {
+    if (isSecondOrder) {
+      console.log("## popqs", printLocation(tokenPos.location))
+    }
+  },
+  beginLet: (tokenPos) => {
+    // stack.push(tokenPos);
+    console.log('let', tokenPos.token, printLocation(tokenPos.location));
+  },
+  endLet: (tokenPos) => {
+    // stack.push(tokenPos);
+    console.log('## letast', printLocation(tokenPos.location));
+  },
+  beginLetConst: (tokenPos) => {
+    // stack.push(tokenPos);
+    console.log('let', tokenPos.token, printLocation(tokenPos.location));
+  },
+  endLetConst: (tokenPos) => {
+    // stack.push(tokenPos);
+    console.log('## letconst', printLocation(tokenPos.location));
+  },
+  beginOperator: (tokenPos) => {
+    console.log('operator', tokenPos.token, printLocation(tokenPos.location));
+  },
+  endOperator: (tokenPos) => {
+    if (isSecondOrder) {
+      console.log('## operatorast', tokenPos.token, 2, printLocation(tokenPos.location));
+    } else {
+      console.log('## operator', tokenPos.token, 2, printLocation(tokenPos.location));
+    }
+  },
+  endChild: () => {
+    // console.log('endChild');
+  },
+  number: ({ token, location }) => {
+    if (isSecondOrder) {
+      console.log(`## numberast  value: ${token}`, printLocation(location));
+    } else {
+      console.log('## number', token, printLocation(location));
+    }
+
+  },
+  symbol: ({ token, location }) => {
+    if (isSecondOrder) {
+      console.log('## bindingast', token, printLocation(location));
+    } else {
+      console.log('## binding', token, printLocation(location));
+    }
+    
+  },
+  name: ({ token, location }) => {
+    if (isSecondOrder) {
+      console.log('## nameast', token, printLocation(location));
+    } else {
+      console.log('## name', token, printLocation(location));
+    }
+  }
+   
+}
+const printLocation = (loc: SourceLocation) => {
+  return `${loc.line}:${loc.column}`
+}
+
+const input = `
+  (statements
+    (let x int (+ 3 2))
+    (letconst foo (+ 32 42))
+    )`;
+const tokenizer = tokenizeWithLocation(input);
+parse(tokenizer, gen);
