@@ -1,6 +1,7 @@
-import { functionTemplateTypeCheckAndCompile, runTopLevel } from "./compiler";
-import { Closure, DoubleType, ExternalFunction, FloatType, IntType, Scope, StringType, VoidType, compilerState, createScope, expectMap, pushSubCompilerState } from "./defs";
+import { functionTemplateTypeCheckAndCompileDef, runTopLevel } from "./compiler";
+import { Closure, DoubleType, ExternalFunction, FloatType, IntType, Scope, StringType, VoidType, compilerAssert, compilerState, createScope, expectMap, pushSubCompilerState } from "./defs";
 import { makeParser } from "./parser"
+import { Queue, stepQueue } from "./tasks";
 
 const parser = makeParser(`
 print("Hello", 3 + 2)
@@ -126,8 +127,22 @@ runTopLevel(parser.ast, rootScope)
 console.log(Bun.inspect(parser.ast, { depth: 10, colors: true }))
 
 const func: Closure = expectMap(rootScope, "main", "No main function found");
-const compiledFunction = functionTemplateTypeCheckAndCompile(func.func, [], [], rootScope);
-// console.log(Bun.inspect(compiledFunction.body, { depth: 10, colors: true }));
+
+const queue = new Queue();
+queue.enqueue(functionTemplateTypeCheckAndCompileDef.of({ func: func.func, args: [], typeArgs: [], parentScope: rootScope}))
+
+for (let i = 0; i < 1000; i++) {
+  if (queue.list.length === 0) break;
+  stepQueue(queue);
+}
+
+compilerAssert(queue.list.length === 0, "Expected empty quue")
+console.log(queue.list.length)
+
+// console.log(queue.final)
+
+// const compiledFunction = functionTemplateTypeCheckAndCompile(func.func, [], [], rootScope);
+// // console.log(Bun.inspect(compiledFunction.body, { depth: 10, colors: true }));
 
 compilerState.global.compiledFunctions.forEach((func) => {
   console.log(func.functionDefinition.debugName)

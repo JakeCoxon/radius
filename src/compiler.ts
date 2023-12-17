@@ -1,4 +1,5 @@
 import { isParseVoid, BytecodeOut, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, MetaInstructionTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseAst, CompiledFunction, AstRoot, isAst, compilerState, pushSubCompilerState, popSubCompilerState, addFunctionDefinition, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst } from "./defs";
+import { Task, createTaskDef, isTask } from "./tasks";
 
 const pushBytecode = (out: BytecodeOut, token: Token, instr: BytecodeInstr) => {
   out.bytecode.locations.push(token.location);
@@ -215,114 +216,152 @@ const compileFunctionPrototype = (prototype: FunctionPrototype) => {
   return prototype.bytecode;
 };
 
-const executePrototype = (func: FunctionDefinition, prototype: FunctionPrototype, scope: Scope): unknown => {
-  if (!scope) throw new Error("Expected scope");
+type ExecuteProtoArg = {
+  func: FunctionDefinition, prototype: FunctionPrototype, scope: Scope
+};
+
+function executePrototypeImpl(ctx, { func, prototype, scope }: ExecuteProtoArg): Task<unknown, never> {
+  compilerAssert(scope, "Expected scope")
 
   const newVm: Vm = { ip: 0, stack: [], scope, location: undefined!, bytecode: prototype.bytecode! };
   pushSubCompilerState({ vm: newVm, func });
   compilerAssert(prototype.bytecode)
 
   vm = newVm;
-  executeBytecode(vm);
-  popSubCompilerState();
-  compilerAssert(vm.stack.length === 1, "Expected 1 value on stack at end of function. Got $num", { num: vm.stack.length })
+  return (
+    executeBytecodeTask.of({ vm })
+    .chainFn((task, arg) => {
 
-  const result = vm.stack.pop();
-  vm = compilerState ? compilerState.vm : undefined!;
-  return result;
+      popSubCompilerState();
+      compilerAssert(vm.stack.length === 1, "Expected 1 value on stack at end of function. Got $num", { num: vm.stack.length })
+
+      const result = vm.stack.pop();
+      vm = compilerState ? compilerState.vm : undefined!;
+      return Task.of(result);
+
+    })
+  );
 };
+const executePrototypeTask = createTaskDef<ExecuteProtoArg, void, unknown, never>(executePrototypeImpl)
 
 
-const compileAndExecuteFunctionHeader = (func: FunctionDefinition, args: Ast[], parentScope: Scope) => {
-  compilerAssert(args.length === func.args.length, 'Expected $x args got $y', { x: func.args.length, y: args.length })
-  func.args.forEach((arg, i) => {
-    // expectArg(arg[0], args[i].type, arg[1])
-  })
-  if (func.args.length === 0) return [];
-  
-  if (!func.headerPrototype) {
-    const args = func.args.map(([name, type], i) => type ? type : new ParseNil(createToken('')))
-    const body = new ParseCall(createToken(''), new ParseIdentifier(createToken('__eval')), args, []);
-    func.headerPrototype = { name: `${func.debugName} header`, body, instructionTable: bytecodeDefault }; // prettier-ignore
-    compileFunctionPrototype(func.headerPrototype)
-  }
+const compileAndExecuteFunctionHeaderDef = createTaskDef<TypeCheckAndCompileArg, void, string, never>(
+  function compileAndExecuteFunctionHeaderDef(ctx, { func, args, parentScope }, param) {
 
-  const concreteTypes = {};
-  const expectArg = (name: string, value, expected) => {
-    compilerAssert(value === expected, "Argument $name of type $value does not match $expected", { name, value, expected })
-    concreteTypes[name] = expected;
-  };
-  const scope = Object.create(parentScope);
-  Object.assign(scope, { __expectArg: new ExternalFunction('__expectArg', expectArg) });
-  Object.assign(scope, { __eval: new ExternalFunction('__eval', (...args) => args) }); // TODO: replace with tuple
+    compilerAssert(args.length === func.args.length, 'Expected $x args got $y', { x: func.args.length, y: args.length })
+    func.args.forEach((arg, i) => {
+      // expectArg(arg[0], args[i].type, arg[1])
+    })
+    if (func.args.length === 0) return Task.of("success");
+    
+    if (!func.headerPrototype) {
+      const args = func.args.map(([name, type], i) => type ? type : new ParseNil(createToken('')))
+      const body = new ParseCall(createToken(''), new ParseIdentifier(createToken('__eval')), args, []);
+      func.headerPrototype = { name: `${func.debugName} header`, body, instructionTable: bytecodeDefault }; // prettier-ignore
+      compileFunctionPrototype(func.headerPrototype)
+    }
 
-  // TODO: Do this once for compiled functions
-  const compiledArgTypes = executePrototype(func, func.headerPrototype!, scope);
-  compilerAssert(Array.isArray(compiledArgTypes), "Error")
-  compiledArgTypes.forEach((type, i) => {
-    if (type === null) return
-    compilerAssert(type instanceof Type);
-    compilerAssert(args[i].type === type, "Argument $name of type $value does not match $expected", { name: func.args[i][0].token, value: args[i].type, expected: type })
-  })
+    const concreteTypes = {};
+    const expectArg = (name: string, value, expected) => {
+      compilerAssert(value === expected, "Argument $name of type $value does not match $expected", { name, value, expected })
+      concreteTypes[name] = expected;
+    };
+    const scope = Object.create(parentScope);
+    Object.assign(scope, { __expectArg: new ExternalFunction('__expectArg', expectArg) });
+    Object.assign(scope, { __eval: new ExternalFunction('__eval', (...args) => args) }); // TODO: replace with tuple
 
-  // console.log('compiled args', res)
-  // func.typeArgs.forEach((typeArg, i) => {
-  //   // scope[typeArg] = typeArgs[i];
-  // });
-  // if (func.args.length) {
-  //   
-  //   executePrototype(func, func.headerPrototype!, scope);
-  // }
+    // TODO: Do this once for compiled functions
+    return (
+      executePrototypeTask.of({ func, prototype: func.headerPrototype!, scope })
+      .chainFn((task, compiledArgTypes) => {
+
+        compilerAssert(Array.isArray(compiledArgTypes), "Error")
+        compiledArgTypes.forEach((type, i) => {
+          if (type === null) return
+          compilerAssert(type instanceof Type);
+          compilerAssert(args[i].type === type, "Argument $name of type $value does not match $expected", { name: func.args[i][0].token, value: args[i].type, expected: type })
+        })
+        return Task.of("success")
+      })
+    )
+
+    // console.log('compiled args', res)
+    // func.typeArgs.forEach((typeArg, i) => {
+    //   // scope[typeArg] = typeArgs[i];
+    // });
+    // if (func.args.length) {
+    //   
+    //   executePrototype(func, func.headerPrototype!, scope);
+    // }
+  });
+
+type TypeCheckAndCompileArg = {
+    func: FunctionDefinition,
+    typeArgs: unknown[],
+    args: Ast[],
+    parentScope: Scope
 }
 
-export const functionTemplateTypeCheckAndCompile = (
-  func: FunctionDefinition,
-  typeArgs: unknown[],
-  args: Ast[],
-  parentScope: Scope
-) => {
-  compileAndExecuteFunctionHeader(func, args, parentScope)
-  compilerAssert(func.body)
+function functionTemplateTypeCheckAndCompileImpl(ctx, { func, typeArgs, args, parentScope }: TypeCheckAndCompileArg, param): Task<CompiledFunction, never> {
 
-  if (!func.templatePrototype) 
-    func.templatePrototype = { name: `${func.debugName} template bytecode`, body: func.body, instructionTable: bytecodeSecond }; // prettier-ignore
-  compilerAssert(func.templatePrototype);
-
-  const concreteTypes = []
-
-  const templateScope = Object.create(parentScope);
   const argBindings: Binding[] = [];
-  func.args.forEach(([iden, type], i) => {
-    const binding = new Binding(iden.token.value, VoidType);
-    templateScope[iden.token.value] = binding;
-    argBindings.push(binding);
-  });
 
-  func.typeArgs.forEach((typeArg, i) => {
-    compilerAssert(typeArgs[i], "Expected type argument number $i", { i });
-    compilerAssert(typeArg instanceof ParseIdentifier, "Not implemented")
-    templateScope[typeArg.token.value] = typeArgs[i];
-  });
+  return (
+    compileAndExecuteFunctionHeaderDef.of({ func, args, typeArgs, parentScope })
+    .chainFn((task, arg) => {
 
-  compileFunctionPrototype(func.templatePrototype);
-  const ast = executePrototype(func, func.templatePrototype, templateScope)
-  console.log(`Compiled template ${func.debugName}`)
-  
-  compilerAssert(isAst(ast), "Expected ast got $ast", { ast });
+      compilerAssert(func.body)
 
-  const binding = new Binding(`${func.debugName} compiled`, FunctionType);
-  const returnType = ast.type;
-  const compiledFunction = new CompiledFunction(binding, func, returnType, concreteTypes, ast, argBindings);
-  compilerState.global.compiledFunctions.set(binding, compiledFunction);
-  return compiledFunction;
-};
+      if (!func.templatePrototype) 
+        func.templatePrototype = { name: `${func.debugName} template bytecode`, body: func.body, instructionTable: bytecodeSecond }; // prettier-ignore
+      compilerAssert(func.templatePrototype);
 
-const functionCompileTimeCompile = (
+      const templateScope = Object.create(parentScope);
+      
+      func.args.forEach(([iden, type], i) => {
+        const binding = new Binding(iden.token.value, VoidType);
+        templateScope[iden.token.value] = binding;
+        argBindings.push(binding);
+      });
+
+      func.typeArgs.forEach((typeArg, i) => {
+        compilerAssert(typeArgs[i], "Expected type argument number $i", { i });
+        compilerAssert(typeArg instanceof ParseIdentifier, "Not implemented")
+        templateScope[typeArg.token.value] = typeArgs[i];
+      });
+
+      compileFunctionPrototype(func.templatePrototype);
+
+      return executePrototypeTask.of({ func, prototype: func.templatePrototype, scope: templateScope });
+    })
+    .chainFn((task, ast) => {
+
+      const concreteTypes = []
+
+      console.log(`Compiled template ${func.debugName}`)
+      
+      compilerAssert(isAst(ast), "Expected ast got $ast", { ast });
+
+      const binding = new Binding(`${func.debugName} compiled`, FunctionType);
+      const returnType = ast.type;
+      const compiledFunction = new CompiledFunction(binding, func, returnType, concreteTypes, ast, argBindings);
+      compilerState.global.compiledFunctions.set(binding, compiledFunction);
+      
+      return Task.of(compiledFunction)
+    })
+  )
+
+}
+
+export const functionTemplateTypeCheckAndCompileDef = createTaskDef<TypeCheckAndCompileArg, void, CompiledFunction, never>(functionTemplateTypeCheckAndCompileImpl)
+
+type FunctionCallArg = {
   func: FunctionDefinition,
   typeArgs: any[],
   args: any[],
   parentScope: Scope
-) => {
+}
+function functionCompileTimeCompileImpl(ctx, { func, typeArgs, args, parentScope }: FunctionCallArg) {
   compilerAssert(func.body, "Expected body");
   compilerAssert(args.length === func.args.length, "Expected $expected arguments got $got", { expected: func.args.length, got: func.args.length, func })
 
@@ -338,8 +377,9 @@ const functionCompileTimeCompile = (
   //   scope[typeArg] = typeArgs[i];
   // });
   compileFunctionPrototype(func.compileTimePrototype)
-  return executePrototype(func, func.compileTimePrototype, scope);
+  return executePrototypeTask.of({ func, prototype: func.compileTimePrototype, scope });
 };
+const functionCompileTimeCompileTask = createTaskDef<FunctionCallArg, void, unknown, never>(functionCompileTimeCompileImpl)
 
 
 let vm: Vm = undefined!;
@@ -378,19 +418,29 @@ const letLocal = (vm: Vm, name: string, type: Type, value: Ast) => {
   return new LetAst(VoidType, vm.location, binding, value);
 }
 
-const createCallAst = (vm: Vm, name: string, count: number, tcount: number) => {
+function createCallAstImpl(ctx, { vm, name, count, tcount }: { vm: Vm, name: string, count: number, tcount: number }): Task<string, never> {
   const args = popValues(count)
   const typeArgs = popValues(tcount || 0);
   const func = expectMap(vm.scope, name, `$key not in scope`)
-  if (func instanceof ExternalFunction) return new CallAst(IntType, vm.location, func, args);
+  if (func instanceof ExternalFunction) {
+    vm.stack.push(new CallAst(IntType, vm.location, func, args));
+    return Task.of("success")
+  }
   if (func instanceof Closure) {
-    const compiledFunction = functionTemplateTypeCheckAndCompile(func.func, typeArgs, args, func.scope); // prettier-ignore
-    const binding = compiledFunction.binding;
-    const returnType = compiledFunction.returnType;
-    return new UserCallAst(returnType, vm.location, binding, args)
+    return (
+      functionTemplateTypeCheckAndCompileDef.of({ func: func.func, typeArgs, args, parentScope: func.scope })
+      .chainFn((task, compiledFunction) => {
+        const binding = compiledFunction.binding;
+        const returnType = compiledFunction.returnType;
+        vm.stack.push(new UserCallAst(returnType, vm.location, binding, args));
+        return Task.of("success")
+
+      })
+    )
   }
   compilerAssert(false, "Not supported value $func", { func })
 }
+const createCallAstDef = createTaskDef(createCallAstImpl);
 
 const unknownToAst = (location: SourceLocation, value: unknown) => {
   if (typeof value === 'number') return new NumberAst(IntType, location, value);
@@ -417,7 +467,7 @@ const instructions: InstructionMapping = {
   ifast: ({ f }) =>         vm.stack.push(new IfAst(IntType, vm.location, popStack(), popStack(), f ? popStack() : null)),
   whileast: () =>           vm.stack.push(new WhileAst(VoidType, vm.location, popStack(), popStack())),
   returnast: ({ r }) =>     vm.stack.push(new ReturnAst(VoidType, vm.location, r ? popStack() : null)),
-  callast: ({ name, count, tcount }) => vm.stack.push(createCallAst(vm, name, count, tcount)),
+  callast: ({ name, count, tcount }) => createCallAstDef.of({ vm, name, count, tcount }),
   toast: () => vm.stack.push(unknownToAst(vm.location, popStack())),
 
   bindingast: ({ name }) => {
@@ -456,9 +506,13 @@ const instructions: InstructionMapping = {
       return;
     }
     if (func instanceof Closure) {
-      const functionResult = functionCompileTimeCompile(func.func, typeArgs, values, func.scope); // prettier-ignore
-      vm.stack.push(functionResult);
-      return;
+      return (
+        functionCompileTimeCompileTask.of({ func: func.func, typeArgs, args: values, parentScope: func.scope })
+        .chainFn((task, functionResult) => {
+          vm.stack.push(functionResult);
+          return Task.of("success")
+        })
+      )
     }
     compilerAssert(!(func instanceof FunctionDefinition), "$func is not handled", { func })
     compilerAssert(false, "$func is not a function", { func })
@@ -490,7 +544,7 @@ const instructions: InstructionMapping = {
   },
 };
 
-const executeBytecode = (vm: Vm) => {
+function executeBytecodeImpl(ctx, { vm } : { vm: Vm }, p: void): Task<string, never> {
   const {locations, code} = vm.bytecode;
   let current = code[vm.ip];
   vm.location = locations[vm.ip];
@@ -498,17 +552,31 @@ const executeBytecode = (vm: Vm) => {
     const startIp = vm.ip;
     const instr = instructions[current.type];
     compilerAssert(instr, "Not inplemented yet instruction $type", { type: current.type, current })
+    let res;
     try {
-      instr(current);
+      res = instr(current);
     } catch(ex) {
       console.log({ current, ip: vm.ip })
       throw ex;
     }
-    if (vm.ip === startIp) vm.ip++;
-    current = code[vm.ip];
-    vm.location = locations[vm.ip];
+
+    if (isTask(res)) {
+      return (res as Task<string, never>).chainFn(() => {
+        if (vm.ip === startIp) vm.ip++;
+        current = code[vm.ip];
+        vm.location = locations[vm.ip];
+
+        return executeBytecodeTask.of({ vm })
+      })
+    } else {
+      if (vm.ip === startIp) vm.ip++;
+      current = code[vm.ip];
+      vm.location = locations[vm.ip];
+    }
   }
+  return Task.of('success')
 };
+export const executeBytecodeTask = createTaskDef<{ vm: Vm }, void, string, never>(executeBytecodeImpl);
 
 export const runTopLevel = (stmts: ParseStatements, rootScope: Scope) => {
   stmts.exprs.forEach(expr => {
