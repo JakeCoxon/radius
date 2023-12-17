@@ -43,6 +43,9 @@ x := [1,2,3 | asdasd | 323123123 |> thing]
 defn thing(x: int):
   print(x + 32)
 
+defn thing4(x: int):
+  return x + 2
+
 defn fam!(T)(a: int):
   print(a)
   print(T)
@@ -52,6 +55,12 @@ defn main():
 
   if 2 < 3:
     print("OK")
+  elif 3 > 2:
+    print("wow")
+  elif 3 > 2:
+    print("wow")
+  elif 3 > 2:
+    print("wow")
   else:
     print(3)
 
@@ -60,6 +69,15 @@ defn main():
 
   while false or true:
     print("OK")
+  
+  if 3:
+    print("asd")
+
+  meta if thing4(2):
+    print("k thing4")
+
+  meta if true:
+    print("this is meta if")
 
   foo :: {|x| x + 1}
 

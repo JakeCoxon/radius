@@ -1,6 +1,6 @@
-import { isParseVoid, BytecodeOut, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, MetaInstructionTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseAst, CompiledFunction, AstRoot, isAst, compilerState, pushSubCompilerState, popSubCompilerState, addFunctionDefinition, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation } from "./defs";
+import { isParseVoid, BytecodeOut, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, MetaInstructionTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseAst, CompiledFunction, AstRoot, isAst, compilerState, pushSubCompilerState, popSubCompilerState, addFunctionDefinition, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst } from "./defs";
 
-const pushBytecode = (out: BytecodeOut, token: Token, instr) => {
+const pushBytecode = (out: BytecodeOut, token: Token, instr: BytecodeInstr) => {
   out.bytecode.locations.push(token.location);
   out.bytecode.code.push(instr)
 }
@@ -53,6 +53,10 @@ const bytecodeDefault: MetaInstructionTable = {
     }
     compilerAssert(false, "Call with non-identifier not implemented yet")
   },
+  return: (out, ast) => {
+    if (ast.expr) writeBytecode(out, ast.expr);
+    pushBytecode(out, ast.token, { type: 'return', r: !!ast.expr })
+  },
 
   // "call*": (out, ...rest) => (writeAll(out, rest), pushBytecode(out, { type: "call", args: rest.length })), // prettier-ignore
   // "callt*": (out, ...rest) => (writeAll(out, rest), pushBytecode(out, { type: "callt", args: rest.length })), // prettier-ignore
@@ -86,16 +90,22 @@ const bytecodeDefault: MetaInstructionTable = {
   //   });
   // },
 
+  else: (out, ast) => writeBytecode(out, ast.body),
+
   if: (out, ast) => {
-    writeBytecode(out, ast.exprs[0]);
+    writeBytecode(out, ast.condition);
     const jump1 = { type: "jumpf", address: 0 };
-    pushBytecode(out, ast.exprs[1].token, jump1);
-    writeBytecode(out, ast.exprs[1]);
-    const jump2 = { type: "jump", address: 0 };
-    pushBytecode(out, ast.exprs[2].token, jump2);
-    jump1.address = out.bytecode.code.length;
-    writeBytecode(out, ast.exprs[2]);
-    jump2.address = out.bytecode.code.length;
+    pushBytecode(out, ast.condition.token, jump1);
+    writeBytecode(out, ast.trueBody);
+    if (ast.falseBody) {
+      const jump2 = { type: "jump", address: 0 };
+      pushBytecode(out, ast.trueBody.token, jump2);
+      jump1.address = out.bytecode.code.length;
+      writeBytecode(out, ast.falseBody);
+      jump2.address = out.bytecode.code.length;
+    } else {
+      jump1.address = out.bytecode.code.length;
+    }
   },
 };
 
@@ -122,6 +132,10 @@ const bytecodeSecond: MetaInstructionTable = {
   function: (out, ast) => {
     compilerAssert(false, "Function not implemented yet")
     // pushBytecode(out, ast.token, { type: "closure", id: ast.id }), // prettier-ignore
+  },
+  return: (out, ast) => {
+    if (ast.expr) writeBytecode(out, ast.expr);
+    pushBytecode(out, ast.token, { type: 'returnast', r: !!ast.expr })
   },
 
   list: (out, ast) => (writeAll(out, ast.exprs), pushBytecode(out, ast.token, { type: 'listast', count: ast.exprs.length })),
@@ -155,11 +169,31 @@ const bytecodeSecond: MetaInstructionTable = {
     pushBytecode(out, ast.token, { type: "popqs" });
   },
 
+  else: (out, ast) => writeBytecode(out, ast.body),
+
+  metaif: (out, ast) => {
+    // TODO: elsif
+    const if_ = ast.expr
+    writeMeta(out, if_.condition);
+    const jump1 = { type: "jumpf", address: 0 };
+    pushBytecode(out, if_.condition.token, jump1);
+    writeBytecode(out, if_.trueBody);
+    if (if_.falseBody) {
+      const jump2 = { type: "jump", address: 0 };
+      pushBytecode(out, if_.trueBody.token, jump2);
+      jump1.address = out.bytecode.code.length;
+      writeBytecode(out, if_.falseBody);
+      jump2.address = out.bytecode.code.length;
+    } else {
+      jump1.address = out.bytecode.code.length;
+    }
+  },
+
   if: (out, ast) => {
-    writeBytecode(out, ast.exprs[0])
-    writeBytecode(out, ast.exprs[1])
-    writeBytecode(out, ast.exprs[2])
-    pushBytecode(out, ast.token, { type: "ifast" });
+    if (ast.falseBody) writeBytecode(out, ast.falseBody)
+    writeBytecode(out, ast.trueBody)
+    writeBytecode(out, ast.condition)
+    pushBytecode(out, ast.token, { type: "ifast", f: !!ast.falseBody });
   }
 };
 
@@ -173,7 +207,7 @@ const compileFunctionPrototype = (prototype: FunctionPrototype) => {
   }
   writeBytecode(out, prototype.body);
   prototype.bytecode.code.push({ type: "halt" });
-  prototype.bytecode.locations.push({ column: -1, line: -1 });
+  prototype.bytecode.locations.push(new SourceLocation(-1, -1));
 
   console.log(`Compiled ${prototype.name}`)
   console.log(bytecodeToString(prototype.bytecode))
@@ -258,9 +292,9 @@ export const functionTemplateTypeCheckAndCompile = (
 
   const templateScope = Object.create(parentScope);
   const argBindings: Binding[] = [];
-  func.args.forEach((arg, i) => {
-    const binding = new Binding(arg[0].token.value, VoidType);
-    templateScope[arg[0].token.value] = binding;
+  func.args.forEach(([iden, type], i) => {
+    const binding = new Binding(iden.token.value, VoidType);
+    templateScope[iden.token.value] = binding;
     argBindings.push(binding);
   });
 
@@ -290,7 +324,8 @@ const functionCompileTimeCompile = (
   parentScope: Scope
 ) => {
   compilerAssert(func.body, "Expected body");
-  if (args.length !== func.args.length) throw new Error(`Expected ${func.args.length} args got ${args.length}`); // prettier-ignore
+  compilerAssert(args.length === func.args.length, "Expected $expected arguments got $got", { expected: func.args.length, got: func.args.length, func })
+
   if (!func.compileTimePrototype) 
     func.compileTimePrototype = { name: `${func.debugName} comptime bytecode`, body: func.body, instructionTable: bytecodeDefault }; // prettier-ignore
   compilerAssert(func.compileTimePrototype)
@@ -343,7 +378,7 @@ const letLocal = (vm: Vm, name: string, type: Type, value: Ast) => {
   return new LetAst(VoidType, vm.location, binding, value);
 }
 
-const createCall = (vm: Vm, name: string, count: number, tcount: number) => {
+const createCallAst = (vm: Vm, name: string, count: number, tcount: number) => {
   const args = popValues(count)
   const typeArgs = popValues(tcount || 0);
   const func = expectMap(vm.scope, name, `$key not in scope`)
@@ -364,10 +399,12 @@ const unknownToAst = (location: SourceLocation, value: unknown) => {
   compilerAssert(false, "Type is not convertable to an AST: $value", { value })
 }
 
-const instructions = {
+type InstructionMapping = {[key:string]:(instr: BytecodeInstr) => unknown}
+
+const instructions: InstructionMapping = {
   push: ({ value }) => vm.stack.push(value),
   nil: () => vm.stack.push(null),
-  
+
   operatorast: ({ name, count }) => vm.stack.push(new OperatorAst(IntType, vm.location, name, popValues(count))),
   numberast:({ value }) =>  vm.stack.push(new NumberAst(IntType, vm.location, value)),
   stringast:({ value }) =>  vm.stack.push(new StringAst(StringType, vm.location, value)),
@@ -377,14 +414,21 @@ const instructions = {
   orast: ({ count }) =>     vm.stack.push(new OrAst(IntType, vm.location, popValues(count))),
   andast: ({ count }) =>    vm.stack.push(new AndAst(IntType, vm.location, popValues(count))),
   listast: ({ count }) =>   vm.stack.push(new ListAst(IntType, vm.location, popValues(count))),
-  ifast: () =>              vm.stack.push(new IfAst(IntType, vm.location, popStack(), popStack(), popStack())),
+  ifast: ({ f }) =>         vm.stack.push(new IfAst(IntType, vm.location, popStack(), popStack(), f ? popStack() : null)),
   whileast: () =>           vm.stack.push(new WhileAst(VoidType, vm.location, popStack(), popStack())),
-  callast: ({ name, count, tcount }) => vm.stack.push(createCall(vm, name, count, tcount)),
+  returnast: ({ r }) =>     vm.stack.push(new ReturnAst(VoidType, vm.location, r ? popStack() : null)),
+  callast: ({ name, count, tcount }) => vm.stack.push(createCallAst(vm, name, count, tcount)),
   toast: () => vm.stack.push(unknownToAst(vm.location, popStack())),
 
   bindingast: ({ name }) => {
     const value = expectMap(vm.scope, name, `No binding ${name}`);
     vm.stack.push(unknownToAst(vm.location, value));
+  },
+  return: ({ r }) => { 
+    const ret = r ? vm.stack[vm.stack.length - 1] : null;
+    vm.stack.length = 0
+    vm.stack.push(ret);
+    vm.ip = vm.bytecode.code.length - 1;
   },
 
   binding: ({ name }) => vm.stack.push(expectMap(vm.scope, name, `No binding ${name}`)),

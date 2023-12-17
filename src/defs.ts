@@ -47,12 +47,14 @@ const TokenRoot = {
 export const createToken = (value: any, type = "NONE"): Token => Object.assign(Object.create(TokenRoot), { value, type, location: new SourceLocation(0, 0) });
 
 export type ArgumentTypePair = [ParseIdentifier, ParseAst | null];
+
 // These are reference types that id will be filled in later.
 export type ParserFunctionDecl = {
   id: number | undefined, debugName: string,
   token: Token, functionMetaName: ParseIdentifier | null,
   name: ParseIdentifier | null, typeArgs: ParseAst[], args: ArgumentTypePair[], 
   returnType: ParseAst | null, body: ParseAst | null, keywords: ParseAst[] }
+  
 export type ParserClassDecl = {
   id: number | undefined, debugName: string,
   token: Token, metaType: ParseIdentifier | null,
@@ -88,17 +90,20 @@ export class ParseSet extends ParseTreeType {        key = 'set' as const;      
 export class ParseOperator extends ParseTreeType {   key = 'operator' as const;   constructor(public token: Token, public exprs: ParseAst[]) { super();} }
 export class ParseNote extends ParseTreeType {       key = 'note' as const;       constructor(public token: Token, public expr: ParseAst) { super();} }
 export class ParseMeta extends ParseTreeType {       key = 'meta' as const;       constructor(public token: Token, public expr: ParseAst) { super();} }
+export class ParseMetaIf extends ParseTreeType {     key = 'metaif' as const;     constructor(public token: Token, public expr: ParseIf) { super();} }
+export class ParseMetaFor extends ParseTreeType {    key = 'metafor' as const;     constructor(public token: Token, public expr: ParseFor) { super();} }
 export class ParseCompTime extends ParseTreeType {   key = 'comptime' as const;   constructor(public token: Token, public expr: ParseAst) { super();} }
 export class ParseCall extends ParseTreeType {       key = 'call' as const;       constructor(public token: Token, public left: ParseAst, public args: ParseAst[], public typeArgs: ParseAst[]) { super();} }
 export class ParseList extends ParseTreeType {       key = 'list' as const;       constructor(public token: Token, public exprs: ParseAst[]) { super();} }
 export class ParseListComp extends ParseTreeType {   key = 'listcomp' as const;   constructor(public token: Token, public exprs: ParseAst[], public mapping: ParseAst[], public reduce: ParseAst | null) { super();} }
 export class ParseOr extends ParseTreeType {         key = 'or' as const;         constructor(public token: Token, public exprs: ParseAst[]) { super();} }
 export class ParseAnd extends ParseTreeType {        key = 'and' as const;        constructor(public token: Token, public exprs: ParseAst[]) { super();} }
-export class ParseIf extends ParseTreeType {         key = 'if' as const;         constructor(public token: Token, public exprs: ParseAst[]) { super();} }
+export class ParseElse extends ParseTreeType {       key = 'else' as const;       constructor(public token: Token, public body: ParseAst) { super();} }
+export class ParseIf extends ParseTreeType {         key = 'if' as const;         constructor(public token: Token, public condition: ParseAst, public trueBody: ParseAst, public falseBody: ParseIf | ParseElse | null) { super();} }
 export class ParseLetConst extends ParseTreeType {   key = 'letconst' as const;   constructor(public token: Token, public name: ParseIdentifier, public value: ParseAst) { super();} }
 export class ParseFunction extends ParseTreeType {   key = 'function' as const;   constructor(public token: Token, public functionDecl: ParserFunctionDecl) { super();} }
 export class ParseClass extends ParseTreeType {      key = 'class' as const;      constructor(public token: Token, public classDecl: ParserClassDecl) { super();} }
-export class ParseReturn extends ParseTreeType {     key = 'return' as const;     constructor(public token: Token, public expr: ParseAst) { super();} }
+export class ParseReturn extends ParseTreeType {     key = 'return' as const;     constructor(public token: Token, public expr: ParseAst | null) { super();} }
 export class ParseBreak extends ParseTreeType {      key = 'break' as const;      constructor(public token: Token, public expr: ParseAst) { super();} }
 export class ParseContinue extends ParseTreeType {   key = 'continue' as const;   constructor(public token: Token, public expr: ParseAst) { super();} }
 export class ParseFor extends ParseTreeType {        key = 'for' as const;        constructor(public token: Token, public identifier: ParseIdentifier, public expr: ParseAst, public body: ParseAst) { super();} }
@@ -121,14 +126,14 @@ export type ParseAst = ParseStatements | ParseLet | ParseSet | ParseOperator | P
   ParseIf | ParseFunction | ParseString | ParseReturn | ParseBreak | ParseContinue | ParseFor | ParseCast |
   ParseOpEq | ParseWhile | ParseWhileExpr | ParseForExpr | ParseNot | ParseField | ParseExpand | ParseListComp |
   ParseDict | ParsePostCall | ParseSymbol | ParseNote | ParseSlice | ParseSubscript | ParseTuple | ParseClass |
-  ParseNil | ParseBoolean
+  ParseNil | ParseBoolean | ParseElse | ParseMetaIf | ParseMetaFor
 
 // Void types mean that in secondOrder compilation, the AST doesn't return an AST
 export const isParseVoid = (ast: ParseAst) => ast.key == 'letconst' || ast.key === 'function' || ast.key === 'class' || ast.key === 'comptime';
 
-
+export type BytecodeInstr = { type: string } & {[key:string]:unknown}
 export type BytecodeGen = {
-  code: { type: string }[]
+  code: BytecodeInstr[]
   locations: SourceLocation[]
 }
 export type FunctionPrototype = {
@@ -153,10 +158,10 @@ export type MetaInstructionTable = {
 }
 
 export class FunctionDefinition {
-
   headerPrototype?: FunctionPrototype | undefined
   templatePrototype?: FunctionPrototype | undefined
   compileTimePrototype?: FunctionPrototype | undefined
+
   constructor(
     public id: number,
     public debugName: string,
@@ -190,7 +195,7 @@ export class BoolAst extends AstRoot {       constructor(public type: Type, publ
 export class LetAst extends AstRoot {        constructor(public type: Type, public location: SourceLocation, public binding: Binding, public value: Ast) { super() } }
 export class SetAst extends AstRoot {        constructor(public type: Type, public location: SourceLocation, public binding: Binding, public value: Ast) { super() } }
 export class OperatorAst extends AstRoot {   constructor(public type: Type, public location: SourceLocation, public operator: string, public args: Ast[]) { super() } }
-export class IfAst extends AstRoot {         constructor(public type: Type, public location: SourceLocation, public expr: Ast, public trueBody: Ast, public falseBody: Ast) { super() } }
+export class IfAst extends AstRoot {         constructor(public type: Type, public location: SourceLocation, public expr: Ast, public trueBody: Ast, public falseBody: Ast | null) { super() } }
 export class ListAst extends AstRoot {       constructor(public type: Type, public location: SourceLocation, public args: Ast[]) { super() } }
 export class CallAst extends AstRoot {       constructor(public type: Type, public location: SourceLocation, public func: ExternalFunction, public args: Ast[]) { super() } }
 export class UserCallAst extends AstRoot {   constructor(public type: Type, public location: SourceLocation, public binding: Binding, public args: Ast[]) { super() } }
@@ -198,8 +203,9 @@ export class AndAst extends AstRoot {        constructor(public type: Type, publ
 export class OrAst extends AstRoot {         constructor(public type: Type, public location: SourceLocation, public args: Ast[]) { super() } }
 export class StatementsAst extends AstRoot { constructor(public type: Type, public location: SourceLocation, public statements: Ast[]) { super() } }
 export class WhileAst extends AstRoot {      constructor(public type: Type, public location: SourceLocation, public condition: Ast, public body: Ast) { super() } }
+export class ReturnAst extends AstRoot {     constructor(public type: Type, public location: SourceLocation, public expr: Ast | null) { super() } }
 
-export type Ast = NumberAst | LetAst | SetAst | OperatorAst | IfAst | ListAst | CallAst | AndAst | OrAst | StatementsAst;
+export type Ast = NumberAst | LetAst | SetAst | OperatorAst | IfAst | ListAst | CallAst | AndAst | OrAst | StatementsAst | WhileAst | ReturnAst;
 export const isAst = (value: unknown): value is Ast => value instanceof AstRoot;
 
 export class Binding {
