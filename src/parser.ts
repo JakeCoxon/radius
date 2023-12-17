@@ -1,4 +1,4 @@
-import { ArgumentTypePair, ParseAnd, ParseAst, ParseBreak, ParseCall, ParseCast, ParseCompTime, ParseContinue, ParseDict, ParseExpand, ParseField, ParseFor, ParseForExpr, ParseIf, ParseLet, ParseLetConst, ParseList, ParseListComp, ParseMeta, ParseName, ParseNot, ParseNumber, ParseOpEq, ParseOperator, ParseOr, ParseReturn, ParseSet, ParseStatements, ParseString, ParseIdentifier, ParseWhile, ParseWhileExpr, ParserFunctionDecl, Token, compilerAssert, ParsePostCall, ParseSymbol, ParseCompilerNote, ParseSlice, ParseSubscript, ParserClassDecl, ParseClass, ParseFunction, createToken } from "./defs";
+import { ArgumentTypePair, ParseAnd, ParseAst, ParseBreak, ParseCall, ParseCast, ParseCompTime, ParseContinue, ParseDict, ParseExpand, ParseField, ParseFor, ParseForExpr, ParseIf, ParseLet, ParseLetConst, ParseList, ParseListComp, ParseMeta, ParseName, ParseNot, ParseNumber, ParseOpEq, ParseOperator, ParseOr, ParseReturn, ParseSet, ParseStatements, ParseString, ParseIdentifier, ParseWhile, ParseWhileExpr, ParserFunctionDecl, Token, compilerAssert, ParsePostCall, ParseSymbol, ParseNote, ParseSlice, ParseSubscript, ParserClassDecl, ParseClass, ParseFunction, createToken, ParseBoolean } from "./defs";
 
 type LexerState = { significantNewlines: boolean; parenStack: string[] };
 
@@ -36,7 +36,7 @@ function* tokenize(input: string, state: LexerState): Generator<Token> {
       return true;
     }
   };
-  const pushToken = (type: string, value: string = match[0]) => {
+  const pushToken = (type: string, value: string = match![0]) => {
     // (state as any).remain = remain; // debug
     const token = createToken(value, type)
     token.location.column = charIndex - lineStart;
@@ -229,11 +229,12 @@ export const makeParser = (input: string) => {
     // else if (match("~"))  return [createToken("unquote"), parseExpr()];
     // else if (match(":"))  return [createToken("keyword"), parseExpr()];
     else if (match("'"))  return new ParseSymbol(parseIdentifier().token);
-    else if (match("@"))  return new ParseCompilerNote(previous, parseExpr());
+    else if (match("@"))  return new ParseNote(previous, parseExpr());
     else if (match("{"))  return match("|") ? parseLambda() : parseDict(previous)
     else if (matchStringLiteral()) return new ParseString(previous)
     else if (matchNumberLiteral()) return parseNumberLiteral();
     else if (prevSignificantNewlines && match("|")) return parseBracelessLambda();
+    else if (match("true") || match("false")) return new ParseBoolean(previous);
     else return parseIdentifier();
   };
 
@@ -264,7 +265,7 @@ export const makeParser = (input: string) => {
       return typeArgs;
     }
 
-    const typeArgs = match("(") ? parseTypeArgs() : [parseIdentifier()]
+    const typeArgs = match("(") ? parseTypeArgs() : matchNumberLiteral() ? [parseNumberLiteral()] : [parseIdentifier()];
     const args = match("(") ? parseArgs() : []
     return new ParseCall(callToken, left, args, typeArgs)
     

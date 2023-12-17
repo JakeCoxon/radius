@@ -1,5 +1,5 @@
-import { functionTemplateTypeCheckAndCompile } from "./compiler";
-import { Closure, DoubleType, ExternalFunction, FloatType, FunctionDefinition, IntType, ParseStatements, Scope, StringType, VoidType, addFunctionDefinition, compilerState, createScope, expect, expectMap, pushSubCompilerState } from "./defs";
+import { functionTemplateTypeCheckAndCompile, runTopLevel } from "./compiler";
+import { Closure, DoubleType, ExternalFunction, FloatType, IntType, Scope, StringType, VoidType, compilerState, createScope, expectMap, pushSubCompilerState } from "./defs";
 import { makeParser } from "./parser"
 
 const parser = makeParser(`
@@ -34,14 +34,6 @@ foo.too(3, 2)
 
 x := |asd| asd + 2
 
-x := {
-  defn foo(x):
-    print(2)
-  
-  defn thing(x):
-    print(x)
-}
-
 x := {|asd| asd + 2}
 
 defn thing2(foo: int):
@@ -51,14 +43,33 @@ x := [1,2,3 | asdasd | 323123123 |> thing]
 defn thing(x: int):
   print(x + 32)
 
+defn fam!(T)(a: int):
+  print(a)
+  print(T)
+
 defn main():
   print(2 + 42 * thing(12))
+
+  if 2 < 3:
+    print("OK")
+  else:
+    print(3)
+
+  z : int = 2
+  x : int = z ifx 2 else 2
+
+  while false or true:
+    print("OK")
 
   foo :: {|x| x + 1}
 
   foo(1)
+  fam!2(1)
   
   print(meta thing(12))
+
+  #for x in thing:
+  #  print(x)
 
 
 foo[1:2:3]
@@ -91,22 +102,8 @@ const rootScope: Scope = createScope({
 
 pushSubCompilerState({ })
 
-parser.ast.exprs.forEach(expr => {
-  if (expr.key === 'function') {
+runTopLevel(parser.ast, rootScope)
 
-    const funcDef = addFunctionDefinition(expr.functionDecl)
-    // const func = parser.functionDecls[expr.id]
-    console.log("Global func", funcDef.name)
-
-    
-    rootScope[funcDef.name!.token.value] = new Closure(funcDef, rootScope);
-    
-
-    return
-
-  }
-  // throw new Error(`Not supported at top level ${expr.key}`)
-})
 
 console.log(Bun.inspect(parser.ast, { depth: 10, colors: true }))
 
