@@ -1,3 +1,5 @@
+import { Event } from "./tasks";
+
 export function compilerAssert(expected: unknown, message: string="", info: object={}): asserts expected {
   if (expected) return;
   let out = message.replace(/\$([a-z]+)/g, (match, capture) => { 
@@ -226,7 +228,11 @@ export class Closure {
   constructor(public func: FunctionDefinition, public scope: Scope) {}
 }
 
-export type Scope = object & { _scope: true }
+export const ScopeEventsSymbol = Symbol('ScopeEventsSymbol')
+export type Scope = object & {
+  _scope: true,
+  [ScopeEventsSymbol]: {[key:string]:Event<unknown, never>}
+}
 export const createScope = (obj: object) => obj as Scope;
 
 export class ExternalFunction {

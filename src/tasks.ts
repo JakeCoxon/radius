@@ -29,6 +29,10 @@ export function isTask(value: unknown): value is Task<unknown, unknown> {
   return value instanceof Task;
 }
 
+export function isTaskResult(value: unknown): value is TaskOf<unknown> {
+  return value instanceof TaskOf;
+}
+
 export class Task<S, F> {
   _state = "created" as "created" | "started" | "completed";
   _success: S | undefined;
@@ -238,6 +242,7 @@ export class Event<S, F> {
   success(s: S) {
     this._success = s;
     this.listeners.forEach(f => f(s));
+    this.listeners.length = 0
   }
 }
 

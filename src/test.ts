@@ -4,42 +4,14 @@ import { makeParser } from "./parser"
 import { Queue, stepQueue } from "./tasks";
 
 const parser = makeParser(`
-print("Hello", 3 + 2)
 
-x := 32
 
-for x in foo:
-  print("lol")
+foo2 :: foo + 3
+foo :: thing4(5)
 
-comptime:
-  lol as asd
-
-while true:
-  print("Foo" + 3)
-
-if 3:
-  print("OK")
-
-if 3 >= 2:
-  print("OK")
-elif 3 < 2:
-  print("NOOO")
-else:
-  print("No")
-
-x := not y
-x := meta 2
-x := x ifx 2 else 2
-
-foo.too(3, 2)
-
-x := |asd| asd + 2
-
-x := {|asd| asd + 2}
 
 defn thing2(foo: int):
   x := [1,2,3 | asdasd | 323123123 |> thing]
-x := [1,2,3 | asdasd | 323123123 |> thing]
 
 defn thing(x: int):
   print(x + 32)
@@ -91,17 +63,6 @@ defn main():
   #  print(x)
 
 
-foo[1:2:3]
-foo[1:2]
-foo[1]
-foo.[1] /= 2
-
-foo!(A, B)(a, b)
-
-class Thing!(T):
-  x: int
-  y: int
-
 `)
 
 
@@ -121,31 +82,34 @@ const rootScope: Scope = createScope({
 
 pushSubCompilerState({ })
 
-runTopLevel(parser.ast, rootScope)
 
 
-console.log(Bun.inspect(parser.ast, { depth: 10, colors: true }))
 
-const func: Closure = expectMap(rootScope, "main", "No main function found");
+// console.log(Bun.inspect(parser.ast, { depth: 10, colors: true }))
+
+// const func: Closure = expectMap(rootScope, "main", "No main function found");
 
 const queue = new Queue();
-queue.enqueue(functionTemplateTypeCheckAndCompileDef.of({ func: func.func, args: [], typeArgs: [], parentScope: rootScope}))
+// queue.enqueue(functionTemplateTypeCheckAndCompileDef.of({ func: func.func, args: [], typeArgs: [], parentScope: rootScope}))
+const root = runTopLevel(parser.ast, rootScope)
+queue.enqueue(root)
 
 for (let i = 0; i < 1000; i++) {
   if (queue.list.length === 0) break;
   stepQueue(queue);
 }
 
-compilerAssert(queue.list.length === 0, "Expected empty quue")
+console.log(root)
+compilerAssert(root._success, "Expected success")
+// compilerAssert(queue.list.length === 0, "Expected empty queue")
 console.log(queue.list.length)
 
-// console.log(queue.final)
 
 // const compiledFunction = functionTemplateTypeCheckAndCompile(func.func, [], [], rootScope);
 // // console.log(Bun.inspect(compiledFunction.body, { depth: 10, colors: true }));
 
-compilerState.global.compiledFunctions.forEach((func) => {
-  console.log(func.functionDefinition.debugName)
-  console.log(Bun.inspect(func.body, { depth: 10, colors: true }));
-  console.log("")
-})
+// compilerState.global.compiledFunctions.forEach((func) => {
+//   console.log(func.functionDefinition.debugName)
+//   console.log(Bun.inspect(func.body, { depth: 10, colors: true }));
+//   console.log("")
+// })

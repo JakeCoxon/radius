@@ -1,5 +1,5 @@
-import { isParseVoid, BytecodeOut, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, MetaInstructionTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseAst, CompiledFunction, AstRoot, isAst, compilerState, pushSubCompilerState, popSubCompilerState, addFunctionDefinition, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst } from "./defs";
-import { Task, createTaskDef, isTask } from "./tasks";
+import { isParseVoid, BytecodeOut, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, MetaInstructionTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseAst, CompiledFunction, AstRoot, isAst, compilerState, pushSubCompilerState, popSubCompilerState, addFunctionDefinition, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, BytecodeGen, ParserFunctionDecl, ScopeEventsSymbol } from "./defs";
+import { Event, Task, createTaskDef, isTask, isTaskResult } from "./tasks";
 
 const pushBytecode = (out: BytecodeOut, token: Token, instr: BytecodeInstr) => {
   out.bytecode.locations.push(token.location);
@@ -229,7 +229,7 @@ function executePrototypeImpl(ctx, { func, prototype, scope }: ExecuteProtoArg):
 
   vm = newVm;
   return (
-    executeBytecodeTask.of({ vm })
+    executeVmTask.of({ vm })
     .chainFn((task, arg) => {
 
       popSubCompilerState();
@@ -243,6 +243,34 @@ function executePrototypeImpl(ctx, { func, prototype, scope }: ExecuteProtoArg):
   );
 };
 const executePrototypeTask = createTaskDef<ExecuteProtoArg, void, unknown, never>(executePrototypeImpl)
+
+type ExecuteVmArg = {
+  bytecode: BytecodeGen, scope: Scope
+};
+
+function executeBytecodeImpl(ctx, { bytecode, scope }: ExecuteVmArg): Task<unknown, never> {
+  compilerAssert(scope, "Expected scope")
+
+  const newVm: Vm = { ip: 0, stack: [], scope, location: undefined!, bytecode: bytecode! };
+  pushSubCompilerState({ vm: newVm, func: null });
+  compilerAssert(bytecode)
+
+  vm = newVm;
+  return (
+    executeVmTask.of({ vm })
+    .chainFn((task, arg) => {
+
+      popSubCompilerState();
+      compilerAssert(vm.stack.length === 1, "Expected 1 value on stack at end of function. Got $num", { num: vm.stack.length })
+
+      const result = vm.stack.pop();
+      vm = compilerState ? compilerState.vm : undefined!;
+      return Task.of(result);
+
+    })
+  );
+};
+const executeBytecodeTask = createTaskDef<ExecuteVmArg, void, unknown, never>(executeBytecodeImpl)
 
 
 const compileAndExecuteFunctionHeaderDef = createTaskDef<TypeCheckAndCompileArg, void, string, never>(
@@ -418,8 +446,10 @@ const letLocal = (vm: Vm, name: string, type: Type, value: Ast) => {
   return new LetAst(VoidType, vm.location, binding, value);
 }
 
-function createCallAstImpl(ctx, { vm, name, count, tcount }: { vm: Vm, name: string, count: number, tcount: number }): Task<string, never> {
+type CallArgs = { vm: Vm, name: string, count: number, tcount: number }
+function createCallAstImpl(ctx, { vm, name, count, tcount }: CallArgs): Task<string, never> {
   const args = popValues(count)
+  compilerAssert(args.every(isAst), "Expected ASTs", { args })
   const typeArgs = popValues(tcount || 0);
   const func = expectMap(vm.scope, name, `$key not in scope`)
   if (func instanceof ExternalFunction) {
@@ -440,7 +470,46 @@ function createCallAstImpl(ctx, { vm, name, count, tcount }: { vm: Vm, name: str
   }
   compilerAssert(false, "Not supported value $func", { func })
 }
-const createCallAstDef = createTaskDef(createCallAstImpl);
+const createCallAstDef = createTaskDef<CallArgs, void, string, never>(createCallAstImpl);
+
+const newEvent = () => {
+  return new Event<string, never>();
+}
+
+function resolveScope(scope: Scope, name: string) {
+  if (scope[name]) return Task.of(scope[name])
+  if (!scope[ScopeEventsSymbol]) scope[ScopeEventsSymbol] = {}
+  if (!scope[ScopeEventsSymbol][name]) scope[ScopeEventsSymbol][name] = newEvent()
+  return Task.waitFor(scope[ScopeEventsSymbol][name])
+}
+
+function callFunctionImpl(ctx, { vm, name, count, tcount }: CallArgs): Task<string, never> {
+  const values = popValues(count);
+  const typeArgs = popValues(tcount || 0);
+  return (
+    resolveScope(vm.scope, name)
+    .chainFn((task, func) => {
+
+      if (func instanceof ExternalFunction) {
+        const functionResult = func.func(...values);
+        vm.stack.push(functionResult);
+        return Task.of('success');
+      }
+      if (func instanceof Closure) {
+        return (
+          functionCompileTimeCompileTask.of({ func: func.func, typeArgs, args: values, parentScope: func.scope })
+          .chainFn((task, functionResult) => {
+            vm.stack.push(functionResult);
+            return Task.of("success")
+          })
+        )
+      }
+      compilerAssert(!(func instanceof FunctionDefinition), "$func is not handled", { func })
+      compilerAssert(false, "$func is not a function", { func })
+    })
+  )
+}
+const callFunctionTask = createTaskDef<CallArgs, void, string, never>(callFunctionImpl);
 
 const unknownToAst = (location: SourceLocation, value: unknown) => {
   if (typeof value === 'number') return new NumberAst(IntType, location, value);
@@ -481,7 +550,12 @@ const instructions: InstructionMapping = {
     vm.ip = vm.bytecode.code.length - 1;
   },
 
-  binding: ({ name }) => vm.stack.push(expectMap(vm.scope, name, `No binding ${name}`)),
+  binding: ({ name }) => {
+    return resolveScope(vm.scope, name).chainFn((task, res) => {
+      vm.stack.push(res)
+      return Task.of('success')
+    })
+  },
   
   pop: () => vm.stack.pop(),
   jumpf: ({ address }) => {
@@ -489,34 +563,14 @@ const instructions: InstructionMapping = {
   },
   letlocal: ({ name }) => {
     expect(!Object.hasOwn(vm.scope, name), `$name is already in scope`, { name });
-    vm.scope[name] = popStack();
+    setScopeValueAndResolveEvents(vm.scope, name, popStack())
   },
   setlocal: ({ name }) => {
     expect(Object.hasOwn(vm.scope, name), `$name not existing in scope`, { name });
     vm.scope[name] = popStack();
   },
   jump: ({ address }) => void (vm.ip = address),
-  call: ({ name, count, tcount }) => {
-    const values = popValues(count);
-    const typeArgs = popValues(tcount || 0);
-    const func = expectMap(vm.scope, name, "Expected $key in scope")
-    if (func instanceof ExternalFunction) {
-      const functionResult = func.func(...values);
-      vm.stack.push(functionResult);
-      return;
-    }
-    if (func instanceof Closure) {
-      return (
-        functionCompileTimeCompileTask.of({ func: func.func, typeArgs, args: values, parentScope: func.scope })
-        .chainFn((task, functionResult) => {
-          vm.stack.push(functionResult);
-          return Task.of("success")
-        })
-      )
-    }
-    compilerAssert(!(func instanceof FunctionDefinition), "$func is not handled", { func })
-    compilerAssert(false, "$func is not a function", { func })
-  },
+  call: ({ name, count, tcount }) => callFunctionTask.of({ vm, name, count, tcount }),
   operator: ({ name, count }) => {
     const values = popValues(count);
     compilerAssert(operators[name], `Invalid operator $name`, { name });
@@ -544,10 +598,11 @@ const instructions: InstructionMapping = {
   },
 };
 
-function executeBytecodeImpl(ctx, { vm } : { vm: Vm }, p: void): Task<string, never> {
+function executeVmImpl(ctx, { vm } : { vm: Vm }, p: void): Task<string, never> {
   const {locations, code} = vm.bytecode;
   let current = code[vm.ip];
   vm.location = locations[vm.ip];
+  compilerAssert(current, "Expected 'halt' instruction")
   while (current.type !== "halt") {
     const startIp = vm.ip;
     const instr = instructions[current.type];
@@ -560,38 +615,85 @@ function executeBytecodeImpl(ctx, { vm } : { vm: Vm }, p: void): Task<string, ne
       throw ex;
     }
 
-    if (isTask(res)) {
+    if (isTaskResult(res) || !isTask(res)) {
+      if (vm.ip === startIp) vm.ip++;
+      current = code[vm.ip];
+      vm.location = locations[vm.ip];
+    } else {
       return (res as Task<string, never>).chainFn(() => {
         if (vm.ip === startIp) vm.ip++;
         current = code[vm.ip];
         vm.location = locations[vm.ip];
 
-        return executeBytecodeTask.of({ vm })
+        return executeVmTask.of({ vm })
       })
-    } else {
-      if (vm.ip === startIp) vm.ip++;
-      current = code[vm.ip];
-      vm.location = locations[vm.ip];
     }
   }
   return Task.of('success')
 };
-export const executeBytecodeTask = createTaskDef<{ vm: Vm }, void, string, never>(executeBytecodeImpl);
+export const executeVmTask = createTaskDef<{ vm: Vm }, void, string, never>(executeVmImpl);
+
+const setScopeValueAndResolveEvents = (scope: Scope, name: string, value: unknown) => {
+  scope[name] = value;
+  const events = scope[ScopeEventsSymbol];
+  if (events && events[name]) {
+    (events[name] as Event<unknown, unknown>).success(value);
+    delete events[name]
+  }
+}
+
+type TopLevelFuncDecArg = {
+  funcDecl: ParserFunctionDecl,
+  scope: Scope
+}
+function topLevelFunctionDefinitionImpl(ctx, { funcDecl, scope }: TopLevelFuncDecArg) {
+  const funcDef = addFunctionDefinition(funcDecl)
+
+  compilerAssert(!Object.hasOwn(scope, funcDef.name!.token.value), "$name already in scope", { name: funcDef.name!.token.value, value: scope[funcDef.name!.token.value] })
+
+  setScopeValueAndResolveEvents(scope, funcDef.name!.token.value, new Closure(funcDef, scope))
+  return Task.of("Success")
+}
+
+
+const topLevelFunctionDefinitionTask = createTaskDef<TopLevelFuncDecArg, void, string, never>(topLevelFunctionDefinitionImpl)
 
 export const runTopLevel = (stmts: ParseStatements, rootScope: Scope) => {
+  const tasks: Task<unknown, unknown>[] = []
+  
   stmts.exprs.forEach(expr => {
+    if (expr.key === 'letconst') {
+      console.log(expr)
+
+      const out: BytecodeOut = {
+        bytecode: { code: [], locations: [] },
+        table: bytecodeDefault
+      }
+      writeBytecode(out, expr.value);
+      out.bytecode.code.push({ type: "halt" });
+      out.bytecode.locations.push(new SourceLocation(-1, -1));
+
+      console.log(bytecodeToString(out.bytecode))
+
+      const task = (
+        executeBytecodeTask.of({ bytecode: out.bytecode, scope: rootScope })
+        .chainFn((task, result) => {
+          setScopeValueAndResolveEvents(rootScope, expr.name.token.value, result)
+          return Task.of('success')
+        })
+      );
+      tasks.push(task);
+      return
+    }
     if (expr.key === 'function') {
 
-      const funcDef = addFunctionDefinition(expr.functionDecl)
-      // const func = parser.functionDecls[expr.id]
+      tasks.push(topLevelFunctionDefinitionTask.of({ funcDecl: expr.functionDecl, scope: rootScope }));
 
-      compilerAssert(!Object.hasOwn(rootScope, funcDef.name!.token.value), "$name already in scope", { name: funcDef.name!.token.value, value: rootScope[funcDef.name!.token.value] })
-
-      rootScope[funcDef.name!.token.value] = new Closure(funcDef, rootScope);
-      
       return
 
     }
     // compilerAssert(false, `Not supported at top level $key`, { key: expr.key })
   })
+
+  return Task.concurrency(tasks);
 }
