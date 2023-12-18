@@ -338,7 +338,7 @@ export const stepQueue = (queue: Queue) => {
 };
 
 type TaskDef<T, TParam, S, F> = { (param: TParam): Chainable<T, S, F> } &
-  { of(arg: T, param: TParam): Task<S, F> & Chainable<void, S, F>; };
+  { create(arg: T, param: TParam): Task<S, F> & Chainable<void, S, F>; };
 
 export const createTaskDef = <T, TParam, S, F>(
   computation: (context: object, arg: T, param: TParam) => Task<S, F>,
@@ -352,7 +352,7 @@ export const createTaskDef = <T, TParam, S, F>(
     }
     return { chainFrom }
   };
-  const of: TaskDef<T, TParam, S, F>["of"] = (arg: T, param: TParam) => {
+  const create: TaskDef<T, TParam, S, F>["create"] = (arg: T, param: TParam) => {
     const task = new InitFn((task) => computation(task._context, arg, param))
     // task.toString = () => computation.name
     task.def = computation.name;
@@ -362,6 +362,15 @@ export const createTaskDef = <T, TParam, S, F>(
   //   computation(task, arg, param);
 
   const taskDef: TaskDef<T, TParam, S, F> =
-    Object.assign(constructor, { of }, );
+    Object.assign(constructor, { create }, );
   return taskDef;
 };
+
+export const withContext = (context: object) => <S, F>(task: Task<S, F>) => {
+  const newTask = new InitFn<S, S, F, F>(newTask => {
+    newTask._context = Object.assign({}, newTask._context, context);
+    return task;
+  })
+  newTask.def = 'withContext'
+  return newTask
+}

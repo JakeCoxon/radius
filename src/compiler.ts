@@ -1,4 +1,4 @@
-import { isParseVoid, BytecodeOut, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, MetaInstructionTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseAst, CompiledFunction, AstRoot, isAst, compilerState, pushSubCompilerState, popSubCompilerState, addFunctionDefinition, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, BytecodeGen, ParserFunctionDecl, ScopeEventsSymbol } from "./defs";
+import { isParseVoid, BytecodeOut, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, MetaInstructionTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseAst, CompiledFunction, AstRoot, isAst, pushSubCompilerState, addFunctionDefinition, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, BytecodeGen, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState } from "./defs";
 import { Event, Task, createTaskDef, isTask, isTaskResult } from "./tasks";
 
 const pushBytecode = (out: BytecodeOut, token: Token, instr: BytecodeInstr) => {
@@ -16,7 +16,7 @@ const writeAll = (out: BytecodeOut, exprs: ParseAst[]) => {
   exprs.forEach(expr => writeBytecode(out, expr))
 }
 const writeMeta = (out: BytecodeOut, expr: ParseAst) => {
-  writeBytecode({ bytecode: out.bytecode, table: bytecodeDefault }, expr)
+  writeBytecode({ bytecode: out.bytecode, table: bytecodeDefault, globalCompilerState: out.globalCompilerState }, expr)
 }
 
 const bytecodeDefault: MetaInstructionTable = {
@@ -33,8 +33,8 @@ const bytecodeDefault: MetaInstructionTable = {
   meta:     (out, ast) => (writeBytecode(out, ast.expr)),
   comptime: (out, ast) => (writeBytecode(out, ast.expr)),
 
-  list: (out, ast) => (writeAll(out, ast.exprs), pushBytecode(out, ast.token, { type: 'list', count: ast.exprs.length })),
-  // binding: (out, ast) => pushBytecode(out, { type: "binding", name }), // prettier-ignore
+  list:  (out, ast) => (writeAll(out, ast.exprs), pushBytecode(out, ast.token, { type: 'list', count: ast.exprs.length })),
+  tuple: (out, ast) => (writeAll(out, ast.exprs), pushBytecode(out, ast.token, { type: 'tuple', count: ast.exprs.length })),
   
   let: (out, ast) => {
     compilerAssert(ast.value, "Not implemented yet");
@@ -43,7 +43,7 @@ const bytecodeDefault: MetaInstructionTable = {
   },
 
   function: (out, ast) => {
-    pushBytecode(out, ast.token, { type: "closure", id: addFunctionDefinition(ast.functionDecl).id }) // prettier-ignore
+    pushBytecode(out, ast.token, { type: "closure", id: addFunctionDefinition(out.globalCompilerState, ast.functionDecl).id }) // prettier-ignore
   },
   call:    (out, ast) => {
     compilerAssert(ast.typeArgs.length === 0, "Not implemented")
@@ -58,15 +58,6 @@ const bytecodeDefault: MetaInstructionTable = {
     if (ast.expr) writeBytecode(out, ast.expr);
     pushBytecode(out, ast.token, { type: 'return', r: !!ast.expr })
   },
-
-  // "call*": (out, ...rest) => (writeAll(out, rest), pushBytecode(out, { type: "call", args: rest.length })), // prettier-ignore
-  // "callt*": (out, ...rest) => (writeAll(out, rest), pushBytecode(out, { type: "callt", args: rest.length })), // prettier-ignore
-  // builtincall: (out, name, ...args) => (writeAll(out, args), pushBytecode(out, { type: "builtin", name, args: args.length })), // prettier-ignore
-  // tuple: (out, ...args) => (writeAll(out, args), pushBytecode(out, { type: "tuple", args: args.length })), // prettier-ignore
-  // appendquote: (out, quote) => (writeBytecode(out, quote), pushBytecode(out, { type: 'appendq'})), // prettier-ignore
-  // deflocal: (out, name, value) => (writeBytecode(out, value), pushBytecode(out, { type: 'deflocal', name })), // prettier-ignore
-  // setlocal: (out, name, value) => (writeBytecode(out, value), pushBytecode(out, { type: 'setlocal', name })), // prettier-ignore
-  // operator: (out, name, ...args) => (writeAll(out, args), pushBytecode(out, { type: 'operator', name, args: args.length })), // prettier-ignore
 
   and: (out, ast) => {
     writeAll(out, ast.exprs)
@@ -84,13 +75,6 @@ const bytecodeDefault: MetaInstructionTable = {
     });
   },
   
-  // "statements*": (out, ...stmts) => {
-  //   stmts.forEach((x, i) => {
-  //     writeBytecode(out, x);
-  //     if (i !== stmts.length - 1) pushBytecode(out, { type: "pop" });
-  //   });
-  // },
-
   else: (out, ast) => writeBytecode(out, ast.body),
 
   if: (out, ast) => {
@@ -111,22 +95,18 @@ const bytecodeDefault: MetaInstructionTable = {
 };
 
 const bytecodeSecond: MetaInstructionTable = {
-  // string: (out, ast) => pushBytecode(out, ast.token, { type: "stringast", token: ast.value }), // prettier-ignore
   identifier: (out, ast) => pushBytecode(out, ast.token, { type: "bindingast", name: ast.token.value }), // prettier-ignore
   number:  (out, ast) => pushBytecode(out, ast.token, { type: "numberast", value: Number(ast.token.value) }), // prettier-ignore
   name:    (out, ast) => pushBytecode(out, ast.token, { type: "nameast", name: ast.token.value }), // prettier-ignore
   string:  (out, ast) => pushBytecode(out, ast.token, { type: "stringast", value: ast.token.value }), // prettier-ignore
   boolean: (out, ast) => pushBytecode(out, ast.token, { type: "boolast", value: ast.token.value !== 'false' }), // prettier-ignore
-  // closure: (out, ast) => pushBytecode(out, { type: "closure", id }), // prettier-ignore
 
-  // "callt*": (out, ast) => (writeAll(out, rest), pushBytecode(out, { type: "callt", args: rest.length })), // prettier-ignore
-  // builtincall: (out, ast) => (writeAll(out, args), pushBytecode(out, { type: "builtin", name, args: args.length })), // prettier-ignore
-  // tuple: (out, ast) => (writeAll(out, args), pushBytecode(out, { type: "tuple", args: args.length })), // prettier-ignore
   set:      (out, ast) => (writeBytecode(out, ast.value), pushBytecode(out, ast.token, { type: 'setast', name: ast.name })), // prettier-ignore,
   operator: (out, ast) => (writeAll(out, ast.exprs), pushBytecode(out, ast.token, { type: 'operatorast', name: ast.token.value, count: ast.exprs.length })), // prettier-ignore
   meta:     (out, ast) => (writeMeta(out, ast.expr), pushBytecode(out, ast.token, { type: 'toast' })),
   comptime: (out, ast) => writeMeta(out, ast.expr),
   letconst: (out, ast) => (writeMeta(out, ast.value), pushBytecode(out, ast.token, { type: 'letlocal', name: ast.name.token.value })),
+  tuple:    (out, ast) => (writeAll(out, ast.exprs), pushBytecode(out, ast.token, { type: 'tuple', count: ast.exprs.length })),
 
   while: (out, ast) => (writeBytecode(out, ast.body), writeBytecode(out, ast.condition), pushBytecode(out, ast.token, { type: 'whileast' })),
 
@@ -145,13 +125,13 @@ const bytecodeSecond: MetaInstructionTable = {
   or: (out, ast) =>  (writeAll(out, ast.exprs), pushBytecode(out, ast.token, { type: "orast", count: ast.exprs.length })),
   
   let: (out, ast) => {
-    compilerAssert(ast.value, "Not implemented yet");
-    compilerAssert(ast.type, "Not implemented yet");
-    (writeBytecode(out, ast.value), writeMeta(out, ast.type), pushBytecode(out, ast.token, { type: 'letast', name: ast.name.token.value })) // prettier-ignore,
+    if (ast.value) writeBytecode(out, ast.value);
+    if (ast.type) writeMeta(out, ast.type);
+    pushBytecode(out, ast.token, { type: 'letast', name: ast.name.token.value, t: !!ast.type, v: !!ast.value })
   },
 
   call: (out, ast) => {
-    writeAll(out, ast.typeArgs);
+    ast.typeArgs.forEach(x => writeMeta(out, x));
     writeAll(out, ast.args);
     if (ast.left instanceof ParseIdentifier) {
       pushBytecode(out, ast.token, { type: "callast", name: ast.left.token.value, count: ast.args.length, tcount: ast.typeArgs.length }); // prettier-ignore
@@ -173,7 +153,6 @@ const bytecodeSecond: MetaInstructionTable = {
   else: (out, ast) => writeBytecode(out, ast.body),
 
   metaif: (out, ast) => {
-    // TODO: elsif
     const if_ = ast.expr
     writeMeta(out, if_.condition);
     const jump1 = { type: "jumpf", address: 0 };
@@ -183,6 +162,7 @@ const bytecodeSecond: MetaInstructionTable = {
       const jump2 = { type: "jump", address: 0 };
       pushBytecode(out, if_.trueBody.token, jump2);
       jump1.address = out.bytecode.code.length;
+      compilerAssert(!(if_.falseBody instanceof ParseIf), "Meta elif not implemented yet")
       writeBytecode(out, if_.falseBody);
       jump2.address = out.bytecode.code.length;
     } else {
@@ -198,13 +178,14 @@ const bytecodeSecond: MetaInstructionTable = {
   }
 };
 
-const compileFunctionPrototype = (prototype: FunctionPrototype) => {
+const compileFunctionPrototype = (ctx: TaskContext, prototype: FunctionPrototype) => {
   if (prototype.bytecode) return prototype.bytecode;
 
   prototype.bytecode = { code: [], locations: [] }
   const out: BytecodeOut = {
     bytecode: prototype.bytecode,
-    table: prototype.instructionTable
+    table: prototype.instructionTable,
+    globalCompilerState: ctx.globalCompiler
   }
   writeBytecode(out, prototype.body);
   prototype.bytecode.code.push({ type: "halt" });
@@ -216,34 +197,6 @@ const compileFunctionPrototype = (prototype: FunctionPrototype) => {
   return prototype.bytecode;
 };
 
-type ExecuteProtoArg = {
-  func: FunctionDefinition, prototype: FunctionPrototype, scope: Scope
-};
-
-function executePrototypeImpl(ctx, { func, prototype, scope }: ExecuteProtoArg): Task<unknown, never> {
-  compilerAssert(scope, "Expected scope")
-
-  const newVm: Vm = { ip: 0, stack: [], scope, location: undefined!, bytecode: prototype.bytecode! };
-  pushSubCompilerState({ vm: newVm, func });
-  compilerAssert(prototype.bytecode)
-
-  vm = newVm;
-  return (
-    executeVmTask.of({ vm })
-    .chainFn((task, arg) => {
-
-      popSubCompilerState();
-      compilerAssert(vm.stack.length === 1, "Expected 1 value on stack at end of function. Got $num", { num: vm.stack.length })
-
-      const result = vm.stack.pop();
-      vm = compilerState ? compilerState.vm : undefined!;
-      return Task.of(result);
-
-    })
-  );
-};
-const executePrototypeTask = createTaskDef<ExecuteProtoArg, void, unknown, never>(executePrototypeImpl)
-
 type ExecuteVmArg = {
   bytecode: BytecodeGen, scope: Scope
 };
@@ -251,22 +204,19 @@ type ExecuteVmArg = {
 function executeBytecodeImpl(ctx, { bytecode, scope }: ExecuteVmArg): Task<unknown, never> {
   compilerAssert(scope, "Expected scope")
 
-  const newVm: Vm = { ip: 0, stack: [], scope, location: undefined!, bytecode: bytecode! };
-  pushSubCompilerState({ vm: newVm, func: null });
+  const vm: Vm = { ip: 0, stack: [], scope, location: undefined!, bytecode: bytecode!, context: ctx };
+  pushSubCompilerState(ctx, { vm, func: null });
   compilerAssert(bytecode)
 
-  vm = newVm;
   return (
-    executeVmTask.of({ vm })
+    executeVmTask.create({ vm  })
     .chainFn((task, arg) => {
 
-      popSubCompilerState();
-      compilerAssert(vm.stack.length === 1, "Expected 1 value on stack at end of function. Got $num", { num: vm.stack.length })
+      compilerAssert(vm.stack.length === 1, "Expected 1 value on stack at end of function. Got $num", { num: vm.stack.length, vm })
 
       const result = vm.stack.pop();
-      vm = compilerState ? compilerState.vm : undefined!;
+      // vm = compilerState ? compilerState.vm : undefined!;
       return Task.of(result);
-
     })
   );
 };
@@ -274,7 +224,7 @@ const executeBytecodeTask = createTaskDef<ExecuteVmArg, void, unknown, never>(ex
 
 
 const compileAndExecuteFunctionHeaderDef = createTaskDef<TypeCheckAndCompileArg, void, string, never>(
-  function compileAndExecuteFunctionHeaderDef(ctx, { func, args, parentScope }, param) {
+  function compileAndExecuteFunctionHeaderDef(ctx: TaskContext, { func, args, parentScope }, param) {
 
     compilerAssert(args.length === func.args.length, 'Expected $x args got $y', { x: func.args.length, y: args.length })
     func.args.forEach((arg, i) => {
@@ -284,27 +234,19 @@ const compileAndExecuteFunctionHeaderDef = createTaskDef<TypeCheckAndCompileArg,
     
     if (!func.headerPrototype) {
       const args = func.args.map(([name, type], i) => type ? type : new ParseNil(createToken('')))
-      const body = new ParseCall(createToken(''), new ParseIdentifier(createToken('__eval')), args, []);
+      const body = new ParseTuple(createToken(''), args);
       func.headerPrototype = { name: `${func.debugName} header`, body, instructionTable: bytecodeDefault }; // prettier-ignore
-      compileFunctionPrototype(func.headerPrototype)
+      compileFunctionPrototype(ctx, func.headerPrototype)
     }
 
-    const concreteTypes = {};
-    const expectArg = (name: string, value, expected) => {
-      compilerAssert(value === expected, "Argument $name of type $value does not match $expected", { name, value, expected })
-      concreteTypes[name] = expected;
-    };
     const scope = Object.create(parentScope);
-    Object.assign(scope, { __expectArg: new ExternalFunction('__expectArg', expectArg) });
-    Object.assign(scope, { __eval: new ExternalFunction('__eval', (...args) => args) }); // TODO: replace with tuple
 
-    // TODO: Do this once for compiled functions
     return (
-      executePrototypeTask.of({ func, prototype: func.headerPrototype!, scope })
+      executeBytecodeTask.create({ bytecode: func.headerPrototype!.bytecode!, scope })
       .chainFn((task, compiledArgTypes) => {
 
-        compilerAssert(Array.isArray(compiledArgTypes), "Error")
-        compiledArgTypes.forEach((type, i) => {
+        compilerAssert(compiledArgTypes instanceof Tuple, "Expected tuple")
+        compiledArgTypes.values.forEach((type, i) => {
           if (type === null) return
           compilerAssert(type instanceof Type);
           compilerAssert(args[i].type === type, "Argument $name of type $value does not match $expected", { name: func.args[i][0].token, value: args[i].type, expected: type })
@@ -313,14 +255,6 @@ const compileAndExecuteFunctionHeaderDef = createTaskDef<TypeCheckAndCompileArg,
       })
     )
 
-    // console.log('compiled args', res)
-    // func.typeArgs.forEach((typeArg, i) => {
-    //   // scope[typeArg] = typeArgs[i];
-    // });
-    // if (func.args.length) {
-    //   
-    //   executePrototype(func, func.headerPrototype!, scope);
-    // }
   });
 
 type TypeCheckAndCompileArg = {
@@ -330,19 +264,31 @@ type TypeCheckAndCompileArg = {
     parentScope: Scope
 }
 
-function functionTemplateTypeCheckAndCompileImpl(ctx, { func, typeArgs, args, parentScope }: TypeCheckAndCompileArg, param): Task<CompiledFunction, never> {
+function functionTemplateTypeCheckAndCompileImpl(ctx: TaskContext, { func, typeArgs, args, parentScope }: TypeCheckAndCompileArg, param): Task<CompiledFunction, never> {
 
   const argBindings: Binding[] = [];
+  let typeParamHash;
 
   return (
-    compileAndExecuteFunctionHeaderDef.of({ func, args, typeArgs, parentScope })
+    compileAndExecuteFunctionHeaderDef.create({ func, args, typeArgs, parentScope })
     .chainFn((task, arg) => {
 
       compilerAssert(func.body)
 
-      if (!func.templatePrototype) 
+      if (!func.templatePrototype)  {
         func.templatePrototype = { name: `${func.debugName} template bytecode`, body: func.body, instructionTable: bytecodeSecond }; // prettier-ignore
+        compileFunctionPrototype(ctx, func.templatePrototype);
+      }
       compilerAssert(func.templatePrototype);
+
+      compilerAssert(typeArgs.length === func.typeArgs.length, "Expected $expected type parameters, got $got", { expected: func.typeArgs.length, got: typeArgs.length })
+      typeParamHash = hashValues(typeArgs)
+      const existing = func.compiledFunctions.find(compiledFunc => {
+        if (compiledFunc.typeParamHash === typeParamHash) {
+          if (compiledFunc.typeParameters.every((x, i) => x === typeArgs[i])) return true
+        }
+      })
+      if (existing) return Task.of(existing);
 
       const templateScope = Object.create(parentScope);
       
@@ -351,37 +297,39 @@ function functionTemplateTypeCheckAndCompileImpl(ctx, { func, typeArgs, args, pa
         templateScope[iden.token.value] = binding;
         argBindings.push(binding);
       });
-
+      
       func.typeArgs.forEach((typeArg, i) => {
-        compilerAssert(typeArgs[i], "Expected type argument number $i", { i });
         compilerAssert(typeArg instanceof ParseIdentifier, "Not implemented")
         templateScope[typeArg.token.value] = typeArgs[i];
       });
 
-      compileFunctionPrototype(func.templatePrototype);
+      return (
+        executeBytecodeTask.create({ bytecode: func.templatePrototype.bytecode!, scope: templateScope })
+        .chainFn((task, ast) => {
 
-      return executePrototypeTask.of({ func, prototype: func.templatePrototype, scope: templateScope });
-    })
-    .chainFn((task, ast) => {
+          const concreteTypes = []
 
-      const concreteTypes = []
+          console.log(`Compiled template ${func.debugName}`)
+          
+          compilerAssert(isAst(ast), "Expected ast got $ast", { ast });
 
-      console.log(`Compiled template ${func.debugName}`)
-      
-      compilerAssert(isAst(ast), "Expected ast got $ast", { ast });
-
-      const binding = new Binding(`${func.debugName} compiled`, FunctionType);
-      const returnType = ast.type;
-      const compiledFunction = new CompiledFunction(binding, func, returnType, concreteTypes, ast, argBindings);
-      compilerState.global.compiledFunctions.set(binding, compiledFunction);
-      
-      return Task.of(compiledFunction)
+          const id = func.compiledFunctions.length;
+          const binding = new Binding(`${func.debugName} compiled ${id}`, FunctionType);
+          const returnType = ast.type;
+          const compiledFunction = new CompiledFunction(
+              binding, func, returnType, concreteTypes, ast, argBindings, typeArgs, typeParamHash);
+          ctx.globalCompiler.compiledFunctions.set(binding, compiledFunction);
+          func.compiledFunctions.push(compiledFunction)
+          
+          return Task.of(compiledFunction)
+        })
+      )
     })
   )
 
 }
 
-export const functionTemplateTypeCheckAndCompileDef = createTaskDef<TypeCheckAndCompileArg, void, CompiledFunction, never>(functionTemplateTypeCheckAndCompileImpl)
+export const functionTemplateTypeCheckAndCompileTask = createTaskDef<TypeCheckAndCompileArg, void, CompiledFunction, never>(functionTemplateTypeCheckAndCompileImpl)
 
 type FunctionCallArg = {
   func: FunctionDefinition,
@@ -389,7 +337,7 @@ type FunctionCallArg = {
   args: any[],
   parentScope: Scope
 }
-function functionCompileTimeCompileImpl(ctx, { func, typeArgs, args, parentScope }: FunctionCallArg) {
+function functionCompileTimeCompileImpl(ctx: TaskContext, { func, typeArgs, args, parentScope }: FunctionCallArg) {
   compilerAssert(func.body, "Expected body");
   compilerAssert(args.length === func.args.length, "Expected $expected arguments got $got", { expected: func.args.length, got: func.args.length, func })
 
@@ -404,19 +352,17 @@ function functionCompileTimeCompileImpl(ctx, { func, typeArgs, args, parentScope
   // func.typeArgs.forEach((typeArg, i) => {
   //   scope[typeArg] = typeArgs[i];
   // });
-  compileFunctionPrototype(func.compileTimePrototype)
-  return executePrototypeTask.of({ func, prototype: func.compileTimePrototype, scope });
+  compileFunctionPrototype(ctx, func.compileTimePrototype)
+  return executeBytecodeTask.create({ bytecode: func.compileTimePrototype.bytecode!, scope });
 };
 const functionCompileTimeCompileTask = createTaskDef<FunctionCallArg, void, unknown, never>(functionCompileTimeCompileImpl)
 
 
-let vm: Vm = undefined!;
-
-const popValues = (num) => {
+const popValues = (vm: Vm, num: number) => {
   if (vm.stack.length < num) throw new Error(`Expected ${num} values on stack`);
   return Array.from(new Array(num)).map(() => vm.stack.pop()).reverse() // prettier-ignore
 };
-const popStack = () => {
+const popStack = (vm: Vm) => {
   if (vm.stack.length === 0) {
     console.log(vm.stack)
     throw new Error(`Expected 1 value on stack got ${vm.stack.length}`);
@@ -439,18 +385,20 @@ const operators = {
 };
 
 
-const letLocal = (vm: Vm, name: string, type: Type, value: Ast) => {
-  if (Object.hasOwn(vm.scope, name))
-    throw new Error(`Already defined ${name}`);
-  const binding = (vm.scope[name] = new Binding(name, type));
+const letLocal = (vm: Vm, name: string, type: Type | null, value: Ast | null) => {
+  compilerAssert(type || value);
+  compilerAssert(!Object.hasOwn(vm.scope, name), `Already defined $name`, { name });
+  const inferType = type || value!.type
+  console.log("inferType", inferType)
+  const binding = (vm.scope[name] = new Binding(name, inferType));
   return new LetAst(VoidType, vm.location, binding, value);
 }
 
 type CallArgs = { vm: Vm, name: string, count: number, tcount: number }
 function createCallAstImpl(ctx, { vm, name, count, tcount }: CallArgs): Task<string, never> {
-  const args = popValues(count)
+  const args = popValues(vm, count)
   compilerAssert(args.every(isAst), "Expected ASTs", { args })
-  const typeArgs = popValues(tcount || 0);
+  const typeArgs = popValues(vm, tcount || 0);
   const func = expectMap(vm.scope, name, `$key not in scope`)
   if (func instanceof ExternalFunction) {
     vm.stack.push(new CallAst(IntType, vm.location, func, args));
@@ -458,7 +406,7 @@ function createCallAstImpl(ctx, { vm, name, count, tcount }: CallArgs): Task<str
   }
   if (func instanceof Closure) {
     return (
-      functionTemplateTypeCheckAndCompileDef.of({ func: func.func, typeArgs, args, parentScope: func.scope })
+      functionTemplateTypeCheckAndCompileTask.create({ func: func.func, typeArgs, args, parentScope: func.scope })
       .chainFn((task, compiledFunction) => {
         const binding = compiledFunction.binding;
         const returnType = compiledFunction.returnType;
@@ -484,8 +432,8 @@ function resolveScope(scope: Scope, name: string) {
 }
 
 function callFunctionImpl(ctx, { vm, name, count, tcount }: CallArgs): Task<string, never> {
-  const values = popValues(count);
-  const typeArgs = popValues(tcount || 0);
+  const values = popValues(vm, count);
+  const typeArgs = popValues(vm, tcount || 0);
   return (
     resolveScope(vm.scope, name)
     .chainFn((task, func) => {
@@ -495,14 +443,11 @@ function callFunctionImpl(ctx, { vm, name, count, tcount }: CallArgs): Task<stri
         vm.stack.push(functionResult);
         return Task.of('success');
       }
+
       if (func instanceof Closure) {
-        return (
-          functionCompileTimeCompileTask.of({ func: func.func, typeArgs, args: values, parentScope: func.scope })
-          .chainFn((task, functionResult) => {
-            vm.stack.push(functionResult);
-            return Task.of("success")
-          })
-        )
+        const call: FunctionCallArg = { func: func.func, typeArgs, args: values, parentScope: func.scope };
+        const task = functionCompileTimeCompileTask.create(call)
+        return task.chainFn((task, res) => { vm.stack.push(res); return Task.of("success") })
       }
       compilerAssert(!(func instanceof FunctionDefinition), "$func is not handled", { func })
       compilerAssert(false, "$func is not a function", { func })
@@ -518,68 +463,67 @@ const unknownToAst = (location: SourceLocation, value: unknown) => {
   compilerAssert(false, "Type is not convertable to an AST: $value", { value })
 }
 
-type InstructionMapping = {[key:string]:(instr: BytecodeInstr) => unknown}
-
 const instructions: InstructionMapping = {
-  push: ({ value }) => vm.stack.push(value),
-  nil: () => vm.stack.push(null),
+  push: (vm, { value }) => vm.stack.push(value),
+  nil: (vm) => vm.stack.push(null),
 
-  operatorast: ({ name, count }) => vm.stack.push(new OperatorAst(IntType, vm.location, name, popValues(count))),
-  numberast:({ value }) =>  vm.stack.push(new NumberAst(IntType, vm.location, value)),
-  stringast:({ value }) =>  vm.stack.push(new StringAst(StringType, vm.location, value)),
-  boolast:({ value }) =>    vm.stack.push(new BoolAst(IntType, vm.location, value)),
-  letast: ({ name }) =>     vm.stack.push(letLocal(vm, name, popStack(), popStack())),
-  setast: ({ name }) =>     vm.stack.push(new SetAst(VoidType, vm.location, name, popStack())),
-  orast: ({ count }) =>     vm.stack.push(new OrAst(IntType, vm.location, popValues(count))),
-  andast: ({ count }) =>    vm.stack.push(new AndAst(IntType, vm.location, popValues(count))),
-  listast: ({ count }) =>   vm.stack.push(new ListAst(IntType, vm.location, popValues(count))),
-  ifast: ({ f }) =>         vm.stack.push(new IfAst(IntType, vm.location, popStack(), popStack(), f ? popStack() : null)),
-  whileast: () =>           vm.stack.push(new WhileAst(VoidType, vm.location, popStack(), popStack())),
-  returnast: ({ r }) =>     vm.stack.push(new ReturnAst(VoidType, vm.location, r ? popStack() : null)),
-  callast: ({ name, count, tcount }) => createCallAstDef.of({ vm, name, count, tcount }),
-  toast: () => vm.stack.push(unknownToAst(vm.location, popStack())),
+  operatorast: (vm, { name, count }) => vm.stack.push(new OperatorAst(IntType, vm.location, name, popValues(vm, count))),
+  numberast: (vm, { value }) => vm.stack.push(new NumberAst(IntType, vm.location, value)),
+  stringast: (vm, { value }) => vm.stack.push(new StringAst(StringType, vm.location, value)),
+  boolast: (vm, { value }) =>   vm.stack.push(new BoolAst(BoolType, vm.location, value)),
+  setast: (vm, { name }) =>     vm.stack.push(new SetAst(VoidType, vm.location, name, popStack(vm))),
+  orast: (vm, { count }) =>     vm.stack.push(new OrAst(IntType, vm.location, popValues(vm, count))),
+  andast: (vm, { count }) =>    vm.stack.push(new AndAst(IntType, vm.location, popValues(vm, count))),
+  listast: (vm, { count }) =>   vm.stack.push(new ListAst(IntType, vm.location, popValues(vm, count))),
+  ifast: (vm, { f }) =>         vm.stack.push(new IfAst(IntType, vm.location, popStack(vm), popStack(vm), f ? popStack(vm) : null)),
+  whileast: (vm) =>             vm.stack.push(new WhileAst(VoidType, vm.location, popStack(vm), popStack(vm))),
+  returnast: (vm, { r }) =>     vm.stack.push(new ReturnAst(VoidType, vm.location, r ? popStack(vm) : null)),
+  letast: (vm, { name, t, v }) => vm.stack.push(letLocal(vm, name, t ? popStack(vm) : null, v ? popStack(vm) : null)),
+  callast: (vm, { name, count, tcount }) => createCallAstDef.create({ vm, name, count, tcount }),
+  toast: (vm) => vm.stack.push(unknownToAst(vm.location, popStack(vm))),
 
-  bindingast: ({ name }) => {
+  bindingast: (vm, { name }) => {
     const value = expectMap(vm.scope, name, `No binding ${name}`);
     vm.stack.push(unknownToAst(vm.location, value));
   },
-  return: ({ r }) => { 
+  return: (vm, { r }) => { 
     const ret = r ? vm.stack[vm.stack.length - 1] : null;
     vm.stack.length = 0
     vm.stack.push(ret);
     vm.ip = vm.bytecode.code.length - 1;
   },
 
-  binding: ({ name }) => {
+  binding: (vm, { name }) => {
     return resolveScope(vm.scope, name).chainFn((task, res) => {
       vm.stack.push(res)
       return Task.of('success')
     })
   },
   
-  pop: () => vm.stack.pop(),
-  jumpf: ({ address }) => {
+  pop: (vm) => vm.stack.pop(),
+  jumpf: (vm, { address }) => {
     if (!vm.stack.pop()) vm.ip = address;
   },
-  letlocal: ({ name }) => {
+  letlocal: (vm, { name }) => {
     expect(!Object.hasOwn(vm.scope, name), `$name is already in scope`, { name });
-    setScopeValueAndResolveEvents(vm.scope, name, popStack())
+    setScopeValueAndResolveEvents(vm.scope, name, popStack(vm))
   },
-  setlocal: ({ name }) => {
+  setlocal: (vm, { name }) => {
     expect(Object.hasOwn(vm.scope, name), `$name not existing in scope`, { name });
-    vm.scope[name] = popStack();
+    vm.scope[name] = popStack(vm);
   },
-  jump: ({ address }) => void (vm.ip = address),
-  call: ({ name, count, tcount }) => callFunctionTask.of({ vm, name, count, tcount }),
-  operator: ({ name, count }) => {
-    const values = popValues(count);
+  jump: (vm, { address }) => void (vm.ip = address),
+  call: (vm, { name, count, tcount }) => callFunctionTask.create({ vm, name, count, tcount }),
+  operator: (vm, { name, count }) => {
+    const values = popValues(vm, count);
     compilerAssert(operators[name], `Invalid operator $name`, { name });
     const operatorResult = operators[name](...values);
     vm.stack.push(operatorResult);
   },
-  closure: ({ id }) => {
-    compilerAssert(id in compilerState.global.functionDefinitions, "Not found in func $id", { id })
-    const func = compilerState.global.functionDefinitions[id];
+  closure: (vm, { id }) => {
+    const globalCompiler = (vm.context as TaskContext).globalCompiler
+    compilerAssert(id in globalCompiler.functionDefinitions, "Not found in func $id", { id })
+    const func = globalCompiler.functionDefinitions[id];
     const closure = new Closure(func, vm.scope);
     vm.stack.push(closure);
     if (func.name) {
@@ -588,11 +532,12 @@ const instructions: InstructionMapping = {
       vm.scope[func.name.token.value] = closure;
     }
   },
-  tuple: ({ count }) => vm.stack.push({ _tuple: true, values: popValues(count) }),
-  pushqs: () => compilerState.quoteStack.push([]),
-  popqs: () => vm.stack.push(createStatements(vm.location, compilerState.quoteStack.pop())),
-  appendq: () => {
+  tuple: (vm, { count }) => vm.stack.push(new Tuple(popValues(vm, count))),
+  pushqs: (vm) => vm.context.subCompilerState.quoteStack.push([]),
+  popqs: (vm) => vm.stack.push(createStatements(vm.location, vm.context.subCompilerState.quoteStack.pop())),
+  appendq: (vm) => {
     const value = vm.stack.pop();
+    const compilerState = vm.context.subCompilerState;
     compilerState.quoteStack[compilerState.quoteStack.length - 1].push(value);
     vm.stack.push(null); // needed for statements
   },
@@ -609,7 +554,7 @@ function executeVmImpl(ctx, { vm } : { vm: Vm }, p: void): Task<string, never> {
     compilerAssert(instr, "Not inplemented yet instruction $type", { type: current.type, current })
     let res;
     try {
-      res = instr(current);
+      res = instr(vm, current);
     } catch(ex) {
       console.log({ current, ip: vm.ip })
       throw ex;
@@ -625,7 +570,7 @@ function executeVmImpl(ctx, { vm } : { vm: Vm }, p: void): Task<string, never> {
         current = code[vm.ip];
         vm.location = locations[vm.ip];
 
-        return executeVmTask.of({ vm })
+        return executeVmTask.create({ vm })
       })
     }
   }
@@ -634,6 +579,9 @@ function executeVmImpl(ctx, { vm } : { vm: Vm }, p: void): Task<string, never> {
 export const executeVmTask = createTaskDef<{ vm: Vm }, void, string, never>(executeVmImpl);
 
 const setScopeValueAndResolveEvents = (scope: Scope, name: string, value: unknown) => {
+  // TODO: Make sure metagenerated names don't shadow something because this won't work
+  // To do that might be difficult because the shadow might compile before the thing being shadowed.
+  // Can we enforce outer scopes are compiled first?
   scope[name] = value;
   const events = scope[ScopeEventsSymbol];
   if (events && events[name]) {
@@ -646,19 +594,20 @@ type TopLevelFuncDecArg = {
   funcDecl: ParserFunctionDecl,
   scope: Scope
 }
-function topLevelFunctionDefinitionImpl(ctx, { funcDecl, scope }: TopLevelFuncDecArg) {
-  const funcDef = addFunctionDefinition(funcDecl)
+function topLevelFunctionDefinitionImpl(ctx: TaskContext, { funcDecl, scope }: TopLevelFuncDecArg) {
+  const funcDef = addFunctionDefinition(ctx.globalCompiler, funcDecl)
 
   compilerAssert(!Object.hasOwn(scope, funcDef.name!.token.value), "$name already in scope", { name: funcDef.name!.token.value, value: scope[funcDef.name!.token.value] })
 
   setScopeValueAndResolveEvents(scope, funcDef.name!.token.value, new Closure(funcDef, scope))
+
   return Task.of("Success")
 }
 
 
 const topLevelFunctionDefinitionTask = createTaskDef<TopLevelFuncDecArg, void, string, never>(topLevelFunctionDefinitionImpl)
 
-export const runTopLevel = (stmts: ParseStatements, rootScope: Scope) => {
+export const runTopLevel = (globalCompiler: GlobalCompilerState, stmts: ParseStatements, rootScope: Scope) => {
   const tasks: Task<unknown, unknown>[] = []
   
   stmts.exprs.forEach(expr => {
@@ -667,7 +616,8 @@ export const runTopLevel = (stmts: ParseStatements, rootScope: Scope) => {
 
       const out: BytecodeOut = {
         bytecode: { code: [], locations: [] },
-        table: bytecodeDefault
+        table: bytecodeDefault,
+        globalCompilerState: globalCompiler
       }
       writeBytecode(out, expr.value);
       out.bytecode.code.push({ type: "halt" });
@@ -676,7 +626,7 @@ export const runTopLevel = (stmts: ParseStatements, rootScope: Scope) => {
       console.log(bytecodeToString(out.bytecode))
 
       const task = (
-        executeBytecodeTask.of({ bytecode: out.bytecode, scope: rootScope })
+        executeBytecodeTask.create({ bytecode: out.bytecode, scope: rootScope })
         .chainFn((task, result) => {
           setScopeValueAndResolveEvents(rootScope, expr.name.token.value, result)
           return Task.of('success')
@@ -687,7 +637,7 @@ export const runTopLevel = (stmts: ParseStatements, rootScope: Scope) => {
     }
     if (expr.key === 'function') {
 
-      tasks.push(topLevelFunctionDefinitionTask.of({ funcDecl: expr.functionDecl, scope: rootScope }));
+      tasks.push(topLevelFunctionDefinitionTask.create({ funcDecl: expr.functionDecl, scope: rootScope }));
 
       return
 

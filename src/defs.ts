@@ -29,7 +29,9 @@ export class CompiledFunction {
     public returnType: Type,
     public concreteTypes: Type[],
     public body: Ast,
-    public argBindings: Binding[]) {}
+    public argBindings: Binding[],
+    public typeParameters: unknown[],
+    public typeParamHash: unknown) {}
 }
 
 export class SourceLocation {
@@ -93,7 +95,7 @@ export class ParseOperator extends ParseTreeType {   key = 'operator' as const; 
 export class ParseNote extends ParseTreeType {       key = 'note' as const;       constructor(public token: Token, public expr: ParseAst) { super();} }
 export class ParseMeta extends ParseTreeType {       key = 'meta' as const;       constructor(public token: Token, public expr: ParseAst) { super();} }
 export class ParseMetaIf extends ParseTreeType {     key = 'metaif' as const;     constructor(public token: Token, public expr: ParseIf) { super();} }
-export class ParseMetaFor extends ParseTreeType {    key = 'metafor' as const;     constructor(public token: Token, public expr: ParseFor) { super();} }
+export class ParseMetaFor extends ParseTreeType {    key = 'metafor' as const;    constructor(public token: Token, public expr: ParseFor) { super();} }
 export class ParseCompTime extends ParseTreeType {   key = 'comptime' as const;   constructor(public token: Token, public expr: ParseAst) { super();} }
 export class ParseCall extends ParseTreeType {       key = 'call' as const;       constructor(public token: Token, public left: ParseAst, public args: ParseAst[], public typeArgs: ParseAst[]) { super();} }
 export class ParseList extends ParseTreeType {       key = 'list' as const;       constructor(public token: Token, public exprs: ParseAst[]) { super();} }
@@ -146,13 +148,21 @@ export type FunctionPrototype = {
   instructionTable: MetaInstructionTable
 }
 
+export const hashValues = (values: unknown[]) => {
+  return values.map(value => {
+    if (value instanceof Type) return `$${value.typeName}`
+    if (typeof value === 'number') return value
+    compilerAssert(false, "Cannot hash value", { value })
+  }).join("__")
+}
 
 export interface BytecodeOut {
   bytecode: {
     code: any[]
     locations: SourceLocation[]
   }
-  table: any
+  table: MetaInstructionTable
+  globalCompilerState: GlobalCompilerState // Not nice
 }
 
 export type MetaInstructionTable = {
@@ -163,6 +173,8 @@ export class FunctionDefinition {
   headerPrototype?: FunctionPrototype | undefined
   templatePrototype?: FunctionPrototype | undefined
   compileTimePrototype?: FunctionPrototype | undefined
+
+  compiledFunctions: CompiledFunction[] = []
 
   constructor(
     public id: number,
@@ -194,7 +206,7 @@ export class NumberAst extends AstRoot {     constructor(public type: Type, publ
 export class StringAst extends AstRoot {     constructor(public type: Type, public location: SourceLocation, public value: string) { super() } }
 export class BindingAst extends AstRoot {    constructor(public type: Type, public location: SourceLocation, public binding: Binding) { super() } }
 export class BoolAst extends AstRoot {       constructor(public type: Type, public location: SourceLocation, public value: boolean) { super() } }
-export class LetAst extends AstRoot {        constructor(public type: Type, public location: SourceLocation, public binding: Binding, public value: Ast) { super() } }
+export class LetAst extends AstRoot {        constructor(public type: Type, public location: SourceLocation, public binding: Binding, public value: Ast | null) { super() } }
 export class SetAst extends AstRoot {        constructor(public type: Type, public location: SourceLocation, public binding: Binding, public value: Ast) { super() } }
 export class OperatorAst extends AstRoot {   constructor(public type: Type, public location: SourceLocation, public operator: string, public args: Ast[]) { super() } }
 export class IfAst extends AstRoot {         constructor(public type: Type, public location: SourceLocation, public expr: Ast, public trueBody: Ast, public falseBody: Ast | null) { super() } }
@@ -210,9 +222,17 @@ export class ReturnAst extends AstRoot {     constructor(public type: Type, publ
 export type Ast = NumberAst | LetAst | SetAst | OperatorAst | IfAst | ListAst | CallAst | AndAst | OrAst | StatementsAst | WhileAst | ReturnAst;
 export const isAst = (value: unknown): value is Ast => value instanceof AstRoot;
 
-export class Binding {
-  constructor(public name: string, public type: Type) {
+export type InstructionMapping = {[key:string]:(vm: Vm, instr: BytecodeInstr) => unknown}
+
+export class Tuple {
+  constructor(public values: unknown[]) {}
+  [Bun.inspect.custom](depth, options, inspect) {
+    return options.stylize(`[Tuple ...]`, 'special');
   }
+}
+
+export class Binding {
+  constructor(public name: string, public type: Type) {}
   [Bun.inspect.custom](depth, options, inspect) {
     return options.stylize(`[Binding ${this.name} ${inspect(this.type)}]`, 'special');
   }
@@ -244,6 +264,7 @@ export class ExternalFunction {
 
 export const VoidType = new Type("void")
 export const IntType = new Type("int")
+export const BoolType = new Type("bool")
 export const FloatType = new Type("float")
 export const DoubleType = new Type("double")
 export const StringType = new Type("string")
@@ -267,13 +288,13 @@ export type Vm = {
   stack: unknown[],
   scope: Scope,
   location: SourceLocation,
-  bytecode: BytecodeGen
+  bytecode: BytecodeGen,
+  context: TaskContext
 }
 export type SubCompilerState = {
   vm: Vm,
   func: FunctionDefinition,
   quoteStack: ParseAst[][]
-  global: GlobalCompilerState,
   prevCompilerState: SubCompilerState | undefined
 }
 
@@ -284,38 +305,36 @@ export type GlobalCompilerState = {
   subCompilerState: SubCompilerState | undefined
 }
 
-let globalCompiler: GlobalCompilerState = {
-  compiledFunctions: new Map(),
-  functionDefinitions: [],
-  subCompilerState: undefined
+export interface TaskContext {
+  subCompilerState: SubCompilerState
+  globalCompiler: GlobalCompilerState
 }
-export let compilerState: SubCompilerState;
 
-export const pushSubCompilerState = (obj: { vm: Vm, func: FunctionDefinition }) => {
+export const pushSubCompilerState = (ctx: TaskContext, obj: { vm: Vm, func: FunctionDefinition }) => {
   const state: SubCompilerState = {
     func: obj.func,
     vm: obj.vm,
-    global: globalCompiler,
     quoteStack: [],
-    prevCompilerState: globalCompiler.subCompilerState
+    prevCompilerState: ctx.subCompilerState
   }
-  compilerState = state;
-  globalCompiler.subCompilerState = state;
+  ctx.subCompilerState = state;
+  // compilerState = state;
+  // globalCompiler.subCompilerState = state;
 }
-export const popSubCompilerState = () => {
-  globalCompiler.subCompilerState = globalCompiler.subCompilerState?.prevCompilerState;
-  compilerState = globalCompiler.subCompilerState!;
-}
-export const addFunctionDefinition = (decl: ParserFunctionDecl) => {
-  if (decl.id !== undefined) return globalCompiler.functionDefinitions[decl.id];
+// export const popSubCompilerState = () => {
+//   globalCompiler.subCompilerState = globalCompiler.subCompilerState?.prevCompilerState;
+//   compilerState = globalCompiler.subCompilerState!;
+// }
+export const addFunctionDefinition = (compilerState: GlobalCompilerState, decl: ParserFunctionDecl) => {
+  if (decl.id !== undefined) return compilerState.functionDefinitions[decl.id];
 
-  decl.id = globalCompiler.functionDefinitions.length;
+  decl.id = compilerState.functionDefinitions.length;
   const funcDef = new FunctionDefinition(
     decl.id, decl.debugName,
     decl.name, decl.typeArgs, decl.args,
     decl.returnType, decl.body)
 
-  globalCompiler.functionDefinitions.push(funcDef);
+  compilerState.functionDefinitions.push(funcDef);
   return funcDef;
 }
 
