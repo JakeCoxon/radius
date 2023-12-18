@@ -1,4 +1,4 @@
-import { isParseVoid, BytecodeOut, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, MetaInstructionTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseAst, CompiledFunction, AstRoot, isAst, pushSubCompilerState, addFunctionDefinition, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, BytecodeGen, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState } from "./defs";
+import { isParseVoid, BytecodeOut, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, MetaInstructionTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, addFunctionDefinition, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, BytecodeGen, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts } from "./defs";
 import { Event, Task, createTaskDef, isTask, isTaskResult } from "./tasks";
 
 const pushBytecode = (out: BytecodeOut, token: Token, instr: BytecodeInstr) => {
@@ -6,38 +6,37 @@ const pushBytecode = (out: BytecodeOut, token: Token, instr: BytecodeInstr) => {
   out.bytecode.code.push(instr)
 }
 
-const writeBytecode = (out: BytecodeOut, expr: ParseAst) => {
+const visitParseNode = (out: BytecodeOut, expr: ParseNode) => {
   compilerAssert(expr.key, "$expr not found", { expr })
   const table = out.table
   const instrWriter = expectMap(table, expr.key, "Not implemented parser node $key")
   instrWriter(out, expr)
 }
-const writeAll = (out: BytecodeOut, exprs: ParseAst[]) => {
-  exprs.forEach(expr => writeBytecode(out, expr))
+const visitAll = (out: BytecodeOut, exprs: ParseNode[]) => {
+  exprs.forEach(expr => visitParseNode(out, expr))
 }
-const writeMeta = (out: BytecodeOut, expr: ParseAst) => {
-  writeBytecode({ bytecode: out.bytecode, table: bytecodeDefault, globalCompilerState: out.globalCompilerState }, expr)
+const writeMeta = (out: BytecodeOut, expr: ParseNode) => {
+  visitParseNode({ bytecode: out.bytecode, table: bytecodeDefault, globalCompilerState: out.globalCompilerState }, expr)
 }
 
 const bytecodeDefault: MetaInstructionTable = {
   identifier: (out, ast) => pushBytecode(out, ast.token, { type: "binding", name: ast.token.value }), // prettier-ignore
   number:  (out, ast) => pushBytecode(out, ast.token, { type: "push", value: Number(ast.token.value) }), // prettier-ignore
-  name:    (out, ast) => pushBytecode(out, ast.token, { type: "name", name: ast.token.value }), // prettier-ignore
   string:  (out, ast) => pushBytecode(out, ast.token, { type: "push", value: ast.token.value }), // prettier-ignore
   nil:     (out, ast) => pushBytecode(out, ast.token, { type: "push", value: null }), // prettier-ignore
   boolean: (out, ast) => pushBytecode(out, ast.token, { type: "push", value: ast.token.value !== 'false' }), // prettier-ignore
 
-  operator: (out, ast) => (writeAll(out, ast.exprs), pushBytecode(out, ast.token, { type: 'operator', name: ast.token.value, count: ast.exprs.length })), // prettier-ignore
-  set:      (out, ast) => (writeBytecode(out, ast.value), pushBytecode(out, ast.token, { type: 'setlocal', name: ast.name.token.value })), // prettier-ignore
-  letconst: (out, ast) => (writeBytecode(out, ast.value), pushBytecode(out, ast.token, { type: 'letlocal', name: ast.name.token.value, t: false, v: true })), // prettier-ignore
-  meta:     (out, ast) => (writeBytecode(out, ast.expr)),
-  comptime: (out, ast) => (writeBytecode(out, ast.expr)),
+  operator: (out, ast) => (visitAll(out, ast.exprs), pushBytecode(out, ast.token, { type: 'operator', name: ast.token.value, count: ast.exprs.length })), // prettier-ignore
+  set:      (out, ast) => (visitParseNode(out, ast.value), pushBytecode(out, ast.token, { type: 'setlocal', name: ast.name.token.value })), // prettier-ignore
+  letconst: (out, ast) => (visitParseNode(out, ast.value), pushBytecode(out, ast.token, { type: 'letlocal', name: ast.name.token.value, t: false, v: true })), // prettier-ignore
+  meta:     (out, ast) => (visitParseNode(out, ast.expr)),
+  comptime: (out, ast) => (visitParseNode(out, ast.expr)),
 
-  list:  (out, ast) => (writeAll(out, ast.exprs), pushBytecode(out, ast.token, { type: 'list', count: ast.exprs.length })),
-  tuple: (out, ast) => (writeAll(out, ast.exprs), pushBytecode(out, ast.token, { type: 'tuple', count: ast.exprs.length })),
+  list:  (out, ast) => (visitAll(out, ast.exprs), pushBytecode(out, ast.token, { type: 'list', count: ast.exprs.length })),
+  tuple: (out, ast) => (visitAll(out, ast.exprs), pushBytecode(out, ast.token, { type: 'tuple', count: ast.exprs.length })),
   
   let: (out, ast) => {
-    if (ast.value) writeBytecode(out, ast.value);
+    if (ast.value) visitParseNode(out, ast.value);
     if (ast.type) writeMeta(out, ast.type);
     pushBytecode(out, ast.token, { type: 'letlocal', name: ast.name.token.value, t: !!ast.type, v: !!ast.value }) // prettier-ignore
   },
@@ -47,8 +46,8 @@ const bytecodeDefault: MetaInstructionTable = {
   },
   call: (out, ast) => {
     // compilerAssert(ast.typeArgs.length === 0, "Not implemented", { ast })
-    writeAll(out, ast.typeArgs)
-    writeAll(out, ast.args);
+    visitAll(out, ast.typeArgs)
+    visitAll(out, ast.args);
     if (ast.left instanceof ParseIdentifier) {
       pushBytecode(out, ast.token, { type: "call", name: ast.left.token.value, count: ast.args.length, tcount: ast.typeArgs.length }); // prettier-ignore
       return;
@@ -56,50 +55,50 @@ const bytecodeDefault: MetaInstructionTable = {
     compilerAssert(false, "Call with non-identifier not implemented yet")
   },
   return: (out, ast) => {
-    if (ast.expr) writeBytecode(out, ast.expr);
+    if (ast.expr) visitParseNode(out, ast.expr);
     pushBytecode(out, ast.token, { type: 'return', r: !!ast.expr })
   },
 
   statements: (out, ast) => {
     ast.exprs.forEach((stmt, i) => {
-      writeBytecode(out, stmt);
+      visitParseNode(out, stmt);
       if (i !== ast.exprs.length - 1) pushBytecode(out, ast.token, { type: "pop" });
     });
   },
   
-  else: (out, ast) => writeBytecode(out, ast.body),
+  else: (out, ast) => visitParseNode(out, ast.body),
 
   and: (out, ast) => {
-    writeBytecode(out, ast.exprs[0]);
+    visitParseNode(out, ast.exprs[0]);
     const jump1 = { type: "jumpf" as const, address: 0 };
     pushBytecode(out, ast.exprs[0].token, jump1);
     pushBytecode(out, ast.exprs[0].token, { type: 'pop' });
-    writeBytecode(out, ast.exprs[1])
+    visitParseNode(out, ast.exprs[1])
     jump1.address = out.bytecode.code.length;
   },
 
   or: (out, ast) => {
-    writeBytecode(out, ast.exprs[0]);
+    visitParseNode(out, ast.exprs[0]);
     const jump1 = { type: "jumpf" as const, address: 0 };
     pushBytecode(out, ast.exprs[0].token, jump1);
     const jump2 = { type: "jump" as const, address: 0 };
     pushBytecode(out, ast.exprs[0].token, jump2);
     jump1.address = out.bytecode.code.length;
     pushBytecode(out, ast.exprs[0].token, { type: 'pop' });
-    writeBytecode(out, ast.exprs[1])
+    visitParseNode(out, ast.exprs[1])
     jump2.address = out.bytecode.code.length;
   },
 
   if: (out, ast) => {
-    writeBytecode(out, ast.condition);
+    visitParseNode(out, ast.condition);
     const jump1 = { type: "jumpf" as const, address: 0 };
     pushBytecode(out, ast.condition.token, jump1);
-    writeBytecode(out, ast.trueBody);
+    visitParseNode(out, ast.trueBody);
     if (ast.falseBody) {
       const jump2 = { type: "jump" as const, address: 0 };
       pushBytecode(out, ast.trueBody.token, jump2);
       jump1.address = out.bytecode.code.length;
-      writeBytecode(out, ast.falseBody);
+      visitParseNode(out, ast.falseBody);
       jump2.address = out.bytecode.code.length;
     } else {
       jump1.address = out.bytecode.code.length;
@@ -108,15 +107,15 @@ const bytecodeDefault: MetaInstructionTable = {
   metaif: (out, ast) => {
     // Same as if
     const if_ = ast.expr;
-    writeBytecode(out, if_.condition);
+    visitParseNode(out, if_.condition);
     const jump1 = { type: "jumpf" as const, address: 0 };
     pushBytecode(out, if_.condition.token, jump1);
-    writeBytecode(out, if_.trueBody);
+    visitParseNode(out, if_.trueBody);
     if (if_.falseBody) {
       const jump2 = { type: "jump" as const, address: 0 };
       pushBytecode(out, if_.trueBody.token, jump2);
       jump1.address = out.bytecode.code.length;
-      writeBytecode(out, if_.falseBody);
+      visitParseNode(out, if_.falseBody);
       jump2.address = out.bytecode.code.length;
     } else {
       jump1.address = out.bytecode.code.length;
@@ -124,10 +123,10 @@ const bytecodeDefault: MetaInstructionTable = {
   },
   while: (out, ast) => {
     const jump2 = { type: "jump" as const, address: out.bytecode.code.length };
-    writeBytecode(out, ast.condition);
+    visitParseNode(out, ast.condition);
     const jump1 = { type: "jumpf" as const, address: 0 };
     pushBytecode(out, ast.condition.token, jump1);
-    writeBytecode(out, ast.body);
+    visitParseNode(out, ast.body);
     pushBytecode(out, ast.condition.token, jump2);
     jump1.address = out.bytecode.code.length
   }
@@ -136,42 +135,41 @@ const bytecodeDefault: MetaInstructionTable = {
 const bytecodeSecond: MetaInstructionTable = {
   identifier: (out, ast) => pushBytecode(out, ast.token, { type: "bindingast", name: ast.token.value }), // prettier-ignore
   number:  (out, ast) => pushBytecode(out, ast.token, { type: "numberast", value: Number(ast.token.value) }), // prettier-ignore
-  name:    (out, ast) => pushBytecode(out, ast.token, { type: "nameast", name: ast.token.value }), // prettier-ignore
   string:  (out, ast) => pushBytecode(out, ast.token, { type: "stringast", value: ast.token.value }), // prettier-ignore
   boolean: (out, ast) => pushBytecode(out, ast.token, { type: "boolast", value: ast.token.value !== 'false' }), // prettier-ignore
 
-  set:      (out, ast) => (writeBytecode(out, ast.value), pushBytecode(out, ast.token, { type: 'setast', name: ast.name.token.value })), // prettier-ignore,
-  operator: (out, ast) => (writeAll(out, ast.exprs), pushBytecode(out, ast.token, { type: 'operatorast', name: ast.token.value, count: ast.exprs.length })), // prettier-ignore
+  set:      (out, ast) => (visitParseNode(out, ast.value), pushBytecode(out, ast.token, { type: 'setast', name: ast.name.token.value })), // prettier-ignore,
+  operator: (out, ast) => (visitAll(out, ast.exprs), pushBytecode(out, ast.token, { type: 'operatorast', name: ast.token.value, count: ast.exprs.length })), // prettier-ignore
   meta:     (out, ast) => (writeMeta(out, ast.expr), pushBytecode(out, ast.token, { type: 'toast' })),
   comptime: (out, ast) => writeMeta(out, ast.expr),
   letconst: (out, ast) => (writeMeta(out, ast.value), pushBytecode(out, ast.token, { type: 'letlocal', name: ast.name.token.value, t: false, v: true })),
-  tuple:    (out, ast) => (writeAll(out, ast.exprs), pushBytecode(out, ast.token, { type: 'tuple', count: ast.exprs.length })),
+  tuple:    (out, ast) => (visitAll(out, ast.exprs), pushBytecode(out, ast.token, { type: 'tuple', count: ast.exprs.length })),
 
-  while: (out, ast) => (writeBytecode(out, ast.body), writeBytecode(out, ast.condition), pushBytecode(out, ast.token, { type: 'whileast' })),
+  while: (out, ast) => (visitParseNode(out, ast.body), visitParseNode(out, ast.condition), pushBytecode(out, ast.token, { type: 'whileast' })),
 
   function: (out, ast) => {
     compilerAssert(false, "Function not implemented yet")
     // pushBytecode(out, ast.token, { type: "closure", id: ast.id }), // prettier-ignore
   },
   return: (out, ast) => {
-    if (ast.expr) writeBytecode(out, ast.expr);
+    if (ast.expr) visitParseNode(out, ast.expr);
     pushBytecode(out, ast.token, { type: 'returnast', r: !!ast.expr })
   },
 
-  list: (out, ast) => (writeAll(out, ast.exprs), pushBytecode(out, ast.token, { type: 'listast', count: ast.exprs.length })),
+  list: (out, ast) => (visitAll(out, ast.exprs), pushBytecode(out, ast.token, { type: 'listast', count: ast.exprs.length })),
 
-  and: (out, ast) => (writeAll(out, ast.exprs), pushBytecode(out, ast.token, { type: "andast", count: ast.exprs.length })),
-  or: (out, ast) =>  (writeAll(out, ast.exprs), pushBytecode(out, ast.token, { type: "orast", count: ast.exprs.length })),
+  and: (out, ast) => (visitAll(out, ast.exprs), pushBytecode(out, ast.token, { type: "andast", count: ast.exprs.length })),
+  or: (out, ast) =>  (visitAll(out, ast.exprs), pushBytecode(out, ast.token, { type: "orast", count: ast.exprs.length })),
   
   let: (out, ast) => {
-    if (ast.value) writeBytecode(out, ast.value);
+    if (ast.value) visitParseNode(out, ast.value);
     if (ast.type) writeMeta(out, ast.type);
     pushBytecode(out, ast.token, { type: 'letast', name: ast.name.token.value, t: !!ast.type, v: !!ast.value })
   },
 
   call: (out, ast) => {
     ast.typeArgs.forEach(x => writeMeta(out, x));
-    writeAll(out, ast.args);
+    visitAll(out, ast.args);
     if (ast.left instanceof ParseIdentifier) {
       pushBytecode(out, ast.token, { type: "callast", name: ast.left.token.value, count: ast.args.length, tcount: ast.typeArgs.length }); // prettier-ignore
       return;
@@ -182,27 +180,27 @@ const bytecodeSecond: MetaInstructionTable = {
   statements: (out, ast) => {
     pushBytecode(out, ast.token, { type: "pushqs" });
     ast.exprs.forEach((stmt, i) => {
-      writeBytecode(out, stmt);
+      visitParseNode(out, stmt);
       if (!isParseVoid(stmt)) pushBytecode(out, ast.token, { type: "appendq" });
       pushBytecode(out, ast.token, { type: "pop" }); // Even pop the final value
     });
     pushBytecode(out, ast.token, { type: "popqs" });
   },
 
-  else: (out, ast) => writeBytecode(out, ast.body),
+  else: (out, ast) => visitParseNode(out, ast.body),
 
   metaif: (out, ast) => {
     const if_ = ast.expr
     writeMeta(out, if_.condition);
     const jump1 = { type: "jumpf" as const, address: 0 };
     pushBytecode(out, if_.condition.token, jump1);
-    writeBytecode(out, if_.trueBody);
+    visitParseNode(out, if_.trueBody);
     if (if_.falseBody) {
       const jump2 = { type: "jump" as const, address: 0 };
       pushBytecode(out, if_.trueBody.token, jump2);
       jump1.address = out.bytecode.code.length;
       compilerAssert(!(if_.falseBody instanceof ParseIf), "Meta elif not implemented yet")
-      writeBytecode(out, if_.falseBody);
+      visitParseNode(out, if_.falseBody);
       jump2.address = out.bytecode.code.length;
     } else {
       jump1.address = out.bytecode.code.length;
@@ -210,9 +208,9 @@ const bytecodeSecond: MetaInstructionTable = {
   },
 
   if: (out, ast) => {
-    if (ast.falseBody) writeBytecode(out, ast.falseBody)
-    writeBytecode(out, ast.trueBody)
-    writeBytecode(out, ast.condition)
+    if (ast.falseBody) visitParseNode(out, ast.falseBody)
+    visitParseNode(out, ast.trueBody)
+    visitParseNode(out, ast.condition)
     pushBytecode(out, ast.token, { type: "ifast", f: !!ast.falseBody });
   }
 };
@@ -226,7 +224,7 @@ const compileFunctionPrototype = (ctx: TaskContext, prototype: FunctionPrototype
     table: prototype.instructionTable,
     globalCompilerState: ctx.globalCompiler
   }
-  writeBytecode(out, prototype.body);
+  visitParseNode(out, prototype.body);
   prototype.bytecode.code.push({ type: "halt" });
   prototype.bytecode.locations.push(new SourceLocation(-1, -1));
 
@@ -521,22 +519,22 @@ const instructions: InstructionMapping = {
   push: (vm, { value }) => vm.stack.push(value),
   nil: (vm) => vm.stack.push(null),
 
-  operatorast: (vm, { name, count }) => vm.stack.push(new OperatorAst(IntType, vm.location, name, popValues(vm, count))),
+  operatorast: (vm, { name, count }) => vm.stack.push(new OperatorAst(IntType, vm.location, name, expectAsts(popValues(vm, count)))),
   numberast: (vm, { value }) => vm.stack.push(new NumberAst(IntType, vm.location, value)),
   stringast: (vm, { value }) => vm.stack.push(new StringAst(StringType, vm.location, value)),
   boolast: (vm, { value }) =>   vm.stack.push(new BoolAst(BoolType, vm.location, value)),
-  orast: (vm, { count }) =>     vm.stack.push(new OrAst(IntType, vm.location, popValues(vm, count))),
-  andast: (vm, { count }) =>    vm.stack.push(new AndAst(IntType, vm.location, popValues(vm, count))),
-  listast: (vm, { count }) =>   vm.stack.push(new ListAst(IntType, vm.location, popValues(vm, count))),
-  ifast: (vm, { f }) =>         vm.stack.push(new IfAst(IntType, vm.location, popStack(vm), popStack(vm), f ? popStack(vm) : null)),
-  whileast: (vm) =>             vm.stack.push(new WhileAst(VoidType, vm.location, popStack(vm), popStack(vm))),
-  returnast: (vm, { r }) =>     vm.stack.push(new ReturnAst(VoidType, vm.location, r ? popStack(vm) : null)),
-  letast: (vm, { name, t, v }) => vm.stack.push(letLocal(vm, name, t ? popStack(vm) : null, v ? popStack(vm) : null)),
+  orast: (vm, { count }) =>     vm.stack.push(new OrAst(IntType, vm.location, expectAsts(popValues(vm, count)))),
+  andast: (vm, { count }) =>    vm.stack.push(new AndAst(IntType, vm.location, expectAsts(popValues(vm, count)))),
+  listast: (vm, { count }) =>   vm.stack.push(new ListAst(IntType, vm.location, expectAsts(popValues(vm, count)))),
+  ifast: (vm, { f }) =>         vm.stack.push(new IfAst(IntType, vm.location, expectAst(popStack(vm)), expectAst(popStack(vm)), f ? expectAst(popStack(vm)) : null)),
+  whileast: (vm) =>             vm.stack.push(new WhileAst(VoidType, vm.location, expectAst(popStack(vm)), expectAst(popStack(vm)))),
+  returnast: (vm, { r }) =>     vm.stack.push(new ReturnAst(VoidType, vm.location, r ? expectAst(popStack(vm)) : null)),
+  letast: (vm, { name, t, v }) => vm.stack.push(letLocal(vm, name, t ? expectType(popStack(vm)) : null, v ? expectAst(popStack(vm)) : null)),
   callast: (vm, { name, count, tcount }) => createCallAstDef.create({ vm, name, count, tcount }),
   toast: (vm) => vm.stack.push(unknownToAst(vm.location, popStack(vm))),
   setast: (vm, { name }) =>     {
     const binding = expectMap(vm.scope, name, `No binding $key`);
-    vm.stack.push(new SetAst(VoidType, vm.location, binding, popStack(vm)))
+    vm.stack.push(new SetAst(VoidType, vm.location, binding, expectAst(popStack(vm))))
   },
 
   bindingast: (vm, { name }) => {
@@ -592,9 +590,13 @@ const instructions: InstructionMapping = {
   },
   tuple: (vm, { count }) => vm.stack.push(new Tuple(popValues(vm, count))),
   pushqs: (vm) => vm.context.subCompilerState.quoteStack.push([]),
-  popqs: (vm) => vm.stack.push(createStatements(vm.location, vm.context.subCompilerState.quoteStack.pop())),
+  popqs: (vm) => {
+    compilerAssert(vm.context.subCompilerState.quoteStack.length)
+    const stmts = expectAll(isAst, vm.context.subCompilerState.quoteStack.pop()!);
+    vm.stack.push(createStatements(vm.location, stmts))
+  },
   appendq: (vm) => {
-    const value = vm.stack.pop();
+    const value = expectAst(vm.stack.pop());
     const compilerState = vm.context.subCompilerState;
     compilerState.quoteStack[compilerState.quoteStack.length - 1].push(value);
     vm.stack.push(null); // needed for statements
@@ -677,7 +679,7 @@ export const runTopLevel = (globalCompiler: GlobalCompilerState, stmts: ParseSta
         table: bytecodeDefault,
         globalCompilerState: globalCompiler
       }
-      writeBytecode(out, expr.value);
+      visitParseNode(out, expr.value);
       out.bytecode.code.push({ type: "halt" });
       out.bytecode.locations.push(new SourceLocation(-1, -1));
 

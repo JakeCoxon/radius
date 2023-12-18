@@ -1,4 +1,4 @@
-import { ArgumentTypePair, ParseAnd, ParseAst, ParseBreak, ParseCall, ParseCast, ParseCompTime, ParseContinue, ParseDict, ParseExpand, ParseField, ParseFor, ParseForExpr, ParseIf, ParseLet, ParseLetConst, ParseList, ParseListComp, ParseMeta, ParseName, ParseNot, ParseNumber, ParseOpEq, ParseOperator, ParseOr, ParseReturn, ParseSet, ParseStatements, ParseString, ParseIdentifier, ParseWhile, ParseWhileExpr, ParserFunctionDecl, Token, compilerAssert, ParsePostCall, ParseSymbol, ParseNote, ParseSlice, ParseSubscript, ParserClassDecl, ParseClass, ParseFunction, createToken, ParseBoolean, ParseElse, ParseMetaIf, ParseMetaFor } from "./defs";
+import { ArgumentTypePair, ParseAnd, ParseNode, ParseBreak, ParseCall, ParseCast, ParseCompTime, ParseContinue, ParseDict, ParseExpand, ParseField, ParseFor, ParseForExpr, ParseIf, ParseLet, ParseLetConst, ParseList, ParseListComp, ParseMeta, ParseNot, ParseNumber, ParseOpEq, ParseOperator, ParseOr, ParseReturn, ParseSet, ParseStatements, ParseString, ParseIdentifier, ParseWhile, ParseWhileExpr, ParserFunctionDecl, Token, compilerAssert, ParsePostCall, ParseSymbol, ParseNote, ParseSlice, ParseSubscript, ParserClassDecl, ParseClass, ParseFunction, createToken, ParseBoolean, ParseElse, ParseMetaIf, ParseMetaFor } from "./defs";
 
 type LexerState = { significantNewlines: boolean; parenStack: string[] };
 
@@ -166,19 +166,19 @@ export const makeParser = (input: string) => {
   const matchType = (expected: string) =>
     token && token.type === expected ? (advance(), true) : false;
   
-  const assertIdentifier = (ast: ParseAst): ParseIdentifier => (compilerAssert(ast instanceof ParseIdentifier, "Expected identifier"), ast);
+  const assertIdentifier = (ast: ParseNode): ParseIdentifier => (compilerAssert(ast instanceof ParseIdentifier, "Expected identifier"), ast);
 
   const parseParens = () => {
     const expr = parseExpr();
     expect(")", `Expected ')' after expression`);
     return expr;
   };
-  const parseList = (): ParseAst => {
+  const parseList = (): ParseNode => {
     const listToken = previous;
     if (match("]")) return new ParseList(listToken, []);
 
     const list = [parseExpr()];       while (match(",")) list.push(parseExpr());
-    const mapping: ParseAst[] = [];   while (match("|")) mapping.push(parseExpr());
+    const mapping: ParseNode[] = [];   while (match("|")) mapping.push(parseExpr());
     const reduce = match("|>") ? parseExpr() : null;
     expect("]", `Expected ']' after list item`);
     if (!mapping.length && !reduce) return new ParseList(listToken, list);
@@ -208,10 +208,10 @@ export const makeParser = (input: string) => {
     return new ParseIdentifier(token);
   }
 
-  const parseDictPair = (): [ParseAst, ParseAst] => {
+  const parseDictPair = (): [ParseNode, ParseNode] => {
     return [parseExpr(), (expect(":", "Expected ':' after dict key"), parseExpr())]
   }
-  const parseDict = (dictToken: Token): ParseAst => {
+  const parseDict = (dictToken: Token): ParseNode => {
     if (match("}")) return new ParseDict(dictToken, [])
     const pairs = [parseDictPair()];
     while (match(",") && !match("}")) pairs.push(parseDictPair());
@@ -221,7 +221,7 @@ export const makeParser = (input: string) => {
 
   const matchStringLiteral = () => typeof token?.value === "string" && token.value[0] === '"' ? (advance(), true) : false;
 
-  const parseLiteral = (): ParseAst => {
+  const parseLiteral = (): ParseNode => {
     if (match("("))       return parseParens();
     else if (match("["))  return parseList();
     // else if (match("`"))  return [createToken("syntax-quote"), parseExpr()];
@@ -238,9 +238,9 @@ export const makeParser = (input: string) => {
     else return parseIdentifier();
   };
 
-  const parseSlice = (isStatic: boolean, left: ParseAst): ParseAst => {
+  const parseSlice = (isStatic: boolean, left: ParseNode): ParseNode => {
     const sliceToken = previous;
-    let l: (ParseAst | null)[] = [];
+    let l: (ParseNode | null)[] = [];
     if (token?.value === ":") l.push(null);
     else if (match("]")) compilerAssert(false, "Not implemented");
     else {
@@ -256,7 +256,7 @@ export const makeParser = (input: string) => {
 
     return new ParseSlice(sliceToken, left, l[0], l[1], l[2], isStatic)
   };
-  const parseFunctionTypeArguments = (callToken: Token, left: ParseAst): ParseAst => {
+  const parseFunctionTypeArguments = (callToken: Token, left: ParseNode): ParseNode => {
 
     const parseTypeArgs = () => {
       const typeArgs = [parseExpr()];
@@ -271,10 +271,10 @@ export const makeParser = (input: string) => {
     
   };
 
-  const parseFieldAccess = (left: ParseAst) => new ParseField(previous, left, parseIdentifier())
-  const parsePostCall = (left: ParseAst) => new ParsePostCall(previous, left, parseLambda())
+  const parseFieldAccess = (left: ParseNode) => new ParseField(previous, left, parseIdentifier())
+  const parsePostCall = (left: ParseNode) => new ParsePostCall(previous, left, parseLambda())
 
-  const parseCall = (): ParseAst => {
+  const parseCall = (): ParseNode => {
     let left = parseLiteral();
 
     while (true) {
@@ -314,7 +314,7 @@ export const makeParser = (input: string) => {
 
   const parseAssignExpr = parseMeta; // parseAssignExpr excludes expansion dots
 
-  const parseDots = (): ParseAst => {
+  const parseDots = (): ParseNode => {
     let expr = parseMeta();
     if (match("...")) return new ParseExpand(previous, expr);
     else if (match("while")) return new ParseWhileExpr(previous, parseExpr(), expr);
@@ -335,7 +335,7 @@ export const makeParser = (input: string) => {
     expect(final, `Expected '${final}' after arg list`);
     return args;
   };
-  const parseColonBlock = (afterMessage: string): ParseAst => {
+  const parseColonBlock = (afterMessage: string): ParseNode => {
     expect(":", `Expected ':' after ${afterMessage}`);
     const token = previous;
     if (!matchType("NEWLINE")) return new ParseStatements(token, [parseExpr()]);
@@ -397,7 +397,7 @@ export const makeParser = (input: string) => {
     return lambda;
   };
   const parseKeywords = () => {
-    const kw: ParseAst[] = []
+    const kw: ParseNode[] = []
     while (token?.value === "@") kw.push(parseLiteral());
     return kw;
   }
@@ -406,7 +406,7 @@ export const makeParser = (input: string) => {
     matchType("NEWLINE") ? parseMultilineBlock(previous) 
     : new ParseStatements(previous, [parseExpr()])
 
-  const parseBracelessLambda = (): ParseAst => {
+  const parseBracelessLambda = (): ParseNode => {
     const lambdaToken = previous;
 
     const decl: ParserFunctionDecl = {
@@ -425,7 +425,7 @@ export const makeParser = (input: string) => {
 
     return new ParseFunction(lambdaToken, decl)
   };
-  const parseClassDef = (): ParseAst => {
+  const parseClassDef = (): ParseNode => {
     const classToken = previous;
     const decl: ParserClassDecl = {
       id: undefined,
@@ -449,7 +449,7 @@ export const makeParser = (input: string) => {
     return null
   }
   const parseIf = (ifToken: Token, message: string = "if condition") => {
-    return new ParseIf(ifToken, parseExpr(), parseColonBlock("if condition"), parseElse());
+    return new ParseIf(ifToken, parseExpr(), parseColonBlock(message), parseElse());
   };
 
   const parseWhile = () => new ParseWhile(previous, parseExpr(), parseColonBlock('while condition')); // prettier-ignore
@@ -490,7 +490,7 @@ export const makeParser = (input: string) => {
     if (match("for")) return new ParseMetaFor(metaToken, parseForStatement());
     return new ParseMeta(previous, parseStatement());
   }
-  const parseStatement = (): ParseAst => {
+  const parseStatement = (): ParseNode => {
     if (match("defn"))          return parseFunctionDef();
     else if (match("class"))    return parseClassDef();
     else if (match("if"))       return parseIf(previous);
@@ -504,7 +504,7 @@ export const makeParser = (input: string) => {
     return parseExpressionStatement();
   };
   const parseLines = () => {
-    const stmts: ParseAst[] = [];
+    const stmts: ParseNode[] = [];
 
     while (matchType("NEWLINE"));
     stmts.push(parseStatement());
