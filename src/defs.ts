@@ -42,7 +42,7 @@ export type ArgumentTypePair = [ParseIdentifier, ParseNode | null];
 
 // These are reference types that id will be filled in later.
 export type ParserFunctionDecl = {
-  id: number | undefined, debugName: string,
+  id: number | undefined, debugName: string, anonymous?: boolean,
   token: Token, functionMetaName: ParseIdentifier | null,
   name: ParseIdentifier | null, typeArgs: ParseNode[], args: ArgumentTypePair[], 
   returnType: ParseNode | null, body: ParseNode | null, keywords: ParseNode[] }
@@ -231,7 +231,8 @@ export class FunctionDefinition {
     public typeArgs: ParseNode[],
     public args: ArgumentTypePair[],
     public returnType: ParseNode | null,
-    public body: ParseNode | null) {}
+    public body: ParseNode | null,
+    public inline: boolean) {}
 
   [Bun.inspect.custom](depth, options, inspect) {
     if (options.ast) return options.stylize(`[FunctionDefinition ${this.name}]`, 'special');
@@ -343,7 +344,7 @@ export const expectAsts = <T>(expected: unknown[], info: object = {}) => {
   return expected;
 };
 export const createStatements = (location: SourceLocation, list: Ast[]) => {
-  expect(list.length > 0, "Expected statements");
+  compilerAssert(list.length > 0, "Expected statements", { list });
   return new StatementsAst(list[list.length - 1].type, location, list);
 };
 
@@ -412,10 +413,12 @@ export const addFunctionDefinition = (compilerState: GlobalCompilerState, decl: 
   if (decl.id !== undefined) return compilerState.functionDefinitions[decl.id];
 
   decl.id = compilerState.functionDefinitions.length;
+  const inline = !!decl.anonymous
   const funcDef = new FunctionDefinition(
     decl.id, decl.debugName,
     decl.name, decl.typeArgs, decl.args,
-    decl.returnType, decl.body)
+    decl.returnType, decl.body,
+    inline)
 
   compilerState.functionDefinitions.push(funcDef);
   return funcDef;

@@ -418,6 +418,7 @@ export const makeParser = (input: string) => {
       typeArgs: [],
       args: parseArgList("|"),
       keywords: parseKeywords(),
+      anonymous: true,
       returnType: parseOptionalReturnType(),
       body: parseSingleOrMultilineBody()
     };

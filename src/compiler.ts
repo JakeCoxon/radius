@@ -329,11 +329,14 @@ const compileAndExecuteFunctionHeaderDef = createTaskDef<TypeCheckHeaderArg, voi
       .chainFn((task, compiledArgTypes) => {
 
         compilerAssert(compiledArgTypes instanceof Tuple, "Expected tuple")
-        concreteTypes.push(...compiledArgTypes.values as any)
         compiledArgTypes.values.forEach((type, i) => {
-          if (type === null) return
+          if (type === null) {
+            concreteTypes.push(args[i].type)
+            return
+          }
           compilerAssert(type instanceof Type);
           compilerAssert(args[i].type === type, "Argument $name of type $value does not match $expected", { name: func.args[i][0].token, value: args[i].type, expected: type })
+          concreteTypes.push(type)
         })
         return Task.of("success")
       })
@@ -416,6 +419,69 @@ function functionTemplateTypeCheckAndCompileImpl(ctx: TaskContext, { func, typeA
 
 export const functionTemplateTypeCheckAndCompileTask = createTaskDef<TypeCheckAndCompileArg, void, CompiledFunction, never>(functionTemplateTypeCheckAndCompileImpl)
 
+type FunctionInlineArg = {
+  vm: Vm
+  func: FunctionDefinition,
+  typeArgs: unknown[],
+  args: Ast[],
+  parentScope: Scope
+}
+
+function functionInlineImpl(ctx: TaskContext, { vm, func, typeArgs, args, parentScope }: FunctionInlineArg, param): Task<string, never> {
+
+  const argBindings: Binding[] = [];
+  const concreteTypes: Type[] = []
+  const statements: Ast[] = []
+  const location = vm.location;
+
+  return (
+    compileAndExecuteFunctionHeaderDef.create({ func, args, typeArgs, parentScope, concreteTypes })
+    .chainFn((task, arg) => {
+
+      compilerAssert(func.body)
+
+      if (!func.templatePrototype)  {
+        func.templatePrototype = { name: `${func.debugName} template bytecode`, body: func.body, instructionTable: bytecodeSecond }; // prettier-ignore
+        compileFunctionPrototype(ctx, func.templatePrototype);
+      }
+      compilerAssert(func.templatePrototype);
+
+      compilerAssert(typeArgs.length === func.typeArgs.length, "Expected $expected type parameters, got $got", { expected: func.typeArgs.length, got: typeArgs.length })
+      
+      const templateScope = Object.create(parentScope);
+      
+      func.args.forEach(([iden, type], i) => {
+        compilerAssert(concreteTypes[i], `Expected type`, { args, concreteTypes })
+        const binding = new Binding(iden.token.value, concreteTypes[i]);
+        templateScope[iden.token.value] = binding;
+        statements.push(new LetAst(VoidType, location, binding, args[i]))
+        argBindings.push(binding);
+      });
+      
+      func.typeArgs.forEach((typeArg, i) => {
+        compilerAssert(typeArg instanceof ParseIdentifier, "Not implemented")
+        templateScope[typeArg.token.value] = typeArgs[i];
+      });
+
+      return (
+        executeBytecodeTask.create({ bytecode: func.templatePrototype.bytecode!, scope: templateScope })
+        .chainFn((task, ast) => {
+
+          compilerAssert(isAst(ast), "Expected ast got $ast", { ast });
+
+          console.log(`Compiled inline ${func.debugName}`)
+          vm.stack.push(new StatementsAst(ast.type, location, [...statements, ast]));
+          
+          return Task.of("success")
+        })
+      )
+    })
+  )
+
+}
+
+export const functionInlineTask = createTaskDef<FunctionInlineArg, void, string, never>(functionInlineImpl)
+
 type FunctionCallArg = {
   func: FunctionDefinition,
   typeArgs: unknown[],
@@ -491,6 +557,7 @@ function createCallAstImpl(ctx, { vm, name, count, tcount }: CallArgs): Task<str
     return Task.of("success")
   }
   if (func instanceof Closure) {
+    if (func.func.inline) return functionInlineTask.create({ vm, func: func.func, typeArgs, args, parentScope: func.scope })
     return (
       functionTemplateTypeCheckAndCompileTask.create({ func: func.func, typeArgs, args, parentScope: func.scope })
       .chainFn((task, compiledFunction) => {
@@ -576,11 +643,11 @@ const instructions: InstructionMapping = {
   
   breakast: (vm, { v }) => {
     const block = findLabelBlockByType(vm.context.subCompilerState.labelBlock, 'break');
-    vm.stack.push(new BreakAst(VoidType, vm.location, block.binding, v ? expectAst(popStack(vm)) : null))
+    vm.stack.push(new BreakAst(VoidType, vm.location, block.binding!, v ? expectAst(popStack(vm)) : null))
   },
   continueast: (vm, { v }) => {
     const block = findLabelBlockByType(vm.context.subCompilerState.labelBlock, 'continue');
-    vm.stack.push(new BreakAst(VoidType, vm.location, block.binding, v ? expectAst(popStack(vm)) : null))
+    vm.stack.push(new BreakAst(VoidType, vm.location, block.binding!, v ? expectAst(popStack(vm)) : null))
   },
 
   bindingast: (vm, { name }) => {
@@ -605,7 +672,7 @@ const instructions: InstructionMapping = {
   binding: (vm, { name }) => {
     return resolveScope(vm.scope, name).chainFn((task, res) => {
       vm.stack.push(res)
-      return Task.of('success')
+      return Task.of(1)
     })
   },
   
