@@ -29,7 +29,7 @@ const bytecodeDefault: MetaInstructionTable = {
 
   operator: (out, ast) => (writeAll(out, ast.exprs), pushBytecode(out, ast.token, { type: 'operator', name: ast.token.value, count: ast.exprs.length })), // prettier-ignore
   set:      (out, ast) => (writeBytecode(out, ast.value), pushBytecode(out, ast.token, { type: 'set', name: ast.name })), // prettier-ignore
-  letconst: (out, ast) => (writeBytecode(out, ast.value), pushBytecode(out, ast.token, { type: 'let', name: ast.name })), // prettier-ignore
+  letconst: (out, ast) => (writeBytecode(out, ast.value), pushBytecode(out, ast.token, { type: 'letlocal', name: ast.name.token.value })), // prettier-ignore
   meta:     (out, ast) => (writeBytecode(out, ast.expr)),
   comptime: (out, ast) => (writeBytecode(out, ast.expr)),
 
@@ -37,19 +37,20 @@ const bytecodeDefault: MetaInstructionTable = {
   tuple: (out, ast) => (writeAll(out, ast.exprs), pushBytecode(out, ast.token, { type: 'tuple', count: ast.exprs.length })),
   
   let: (out, ast) => {
-    compilerAssert(ast.value, "Not implemented yet");
-    compilerAssert(ast.type, "Not implemented yet");
-    (writeBytecode(out, ast.value), pushBytecode(out, ast.token, { type: 'let', name: ast.name })) // prettier-ignore
+    if (ast.value) writeBytecode(out, ast.value);
+    if (ast.type) writeMeta(out, ast.type);
+    pushBytecode(out, ast.token, { type: 'letlocal', name: ast.name.token.value, t: !!ast.type, v: !!ast.value }) // prettier-ignore
   },
 
   function: (out, ast) => {
     pushBytecode(out, ast.token, { type: "closure", id: addFunctionDefinition(out.globalCompilerState, ast.functionDecl).id }) // prettier-ignore
   },
-  call:    (out, ast) => {
-    compilerAssert(ast.typeArgs.length === 0, "Not implemented")
+  call: (out, ast) => {
+    // compilerAssert(ast.typeArgs.length === 0, "Not implemented", { ast })
+    writeAll(out, ast.typeArgs)
     writeAll(out, ast.args);
     if (ast.left instanceof ParseIdentifier) {
-      pushBytecode(out, ast.token, { type: "call", name: ast.left.token.value, count: ast.args.length }); // prettier-ignore
+      pushBytecode(out, ast.token, { type: "call", name: ast.left.token.value, count: ast.args.length, tcount: ast.typeArgs.length }); // prettier-ignore
       return;
     }
     compilerAssert(false, "Call with non-identifier not implemented yet")
@@ -59,14 +60,14 @@ const bytecodeDefault: MetaInstructionTable = {
     pushBytecode(out, ast.token, { type: 'return', r: !!ast.expr })
   },
 
-  and: (out, ast) => {
-    writeAll(out, ast.exprs)
-    pushBytecode(out, ast.token, { type: "and", count: ast.exprs.length })
-  },
-  or: (out, ast) => {
-    writeAll(out, ast.exprs)
-    pushBytecode(out, ast.token, { type: "or", count: ast.exprs.length })
-  },
+  // and: (out, ast) => {
+  //   writeAll(out, ast.exprs)
+  //   pushBytecode(out, ast.token, { type: "and", count: ast.exprs.length })
+  // },
+  // or: (out, ast) => {
+  //   writeAll(out, ast.exprs)
+  //   pushBytecode(out, ast.token, { type: "or", count: ast.exprs.length })
+  // },
 
   statements: (out, ast) => {
     ast.exprs.forEach((stmt, i) => {
@@ -76,6 +77,18 @@ const bytecodeDefault: MetaInstructionTable = {
   },
   
   else: (out, ast) => writeBytecode(out, ast.body),
+
+  or: (out, ast) => {
+    writeBytecode(out, ast.exprs[0]);
+    const jump1 = { type: "jumpf", address: 0 };
+    pushBytecode(out, ast.exprs[0].token, jump1);
+    const jump2 = { type: "jump", address: 0 };
+    pushBytecode(out, ast.exprs[0].token, jump1);
+    jump1.address = out.bytecode.code.length;
+    pushBytecode(out, ast.exprs[0].token, { type: 'pop' });
+    writeBytecode(out, ast.exprs[1])
+    jump2.address = out.bytecode.code.length;
+  },
 
   if: (out, ast) => {
     writeBytecode(out, ast.condition);
@@ -92,6 +105,32 @@ const bytecodeDefault: MetaInstructionTable = {
       jump1.address = out.bytecode.code.length;
     }
   },
+  metaif: (out, ast) => {
+    // Same as if
+    const if_ = ast.expr;
+    writeBytecode(out, if_.condition);
+    const jump1 = { type: "jumpf", address: 0 };
+    pushBytecode(out, if_.condition.token, jump1);
+    writeBytecode(out, if_.trueBody);
+    if (if_.falseBody) {
+      const jump2 = { type: "jump", address: 0 };
+      pushBytecode(out, if_.trueBody.token, jump2);
+      jump1.address = out.bytecode.code.length;
+      writeBytecode(out, if_.falseBody);
+      jump2.address = out.bytecode.code.length;
+    } else {
+      jump1.address = out.bytecode.code.length;
+    }
+  },
+  while: (out, ast) => {
+    const jump2 = { type: "jump", address: out.bytecode.code.length };
+    writeBytecode(out, ast.condition);
+    const jump1 = { type: "jumpf", address: 0 };
+    pushBytecode(out, ast.condition.token, jump1);
+    writeBytecode(out, ast.body);
+    pushBytecode(out, ast.condition.token, jump2);
+    jump1.address = out.bytecode.code.length
+  }
 };
 
 const bytecodeSecond: MetaInstructionTable = {
@@ -223,7 +262,15 @@ function executeBytecodeImpl(ctx, { bytecode, scope }: ExecuteVmArg): Task<unkno
 const executeBytecodeTask = createTaskDef<ExecuteVmArg, void, unknown, never>(executeBytecodeImpl)
 
 
-const compileAndExecuteFunctionHeaderDef = createTaskDef<TypeCheckAndCompileArg, void, string, never>(
+type TypeCheckHeaderArg = {
+  func: FunctionDefinition,
+  typeArgs: unknown[],
+  args: Ast[],
+  parentScope: Scope
+  concreteTypes: Type[] // output
+}
+
+const compileAndExecuteFunctionHeaderDef = createTaskDef<TypeCheckHeaderArg, void, string, never>(
   function compileAndExecuteFunctionHeaderDef(ctx: TaskContext, { func, args, typeArgs, parentScope, concreteTypes }, param) {
 
     compilerAssert(args.length === func.args.length, 'Expected $x args got $y', { x: func.args.length, y: args.length })
@@ -267,7 +314,6 @@ type TypeCheckAndCompileArg = {
   typeArgs: unknown[],
   args: Ast[],
   parentScope: Scope
-  concreteTypes: Type[] // output
 }
 
 function functionTemplateTypeCheckAndCompileImpl(ctx: TaskContext, { func, typeArgs, args, parentScope }: TypeCheckAndCompileArg, param): Task<CompiledFunction, never> {
@@ -340,8 +386,8 @@ export const functionTemplateTypeCheckAndCompileTask = createTaskDef<TypeCheckAn
 
 type FunctionCallArg = {
   func: FunctionDefinition,
-  typeArgs: any[],
-  args: any[],
+  typeArgs: unknown[],
+  args: unknown[],
   parentScope: Scope
 }
 function functionCompileTimeCompileImpl(ctx: TaskContext, { func, typeArgs, args, parentScope }: FunctionCallArg) {
@@ -356,9 +402,10 @@ function functionCompileTimeCompileImpl(ctx: TaskContext, { func, typeArgs, args
   args.forEach((arg, i) => {
     scope[func.args[i][0].token.value] = arg;
   });
-  // func.typeArgs.forEach((typeArg, i) => {
-  //   scope[typeArg] = typeArgs[i];
-  // });
+  func.typeArgs.forEach((typeArg, i) => {
+    compilerAssert(typeArg instanceof ParseIdentifier, "Not implemented")
+    scope[typeArg.token.value] = typeArgs[i];
+  });
   compileFunctionPrototype(ctx, func.compileTimePrototype)
   return executeBytecodeTask.create({ bytecode: func.compileTimePrototype.bytecode!, scope });
 };
@@ -528,6 +575,7 @@ const instructions: InstructionMapping = {
     vm.stack.push(operatorResult);
   },
   closure: (vm, { id }) => {
+    compilerAssert(typeof id === 'number')
     const globalCompiler = (vm.context as TaskContext).globalCompiler
     compilerAssert(id in globalCompiler.functionDefinitions, "Not found in func $id", { id })
     const func = globalCompiler.functionDefinitions[id];

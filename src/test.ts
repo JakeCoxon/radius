@@ -23,8 +23,51 @@ defn fam!(T)(a: int):
 defn famz!(T)(a: T):
   print(a)
 
+defn foop():
+  print(2 + 42 * thing(12))
+
+  if 2 < 3:
+    print("OK")
+  elif 3 > 2:
+    print("wow")
+  elif 3 > 2:
+    print("wow")
+  elif 3 > 2:
+    print("wow")
+  else:
+    print(3)
+
+  zzz := 3
+  z : int = 2
+  x : int = z ifx 2 else 2
+
+  #while false or true:
+  #  print("OK")
+  
+  if 3:
+    print("asd")
+
+  meta if thing4(2):
+    print("k thing4")
+
+  meta if true:
+    print("this is meta if")
+
+  foo1 :: {|x| x + 1}
+
+  foo1(1)
+  fam!2(1)
+  fam!(1 + 1)(2)
+
+  famz!int(200)
+  famz!bool(true)
+  
+  print(meta thing(12))
+
 defn main():
   print(2 + 42 * thing(12))
+
+  meta foop()
 
   if 2 < 3:
     print("OK")
