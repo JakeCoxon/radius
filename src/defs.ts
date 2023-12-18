@@ -135,7 +135,49 @@ export type ParseAst = ParseStatements | ParseLet | ParseSet | ParseOperator | P
 // Void types mean that in secondOrder compilation, the AST doesn't return an AST
 export const isParseVoid = (ast: ParseAst) => ast.key == 'letconst' || ast.key === 'function' || ast.key === 'class' || ast.key === 'comptime';
 
-export type BytecodeInstr = { type: string } & {[key:string]:unknown}
+export type BytecodeInstr = 
+  { type: 'binding', name: string } |
+  { type: 'push', value: unknown } |
+  { type: 'operator', name: string, count: number } |
+  { type: 'name', name: string } |
+  { type: 'letlocal', name: string, t: boolean, v: boolean } |
+  { type: 'setlocal', name: string } |
+  { type: 'list', count: number } |
+  { type: 'tuple', count: number } |
+  { type: 'closure', id: number } |
+  { type: 'call', name: string, count: number, tcount: number } |
+  { type: 'return', r: boolean } |
+  { type: 'pop' } |
+  { type: 'nil' } |
+  { type: 'bindingast', name: string } |
+  { type: 'numberast', value: number } |
+  { type: 'stringast', value: string } |
+  { type: 'boolast', value: boolean } |
+  { type: 'setast', name: string } |
+  { type: 'operatorast', name: string, count: number } |
+  { type: 'toast' } |
+  { type: 'whileast' } |
+  { type: 'returnast', r: boolean } |
+  { type: 'listast', count: number } |
+  { type: 'nameast', name: string } |
+  { type: 'andast', count: number } |
+  { type: 'orast', count: number } |
+  { type: 'ifast', f: boolean } |
+  { type: 'letast', name: string, t: boolean, v: boolean } |
+  { type: 'callast', name: string, count: number, tcount: number } |
+  { type: 'pushqs' } |
+  { type: 'popqs' } |
+  { type: 'appendq' } |
+  { type: 'jump', address: number } |
+  { type: 'jumpf', address: number } |
+  { type: 'halt' }
+
+
+export type InstructionMapping = {
+  [T in BytecodeInstr as T['type']]: (vm: Vm, instr: T) => void;
+}
+
+
 export type BytecodeGen = {
   code: BytecodeInstr[]
   locations: SourceLocation[]
@@ -221,8 +263,6 @@ export class ReturnAst extends AstRoot {     constructor(public type: Type, publ
 
 export type Ast = NumberAst | LetAst | SetAst | OperatorAst | IfAst | ListAst | CallAst | AndAst | OrAst | StatementsAst | WhileAst | ReturnAst;
 export const isAst = (value: unknown): value is Ast => value instanceof AstRoot;
-
-export type InstructionMapping = {[key:string]:(vm: Vm, instr: BytecodeInstr) => unknown}
 
 export class Tuple {
   constructor(public values: unknown[]) {}

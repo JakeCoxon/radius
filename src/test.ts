@@ -44,7 +44,7 @@ defn foop():
   #while false or true:
   #  print("OK")
   
-  if 3:
+  if 3 and 2:
     print("asd")
 
   meta if thing4(2):
@@ -66,6 +66,7 @@ defn foop():
 
 defn main():
   print(2 + 42 * thing(12))
+
 
   meta foop()
 

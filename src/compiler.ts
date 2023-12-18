@@ -28,8 +28,8 @@ const bytecodeDefault: MetaInstructionTable = {
   boolean: (out, ast) => pushBytecode(out, ast.token, { type: "push", value: ast.token.value !== 'false' }), // prettier-ignore
 
   operator: (out, ast) => (writeAll(out, ast.exprs), pushBytecode(out, ast.token, { type: 'operator', name: ast.token.value, count: ast.exprs.length })), // prettier-ignore
-  set:      (out, ast) => (writeBytecode(out, ast.value), pushBytecode(out, ast.token, { type: 'set', name: ast.name })), // prettier-ignore
-  letconst: (out, ast) => (writeBytecode(out, ast.value), pushBytecode(out, ast.token, { type: 'letlocal', name: ast.name.token.value })), // prettier-ignore
+  set:      (out, ast) => (writeBytecode(out, ast.value), pushBytecode(out, ast.token, { type: 'setlocal', name: ast.name.token.value })), // prettier-ignore
+  letconst: (out, ast) => (writeBytecode(out, ast.value), pushBytecode(out, ast.token, { type: 'letlocal', name: ast.name.token.value, t: false, v: true })), // prettier-ignore
   meta:     (out, ast) => (writeBytecode(out, ast.expr)),
   comptime: (out, ast) => (writeBytecode(out, ast.expr)),
 
@@ -60,15 +60,6 @@ const bytecodeDefault: MetaInstructionTable = {
     pushBytecode(out, ast.token, { type: 'return', r: !!ast.expr })
   },
 
-  // and: (out, ast) => {
-  //   writeAll(out, ast.exprs)
-  //   pushBytecode(out, ast.token, { type: "and", count: ast.exprs.length })
-  // },
-  // or: (out, ast) => {
-  //   writeAll(out, ast.exprs)
-  //   pushBytecode(out, ast.token, { type: "or", count: ast.exprs.length })
-  // },
-
   statements: (out, ast) => {
     ast.exprs.forEach((stmt, i) => {
       writeBytecode(out, stmt);
@@ -78,12 +69,21 @@ const bytecodeDefault: MetaInstructionTable = {
   
   else: (out, ast) => writeBytecode(out, ast.body),
 
+  and: (out, ast) => {
+    writeBytecode(out, ast.exprs[0]);
+    const jump1 = { type: "jumpf" as const, address: 0 };
+    pushBytecode(out, ast.exprs[0].token, jump1);
+    pushBytecode(out, ast.exprs[0].token, { type: 'pop' });
+    writeBytecode(out, ast.exprs[1])
+    jump1.address = out.bytecode.code.length;
+  },
+
   or: (out, ast) => {
     writeBytecode(out, ast.exprs[0]);
-    const jump1 = { type: "jumpf", address: 0 };
+    const jump1 = { type: "jumpf" as const, address: 0 };
     pushBytecode(out, ast.exprs[0].token, jump1);
-    const jump2 = { type: "jump", address: 0 };
-    pushBytecode(out, ast.exprs[0].token, jump1);
+    const jump2 = { type: "jump" as const, address: 0 };
+    pushBytecode(out, ast.exprs[0].token, jump2);
     jump1.address = out.bytecode.code.length;
     pushBytecode(out, ast.exprs[0].token, { type: 'pop' });
     writeBytecode(out, ast.exprs[1])
@@ -92,11 +92,11 @@ const bytecodeDefault: MetaInstructionTable = {
 
   if: (out, ast) => {
     writeBytecode(out, ast.condition);
-    const jump1 = { type: "jumpf", address: 0 };
+    const jump1 = { type: "jumpf" as const, address: 0 };
     pushBytecode(out, ast.condition.token, jump1);
     writeBytecode(out, ast.trueBody);
     if (ast.falseBody) {
-      const jump2 = { type: "jump", address: 0 };
+      const jump2 = { type: "jump" as const, address: 0 };
       pushBytecode(out, ast.trueBody.token, jump2);
       jump1.address = out.bytecode.code.length;
       writeBytecode(out, ast.falseBody);
@@ -109,11 +109,11 @@ const bytecodeDefault: MetaInstructionTable = {
     // Same as if
     const if_ = ast.expr;
     writeBytecode(out, if_.condition);
-    const jump1 = { type: "jumpf", address: 0 };
+    const jump1 = { type: "jumpf" as const, address: 0 };
     pushBytecode(out, if_.condition.token, jump1);
     writeBytecode(out, if_.trueBody);
     if (if_.falseBody) {
-      const jump2 = { type: "jump", address: 0 };
+      const jump2 = { type: "jump" as const, address: 0 };
       pushBytecode(out, if_.trueBody.token, jump2);
       jump1.address = out.bytecode.code.length;
       writeBytecode(out, if_.falseBody);
@@ -123,9 +123,9 @@ const bytecodeDefault: MetaInstructionTable = {
     }
   },
   while: (out, ast) => {
-    const jump2 = { type: "jump", address: out.bytecode.code.length };
+    const jump2 = { type: "jump" as const, address: out.bytecode.code.length };
     writeBytecode(out, ast.condition);
-    const jump1 = { type: "jumpf", address: 0 };
+    const jump1 = { type: "jumpf" as const, address: 0 };
     pushBytecode(out, ast.condition.token, jump1);
     writeBytecode(out, ast.body);
     pushBytecode(out, ast.condition.token, jump2);
@@ -140,11 +140,11 @@ const bytecodeSecond: MetaInstructionTable = {
   string:  (out, ast) => pushBytecode(out, ast.token, { type: "stringast", value: ast.token.value }), // prettier-ignore
   boolean: (out, ast) => pushBytecode(out, ast.token, { type: "boolast", value: ast.token.value !== 'false' }), // prettier-ignore
 
-  set:      (out, ast) => (writeBytecode(out, ast.value), pushBytecode(out, ast.token, { type: 'setast', name: ast.name })), // prettier-ignore,
+  set:      (out, ast) => (writeBytecode(out, ast.value), pushBytecode(out, ast.token, { type: 'setast', name: ast.name.token.value })), // prettier-ignore,
   operator: (out, ast) => (writeAll(out, ast.exprs), pushBytecode(out, ast.token, { type: 'operatorast', name: ast.token.value, count: ast.exprs.length })), // prettier-ignore
   meta:     (out, ast) => (writeMeta(out, ast.expr), pushBytecode(out, ast.token, { type: 'toast' })),
   comptime: (out, ast) => writeMeta(out, ast.expr),
-  letconst: (out, ast) => (writeMeta(out, ast.value), pushBytecode(out, ast.token, { type: 'letlocal', name: ast.name.token.value })),
+  letconst: (out, ast) => (writeMeta(out, ast.value), pushBytecode(out, ast.token, { type: 'letlocal', name: ast.name.token.value, t: false, v: true })),
   tuple:    (out, ast) => (writeAll(out, ast.exprs), pushBytecode(out, ast.token, { type: 'tuple', count: ast.exprs.length })),
 
   while: (out, ast) => (writeBytecode(out, ast.body), writeBytecode(out, ast.condition), pushBytecode(out, ast.token, { type: 'whileast' })),
@@ -194,11 +194,11 @@ const bytecodeSecond: MetaInstructionTable = {
   metaif: (out, ast) => {
     const if_ = ast.expr
     writeMeta(out, if_.condition);
-    const jump1 = { type: "jumpf", address: 0 };
+    const jump1 = { type: "jumpf" as const, address: 0 };
     pushBytecode(out, if_.condition.token, jump1);
     writeBytecode(out, if_.trueBody);
     if (if_.falseBody) {
-      const jump2 = { type: "jump", address: 0 };
+      const jump2 = { type: "jump" as const, address: 0 };
       pushBytecode(out, if_.trueBody.token, jump2);
       jump1.address = out.bytecode.code.length;
       compilerAssert(!(if_.falseBody instanceof ParseIf), "Meta elif not implemented yet")
@@ -525,7 +525,6 @@ const instructions: InstructionMapping = {
   numberast: (vm, { value }) => vm.stack.push(new NumberAst(IntType, vm.location, value)),
   stringast: (vm, { value }) => vm.stack.push(new StringAst(StringType, vm.location, value)),
   boolast: (vm, { value }) =>   vm.stack.push(new BoolAst(BoolType, vm.location, value)),
-  setast: (vm, { name }) =>     vm.stack.push(new SetAst(VoidType, vm.location, name, popStack(vm))),
   orast: (vm, { count }) =>     vm.stack.push(new OrAst(IntType, vm.location, popValues(vm, count))),
   andast: (vm, { count }) =>    vm.stack.push(new AndAst(IntType, vm.location, popValues(vm, count))),
   listast: (vm, { count }) =>   vm.stack.push(new ListAst(IntType, vm.location, popValues(vm, count))),
@@ -535,9 +534,13 @@ const instructions: InstructionMapping = {
   letast: (vm, { name, t, v }) => vm.stack.push(letLocal(vm, name, t ? popStack(vm) : null, v ? popStack(vm) : null)),
   callast: (vm, { name, count, tcount }) => createCallAstDef.create({ vm, name, count, tcount }),
   toast: (vm) => vm.stack.push(unknownToAst(vm.location, popStack(vm))),
+  setast: (vm, { name }) =>     {
+    const binding = expectMap(vm.scope, name, `No binding $key`);
+    vm.stack.push(new SetAst(VoidType, vm.location, binding, popStack(vm)))
+  },
 
   bindingast: (vm, { name }) => {
-    const value = expectMap(vm.scope, name, `No binding ${name}`);
+    const value = expectMap(vm.scope, name, `No binding $key`);
     vm.stack.push(unknownToAst(vm.location, value));
   },
   return: (vm, { r }) => { 
@@ -605,7 +608,7 @@ function executeVmImpl(ctx, { vm } : { vm: Vm }, p: void): Task<string, never> {
   compilerAssert(current, "Expected 'halt' instruction")
   while (current.type !== "halt") {
     const startIp = vm.ip;
-    const instr = instructions[current.type];
+    const instr = instructions[current.type] as (vm: Vm, instr: BytecodeInstr) => void;
     compilerAssert(instr, "Not inplemented yet instruction $type", { type: current.type, current })
     let res;
     try {
