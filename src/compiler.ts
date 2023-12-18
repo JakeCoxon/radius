@@ -134,8 +134,6 @@ const bytecodeDefault: MetaInstructionTable = {
     const breakBlock = new LabelBlock(out.state.labelBlock, "labelblock", 'break', null)
     const continueBlock = new LabelBlock(breakBlock, "labelblock", 'continue', null)
     out.state.labelBlock = continueBlock;
-    // const block = pushBytecode(out, ast.condition.token, { type: 'beginblock', breakType: 'break', address: 0 })
-    // const continueBlock = pushBytecode(out, ast.condition.token, { type: 'beginblock', breakType: 'continue', address: 0 })
     const loopTarget = out.bytecode.code.length
     visitParseNode(out, ast.condition);
     const jump1 = pushBytecode(out, ast.condition.token, { type: "jumpf", address: 0 });
@@ -513,7 +511,7 @@ const newEvent = () => {
 }
 
 function resolveScope(scope: Scope, name: string) {
-  if (scope[name]) return Task.of(scope[name])
+  if (scope[name] !== undefined) return Task.of(scope[name])
   if (!scope[ScopeEventsSymbol]) scope[ScopeEventsSymbol] = {}
   if (!scope[ScopeEventsSymbol][name]) scope[ScopeEventsSymbol][name] = newEvent()
   return Task.waitFor(scope[ScopeEventsSymbol][name])

@@ -170,8 +170,8 @@ export class ChainFn<SIn, SOut, F, F1> extends Task<SOut, F1 | F> {
     this._failure = this._task._failure;
     if (this._failure) {
       this._state = "completed";
-    } else if (!this._childTask && this._task._success) {
-      const newTask = this.fn(this, this._task._success);
+    } else if (!this._childTask && !this._task._failure) { // Don't use _success because it could be falsey
+      const newTask = this.fn(this, this._task._success!);
       this._childTask = newTask
       queue.enqueue(newTask);
     } else if (this._childTask) {

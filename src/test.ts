@@ -41,12 +41,13 @@ defn foop():
   z : int = 2
   x : int = z ifx 2 else 2
 
-  #i := 0
-  #while true:
-  #  i = i + 1
-  #  if i > 10:
-  #    break
-  #print(i)
+  i := 0
+  while true:
+    i = i + 1
+    if i > 10:
+      break
+  print(i)
+  print("thanks")
   
   if 3 and 2:
     print("asd")
