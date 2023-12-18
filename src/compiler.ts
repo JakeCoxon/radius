@@ -224,7 +224,7 @@ const executeBytecodeTask = createTaskDef<ExecuteVmArg, void, unknown, never>(ex
 
 
 const compileAndExecuteFunctionHeaderDef = createTaskDef<TypeCheckAndCompileArg, void, string, never>(
-  function compileAndExecuteFunctionHeaderDef(ctx: TaskContext, { func, args, parentScope }, param) {
+  function compileAndExecuteFunctionHeaderDef(ctx: TaskContext, { func, args, typeArgs, parentScope, concreteTypes }, param) {
 
     compilerAssert(args.length === func.args.length, 'Expected $x args got $y', { x: func.args.length, y: args.length })
     func.args.forEach((arg, i) => {
@@ -240,12 +240,17 @@ const compileAndExecuteFunctionHeaderDef = createTaskDef<TypeCheckAndCompileArg,
     }
 
     const scope = Object.create(parentScope);
+    func.typeArgs.forEach((typeArg, i) => {
+      compilerAssert(typeArg instanceof ParseIdentifier)
+      scope[typeArg.token.value] = typeArgs[i];
+    })
 
     return (
       executeBytecodeTask.create({ bytecode: func.headerPrototype!.bytecode!, scope })
       .chainFn((task, compiledArgTypes) => {
 
         compilerAssert(compiledArgTypes instanceof Tuple, "Expected tuple")
+        concreteTypes.push(...compiledArgTypes.values as any)
         compiledArgTypes.values.forEach((type, i) => {
           if (type === null) return
           compilerAssert(type instanceof Type);
@@ -258,19 +263,21 @@ const compileAndExecuteFunctionHeaderDef = createTaskDef<TypeCheckAndCompileArg,
   });
 
 type TypeCheckAndCompileArg = {
-    func: FunctionDefinition,
-    typeArgs: unknown[],
-    args: Ast[],
-    parentScope: Scope
+  func: FunctionDefinition,
+  typeArgs: unknown[],
+  args: Ast[],
+  parentScope: Scope
+  concreteTypes: Type[] // output
 }
 
 function functionTemplateTypeCheckAndCompileImpl(ctx: TaskContext, { func, typeArgs, args, parentScope }: TypeCheckAndCompileArg, param): Task<CompiledFunction, never> {
 
   const argBindings: Binding[] = [];
+  const concreteTypes: Type[] = []
   let typeParamHash;
 
   return (
-    compileAndExecuteFunctionHeaderDef.create({ func, args, typeArgs, parentScope })
+    compileAndExecuteFunctionHeaderDef.create({ func, args, typeArgs, parentScope, concreteTypes })
     .chainFn((task, arg) => {
 
       compilerAssert(func.body)
@@ -293,7 +300,7 @@ function functionTemplateTypeCheckAndCompileImpl(ctx: TaskContext, { func, typeA
       const templateScope = Object.create(parentScope);
       
       func.args.forEach(([iden, type], i) => {
-        const binding = new Binding(iden.token.value, VoidType);
+        const binding = new Binding(iden.token.value, concreteTypes[i]);
         templateScope[iden.token.value] = binding;
         argBindings.push(binding);
       });

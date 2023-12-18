@@ -60,7 +60,7 @@ defn main():
   fam!(1 + 1)(2)
 
   famz!int(200)
-  #famz!bool(true)
+  famz!bool(true)
   
   print(meta thing(12))
 
