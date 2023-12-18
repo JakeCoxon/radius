@@ -1,22 +1,23 @@
-import { isParseVoid, BytecodeOut, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, MetaInstructionTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, addFunctionDefinition, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, BytecodeGen, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts } from "./defs";
+import { isParseVoid, BytecodeOut, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, MetaInstructionTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, addFunctionDefinition, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, BytecodeGen, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, findLabelBlockAstByType } from "./defs";
 import { Event, Task, createTaskDef, isTask, isTaskResult } from "./tasks";
 
-const pushBytecode = (out: BytecodeOut, token: Token, instr: BytecodeInstr) => {
+const pushBytecode = <T extends BytecodeInstr>(out: BytecodeOut, token: Token, instr: T) => {
   out.bytecode.locations.push(token.location);
   out.bytecode.code.push(instr)
+  return instr;
 }
 
 const visitParseNode = (out: BytecodeOut, expr: ParseNode) => {
   compilerAssert(expr.key, "$expr not found", { expr })
   const table = out.table
-  const instrWriter = expectMap(table, expr.key, "Not implemented parser node $key")
+  const instrWriter = expectMap(table, expr.key, `Not implemented parser node $key in ${table === bytecodeDefault ? 'default' : 'second order'} table`)
   instrWriter(out, expr)
 }
 const visitAll = (out: BytecodeOut, exprs: ParseNode[]) => {
   exprs.forEach(expr => visitParseNode(out, expr))
 }
 const writeMeta = (out: BytecodeOut, expr: ParseNode) => {
-  visitParseNode({ bytecode: out.bytecode, table: bytecodeDefault, globalCompilerState: out.globalCompilerState }, expr)
+  visitParseNode({ bytecode: out.bytecode, table: bytecodeDefault, globalCompilerState: out.globalCompilerState, state: out.state }, expr)
 }
 
 const bytecodeDefault: MetaInstructionTable = {
@@ -58,6 +59,16 @@ const bytecodeDefault: MetaInstructionTable = {
     if (ast.expr) visitParseNode(out, ast.expr);
     pushBytecode(out, ast.token, { type: 'return', r: !!ast.expr })
   },
+  break: (out, ast) => {
+    if (ast.expr) visitParseNode(out, ast.expr);
+    const instr = pushBytecode(out, ast.token, { type: 'jump', address: 0 })
+    findLabelBlockByType(out.state.labelBlock, "break").completion.push((address: number) => { instr.address = address })
+  },
+  continue: (out, ast) => {
+    if (ast.expr) visitParseNode(out, ast.expr);
+    const instr = pushBytecode(out, ast.token, { type: 'jump', address: 0 })
+    findLabelBlockByType(out.state.labelBlock, "continue").completion.push((address: number) => { instr.address = address })
+  },
 
   statements: (out, ast) => {
     ast.exprs.forEach((stmt, i) => {
@@ -66,8 +77,6 @@ const bytecodeDefault: MetaInstructionTable = {
     });
   },
   
-  else: (out, ast) => visitParseNode(out, ast.body),
-
   and: (out, ast) => {
     visitParseNode(out, ast.exprs[0]);
     const jump1 = { type: "jumpf" as const, address: 0 };
@@ -89,6 +98,7 @@ const bytecodeDefault: MetaInstructionTable = {
     jump2.address = out.bytecode.code.length;
   },
 
+  else: (out, ast) => visitParseNode(out, ast.body),
   if: (out, ast) => {
     visitParseNode(out, ast.condition);
     const jump1 = { type: "jumpf" as const, address: 0 };
@@ -108,12 +118,10 @@ const bytecodeDefault: MetaInstructionTable = {
     // Same as if
     const if_ = ast.expr;
     visitParseNode(out, if_.condition);
-    const jump1 = { type: "jumpf" as const, address: 0 };
-    pushBytecode(out, if_.condition.token, jump1);
+    const jump1 = pushBytecode(out, if_.condition.token, { type: "jumpf", address: 0 });
     visitParseNode(out, if_.trueBody);
     if (if_.falseBody) {
-      const jump2 = { type: "jump" as const, address: 0 };
-      pushBytecode(out, if_.trueBody.token, jump2);
+      const jump2 = pushBytecode(out, if_.trueBody.token, { type: "jump", address: 0 });
       jump1.address = out.bytecode.code.length;
       visitParseNode(out, if_.falseBody);
       jump2.address = out.bytecode.code.length;
@@ -122,13 +130,24 @@ const bytecodeDefault: MetaInstructionTable = {
     }
   },
   while: (out, ast) => {
-    const jump2 = { type: "jump" as const, address: out.bytecode.code.length };
+    pushBytecode(out, ast.condition.token, { type: "comment", comment: "while begin" });
+    const breakBlock = new LabelBlock(out.state.labelBlock, "labelblock", 'break', null)
+    const continueBlock = new LabelBlock(breakBlock, "labelblock", 'continue', null)
+    out.state.labelBlock = continueBlock;
+    // const block = pushBytecode(out, ast.condition.token, { type: 'beginblock', breakType: 'break', address: 0 })
+    // const continueBlock = pushBytecode(out, ast.condition.token, { type: 'beginblock', breakType: 'continue', address: 0 })
+    const loopTarget = out.bytecode.code.length
     visitParseNode(out, ast.condition);
-    const jump1 = { type: "jumpf" as const, address: 0 };
-    pushBytecode(out, ast.condition.token, jump1);
+    const jump1 = pushBytecode(out, ast.condition.token, { type: "jumpf", address: 0 });
     visitParseNode(out, ast.body);
-    pushBytecode(out, ast.condition.token, jump2);
+    continueBlock.completion.forEach(f => f(out.bytecode.code.length))
+    continueBlock.completion.length = 0
+    pushBytecode(out, ast.condition.token, { type: "jump", address: loopTarget });
     jump1.address = out.bytecode.code.length
+    breakBlock.completion.forEach(f => f(out.bytecode.code.length))
+    breakBlock.completion.length = 0
+    out.state.labelBlock = breakBlock.parent;
+    pushBytecode(out, ast.condition.token, { type: "comment", comment: "while end" });
   }
 };
 
@@ -145,7 +164,15 @@ const bytecodeSecond: MetaInstructionTable = {
   letconst: (out, ast) => (writeMeta(out, ast.value), pushBytecode(out, ast.token, { type: 'letlocal', name: ast.name.token.value, t: false, v: true })),
   tuple:    (out, ast) => (visitAll(out, ast.exprs), pushBytecode(out, ast.token, { type: 'tuple', count: ast.exprs.length })),
 
-  while: (out, ast) => (visitParseNode(out, ast.body), visitParseNode(out, ast.condition), pushBytecode(out, ast.token, { type: 'whileast' })),
+  while: (out, ast) => {
+    pushBytecode(out, ast.token, { type: 'beginblockast', breakType: 'break' })
+    pushBytecode(out, ast.token, { type: 'beginblockast', breakType: 'continue' })
+    visitParseNode(out, ast.body);
+    pushBytecode(out, ast.token, { type: 'endblockast' })
+    visitParseNode(out, ast.condition)
+    pushBytecode(out, ast.token, { type: 'whileast' })
+    pushBytecode(out, ast.token, { type: 'endblockast' })
+  },
 
   function: (out, ast) => {
     compilerAssert(false, "Function not implemented yet")
@@ -154,6 +181,14 @@ const bytecodeSecond: MetaInstructionTable = {
   return: (out, ast) => {
     if (ast.expr) visitParseNode(out, ast.expr);
     pushBytecode(out, ast.token, { type: 'returnast', r: !!ast.expr })
+  },
+  break: (out, ast) => {
+    if (ast.expr) visitParseNode(out, ast.expr);
+    pushBytecode(out, ast.token, { type: 'breakast', v: !!ast.expr })
+  },
+  continue: (out, ast) => {
+    if (ast.expr) visitParseNode(out, ast.expr);
+    pushBytecode(out, ast.token, { type: 'continueast', v: !!ast.expr })
   },
 
   list: (out, ast) => (visitAll(out, ast.exprs), pushBytecode(out, ast.token, { type: 'listast', count: ast.exprs.length })),
@@ -222,7 +257,8 @@ const compileFunctionPrototype = (ctx: TaskContext, prototype: FunctionPrototype
   const out: BytecodeOut = {
     bytecode: prototype.bytecode,
     table: prototype.instructionTable,
-    globalCompilerState: ctx.globalCompiler
+    globalCompilerState: ctx.globalCompiler,
+    state: { labelBlock: null }
   }
   visitParseNode(out, prototype.body);
   prototype.bytecode.code.push({ type: "halt" });
@@ -516,6 +552,8 @@ const unknownToAst = (location: SourceLocation, value: unknown) => {
 }
 
 const instructions: InstructionMapping = {
+  halt: () => compilerAssert(false, "Handled elsewhere"),
+  comment: () => {},
   push: (vm, { value }) => vm.stack.push(value),
   nil: (vm) => vm.stack.push(null),
 
@@ -536,6 +574,16 @@ const instructions: InstructionMapping = {
     const binding = expectMap(vm.scope, name, `No binding $key`);
     vm.stack.push(new SetAst(VoidType, vm.location, binding, expectAst(popStack(vm))))
   },
+  list: (vm, { count }) => vm.stack.push(popValues(vm, count)),
+  
+  breakast: (vm, { v }) => {
+    const block = findLabelBlockByType(vm.context.subCompilerState.labelBlock, 'break');
+    vm.stack.push(new BreakAst(VoidType, vm.location, block.binding, v ? expectAst(popStack(vm)) : null))
+  },
+  continueast: (vm, { v }) => {
+    const block = findLabelBlockByType(vm.context.subCompilerState.labelBlock, 'continue');
+    vm.stack.push(new BreakAst(VoidType, vm.location, block.binding, v ? expectAst(popStack(vm)) : null))
+  },
 
   bindingast: (vm, { name }) => {
     const value = expectMap(vm.scope, name, `No binding $key`);
@@ -546,6 +594,14 @@ const instructions: InstructionMapping = {
     vm.stack.length = 0
     vm.stack.push(ret);
     vm.ip = vm.bytecode.code.length - 1;
+  },
+  beginblockast: (vm, { breakType }) => {
+    const binding = new Binding(`labelbreakast`, VoidType);
+    vm.context.subCompilerState.labelBlock = new LabelBlock(vm.context.subCompilerState.labelBlock, null, breakType, binding)
+  },
+  endblockast: (vm, {}) => {
+    compilerAssert(vm.context.subCompilerState.labelBlock, "Invalid endblockast")
+    vm.context.subCompilerState.labelBlock = vm.context.subCompilerState.labelBlock.parent
   },
 
   binding: (vm, { name }) => {
@@ -677,7 +733,8 @@ export const runTopLevel = (globalCompiler: GlobalCompilerState, stmts: ParseSta
       const out: BytecodeOut = {
         bytecode: { code: [], locations: [] },
         table: bytecodeDefault,
-        globalCompilerState: globalCompiler
+        globalCompilerState: globalCompiler,
+        state: { labelBlock: null }
       }
       visitParseNode(out, expr.value);
       out.bytecode.code.push({ type: "halt" });

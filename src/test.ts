@@ -41,8 +41,12 @@ defn foop():
   z : int = 2
   x : int = z ifx 2 else 2
 
-  #while false or true:
-  #  print("OK")
+  #i := 0
+  #while true:
+  #  i = i + 1
+  #  if i > 10:
+  #    break
+  #print(i)
   
   if 3 and 2:
     print("asd")
@@ -87,6 +91,7 @@ defn main():
 
   while false or true:
     print("OK")
+    break
   
   if 3:
     print("asd")

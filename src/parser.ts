@@ -490,15 +490,17 @@ export const makeParser = (input: string) => {
     if (match("for")) return new ParseMetaFor(metaToken, parseForStatement());
     return new ParseMeta(previous, parseStatement());
   }
+  const parseOptionalExpr = () =>  matchType("NEWLINE") ? null : trailingNewline(parseExpr())
+
   const parseStatement = (): ParseNode => {
     if (match("defn"))          return parseFunctionDef();
     else if (match("class"))    return parseClassDef();
     else if (match("if"))       return parseIf(previous);
     else if (match("while"))    return parseWhile();
     else if (match("comptime")) return new ParseCompTime(previous, parseColonBlock("comptime"));
-    else if (match("return"))   return trailingNewline(new ParseReturn(previous, parseExpr()));
-    else if (match("break"))    return trailingNewline(new ParseBreak(previous, parseExpr()));
-    else if (match("continue")) return trailingNewline(new ParseContinue(previous, parseExpr()));
+    else if (match("return"))   return new ParseReturn(previous, parseOptionalExpr());
+    else if (match("break"))    return new ParseBreak(previous, parseOptionalExpr());
+    else if (match("continue")) return new ParseContinue(previous, parseOptionalExpr());
     else if (match("for"))      return parseForStatement();
     else if (match("meta"))     return parseMetaStatement(previous)
     return parseExpressionStatement();

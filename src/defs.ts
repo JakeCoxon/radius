@@ -95,8 +95,8 @@ export class ParseLetConst extends ParseNodeType {   key = 'letconst' as const; 
 export class ParseFunction extends ParseNodeType {   key = 'function' as const;   constructor(public token: Token, public functionDecl: ParserFunctionDecl) { super();} }
 export class ParseClass extends ParseNodeType {      key = 'class' as const;      constructor(public token: Token, public classDecl: ParserClassDecl) { super();} }
 export class ParseReturn extends ParseNodeType {     key = 'return' as const;     constructor(public token: Token, public expr: ParseNode | null) { super();} }
-export class ParseBreak extends ParseNodeType {      key = 'break' as const;      constructor(public token: Token, public expr: ParseNode) { super();} }
-export class ParseContinue extends ParseNodeType {   key = 'continue' as const;   constructor(public token: Token, public expr: ParseNode) { super();} }
+export class ParseBreak extends ParseNodeType {      key = 'break' as const;      constructor(public token: Token, public expr: ParseNode | null) { super();} }
+export class ParseContinue extends ParseNodeType {   key = 'continue' as const;   constructor(public token: Token, public expr: ParseNode | null) { super();} }
 export class ParseFor extends ParseNodeType {        key = 'for' as const;        constructor(public token: Token, public identifier: ParseIdentifier, public expr: ParseNode, public body: ParseNode) { super();} }
 export class ParseCast extends ParseNodeType {       key = 'cast' as const;       constructor(public token: Token, public expr: ParseNode, public as: ParseNode) { super();} }
 export class ParseOpEq extends ParseNodeType {       key = 'opeq' as const;       constructor(public token: Token, public left: ParseNode, public right: ParseNode) { super();} }
@@ -124,6 +124,7 @@ export const isParseVoid = (ast: ParseNode) => ast.key == 'letconst' || ast.key 
 export const isParseNode = (ast: unknown): ast is ParseNode => ast instanceof ParseNodeType
 
 export type BytecodeInstr = 
+  { type: 'comment', comment: string } |
   { type: 'binding', name: string } |
   { type: 'push', value: unknown } |
   { type: 'operator', name: string, count: number } |
@@ -136,6 +137,8 @@ export type BytecodeInstr =
   { type: 'return', r: boolean } |
   { type: 'pop' } |
   { type: 'nil' } |
+  { type: 'beginblockast', breakType: 'break' | 'continue' | null } |
+  { type: 'endblockast'  } |
   { type: 'bindingast', name: string } |
   { type: 'numberast', value: number } |
   { type: 'stringast', value: string } |
@@ -145,6 +148,8 @@ export type BytecodeInstr =
   { type: 'toast' } |
   { type: 'whileast' } |
   { type: 'returnast', r: boolean } |
+  { type: 'breakast', v: boolean } |
+  { type: 'continueast', v: boolean } |
   { type: 'listast', count: number } |
   { type: 'andast', count: number } |
   { type: 'orast', count: number } |
@@ -187,7 +192,10 @@ export const hashValues = (values: unknown[]) => {
 export interface BytecodeOut {
   bytecode: {
     code: BytecodeInstr[]
-    locations: SourceLocation[]
+    locations: SourceLocation[],
+  },
+  state: {
+    labelBlock: LabelBlock | null
   }
   table: MetaInstructionTable
   globalCompilerState: GlobalCompilerState // Not nice
@@ -258,6 +266,8 @@ export class OrAst extends AstRoot {         constructor(public type: Type, publ
 export class StatementsAst extends AstRoot { constructor(public type: Type, public location: SourceLocation, public statements: Ast[]) { super() } }
 export class WhileAst extends AstRoot {      constructor(public type: Type, public location: SourceLocation, public condition: Ast, public body: Ast) { super() } }
 export class ReturnAst extends AstRoot {     constructor(public type: Type, public location: SourceLocation, public expr: Ast | null) { super() } }
+export class BreakAst extends AstRoot {      constructor(public type: Type, public location: SourceLocation, public binding: Binding, public expr: Ast | null) { super() } }
+export class BlockAst extends AstRoot {      constructor(public type: Type, public location: SourceLocation, public binding: Binding, public body: Ast) { super() } }
 
 export type Ast = NumberAst | LetAst | SetAst | OperatorAst | IfAst | ListAst | CallAst | AndAst | OrAst | StatementsAst | WhileAst | ReturnAst;
 export const isAst = (value: unknown): value is Ast => value instanceof AstRoot;
@@ -350,6 +360,27 @@ export type SubCompilerState = {
   func: FunctionDefinition,
   quoteStack: Ast[][]
   prevCompilerState: SubCompilerState | undefined
+  labelBlock: LabelBlock | null
+}
+export type LabelBlockType = 'break' | 'continue' | null
+
+// Isn't it weird that these are similar but not the same?
+export class LabelBlock {
+  public completion: ((value: unknown) => void)[] = []
+  constructor(
+    public parent: LabelBlock | null,
+    public name: string | null,
+    public type: LabelBlockType,
+    public binding: Binding | null) {}
+}
+
+export const findLabelBlockByType = (labelBlock: LabelBlock | null, type: LabelBlockType) => {
+  let block = labelBlock
+  while (block) {
+    if (block.type === type) return block
+    block = block.parent;
+  }
+  compilerAssert(false, `Invalid ${type} outside a block`, { labelBlock })
 }
 
 export type GlobalCompilerState = {
@@ -369,7 +400,8 @@ export const pushSubCompilerState = (ctx: TaskContext, obj: { vm: Vm, func: Func
     func: obj.func,
     vm: obj.vm,
     quoteStack: [],
-    prevCompilerState: ctx.subCompilerState
+    prevCompilerState: ctx.subCompilerState,
+    labelBlock: null, // TODO: copy from lexical scope
   }
   ctx.subCompilerState = state;
   // compilerState = state;
