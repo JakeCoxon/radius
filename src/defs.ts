@@ -1,5 +1,8 @@
 import { Event } from "./tasks";
 
+export class CompilerError extends Error {
+  constructor(message: string, public info: object) { super(message) }
+}
 export function compilerAssert(expected: unknown, message: string="", info: object={}): asserts expected {
   if (expected) return;
   let out = message.replace(/\$([a-zA-Z]+)/g, (match, capture) => { 
@@ -10,8 +13,8 @@ export function compilerAssert(expected: unknown, message: string="", info: obje
     if (obj.constructor) return makeColor(`[${obj.constructor.name}]`)
     return Bun.inspect(obj)
   }); 
-  console.log(Bun.inspect(info, { depth: 2, colors: true }))
-  throw new Error(out)
+  const error = new CompilerError(out, info)
+  throw error;
 }
 
 const makeColor = (x) => {

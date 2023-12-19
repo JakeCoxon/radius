@@ -1,5 +1,5 @@
 import { functionTemplateTypeCheckAndCompileTask, runTopLevelTask } from "../src/compiler";
-import { BoolType, Closure, DoubleType, ExternalFunction, FloatType, GlobalCompilerState, IntType, Scope, StringType, VoidType, compilerAssert, createScope, expectMap } from "../src/defs";
+import { BoolType, Closure, CompilerError, DoubleType, ExternalFunction, FloatType, GlobalCompilerState, IntType, Scope, StringType, VoidType, compilerAssert, createScope, expectMap } from "../src/defs";
 import { makeParser } from "../src/parser"
 import { Queue, TaskDef, stepQueue, withContext } from "../src//tasks";
 
@@ -63,9 +63,27 @@ export const runCompilerTest = (input: string, { filename }: { filename: string 
   );
   queue.enqueue(root)
 
-  for (let i = 0; i < 10000; i++) {
-    if (queue.list.length === 0) break;
-    stepQueue(queue);
+  try {
+    for (let i = 0; i < 10000; i++) {
+      if (queue.list.length === 0) break;
+      stepQueue(queue);
+    }
+
+    compilerAssert(root._success, "Expected success", { root })
+
+  } catch (ex) {
+    if (ex instanceof Error) {
+      if (ex.stack) logger.log(ex.stack)
+      else logger.log(ex.toString())
+    }
+    if (ex instanceof CompilerError) {
+
+      logger.log("\nError info")
+      Object.entries(ex.info).forEach(([name, value]) => {
+        logger.log(`${name}:`, Bun.inspect(value, { depth: 4, colors: true }))
+      })
+      
+    }
   }
 
   globalCompiler.compiledFunctions.forEach((func) => {
