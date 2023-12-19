@@ -1,15 +1,44 @@
+import { existsSync, unlinkSync } from "node:fs";
 import { functionTemplateTypeCheckAndCompileTask, runTopLevelTask } from "../src/compiler";
 import { BoolType, Closure, CompilerError, DoubleType, ExternalFunction, FloatType, GlobalCompilerState, IntType, Scope, StringType, VoidType, compilerAssert, createDefaultGlobalCompiler, createScope, expectMap } from "../src/defs";
 import { makeParser } from "../src/parser"
 import { Queue, TaskDef, stepQueue, withContext } from "../src//tasks";
 import { expect } from "bun:test";
 
+const runTestInner = (input: string, globalCompiler: GlobalCompilerState, rootScope: Scope) => {
+  const parser = makeParser(input)
+
+  const queue = new Queue();
+  
+  const root = (
+    TaskDef(runTopLevelTask, globalCompiler, parser.node, rootScope)
+    .chainFn((task, arg) => {
+      const func: Closure = expectMap(rootScope, "main", "No main function found");
+      return TaskDef(functionTemplateTypeCheckAndCompileTask, { func: func.func, args: [], typeArgs: [], parentScope: func.scope, concreteTypes: [] })
+    })
+    .wrap(withContext({ globalCompiler }))
+  );
+  queue.enqueue(root)
+
+  for (let i = 0; i < 10000; i++) {
+    if (queue.list.length === 0) break;
+    stepQueue(queue);
+  }
+
+  if (root._state !== 'completed') {
+    // TODO: remove events after they are completed
+    globalCompiler.allWaitingEvents.forEach(e => e.failure({}))
+  }
+  compilerAssert(root._success, "Expected success", { root })
+}
+
 export const runCompilerTest = (input: string, { filename, expectError=false }: { filename: string, expectError?: boolean }) => {
 
-  const file = Bun.file(`${__dirname}/output/${filename}.txt`);
+  const path = `${__dirname}/output/${filename}.txt`
+  if (existsSync(path)) unlinkSync(path)
+  const file = Bun.file(path);
   const writer = file.writer();
-
-  const parser = makeParser(input)
+  
   const prints: unknown[] = []
 
   const writeToFile = (...args) => {
@@ -48,30 +77,10 @@ export const runCompilerTest = (input: string, { filename, expectError=false }: 
 
   let gotError = false;
   let fatalError = false;
-
-  const queue = new Queue();
-
-  const root = (
-    TaskDef(runTopLevelTask, globalCompiler, parser.node, rootScope)
-    .chainFn((task, arg) => {
-      const func: Closure = expectMap(rootScope, "main", "No main function found");
-      return TaskDef(functionTemplateTypeCheckAndCompileTask, { func: func.func, args: [], typeArgs: [], parentScope: func.scope, concreteTypes: [] })
-    })
-    .wrap(withContext({ globalCompiler }))
-  );
-  queue.enqueue(root)
+  
 
   try {
-    for (let i = 0; i < 10000; i++) {
-      if (queue.list.length === 0) break;
-      stepQueue(queue);
-    }
-
-    if (root._state !== 'completed') {
-      // TODO: remove events after they are completed
-      globalCompiler.allWaitingEvents.forEach(e => e.failure({}))
-    }
-    compilerAssert(root._success, "Expected success", { root })
+    runTestInner(input, globalCompiler, rootScope)
 
   } catch (ex) {
     gotError = true;

@@ -1,4 +1,4 @@
-import { ArgumentTypePair, ParseAnd, ParseNode, ParseBreak, ParseCall, ParseCast, ParseCompTime, ParseContinue, ParseDict, ParseExpand, ParseField, ParseFor, ParseForExpr, ParseIf, ParseLet, ParseLetConst, ParseList, ParseListComp, ParseMeta, ParseNot, ParseNumber, ParseOpEq, ParseOperator, ParseOr, ParseReturn, ParseSet, ParseStatements, ParseString, ParseIdentifier, ParseWhile, ParseWhileExpr, ParserFunctionDecl, Token, compilerAssert, ParsePostCall, ParseSymbol, ParseNote, ParseSlice, ParseSubscript, ParserClassDecl, ParseClass, ParseFunction, createToken, ParseBoolean, ParseElse, ParseMetaIf, ParseMetaFor } from "./defs";
+import { ArgumentTypePair, ParseAnd, ParseNode, ParseBreak, ParseCall, ParseCast, ParseCompTime, ParseContinue, ParseDict, ParseExpand, ParseField, ParseFor, ParseForExpr, ParseIf, ParseLet, ParseLetConst, ParseList, ParseListComp, ParseMeta, ParseNot, ParseNumber, ParseOpEq, ParseOperator, ParseOr, ParseReturn, ParseSet, ParseStatements, ParseString, ParseIdentifier, ParseWhile, ParseWhileExpr, ParserFunctionDecl, Token, compilerAssert, ParsePostCall, ParseSymbol, ParseNote, ParseSlice, ParseSubscript, ParserClassDecl, ParseClass, ParseFunction, createToken, ParseBoolean, ParseElse, ParseMetaIf, ParseMetaFor, ParseBlock } from "./defs";
 
 type LexerState = { significantNewlines: boolean; parenStack: string[] };
 
@@ -149,7 +149,7 @@ export const makeParser = (input: string) => {
   };
 
   const expectError = (error: string) => {
-    const num = (token as any)?.lineNumber ?? (previous as any)?.lineNumber;
+    const num = token?.location.line ?? previous?.location.line;
     const value = token?.value !== undefined ? `'${token?.value}' (${token?.type})` : "EOL";
     const msg = `${error} got ${value} on line ${num}`;
     compilerAssert(false, msg, { lexer, token });
@@ -231,6 +231,7 @@ export const makeParser = (input: string) => {
     else if (match("'"))  return new ParseSymbol(parseIdentifier().token);
     else if (match("@"))  return new ParseNote(previous, parseExpr());
     else if (match("{"))  return match("|") ? parseLambda() : parseDict(previous)
+    else if (match("block"))  return new ParseBlock(previous, parseColonBlockExpr('block'))
     else if (matchStringLiteral()) return new ParseString(previous)
     else if (matchNumberLiteral()) return parseNumberLiteral();
     else if (prevSignificantNewlines && match("|")) return parseBracelessLambda();
@@ -335,7 +336,13 @@ export const makeParser = (input: string) => {
     expect(final, `Expected '${final}' after arg list`);
     return args;
   };
-  const parseColonBlock = (afterMessage: string): ParseNode => {
+  const parseColonBlockExpr = (afterMessage: string): ParseStatements => {
+    expect(":", `Expected ':' after ${afterMessage}`);
+    const token = previous;
+    if (!matchType("NEWLINE")) return new ParseStatements(token, [parseExpr()]);
+    return parseMultilineBlock(token)
+  };
+  const parseColonBlock = (afterMessage: string): ParseStatements => {
     expect(":", `Expected ':' after ${afterMessage}`);
     const token = previous;
     if (!matchType("NEWLINE")) return new ParseStatements(token, [parseExpr()]);

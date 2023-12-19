@@ -113,13 +113,14 @@ export class ParsePostCall extends ParseNodeType {   key = 'postcall' as const; 
 export class ParseSlice extends ParseNodeType {      key = 'slice' as const;      constructor(public token: Token, public expr: ParseNode, public a: ParseNode | null, public b: ParseNode | null, public c: ParseNode | null, public isStatic: boolean) { super();} }
 export class ParseSubscript extends ParseNodeType {  key = 'subscript' as const;  constructor(public token: Token, public expr: ParseNode, public subscript: ParseNode, public isStatic: boolean) { super();} }
 export class ParseTuple extends ParseNodeType {      key = 'tuple' as const;      constructor(public token: Token, public exprs: ParseNode[]) { super();} }
+export class ParseBlock extends ParseNodeType {      key = 'block' as const;      constructor(public token: Token, public statements: ParseStatements) { super();} }
 
 export type ParseNode = ParseStatements | ParseLet | ParseSet | ParseOperator | ParseIdentifier | 
   ParseNumber | ParseMeta | ParseCompTime | ParseLetConst | ParseCall | ParseList | ParseOr | ParseAnd | 
   ParseIf | ParseFunction | ParseString | ParseReturn | ParseBreak | ParseContinue | ParseFor | ParseCast |
   ParseOpEq | ParseWhile | ParseWhileExpr | ParseForExpr | ParseNot | ParseField | ParseExpand | ParseListComp |
   ParseDict | ParsePostCall | ParseSymbol | ParseNote | ParseSlice | ParseSubscript | ParseTuple | ParseClass |
-  ParseNil | ParseBoolean | ParseElse | ParseMetaIf | ParseMetaFor
+  ParseNil | ParseBoolean | ParseElse | ParseMetaIf | ParseMetaFor | ParseBlock
 
 // Void types mean that in secondOrder compilation, the AST doesn't return an AST
 export const isParseVoid = (ast: ParseNode) => ast.key == 'letconst' || ast.key === 'function' || ast.key === 'class' || ast.key === 'comptime';
@@ -328,8 +329,9 @@ export class BreakAst extends AstRoot {      constructor(public type: Type, publ
 export class BlockAst extends AstRoot {      constructor(public type: Type, public location: SourceLocation, public binding: Binding, public body: Ast) { super() } }
 export class FieldAst extends AstRoot {      constructor(public type: Type, public location: SourceLocation, public left: Ast, public binding: Binding) { super() } }
 export class SetFieldAst extends AstRoot {   constructor(public type: Type, public location: SourceLocation, public left: Ast, public binding: Binding, public value: Ast) { super() } }
+export class VoidAst extends AstRoot {       constructor(public type: Type, public location: SourceLocation) { super() } }
 
-export type Ast = NumberAst | LetAst | SetAst | OperatorAst | IfAst | ListAst | CallAst | AndAst | OrAst | StatementsAst | WhileAst | ReturnAst;
+export type Ast = NumberAst | LetAst | SetAst | OperatorAst | IfAst | ListAst | CallAst | AndAst | OrAst | StatementsAst | WhileAst | ReturnAst | SetFieldAst | VoidAst
 export const isAst = (value: unknown): value is Ast => value instanceof AstRoot;
 
 export class Tuple {

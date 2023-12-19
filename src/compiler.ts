@@ -1,4 +1,4 @@
-import { isParseVoid, BytecodeOut, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, MetaInstructionTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, addFunctionDefinition, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, BytecodeGen, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, findLabelBlockAstByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, ClassField, FieldAst, ParseField, SetFieldAst, mak, makeCyaneGreen, makeCyan, CompilerError } from "./defs";
+import { isParseVoid, BytecodeOut, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, MetaInstructionTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, addFunctionDefinition, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, BytecodeGen, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, findLabelBlockAstByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, ClassField, FieldAst, ParseField, SetFieldAst, mak, makeCyaneGreen, makeCyan, CompilerError, VoidAst } from "./defs";
 import { Event, Task, TaskDef, isTask, isTaskResult } from "./tasks";
 
 const pushBytecode = <T extends BytecodeInstr>(out: BytecodeOut, token: Token, instr: T) => {
@@ -84,6 +84,7 @@ const bytecodeDefault: MetaInstructionTable = {
       if (i !== ast.exprs.length - 1) pushBytecode(out, ast.token, { type: "pop" });
     });
   },
+  block: (out, ast) => visitParseNode(out, ast.statements),
   
   and: (out, ast) => {
     visitParseNode(out, ast.exprs[0]);
@@ -246,6 +247,7 @@ const bytecodeSecond: MetaInstructionTable = {
     });
     pushBytecode(out, ast.token, { type: "popqs" });
   },
+  block: (out, ast) => visitParseNode(out, ast.statements),
 
   else: (out, ast) => visitParseNode(out, ast.body),
 
@@ -647,6 +649,7 @@ function callFunctionTask(ctx: TaskContext, { vm, name, count, tcount }: CallArg
 const unknownToAst = (location: SourceLocation, value: unknown) => {
   if (typeof value === 'number') return new NumberAst(IntType, location, value);
   if (isAst(value)) return value;
+  if (value === null) return new VoidAst(VoidType, location);
   if (value instanceof Binding) return new BindingAst(value.type, location, value);
   compilerAssert(false, "Type is not convertable to an AST: $value", { value })
 }
@@ -757,6 +760,7 @@ const instructions: InstructionMapping = {
   letlocal: (vm, { name }) => {
     expect(!Object.hasOwn(vm.scope, name), `$name is already in scope`, { name });
     setScopeValueAndResolveEvents(vm.scope, name, popStack(vm))
+    vm.stack.push(null) // statement expression
   },
   setlocal: (vm, { name }) => {
     expect(Object.hasOwn(vm.scope, name), `$name not existing in scope`, { name });

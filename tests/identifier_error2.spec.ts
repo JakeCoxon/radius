@@ -9,8 +9,6 @@ fn main():
 
   print(thing())
 
-  fn thing():
-    print("OK")
 
 `)
   const test = runCompilerTest(input, { filename: 'identifier_error2', expectError: true })
