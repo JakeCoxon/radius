@@ -166,7 +166,7 @@ export const makeParser = (input: string) => {
   const matchType = (expected: string) =>
     token && token.type === expected ? (advance(), true) : false;
   
-  const assertIdentifier = (ast: ParseNode): ParseIdentifier => (compilerAssert(ast instanceof ParseIdentifier, "Expected identifier"), ast);
+  const assertIdentifier = (node: ParseNode): ParseIdentifier => (compilerAssert(node instanceof ParseIdentifier, "Expected identifier"), node);
 
   const parseParens = () => {
     const expr = parseExpr();
@@ -516,9 +516,9 @@ export const makeParser = (input: string) => {
   };
 
   advance();
-  const ast = new ParseStatements(createToken(""), parseLines());
+  const node = new ParseStatements(createToken(""), parseLines());
 
   const msg = `Expected EOF but got ${previous?.value} (${previous?.type})`;
   compilerAssert(token === undefined, msg, { lexer, token: previous });
-  return { classDecls, functionDecls, ast };
+  return { classDecls, functionDecls, node };
 };

@@ -462,12 +462,15 @@ export const findLabelBlockByType = (labelBlock: LabelBlock | null, type: LabelB
   compilerAssert(false, `Invalid ${type} outside a block`, { labelBlock })
 }
 
+export type Logger = { log: (...args: any[]) => void }
+
 export type GlobalCompilerState = {
   compiledFunctions: Map<Binding, CompiledFunction>;
   functionDefinitions: FunctionDefinition[],
   classDefinitions: ClassDefinition[],
 
-  subCompilerState: SubCompilerState | undefined
+  subCompilerState: SubCompilerState | undefined,
+  logger: Logger
 }
 
 export interface TaskContext {

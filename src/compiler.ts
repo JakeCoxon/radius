@@ -288,9 +288,9 @@ const compileFunctionPrototype = (ctx: TaskContext, prototype: FunctionPrototype
   visitParseNode(out, prototype.body);
   pushGeneratedBytecode(out, { type: "halt" })
 
-  console.log(`Compiled ${prototype.name}`)
-  console.log(bytecodeToString(prototype.bytecode))
-  console.log("")
+  ctx.globalCompiler.logger.log(`Compiled ${prototype.name}`)
+  ctx.globalCompiler.logger.log(bytecodeToString(prototype.bytecode))
+  ctx.globalCompiler.logger.log("")
   return prototype.bytecode;
 };
 
@@ -352,9 +352,9 @@ function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, args, typ
     pushGeneratedBytecode(out, { type: "tuple", count: func.args.length })
     pushGeneratedBytecode(out, { type: "halt" })
 
-    console.log(`Compiled ${func.headerPrototype.name}`)
-    console.log(bytecodeToString(func.headerPrototype.bytecode))
-    console.log("")
+    ctx.globalCompiler.logger.log(`Compiled ${func.headerPrototype.name}`)
+    ctx.globalCompiler.logger.log(bytecodeToString(func.headerPrototype.bytecode))
+    ctx.globalCompiler.logger.log("")
     // return prototype.bytecode;
     
     // const args = func.args.map(([name, type], i) => type ? type : new ParseNil(createToken('')))
@@ -434,7 +434,7 @@ export function functionTemplateTypeCheckAndCompileTask(ctx: TaskContext, { func
 
       const concreteTypes = []
 
-      console.log(`Compiled template ${func.debugName}`)
+      ctx.globalCompiler.logger.log(`Compiled template ${func.debugName}`)
       
       compilerAssert(isAst(ast), "Expected ast got $ast", { ast });
 
@@ -496,7 +496,7 @@ function functionInlineTask(ctx: TaskContext, { vm, func, typeArgs, args, parent
 
       compilerAssert(isAst(ast), "Expected ast got $ast", { ast });
 
-      console.log(`Compiled inline ${func.debugName}`)
+      ctx.globalCompiler.logger.log(`Compiled inline ${func.debugName}`)
       vm.stack.push(new StatementsAst(ast.type, location, [...statements, ast]));
       
       return Task.of("success")
@@ -605,7 +605,7 @@ function createCallAstTask(ctx: TaskContext, { vm, name, count, tcount }: CallAr
   compilerAssert(false, "Not supported value $value", { value })
 }
 
-function resolveScope(scope: Scope, name: string) {
+function resolveScope(scope: Scope, name: string): Task<unknown, never> {
   if (scope[name] !== undefined) return Task.of(scope[name])
   if (!scope[ScopeEventsSymbol]) scope[ScopeEventsSymbol] = {}
   if (!scope[ScopeEventsSymbol][name]) scope[ScopeEventsSymbol][name] = new Event<string, never>()
@@ -942,7 +942,7 @@ export const runTopLevelTask = (ctx: TaskContext, globalCompiler: GlobalCompiler
       visitParseNode(out, expr.value);
       pushGeneratedBytecode(out, { type: "halt" })
 
-      console.log(bytecodeToString(out.bytecode))
+      ctx.globalCompiler.logger.log(bytecodeToString(out.bytecode))
 
       const task = (
         TaskDef(executeBytecodeTask, out.bytecode, rootScope)
