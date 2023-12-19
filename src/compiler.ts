@@ -193,7 +193,7 @@ const bytecodeSecond: MetaInstructionTable = {
   },
 
   function: (out, ast) => {
-    compilerAssert(false, "Function not implemented yet")
+    compilerAssert(false, "Function not implemented yet", { fatal: true })
     // pushBytecode(out, ast.token, { type: "closure", id: ast.id }), // prettier-ignore
   },
   return: (out, ast) => {
@@ -355,11 +355,6 @@ function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, args, typ
     ctx.globalCompiler.logger.log(makeCyan(`Compiled ${func.headerPrototype.name}`))
     ctx.globalCompiler.logger.log(bytecodeToString(func.headerPrototype.bytecode))
     ctx.globalCompiler.logger.log("")
-    // return prototype.bytecode;
-    
-    // const args = func.args.map(([name, type], i) => type ? type : new ParseNil(createToken('')))
-    // const body = new ParseTuple(createToken(''), args);
-    // compileFunctionPrototype(ctx, func.headerPrototype)
   }
 
   const scope = Object.create(parentScope);
@@ -605,18 +600,21 @@ function createCallAstTask(ctx: TaskContext, { vm, name, count, tcount }: CallAr
   compilerAssert(false, "Not supported value $value", { value })
 }
 
-function resolveScope(scope: Scope, name: string): Task<unknown, never> {
+function resolveScope(ctx: TaskContext, scope: Scope, name: string): Task<unknown, never> {
   if (scope[name] !== undefined) return Task.of(scope[name])
   if (!scope[ScopeEventsSymbol]) scope[ScopeEventsSymbol] = {}
   if (!scope[ScopeEventsSymbol][name]) scope[ScopeEventsSymbol][name] = new Event<string, never>()
-  return Task.waitFor(scope[ScopeEventsSymbol][name])
+  ctx.globalCompiler.allWaitingEvents.push(scope[ScopeEventsSymbol][name])
+  return Task.waitForOrError(scope[ScopeEventsSymbol][name], (f) => {
+    compilerAssert(false, "Binding $name not found in scope", { name, scope })
+  })
 }
 
 function callFunctionTask(ctx: TaskContext, { vm, name, count, tcount }: CallArgs): Task<string, never> {
   const values = popValues(vm, count);
   const typeArgs = popValues(vm, tcount || 0);
   return (
-    resolveScope(vm.scope, name)
+    TaskDef(resolveScope, vm.scope, name)
     .chainFn((task, func) => {
 
       if (func instanceof ExternalFunction) {
@@ -733,7 +731,7 @@ const instructions: InstructionMapping = {
   },
 
   binding: (vm, { name }) => {
-    return resolveScope(vm.scope, name).chainFn((task, res) => {
+    return TaskDef(resolveScope, vm.scope, name).chainFn((task, res) => {
       vm.stack.push(res)
       return Task.of(1)
     })

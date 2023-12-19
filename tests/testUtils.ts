@@ -1,9 +1,10 @@
 import { functionTemplateTypeCheckAndCompileTask, runTopLevelTask } from "../src/compiler";
-import { BoolType, Closure, CompilerError, DoubleType, ExternalFunction, FloatType, GlobalCompilerState, IntType, Scope, StringType, VoidType, compilerAssert, createScope, expectMap } from "../src/defs";
+import { BoolType, Closure, CompilerError, DoubleType, ExternalFunction, FloatType, GlobalCompilerState, IntType, Scope, StringType, VoidType, compilerAssert, createDefaultGlobalCompiler, createScope, expectMap } from "../src/defs";
 import { makeParser } from "../src/parser"
 import { Queue, TaskDef, stepQueue, withContext } from "../src//tasks";
+import { expect } from "bun:test";
 
-export const runCompilerTest = (input: string, { filename }: { filename: string }) => {
+export const runCompilerTest = (input: string, { filename, expectError=false }: { filename: string, expectError?: boolean }) => {
 
   const file = Bun.file(`${__dirname}/output/${filename}.txt`);
   const writer = file.writer();
@@ -42,14 +43,11 @@ export const runCompilerTest = (input: string, { filename }: { filename: string 
   });
 
 
-  // console.log(Bun.inspect(parser.ast, { depth: 10, colors: true }))
-  const globalCompiler: GlobalCompilerState = {
-    compiledFunctions: new Map(),
-    functionDefinitions: [],
-    classDefinitions: [],
-    subCompilerState: undefined,
-    logger
-  }
+  const globalCompiler = createDefaultGlobalCompiler()
+  globalCompiler.logger = logger
+
+  let gotError = false;
+  let fatalError = false;
 
   const queue = new Queue();
 
@@ -69,9 +67,15 @@ export const runCompilerTest = (input: string, { filename }: { filename: string 
       stepQueue(queue);
     }
 
+    if (root._state !== 'completed') {
+      // TODO: remove events after they are completed
+      globalCompiler.allWaitingEvents.forEach(e => e.failure({}))
+    }
     compilerAssert(root._success, "Expected success", { root })
 
   } catch (ex) {
+    gotError = true;
+
     if (ex instanceof Error) {
       if (ex.stack) logger.log(ex.stack)
       else logger.log(ex.toString())
@@ -82,6 +86,7 @@ export const runCompilerTest = (input: string, { filename }: { filename: string 
       Object.entries(ex.info).forEach(([name, value]) => {
         logger.log(`${name}:`, Bun.inspect(value, { depth: 4, colors: true }))
       })
+      if ((ex.info as any).fatal) fatalError = true
       
     }
   }
@@ -95,6 +100,9 @@ export const runCompilerTest = (input: string, { filename }: { filename: string 
   })
 
   writer.end();
+
+  expect(gotError).toBe(expectError)
+  expect(fatalError).toBe(false);
 
   return { prints, globalCompiler };
 

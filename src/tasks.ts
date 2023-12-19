@@ -81,6 +81,9 @@ export class Task<S, F> {
   static waitFor<S, F>(event: Event<S, F>): Task<S, F> {
     return new WaitForEventTask(event)
   }
+  static waitForOrError<S, F>(event: Event<S, F>, onError: (f: F) => void): Task<S, F> {
+    return new WaitForEventTask(event, onError)
+  }
 
   _acceptContext(context: object) {
     this._context = Object.assign({}, this._context, context);
@@ -237,19 +240,27 @@ export class Event<S, F> {
   _success: S | undefined
   _failure: F | undefined
 
-  listeners: any[] = []
+  listeners: ((f: F | null, s: S | null) => void)[] = []
 
   success(s: S) {
     this._success = s;
-    this.listeners.forEach(f => f(s));
+    const listeners = [...this.listeners]
     this.listeners.length = 0
+    listeners.forEach(func => func(null, s));
+  }
+  failure(f: F) {
+    this._failure = f
+    const listeners = [...this.listeners]
+    this.listeners.length = 0
+    listeners.forEach(func => func(f, null));
   }
 }
 
 export class WaitForEventTask<S, F> extends Task<S, F> {
 
   constructor(
-    public event: Event<S, F>
+    public event: Event<S, F>,
+    public onError?: (f: F) => void
   ) {
     super();
   }
@@ -262,13 +273,16 @@ export class WaitForEventTask<S, F> extends Task<S, F> {
     if (this.event._success) {
       this._state = 'completed'
       this._success = this.event._success;
+    } else if (this.event._failure) {
+      this._state = 'completed'
+      this._failure = this.event._failure;
     }
-    // TODO: handle failure
   }
   _waitForEvent(continuation: () => void) {
     this._state = 'started'
 
-    this.event.listeners.push((success: S) => {
+    this.event.listeners.push((failure: F, success: S) => {
+      if (failure && this.onError) this.onError(failure)
       continuation()
     });
   }

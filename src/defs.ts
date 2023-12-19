@@ -13,8 +13,7 @@ export function compilerAssert(expected: unknown, message: string="", info: obje
     if (obj.constructor) return makeColor(`[${obj.constructor.name}]`)
     return Bun.inspect(obj)
   }); 
-  const error = new CompilerError(out, info)
-  throw error;
+  throw new CompilerError(out, info)
 }
 
 const makeColor = (x) => {
@@ -473,12 +472,25 @@ export type GlobalCompilerState = {
   classDefinitions: ClassDefinition[],
 
   subCompilerState: SubCompilerState | undefined,
+  allWaitingEvents: Event<unknown, unknown>[],
   logger: Logger
 }
 
 export interface TaskContext {
   subCompilerState: SubCompilerState
   globalCompiler: GlobalCompilerState
+}
+
+export const createDefaultGlobalCompiler = () => {
+  const globalCompiler: GlobalCompilerState = {
+    compiledFunctions: new Map(),
+    functionDefinitions: [],
+    classDefinitions: [],
+    subCompilerState: undefined,
+    allWaitingEvents: [],
+    logger: null!
+  }
+  return globalCompiler
 }
 
 export const pushSubCompilerState = (ctx: TaskContext, obj: { vm: Vm, func: FunctionDefinition }) => {
