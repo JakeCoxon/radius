@@ -304,7 +304,7 @@ export class Queue {
       });
       return
     }
-    console.log("pushed", task.toString());
+    // console.log("pushed", task.toString());
     this.list.push(task);
     this.allTasks.push(task);
   }
@@ -316,7 +316,7 @@ export const stepQueue = (queue: Queue) => {
   const task = queue.list.pop()!;
   queue.currentTask = task;
   queue.final = task;
-  console.log("Got", task.toString());
+  // console.log("Got", task.toString());
 
   if ((task as any)._startTick === undefined) {
     (task as any)._startTick = queue.tick;
@@ -340,37 +340,17 @@ export const stepQueue = (queue: Queue) => {
 type TaskDef<T, TParam, S, F> = { (param: TParam): Chainable<T, S, F> } &
   { create(arg: T, param: TParam): Task<S, F> & Chainable<void, S, F>; };
 
-export const createTaskDef = <T, TParam, S, F>(
-  computation: (context: object, arg: T, param: TParam) => Task<S, F>,
-) => {
-  const constructor = (param: TParam): Chainable<T, S, F> => {
-    const chainFrom = <F1 extends F,>(task: Task<T, F>): Task<S, F | F1> => {
-       const newTask : Task<S,F|F1> = new ChainFn(task, (task, arg) => computation(task._context, arg, param))
-      //  newTask.toString = () => computation.name
-       newTask.def = computation.name;
-       return newTask;
-    }
-    return { chainFrom }
-  };
-  const create: TaskDef<T, TParam, S, F>["create"] = (arg: T, param: TParam) => {
-    const task = new InitFn((task) => computation(task._context, arg, param))
-    // task.toString = () => computation.name
-    task.def = computation.name;
-    return task;
-  }
-  // const _fn: TaskDef<T, TParam, S, F>["_fn"] = (task, arg, param) =>
-  //   computation(task, arg, param);
-
-  const taskDef: TaskDef<T, TParam, S, F> =
-    Object.assign(constructor, { create }, );
-  return taskDef;
-};
-
 export const withContext = (context: object) => <S, F>(task: Task<S, F>) => {
   const newTask = new InitFn<S, S, F, F>(newTask => {
     newTask._context = Object.assign({}, newTask._context, context);
     return task;
-  })
-  newTask.def = 'withContext'
+  });
+  (newTask as any).def = 'withContext'
   return newTask
+}
+
+export const TaskDef = <T extends any[], S, F>(computation: (context: object, ...args: T) => Task<S, F>, ...args: T): Task<S, F> & Chainable<never, S, F> => {
+  const task = new InitFn<void, S, F, F>((task) => computation(task._context, ...args));
+  (task as any).def = computation.name;
+  return task;
 }

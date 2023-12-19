@@ -1,7 +1,7 @@
-import { functionTemplateTypeCheckAndCompileTask, runTopLevel } from "./compiler";
+import { functionTemplateTypeCheckAndCompileTask, runTopLevelTask } from "./compiler";
 import { BoolType, Closure, DoubleType, ExternalFunction, FloatType, GlobalCompilerState, IntType, Scope, StringType, VoidType, compilerAssert, createScope, expectMap } from "./defs";
 import { makeParser } from "./parser"
-import { Queue, stepQueue, withContext } from "./tasks";
+import { Queue, TaskDef, stepQueue, withContext } from "./tasks";
 
 const parser = makeParser(`
 
@@ -151,10 +151,10 @@ const globalCompiler: GlobalCompilerState = {
 const queue = new Queue();
 // queue.enqueue(functionTemplateTypeCheckAndCompileDef.of({ func: func.func, args: [], typeArgs: [], parentScope: rootScope}))
 const root = (
-  runTopLevel(globalCompiler, parser.ast, rootScope)
+  TaskDef(runTopLevelTask, globalCompiler, parser.ast, rootScope)
   .chainFn((task, arg) => {
     const func: Closure = expectMap(rootScope, "main", "No main function found");
-    return functionTemplateTypeCheckAndCompileTask.create({ func: func.func, args: [], typeArgs: [], parentScope: func.scope, })
+    return TaskDef(functionTemplateTypeCheckAndCompileTask, { func: func.func, args: [], typeArgs: [], parentScope: func.scope, concreteTypes: [] })
   })
   .wrap(withContext({ globalCompiler }))
 );

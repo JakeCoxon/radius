@@ -405,8 +405,6 @@ export const pushSubCompilerState = (ctx: TaskContext, obj: { vm: Vm, func: Func
     labelBlock: null, // TODO: copy from lexical scope
   }
   ctx.subCompilerState = state;
-  // compilerState = state;
-  // globalCompiler.subCompilerState = state;
 }
 
 export const addFunctionDefinition = (compilerState: GlobalCompilerState, decl: ParserFunctionDecl) => {
