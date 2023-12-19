@@ -517,3 +517,8 @@ export function bytecodeToString(bytecodeGen: BytecodeGen) {
     .map((x, i) => `${String(`${locations[i].line}:`).padStart(5, " ")}${String(`${locations[i].column}`).padEnd(3, " ")} ${String(i).padStart(3, " ")}  ${instr(x)}`)
     .join("\n");
 }
+
+// https://gist.github.com/JBlond/2fea43a3049b38287e5e9cefc87b2124
+export const makeYellow = (string: string) => `\x1b[33m${string}\x1b[39m`
+export const makeGreen = (string: string) => `\x1b[32m${string}\x1b[39m`
+export const makeCyan = (string: string) => `\x1b[36m${string}\x1b[39m`

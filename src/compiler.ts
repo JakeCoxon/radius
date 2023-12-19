@@ -1,4 +1,4 @@
-import { isParseVoid, BytecodeOut, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, MetaInstructionTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, addFunctionDefinition, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, BytecodeGen, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, findLabelBlockAstByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, ClassField, FieldAst, ParseField, SetFieldAst } from "./defs";
+import { isParseVoid, BytecodeOut, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, MetaInstructionTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, addFunctionDefinition, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, BytecodeGen, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, findLabelBlockAstByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, ClassField, FieldAst, ParseField, SetFieldAst, mak, makeCyaneGreen, makeCyan } from "./defs";
 import { Event, Task, TaskDef, isTask, isTaskResult } from "./tasks";
 
 const pushBytecode = <T extends BytecodeInstr>(out: BytecodeOut, token: Token, instr: T) => {
@@ -288,7 +288,7 @@ const compileFunctionPrototype = (ctx: TaskContext, prototype: FunctionPrototype
   visitParseNode(out, prototype.body);
   pushGeneratedBytecode(out, { type: "halt" })
 
-  ctx.globalCompiler.logger.log(`Compiled ${prototype.name}`)
+  ctx.globalCompiler.logger.log(makeCyan(`Compiled ${prototype.name}`))
   ctx.globalCompiler.logger.log(bytecodeToString(prototype.bytecode))
   ctx.globalCompiler.logger.log("")
   return prototype.bytecode;
@@ -352,7 +352,7 @@ function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, args, typ
     pushGeneratedBytecode(out, { type: "tuple", count: func.args.length })
     pushGeneratedBytecode(out, { type: "halt" })
 
-    ctx.globalCompiler.logger.log(`Compiled ${func.headerPrototype.name}`)
+    ctx.globalCompiler.logger.log(makeCyan(`Compiled ${func.headerPrototype.name}`))
     ctx.globalCompiler.logger.log(bytecodeToString(func.headerPrototype.bytecode))
     ctx.globalCompiler.logger.log("")
     // return prototype.bytecode;
@@ -434,7 +434,7 @@ export function functionTemplateTypeCheckAndCompileTask(ctx: TaskContext, { func
 
       const concreteTypes = []
 
-      ctx.globalCompiler.logger.log(`Compiled template ${func.debugName}`)
+      ctx.globalCompiler.logger.log(makeCyan(`Compiled template ${func.debugName}`))
       
       compilerAssert(isAst(ast), "Expected ast got $ast", { ast });
 
@@ -496,7 +496,7 @@ function functionInlineTask(ctx: TaskContext, { vm, func, typeArgs, args, parent
 
       compilerAssert(isAst(ast), "Expected ast got $ast", { ast });
 
-      ctx.globalCompiler.logger.log(`Compiled inline ${func.debugName}`)
+      ctx.globalCompiler.logger.log(makeCyan(`Compiled inline ${func.debugName}`))
       vm.stack.push(new StatementsAst(ast.type, location, [...statements, ast]));
       
       return Task.of("success")
@@ -942,7 +942,9 @@ export const runTopLevelTask = (ctx: TaskContext, globalCompiler: GlobalCompiler
       visitParseNode(out, expr.value);
       pushGeneratedBytecode(out, { type: "halt" })
 
+      ctx.globalCompiler.logger.log(makeCyan("Compiled top level def"))
       ctx.globalCompiler.logger.log(bytecodeToString(out.bytecode))
+      ctx.globalCompiler.logger.log("")
 
       const task = (
         TaskDef(executeBytecodeTask, out.bytecode, rootScope)

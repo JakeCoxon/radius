@@ -52,6 +52,6 @@ fn main():
 
 
 `)
-  runCompilerTest(input)
+  runCompilerTest(input, { filename: 'struct' })
   
 });

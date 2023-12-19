@@ -83,6 +83,6 @@ fn main():
 
 
 `)
-  const test = runCompilerTest(input)
+  const test = runCompilerTest(input, { filename: 'basic' })
 
 });

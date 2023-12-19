@@ -3,12 +3,27 @@ import { BoolType, Closure, DoubleType, ExternalFunction, FloatType, GlobalCompi
 import { makeParser } from "../src/parser"
 import { Queue, TaskDef, stepQueue, withContext } from "../src//tasks";
 
-export const runCompilerTest = (input: string) => {
+export const runCompilerTest = (input: string, { filename }: { filename: string }) => {
 
-  const logger = process.env['LOGGER'] ? { log: console.log } : { log: (...args) => {} }
+  const file = Bun.file(`${__dirname}/output/${filename}.txt`);
+  const writer = file.writer();
 
   const parser = makeParser(input)
   const prints: unknown[] = []
+
+  const writeToFile = (...args) => {
+    args.forEach(arg => {
+      if (typeof arg === 'string') {
+        writer.write(arg)
+      } else writer.write(Bun.inspect(arg, { depth: 10, colors: true }))
+      writer.write(' ')
+    })
+    writer.write('\n')
+  }
+
+  const logger = { log: (...args) => {
+    writeToFile(...args)
+  } }
 
   const rootScope: Scope = createScope({
     int: IntType,
@@ -52,6 +67,16 @@ export const runCompilerTest = (input: string) => {
     if (queue.list.length === 0) break;
     stepQueue(queue);
   }
+
+  globalCompiler.compiledFunctions.forEach((func) => {
+    writer.write(func.functionDefinition.debugName)
+    writer.write("\n")
+    writer.write(Bun.inspect(func.body, { depth: 10, colors: true }));
+    writer.write("\n\n")
+    writer.flush(); // write buffer to disk
+  })
+
+  writer.end();
 
   return { prints, globalCompiler };
 
