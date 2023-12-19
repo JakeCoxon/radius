@@ -10,20 +10,20 @@ foo2 :: foo + 3
 foo :: thing4(5)
 
 
-defn thing(x: int):
+fn thing(x: int):
   print(x + 32)
 
-defn thing4(x: int):
+fn thing4(x: int):
   return x + 2
 
-defn fam!(T)(a: int):
+fn fam!(T)(a: int):
   print(a)
   print(T)
 
-defn famz!(T)(a: T):
+fn famz!(T)(a: T):
   print(a)
 
-defn foop(a: int, b: int):
+fn foop(a: int, b: int):
   print(2 + 42 * thing(12))
 
   if 2 < 3:
@@ -71,7 +71,7 @@ defn foop(a: int, b: int):
   
   print(meta thing(12))
 
-defn main():
+fn main():
   print(2 + 42 * thing(12))
 
 

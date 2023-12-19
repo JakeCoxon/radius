@@ -2,7 +2,7 @@ import { Event } from "./tasks";
 
 export function compilerAssert(expected: unknown, message: string="", info: object={}): asserts expected {
   if (expected) return;
-  let out = message.replace(/\$([a-z]+)/g, (match, capture) => { 
+  let out = message.replace(/\$([a-zA-Z]+)/g, (match, capture) => { 
     const obj = info[capture]
     if (obj === undefined || obj === null) return makeColor(`null`)
     if (obj[Bun.inspect.custom]) return Bun.inspect(obj, { depth: 0, colors: true });
@@ -77,7 +77,7 @@ export class ParseBoolean extends ParseNodeType {    key = 'boolean' as const;  
 
 export class ParseStatements extends ParseNodeType { key = 'statements' as const; constructor(public token: Token, public exprs: ParseNode[]) { super();} }
 export class ParseLet extends ParseNodeType {        key = 'let' as const;        constructor(public token: Token, public name: ParseIdentifier, public type: ParseNode | null, public value: ParseNode | null) { super();} }
-export class ParseSet extends ParseNodeType {        key = 'set' as const;        constructor(public token: Token, public name: ParseNode, public value: ParseNode) { super();} }
+export class ParseSet extends ParseNodeType {        key = 'set' as const;        constructor(public token: Token, public left: ParseNode, public value: ParseNode) { super();} }
 export class ParseOperator extends ParseNodeType {   key = 'operator' as const;   constructor(public token: Token, public exprs: ParseNode[]) { super();} }
 export class ParseNote extends ParseNodeType {       key = 'note' as const;       constructor(public token: Token, public expr: ParseNode) { super();} }
 export class ParseMeta extends ParseNodeType {       key = 'meta' as const;       constructor(public token: Token, public expr: ParseNode) { super();} }
@@ -144,7 +144,8 @@ export type BytecodeInstr =
   { type: 'numberast', value: number } |
   { type: 'stringast', value: string } |
   { type: 'boolast', value: boolean } |
-  { type: 'setast', name: string } |
+  { type: 'setlocalast', name: string } |
+  { type: 'setfieldast', name: string } |
   { type: 'fieldast', name: string } |
   { type: 'operatorast', name: string, count: number } |
   { type: 'toast' } |
@@ -276,6 +277,8 @@ export class ClassDefinition {
   compiledClasses: CompiledClass[] = []
   concreteType: ConcreteClassType | undefined
 
+  abstract: boolean = false
+
   constructor(
     public id: number,
     public location: SourceLocation,
@@ -283,7 +286,9 @@ export class ClassDefinition {
     public debugName: string,
     public name: ParseIdentifier | null,
     public typeArgs: ParseNode[],
-    public body: ParseNode | null) {}
+    public body: ParseNode | null) {
+      this.abstract = typeArgs.length > 0
+    }
 
   [Bun.inspect.custom](depth, options, inspect) {
     if (options.ast) return options.stylize(`[ClassDefinition ${this.name}]`, 'special');
@@ -320,6 +325,7 @@ export class ReturnAst extends AstRoot {     constructor(public type: Type, publ
 export class BreakAst extends AstRoot {      constructor(public type: Type, public location: SourceLocation, public binding: Binding, public expr: Ast | null) { super() } }
 export class BlockAst extends AstRoot {      constructor(public type: Type, public location: SourceLocation, public binding: Binding, public body: Ast) { super() } }
 export class FieldAst extends AstRoot {      constructor(public type: Type, public location: SourceLocation, public left: Ast, public binding: Binding) { super() } }
+export class SetFieldAst extends AstRoot {   constructor(public type: Type, public location: SourceLocation, public left: Ast, public binding: Binding, public value: Ast) { super() } }
 
 export type Ast = NumberAst | LetAst | SetAst | OperatorAst | IfAst | ListAst | CallAst | AndAst | OrAst | StatementsAst | WhileAst | ReturnAst;
 export const isAst = (value: unknown): value is Ast => value instanceof AstRoot;
@@ -369,7 +375,12 @@ export type Scope = object & {
   _scope: true,
   [ScopeEventsSymbol]: {[key:string]:Event<unknown, never>}
 }
-export const createScope = (obj: object) => obj as Scope;
+const RootScope = {
+  [Bun.inspect.custom](depth, options, inspect) {
+    return options.stylize(`[Scope]`, 'special');
+  }
+}
+export const createScope = (obj: object) => Object.assign(Object.create(RootScope), obj) as Scope;
 
 export class ExternalFunction {
   constructor(public name: string, public func: Function) {}

@@ -1,4 +1,4 @@
-import { isParseVoid, BytecodeOut, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, MetaInstructionTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, addFunctionDefinition, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, BytecodeGen, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, findLabelBlockAstByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, ClassField, FieldAst } from "./defs";
+import { isParseVoid, BytecodeOut, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, MetaInstructionTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, addFunctionDefinition, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, BytecodeGen, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, findLabelBlockAstByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, ClassField, FieldAst, ParseField, SetFieldAst } from "./defs";
 import { Event, Task, TaskDef, isTask, isTaskResult } from "./tasks";
 
 const pushBytecode = <T extends BytecodeInstr>(out: BytecodeOut, token: Token, instr: T) => {
@@ -19,6 +19,11 @@ const visitAll = (out: BytecodeOut, exprs: ParseNode[]) => {
 const writeMeta = (out: BytecodeOut, expr: ParseNode) => {
   visitParseNode({ bytecode: out.bytecode, table: bytecodeDefault, globalCompilerState: out.globalCompilerState, state: out.state }, expr)
 }
+const pushGeneratedBytecode = <T extends BytecodeInstr>(out: BytecodeOut, instr: T) => {
+  out.bytecode.code.push(instr);
+  out.bytecode.locations.push(new SourceLocation(-1, -1));
+  return instr;
+}
 
 const bytecodeDefault: MetaInstructionTable = {
   identifier: (out, ast) => pushBytecode(out, ast.token, { type: "binding", name: ast.token.value }), // prettier-ignore
@@ -28,7 +33,7 @@ const bytecodeDefault: MetaInstructionTable = {
   boolean: (out, ast) => pushBytecode(out, ast.token, { type: "push", value: ast.token.value !== 'false' }), // prettier-ignore
 
   operator: (out, ast) => (visitAll(out, ast.exprs), pushBytecode(out, ast.token, { type: 'operator', name: ast.token.value, count: ast.exprs.length })), // prettier-ignore
-  set:      (out, ast) => (visitParseNode(out, ast.value), pushBytecode(out, ast.token, { type: 'setlocal', name: ast.name.token.value })), // prettier-ignore
+  set:      (out, ast) => (visitParseNode(out, ast.value), pushBytecode(out, ast.token, { type: 'setlocal', name: ast.left.token.value })), // prettier-ignore
   letconst: (out, ast) => (visitParseNode(out, ast.value), pushBytecode(out, ast.token, { type: 'letlocal', name: ast.name.token.value, t: false, v: true })), // prettier-ignore
   meta:     (out, ast) => (visitParseNode(out, ast.expr)),
   comptime: (out, ast) => (visitParseNode(out, ast.expr)),
@@ -158,7 +163,19 @@ const bytecodeSecond: MetaInstructionTable = {
   string:  (out, ast) => pushBytecode(out, ast.token, { type: "stringast", value: ast.token.value }), // prettier-ignore
   boolean: (out, ast) => pushBytecode(out, ast.token, { type: "boolast", value: ast.token.value !== 'false' }), // prettier-ignore
 
-  set:      (out, ast) => (visitParseNode(out, ast.value), pushBytecode(out, ast.token, { type: 'setast', name: ast.name.token.value })), // prettier-ignore,
+  set: (out, ast) => {
+    if (ast.left instanceof ParseIdentifier) {
+      visitParseNode(out, ast.value);
+      pushBytecode(out, ast.token, { type: 'setlocalast', name: ast.left.token.value })
+      return
+    } else if (ast.left instanceof ParseField) {
+      visitParseNode(out, ast.left.expr);
+      visitParseNode(out, ast.value);
+      pushBytecode(out, ast.token, { type: 'setfieldast', name: ast.left.field.token.value })
+      return
+    }
+    compilerAssert(false, "Not implemented")
+  },
   operator: (out, ast) => (visitAll(out, ast.exprs), pushBytecode(out, ast.token, { type: 'operatorast', name: ast.token.value, count: ast.exprs.length })), // prettier-ignore
   meta:     (out, ast) => (writeMeta(out, ast.expr), pushBytecode(out, ast.token, { type: 'toast' })),
   comptime: (out, ast) => writeMeta(out, ast.expr),
@@ -269,8 +286,7 @@ const compileFunctionPrototype = (ctx: TaskContext, prototype: FunctionPrototype
     state: { labelBlock: null }
   }
   visitParseNode(out, prototype.body);
-  prototype.bytecode.code.push({ type: "halt" });
-  prototype.bytecode.locations.push(new SourceLocation(-1, -1));
+  pushGeneratedBytecode(out, { type: "halt" })
 
   console.log(`Compiled ${prototype.name}`)
   console.log(bytecodeToString(prototype.bytecode))
@@ -278,11 +294,7 @@ const compileFunctionPrototype = (ctx: TaskContext, prototype: FunctionPrototype
   return prototype.bytecode;
 };
 
-type ExecuteVmArg = {
-  bytecode: BytecodeGen, scope: Scope
-};
-
-function executeBytecodeTask(ctx: TaskContext, { bytecode, scope }: ExecuteVmArg): Task<unknown, never> {
+function executeBytecodeTask(ctx: TaskContext, bytecode: BytecodeGen, scope: Scope): Task<unknown, never> {
   compilerAssert(scope, "Expected scope")
 
   const vm: Vm = { ip: 0, stack: [], scope, location: undefined!, bytecode: bytecode!, context: ctx };
@@ -337,11 +349,8 @@ function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, args, typ
       pushBytecode(out, type.token, { type: 'totype' });
     })
 
-    func.headerPrototype.bytecode.code.push({ type: "tuple", count: func.args.length });
-    func.headerPrototype.bytecode.locations.push(new SourceLocation(-1, -1));
-
-    func.headerPrototype.bytecode.code.push({ type: "halt" });
-    func.headerPrototype.bytecode.locations.push(new SourceLocation(-1, -1));
+    pushGeneratedBytecode(out, { type: "tuple", count: func.args.length })
+    pushGeneratedBytecode(out, { type: "halt" })
 
     console.log(`Compiled ${func.headerPrototype.name}`)
     console.log(bytecodeToString(func.headerPrototype.bytecode))
@@ -360,7 +369,7 @@ function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, args, typ
   })
 
   return (
-    TaskDef(executeBytecodeTask, { bytecode: func.headerPrototype!.bytecode!, scope })
+    TaskDef(executeBytecodeTask, func.headerPrototype!.bytecode!, scope)
     .chainFn((task, compiledArgTypes) => {
 
       compilerAssert(compiledArgTypes instanceof Tuple, "Expected tuple")
@@ -389,7 +398,6 @@ type TypeCheckAndCompileArg = {
 export function functionTemplateTypeCheckAndCompileTask(ctx: TaskContext, { func, typeArgs, args, parentScope, concreteTypes }: TypeCheckAndCompileArg): Task<CompiledFunction, never> {
 
   const argBindings: Binding[] = [];
-  let typeParamHash;
 
   compilerAssert(func.body)
 
@@ -399,7 +407,7 @@ export function functionTemplateTypeCheckAndCompileTask(ctx: TaskContext, { func
   }
   compilerAssert(func.templatePrototype);
 
-  typeParamHash = hashValues(typeArgs)
+  const typeParamHash = hashValues(typeArgs)
   const existing = func.compiledFunctions.find(compiledFunc => {
     if (compiledFunc.typeParamHash === typeParamHash) {
       if (compiledFunc.typeParameters.every((x, i) => x === typeArgs[i])) return true
@@ -421,7 +429,7 @@ export function functionTemplateTypeCheckAndCompileTask(ctx: TaskContext, { func
   });
 
   return (
-    TaskDef(executeBytecodeTask, { bytecode: func.templatePrototype.bytecode!, scope: templateScope })
+    TaskDef(executeBytecodeTask, func.templatePrototype.bytecode!, templateScope)
     .chainFn((task, ast) => {
 
       const concreteTypes = []
@@ -483,7 +491,7 @@ function functionInlineTask(ctx: TaskContext, { vm, func, typeArgs, args, parent
   });
 
   return (
-    TaskDef(executeBytecodeTask, { bytecode: func.templatePrototype.bytecode!, scope: templateScope })
+    TaskDef(executeBytecodeTask, func.templatePrototype.bytecode!, templateScope)
     .chainFn((task, ast) => {
 
       compilerAssert(isAst(ast), "Expected ast got $ast", { ast });
@@ -524,21 +532,17 @@ function functionCompileTimeCompileTask(ctx: TaskContext, { vm, func, typeArgs, 
   compileFunctionPrototype(ctx, func.compileTimePrototype);
 
   return (
-    TaskDef(executeBytecodeTask, { bytecode: func.compileTimePrototype.bytecode!, scope })
+    TaskDef(executeBytecodeTask, func.compileTimePrototype.bytecode!, scope)
     .chainFn((task, res) => { vm.stack.push(res); return Task.of("success") })
   );
 };
 
-
 const popValues = (vm: Vm, num: number) => {
-  if (vm.stack.length < num) throw new Error(`Expected ${num} values on stack`);
+  compilerAssert(vm.stack.length >= num, `Expected ${num} values on stack`)
   return Array.from(new Array(num)).map(() => vm.stack.pop()).reverse() // prettier-ignore
 };
 const popStack = (vm: Vm) => {
-  if (vm.stack.length === 0) {
-    console.log(vm.stack)
-    throw new Error(`Expected 1 value on stack got ${vm.stack.length}`);
-  }
+  compilerAssert(vm.stack.length > 0, `Expected 1 value on stack got ${vm.stack.length}`)
   return vm.stack.pop();
 };
 
@@ -625,6 +629,17 @@ function callFunctionTask(ctx: TaskContext, { vm, name, count, tcount }: CallArg
         const call: CompileTimeFunctionCallArg = { vm, func: func.func, typeArgs, args: values, parentScope: func.scope };
         return TaskDef(functionCompileTimeCompileTask, call)
       }
+
+      if (func instanceof ClassDefinition) {
+        compilerAssert(func.abstract, "Expected abstract class got $func", { func });
+        compilerAssert(values.length === 0, "Not implemented", { values })
+        return (
+          TaskDef(compileClassTask, { classDef: func, typeArgs })
+          .chainFn((task, type) => {
+            vm.stack.push(type); return Task.of('success')
+          })
+        )
+      }
       compilerAssert(!(func instanceof FunctionDefinition), "$func is not handled", { func })
       compilerAssert(false, "$func is not a function", { func })
     })
@@ -661,7 +676,7 @@ const instructions: InstructionMapping = {
   letast: (vm, { name, t, v }) => vm.stack.push(letLocal(vm, name, t ? expectType(popStack(vm)) : null, v ? expectAst(popStack(vm)) : null)),
   callast: (vm, { name, count, tcount }) => TaskDef(createCallAstTask, { vm, name, count, tcount }),
   toast: (vm) => vm.stack.push(unknownToAst(vm.location, popStack(vm))),
-  setast: (vm, { name }) => {
+  setlocalast: (vm, { name }) => {
     const binding = expectMap(vm.scope, name, `No binding $key`);
     vm.stack.push(new SetAst(VoidType, vm.location, binding, expectAst(popStack(vm))))
   },
@@ -671,6 +686,18 @@ const instructions: InstructionMapping = {
       const field = value.type.compiledClass.fields.find(x => x.name === name)
       compilerAssert(field, "No field $name found on type $type", { name, type: value.type })
       vm.stack.push(new FieldAst(field.type, vm.location, value, field.binding))
+      return
+    }
+    compilerAssert(false, "No field $name found on type $type", { name, type: value.type })
+  },
+  setfieldast: (vm, { name }) => {
+    const value = expectAst(popStack(vm));
+    const expr = expectAst(popStack(vm));
+    if (expr.type instanceof ConcreteClassType) {
+      const field = expr.type.compiledClass.fields.find(x => x.name === name)
+      compilerAssert(field, "No field $name found on type $type", { name, type: value.type })
+      compilerAssert(field.type === value.type, "Type $type does not match $exprType field $name type of $type", { name, exprType: expr.type, type: value.type })
+      vm.stack.push(new SetFieldAst(VoidType, vm.location, expr, field.binding, value))
       return
     }
     compilerAssert(false, "No field $name found on type $type", { name, type: value.type })
@@ -717,7 +744,7 @@ const instructions: InstructionMapping = {
     if (type instanceof ClassDefinition) {
       if (type.concreteType) return vm.stack.push(type.concreteType)
       return (
-        TaskDef(compileClassTask, type)
+        TaskDef(compileClassTask, { classDef: type, typeArgs: [] })
         .chainFn((task, res) => { vm.stack.push(res); return Task.of('success') })
       );
     }
@@ -753,7 +780,6 @@ const instructions: InstructionMapping = {
     const closure = new Closure(func, vm.scope);
     vm.stack.push(closure);
     if (func.name) {
-      console.log("Closure", func.name.token.value)
       compilerAssert(!Object.hasOwn(vm.scope, func.name.token.value), "$name already in scope", { name: func.name, value: vm.scope[func.name.token.value] })
       vm.scope[func.name.token.value] = closure;
     }
@@ -847,23 +873,36 @@ function topLevelClassDefinitionTask(ctx: TaskContext, decl: ParserClassDecl, sc
 
 }
 
-function compileClassTask(ctx: TaskContext, classDef: ClassDefinition) {
+function compileClassTask(ctx: TaskContext, { classDef, typeArgs }: { classDef: ClassDefinition, typeArgs: unknown[] }) {
   // console.log("Compiling class", classDef)
 
   const type = new ConcreteClassType(null as any) // add it below
   const binding = new Binding(classDef.debugName, type);
   const body = null as any
+  compilerAssert(typeArgs.length === classDef.typeArgs.length, "Expected $x type parameters for class $classDef, got $y", { x: classDef.typeArgs.length, y: typeArgs.length, classDef })
   
   if (!classDef.templatePrototype)  {
     compilerAssert(classDef.body, "Expected class body");
     classDef.templatePrototype = { name: `${classDef.debugName} template bytecode`, body: classDef.body, instructionTable: bytecodeSecond }; // prettier-ignore
     compileFunctionPrototype(ctx, classDef.templatePrototype);
   }
-  
+
+  const typeParamHash = hashValues(typeArgs)
+  const existing = classDef.compiledClasses.find(compiledClass => {
+    if (compiledClass.typeParamHash === typeParamHash) {
+      if (compiledClass.typeParameters.every((x, i) => x === typeArgs[i])) return true
+    }
+  })
+  if (existing) return Task.of(existing.type);
+
   const templateScope = Object.create(classDef.parentScope);
+  classDef.typeArgs.forEach((typeArg, i) => {
+    compilerAssert(typeArg instanceof ParseIdentifier, "Not implemented")
+    templateScope[typeArg.token.value] = typeArgs[i];
+  });
 
   return (
-    TaskDef(executeBytecodeTask, { bytecode: classDef.templatePrototype!.bytecode!, scope: templateScope })
+    TaskDef(executeBytecodeTask, classDef.templatePrototype!.bytecode!, templateScope)
     .chainFn((task, ast) => {
       compilerAssert(isAst(ast), "Expected ast got $ast", { ast });
 
@@ -871,10 +910,11 @@ function compileClassTask(ctx: TaskContext, classDef: ClassDefinition) {
       for (const name of Object.getOwnPropertyNames(templateScope)) {
         fields.push(new ClassField(null, name, templateScope[name].type, templateScope[name]))
       }
-
+      const debugName = typeArgs.length === 0 ? classDef.debugName :
+        `${classDef.debugName}!(...)`
       const compiledClass = new CompiledClass(
-          classDef.location, classDef.debugName,
-          binding, classDef, type, body, fields, [], 0)
+          classDef.location, debugName,
+          binding, classDef, type, body, fields, [], typeParamHash)
       type.compiledClass = compiledClass
       classDef.compiledClasses.push(compiledClass)
       classDef.concreteType = type;
@@ -892,7 +932,6 @@ export const runTopLevelTask = (ctx: TaskContext, globalCompiler: GlobalCompiler
   
   stmts.exprs.forEach(expr => {
     if (expr.key === 'letconst') {
-      console.log(expr)
 
       const out: BytecodeOut = {
         bytecode: { code: [], locations: [] },
@@ -901,13 +940,12 @@ export const runTopLevelTask = (ctx: TaskContext, globalCompiler: GlobalCompiler
         state: { labelBlock: null }
       }
       visitParseNode(out, expr.value);
-      out.bytecode.code.push({ type: "halt" });
-      out.bytecode.locations.push(new SourceLocation(-1, -1));
+      pushGeneratedBytecode(out, { type: "halt" })
 
       console.log(bytecodeToString(out.bytecode))
 
       const task = (
-        TaskDef(executeBytecodeTask, { bytecode: out.bytecode, scope: rootScope })
+        TaskDef(executeBytecodeTask, out.bytecode, rootScope)
         .chainFn((task, result) => {
           setScopeValueAndResolveEvents(rootScope, expr.name.token.value, result)
           return Task.of('success')

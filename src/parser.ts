@@ -494,7 +494,7 @@ export const makeParser = (input: string) => {
   const parseOptionalExpr = () =>  matchType("NEWLINE") ? null : trailingNewline(parseExpr())
 
   const parseStatement = (): ParseNode => {
-    if (match("defn"))          return parseFunctionDef();
+    if (match("fn"))            return parseFunctionDef();
     else if (match("struct"))   return parseClassDef();
     else if (match("if"))       return parseIf(previous);
     else if (match("while"))    return parseWhile();
