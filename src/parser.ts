@@ -5,11 +5,11 @@ type LexerState = { significantNewlines: boolean; parenStack: string[] };
 function* tokenize(input: string, state: LexerState): Generator<Token> {
   const regexes = {
     KEYWORD:
-      /^(?:and|as\!|as|break|class|continue|comptime|def|defn|elif|else|fn|for|if|ifx|in|lambda|meta|null|not|or|pass|return|try|while|with)(?=\W)/, // note \b
+      /^(?:and|as\!|as|break|class|continue|comptime|def|defn|elif|else|fn|for|if|ifx|in|lambda|meta|null|not|or|pass|return|try|while|with|struct|interface)(?=\W)/, // note \b
     IDENTIFIER: /^[a-zA-Z_][a-zA-Z_0-9-]*/,
     STRING: /^(?:"(?:[^"\\]|\\.)*")/,
     SPECIALNUMBER: /^0o[0-7]+|^0x[0-9a-fA-F_]+|^0b[01_]+/,
-    NUMBER: /^-?(0|[1-9][0-9_]*)(\.[0-9]+)?(?:[eE][+-]?[0-9]+)?/,
+    NUMBER: /^-?(0|[1-9][0-9_]*)(\.[0-9_]+)?(?:[eE][+-]?[0-9]+)?/,
     COMMENT: /^#.+(?=\n)/,
     OPENPAREN: /^[\[\{\(]/,
     CLOSEPAREN: /^[\]\}\)]/,
@@ -495,7 +495,7 @@ export const makeParser = (input: string) => {
 
   const parseStatement = (): ParseNode => {
     if (match("defn"))          return parseFunctionDef();
-    else if (match("class"))    return parseClassDef();
+    else if (match("struct"))   return parseClassDef();
     else if (match("if"))       return parseIf(previous);
     else if (match("while"))    return parseWhile();
     else if (match("comptime")) return new ParseCompTime(previous, parseColonBlock("comptime"));

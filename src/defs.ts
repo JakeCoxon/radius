@@ -140,10 +140,12 @@ export type BytecodeInstr =
   { type: 'beginblockast', breakType: 'break' | 'continue' | null } |
   { type: 'endblockast'  } |
   { type: 'bindingast', name: string } |
+  { type: 'totype' } |
   { type: 'numberast', value: number } |
   { type: 'stringast', value: string } |
   { type: 'boolast', value: boolean } |
   { type: 'setast', name: string } |
+  { type: 'fieldast', name: string } |
   { type: 'operatorast', name: string, count: number } |
   { type: 'toast' } |
   { type: 'whileast' } |
@@ -183,7 +185,7 @@ export type FunctionPrototype = {
 
 export const hashValues = (values: unknown[]) => {
   return values.map(value => {
-    if (value instanceof Type) return `$${value.typeName}`
+    if (value instanceof PrimitiveType) return `$${value.typeName}`
     if (typeof value === 'number') return value
     compilerAssert(false, "Cannot hash value", { value })
   }).join("__")
@@ -240,6 +242,54 @@ export class FunctionDefinition {
   }
 }
 
+export class ClassField {
+  constructor(
+    public location: SourceLocation,
+    public name: string,
+    public type: Type,
+    public binding: Binding // May not be needed
+    ) {}
+}
+export class CompiledClass {
+  constructor(
+    public location: SourceLocation,
+    public debugName: string,
+    public binding: Binding,
+    public classDefinition: ClassDefinition,
+    public type: Type,
+    public body: Ast,
+    public fields: ClassField[],
+    public typeParameters: unknown[],
+    public typeParamHash: unknown) {}
+
+  [Bun.inspect.custom](depth, options, inspect) {
+    if (options.ast) return options.stylize(`[CompiledClass ${this.debugName}]`, 'special');
+    return {...this}
+  }
+}
+
+export class ClassDefinition {
+  headerPrototype?: FunctionPrototype | undefined
+  templatePrototype?: FunctionPrototype | undefined
+  // compileTimePrototype?: FunctionPrototype | undefined
+
+  compiledClasses: CompiledClass[] = []
+  concreteType: ConcreteClassType | undefined
+
+  constructor(
+    public id: number,
+    public location: SourceLocation,
+    public parentScope: Scope,
+    public debugName: string,
+    public name: ParseIdentifier | null,
+    public typeArgs: ParseNode[],
+    public body: ParseNode | null) {}
+
+  [Bun.inspect.custom](depth, options, inspect) {
+    if (options.ast) return options.stylize(`[ClassDefinition ${this.name}]`, 'special');
+    return {...this}
+  }
+}
 
 export class AstRoot {
   [Bun.inspect.custom](depth, options, inspect) {
@@ -269,6 +319,7 @@ export class WhileAst extends AstRoot {      constructor(public type: Type, publ
 export class ReturnAst extends AstRoot {     constructor(public type: Type, public location: SourceLocation, public expr: Ast | null) { super() } }
 export class BreakAst extends AstRoot {      constructor(public type: Type, public location: SourceLocation, public binding: Binding, public expr: Ast | null) { super() } }
 export class BlockAst extends AstRoot {      constructor(public type: Type, public location: SourceLocation, public binding: Binding, public body: Ast) { super() } }
+export class FieldAst extends AstRoot {      constructor(public type: Type, public location: SourceLocation, public left: Ast, public binding: Binding) { super() } }
 
 export type Ast = NumberAst | LetAst | SetAst | OperatorAst | IfAst | ListAst | CallAst | AndAst | OrAst | StatementsAst | WhileAst | ReturnAst;
 export const isAst = (value: unknown): value is Ast => value instanceof AstRoot;
@@ -287,12 +338,28 @@ export class Binding {
   }
 }
 
-export class Type {
-  constructor(public typeName: string) {}
+export class TypeRoot {}
+export class PrimitiveType extends TypeRoot {
+  constructor(public typeName: string) { super() }
   [Bun.inspect.custom](depth, options, inspect) {
-    return options.stylize(`[Type ${this.typeName}]`, 'special');
+    return options.stylize(`[PrimitiveType ${this.typeName}]`, 'special');
   }
 }
+export class AbstractClassType extends TypeRoot {
+  constructor(public classDefinition: ClassDefinition) { super() }
+  [Bun.inspect.custom](depth, options, inspect) {
+    return options.stylize(`[AbstractClassType ${this.classDefinition.debugName}]`, 'special');
+  }
+}
+export class ConcreteClassType extends TypeRoot {
+  constructor(public compiledClass: CompiledClass) { super() }
+  [Bun.inspect.custom](depth, options, inspect) {
+    return options.stylize(`[ConcreteClassType ${this.compiledClass.debugName}]`, 'special');
+  }
+}
+export type Type = PrimitiveType | AbstractClassType | ConcreteClassType
+export const isType = (type: unknown): type is Type => type instanceof TypeRoot
+
 export class Closure {
   constructor(public func: FunctionDefinition, public scope: Scope) {}
 }
@@ -311,13 +378,13 @@ export class ExternalFunction {
   }
 }
 
-export const VoidType = new Type("void")
-export const IntType = new Type("int")
-export const BoolType = new Type("bool")
-export const FloatType = new Type("float")
-export const DoubleType = new Type("double")
-export const StringType = new Type("string")
-export const FunctionType = new Type("function")
+export const VoidType = new PrimitiveType("void")
+export const IntType = new PrimitiveType("int")
+export const BoolType = new PrimitiveType("bool")
+export const FloatType = new PrimitiveType("float")
+export const DoubleType = new PrimitiveType("double")
+export const StringType = new PrimitiveType("string")
+export const FunctionType = new PrimitiveType("function")
 
 export const expectMap = (object: object, key: string, message: string, info: object = {}) => {
   compilerAssert(object[key] !== undefined, message, { object, key, ...info }); 
@@ -336,7 +403,7 @@ export const expectAst = <T>(expected: unknown, info: object = {}) => {
   return expected;
 };
 export const expectType = <T>(expected: unknown, info: object = {}) => {
-  compilerAssert(expected instanceof Type, "Expected Type got $expected", { expected, ...info }); 
+  compilerAssert(isType(expected), "Expected Type got $expected", { expected, ...info }); 
   return expected;
 };
 export const expectAsts = <T>(expected: unknown[], info: object = {}) => {
@@ -387,6 +454,7 @@ export const findLabelBlockByType = (labelBlock: LabelBlock | null, type: LabelB
 export type GlobalCompilerState = {
   compiledFunctions: Map<Binding, CompiledFunction>;
   functionDefinitions: FunctionDefinition[],
+  classDefinitions: ClassDefinition[],
 
   subCompilerState: SubCompilerState | undefined
 }

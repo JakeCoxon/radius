@@ -6,13 +6,6 @@ import { Queue, TaskDef, stepQueue, withContext } from "./tasks";
 const parser = makeParser(`
 
 
-foo2 :: foo + 3
-foo :: thing4(5)
-
-
-defn thing(x: int):
-  print(x + 32)
-
 defn thing4(x: int):
   return x + 2
 
@@ -23,63 +16,30 @@ defn fam!(T)(a: int):
 defn famz!(T)(a: T):
   print(a)
 
-defn foop(a: int, b: int):
-  print(2 + 42 * thing(12))
+struct Thing:
+  x : int
+  y : float
 
-  if 2 < 3:
-    print("OK")
-  elif 3 > 2:
-    print("wow")
-  elif 3 > 2:
-    print("wow")
-  elif 3 > 2:
-    print("wow")
-  else:
-    print(3)
+defn foothing(a: Thing):
+  print(a.x)
+  print(a)
 
-  zzz := 3
-  z : int = 2
-  x : int = z ifx 2 else 2
+defn main():
 
-  i := 0
-  while true:
-    i = i + 1
-    if i > 10:
-      break
-  print(i)
-  print("thanks")
-  
-  if 3 and 2:
-    print("asd")
+  foo :: {|x| x + 1}
 
-  meta if thing4(2):
-    print("k thing4")
+  foo(1)
 
-  meta if true:
-    print("this is meta if")
+  thing: Thing
+  print(thing.x + 32)
+  foothing(thing)
 
-  foo1 :: {|x| x + 1}
 
-  foo1(1)
   fam!2(1)
   fam!(1 + 1)(2)
 
   famz!int(200)
   famz!bool(true)
-
-  my_list := [1, 2 + 3, 3 + 9]
-  
-  print(meta thing(12))
-
-defn main():
-  print(2 + 42 * thing(12))
-
-
-  meta foop(2, 1)
-  foop(2, 1)
-
-  #for x in thing:
-  #  print(x)
 
 
 `)
@@ -109,6 +69,7 @@ const rootScope: Scope = createScope({
 const globalCompiler: GlobalCompilerState = {
   compiledFunctions: new Map(),
   functionDefinitions: [],
+  classDefinitions: [],
   subCompilerState: undefined
 }
 
