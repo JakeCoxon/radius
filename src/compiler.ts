@@ -1,4 +1,4 @@
-import { isParseVoid, BytecodeOut, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, MetaInstructionTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, addFunctionDefinition, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, BytecodeGen, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, findLabelBlockAstByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, ClassField, FieldAst, ParseField, SetFieldAst, mak, makeCyaneGreen, makeCyan, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListType, SubscriptAst } from "./defs";
+import { isParseVoid, BytecodeOut, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, MetaInstructionTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, addFunctionDefinition, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, BytecodeGen, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, findLabelBlockAstByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, ClassField, FieldAst, ParseField, SetFieldAst, makeCyan, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListType, SubscriptAst, ExternalType, GenericType, isGenericTypeOf } from "./defs";
 import { Event, Task, TaskDef, isTask, isTaskResult } from "./tasks";
 
 const pushBytecode = <T extends BytecodeInstr>(out: BytecodeOut, token: Token, instr: T) => {
@@ -222,7 +222,8 @@ const bytecodeSecond: MetaInstructionTable = {
     if (ast.left instanceof ParseIdentifier) {
       visitParseNode(out, ast.left)
       visitParseNode(out, ast.right)
-      pushBytecode(out, ast.token, { type: 'operatorast', name: ast.token.value, count: 2 })
+      const op = ast.token.value.endsWith('=') ? ast.token.value.substring(0, ast.token.value.length - 1) : ast.token.value
+      pushBytecode(out, ast.token, { type: 'operatorast', name: op, count: 2 })
       pushBytecode(out, ast.token, { type: 'setlocalast', name: ast.left.token.value })
       return
     }
@@ -319,7 +320,7 @@ function executeBytecodeTask(ctx: TaskContext, subCompilerState: SubCompilerStat
   compilerAssert(bytecode, "", { fatal: true })
 
   return (
-    TaskDef(executeVmTask, { vm  })
+    TaskDef(executeVmTask, { vm })
     .chainFn((task, arg) => {
 
       compilerAssert(vm.stack.length === 1, "Expected 1 value on stack at end of function. Got $num", { num: vm.stack.length, vm })
@@ -683,6 +684,14 @@ function callFunctionTask(ctx: TaskContext, { vm, name, count, tcount }: CallArg
           })
         )
       }
+
+      if (func instanceof ExternalType) {
+        compilerAssert(values.length === 0, "Expected no args", { values })
+        compilerAssert(typeArgs.length === 1, "Expected one type arg", { typeArgs })
+        vm.stack.push(createGenericType(ctx.globalCompiler, func, [expectType(typeArgs[0])]))
+        return Task.of('success')
+      }
+
       compilerAssert(!(func instanceof FunctionDefinition), "$func is not handled", { func })
       compilerAssert(false, "$func is not a function", { func })
     })
@@ -713,7 +722,12 @@ const instructions: InstructionMapping = {
   boolast: (vm, { value }) =>   vm.stack.push(new BoolAst(BoolType, vm.location, value)),
   orast: (vm, { count }) =>     vm.stack.push(new OrAst(IntType, vm.location, expectAsts(popValues(vm, count)))),
   andast: (vm, { count }) =>    vm.stack.push(new AndAst(IntType, vm.location, expectAsts(popValues(vm, count)))),
-  listast: (vm, { count }) =>   vm.stack.push(new ListAst(ListType, vm.location, expectAsts(popValues(vm, count)))),
+  listast: (vm, { count }) => {
+    const values = expectAsts(popValues(vm, count));
+    const elementType = getCommonType(values.map(x => x.type))
+    const type = createGenericType(vm.context.globalCompiler, ListType, [elementType]);
+    vm.stack.push(new ListAst(type, vm.location, values))
+  },
   ifast: (vm, { f }) =>         vm.stack.push(new IfAst(IntType, vm.location, expectAst(popStack(vm)), expectAst(popStack(vm)), f ? expectAst(popStack(vm)) : null)),
   whileast: (vm) =>             vm.stack.push(new WhileAst(VoidType, vm.location, expectAst(popStack(vm)), expectAst(popStack(vm)))),
   returnast: (vm, { r }) =>     vm.stack.push(new ReturnAst(VoidType, vm.location, r ? expectAst(popStack(vm)) : null)),
@@ -732,10 +746,12 @@ const instructions: InstructionMapping = {
       vm.stack.push(new FieldAst(field.type, vm.location, value, field.binding))
       return
     }
-    if (value.type === ListType) {
-      compilerAssert(false, "Not implemented yet")
-      vm.stack.push(new FieldAst(IntType, vm.location, value, null))
-      return
+    if (value.type instanceof GenericType) {
+      if (value.type.baseType === ListType) {
+        const binding = (value.type.baseType as typeof ListType).lengthBinding
+        vm.stack.push(new FieldAst(IntType, vm.location, value, binding))
+        return
+      }
     }
     compilerAssert(false, "No field $name found on type $type", { name, type: value.type })
   },
@@ -754,7 +770,7 @@ const instructions: InstructionMapping = {
   subscriptast: (vm, {}) => {
     const right = expectAst(popStack(vm));
     const left = expectAst(popStack(vm));
-    compilerAssert(left.type === ListType, "Expected list got $x", { x: left.type })
+    compilerAssert(isGenericTypeOf(left.type, ListType), "Expected list got $x", { x: left.type })
     compilerAssert(right.type === IntType, "Expected int got $x", { x: right.type })
     vm.stack.push(new SubscriptAst(IntType, vm.location, left, right))
   },
@@ -1000,6 +1016,15 @@ function compileClassTask(ctx: TaskContext, { classDef, typeArgs }: { classDef: 
   )
 
   
+}
+
+const getCommonType = (types: Type[]): Type => {
+  compilerAssert(types.every(x => x === types[0]), "Expected types to be the same")
+  return types[0];
+}
+const createGenericType = (globalCompiler: GlobalCompilerState, baseType: Type, argTypes: Type[]): Type => {
+  const newType = new GenericType(baseType, argTypes);
+  return globalCompiler.typeTable.getOrInsert(newType)
 }
 
 const topLevelLetConst = (ctx: TaskContext, expr: ParseLetConst, rootScope: Scope) => {

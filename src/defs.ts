@@ -302,7 +302,7 @@ export class ClassDefinition {
 
 export class AstRoot {
   [Bun.inspect.custom](depth, options, inspect) {
-    if (depth <= 0) return options.stylize(`[${this.constructor.name}]`, 'special');
+    if (depth <= 1) return options.stylize(`[${this.constructor.name}]`, 'special');
     const newOptions = Object.assign({}, options, {
       ast: true,
       depth: options.depth === null ? null : options.depth - 1,
@@ -359,10 +359,22 @@ export class PrimitiveType extends TypeRoot {
     return options.stylize(`[PrimitiveType ${this.typeName}]`, 'special');
   }
 }
+export class ExternalType extends TypeRoot {
+  constructor(public typeName: string) { super() }
+  [Bun.inspect.custom](depth, options, inspect) {
+    return options.stylize(`[ExternalType ${this.typeName}]`, 'special');
+  }
+}
 export class AbstractClassType extends TypeRoot {
   constructor(public classDefinition: ClassDefinition) { super() }
   [Bun.inspect.custom](depth, options, inspect) {
     return options.stylize(`[AbstractClassType ${this.classDefinition.debugName}]`, 'special');
+  }
+}
+export class GenericType extends TypeRoot {
+  constructor(public baseType: Type, public args: Type[]) { super() }
+  [Bun.inspect.custom](depth, options, inspect) {
+    return options.stylize(`[GenericType ...]`, 'special');
   }
 }
 export class ConcreteClassType extends TypeRoot {
@@ -371,7 +383,7 @@ export class ConcreteClassType extends TypeRoot {
     return options.stylize(`[ConcreteClassType ${this.compiledClass.debugName}]`, 'special');
   }
 }
-export type Type = PrimitiveType | AbstractClassType | ConcreteClassType
+export type Type = PrimitiveType | AbstractClassType | ConcreteClassType | ExternalType | GenericType
 export const isType = (type: unknown): type is Type => type instanceof TypeRoot
 
 export class Closure {
@@ -385,7 +397,8 @@ export type Scope = object & {
 }
 const RootScope = {
   [Bun.inspect.custom](depth, options, inspect) {
-    return options.stylize(`[Scope]`, 'special');
+    if (depth <= 1) return options.stylize(`[Scope]`, 'special');
+    return inspect({...this})
   }
 }
 export const createScope = (obj: object) => Object.assign(Object.create(RootScope), obj) as Scope;
@@ -398,13 +411,26 @@ export class ExternalFunction {
 }
 
 export const VoidType = new PrimitiveType("void")
-export const ListType = new PrimitiveType("list")
 export const IntType = new PrimitiveType("int")
 export const BoolType = new PrimitiveType("bool")
 export const FloatType = new PrimitiveType("float")
 export const DoubleType = new PrimitiveType("double")
 export const StringType = new PrimitiveType("string")
 export const FunctionType = new PrimitiveType("function")
+export const ListType = Object.assign(new ExternalType("List"), {
+  lengthBinding: new Binding("length", IntType)
+});
+
+export const BuiltinTypes = {
+  int: IntType,
+  float: FloatType,
+  double: DoubleType,
+  void: VoidType,
+  string: StringType,
+  bool: BoolType,
+  List: ListType
+}
+
 
 export const expectMap = (object: object, key: string, message: string, info: object = {}) => {
   compilerAssert(object[key] !== undefined, message, { object, key, ...info }); 
@@ -473,7 +499,49 @@ export type GlobalCompilerState = {
   classDefinitions: ClassDefinition[],
 
   allWaitingEvents: Event<unknown, unknown>[],
-  logger: Logger
+  logger: Logger,
+  typeTable: TypeTable
+}
+
+class TypeTable {
+  // TODO: Use a map here?
+  array: Type[] = []
+  constructor() { }
+
+  // has(type: Type) { return !!this.map.get(type) }
+  get(type: Type) { 
+    for (const t of this.array) {
+      if (typesEqual(t, type)) return t;
+    }
+  }
+  insert(type: Type) { 
+    this.array.push(type);
+    return type;
+  }
+  getOrInsert(type: Type): Type {
+    let v = this.get(type)
+    if (v) return v;
+    return this.insert(type)
+  }
+  
+}
+
+// Don't use directly, use type table to see if types are equal
+const typesEqual = (t1: Type, t2: any) => {
+  compilerAssert(t1 && t2, "Unexpected", { t1, t2 })
+  if (Object.getPrototypeOf(t1) !== Object.getPrototypeOf(t2)) return false;
+  if (t1 instanceof PrimitiveType) return t1 == t2;
+  if (t1 instanceof ExternalType) return t1 == t2;
+  if (t1 instanceof ConcreteClassType) return t1.compiledClass == t2.compiledClass;
+  if (t1 instanceof AbstractClassType) return t1.classDefinition == t2.compiledClass;
+  if (t1 instanceof GenericType) {
+    if (!typesEqual(t1.baseType, (t2 as any).baseType)) return false;
+    if (t1.args.length !== t2.args.length) return false;
+    return t1.args.every((x, i) => typesEqual(x, t2.args[i]))
+  }
+}
+export const isGenericTypeOf = (a: Type, expected: Type) => {
+  return a instanceof GenericType && a.baseType === expected;
 }
 
 export interface TaskContext {
@@ -487,6 +555,7 @@ export const createDefaultGlobalCompiler = () => {
     functionDefinitions: [],
     classDefinitions: [],
     allWaitingEvents: [],
+    typeTable: new TypeTable(),
     logger: null!
   }
   return globalCompiler
@@ -510,7 +579,11 @@ export class SubCompilerState {
   labelBlock: LabelBlock | null
 
   [Bun.inspect.custom](depth, options, inspect) {
-    return options.stylize(`[CompilerState ${this.debugName}]`, 'special');
+    if (depth <= 1) return options.stylize(`[CompilerState ${this.debugName}]`, 'special');
+    const newOptions = Object.assign({}, options, {
+      depth: options.depth === null ? null : options.depth - 1,
+    });
+    return inspect({ast: this.constructor.name, ...this}, newOptions)
   }
 }
 

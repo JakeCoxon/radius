@@ -1,6 +1,6 @@
 import { existsSync, unlinkSync } from "node:fs";
 import { functionTemplateTypeCheckAndCompileTask, runTopLevelTask } from "../src/compiler";
-import { BoolType, Closure, CompilerError, DoubleType, ExternalFunction, FloatType, GlobalCompilerState, IntType, Scope, StringType, SubCompilerState, TaskContext, VoidType, compilerAssert, createDefaultGlobalCompiler, createScope, expectMap } from "../src/defs";
+import { BoolType, Closure, CompilerError, DoubleType, ExternalFunction, FloatType, GlobalCompilerState, IntType, Scope, StringType, SubCompilerState, TaskContext, VoidType, compilerAssert, createDefaultGlobalCompiler, createScope, expectMap, BuiltinTypes } from "../src/defs";
 import { makeParser } from "../src/parser"
 import { Queue, TaskDef, stepQueue, withContext } from "../src//tasks";
 import { expect } from "bun:test";
@@ -56,12 +56,7 @@ export const runCompilerTest = (input: string, { filename, expectError=false }: 
   } }
 
   const rootScope: Scope = createScope({
-    int: IntType,
-    float: FloatType,
-    double: DoubleType,
-    void: VoidType,
-    string: StringType,
-    bool: BoolType,
+    ...BuiltinTypes,
     compfoo: { _function: (a, b) => 65 + a + b },
     bar: 123,
     print: new ExternalFunction('print', (...args) => {
@@ -92,9 +87,8 @@ export const runCompilerTest = (input: string, { filename, expectError=false }: 
     }
     if (ex instanceof CompilerError) {
 
-      ex.info.currentTask = queue.currentTask.def
-      ex.info.subCompilerState = queue.currentTask._context.subCompilerState
-      ex.info.subCompilerState = {...queue.currentTask._context.subCompilerState}
+      (ex.info as any).currentTask = (queue.currentTask as any).def;
+      (ex.info as any).subCompilerState = (queue.currentTask._context as TaskContext).subCompilerState
 
       logger.log("\nError info")
       Object.entries(ex.info).forEach(([name, value]) => {
