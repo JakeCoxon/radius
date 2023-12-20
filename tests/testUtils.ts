@@ -87,8 +87,8 @@ export const runCompilerTest = (input: string, { filename, expectError=false }: 
     }
     if (ex instanceof CompilerError) {
 
-      (ex.info as any).currentTask = (queue.currentTask as any).def;
-      (ex.info as any).subCompilerState = (queue.currentTask._context as TaskContext).subCompilerState
+      (ex.info as any).currentTask = (queue.currentTask as any)?.def;
+      (ex.info as any).subCompilerState = (queue.currentTask?._context as TaskContext).subCompilerState
 
       logger.log("\nError info")
       Object.entries(ex.info).forEach(([name, value]) => {

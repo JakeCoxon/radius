@@ -5,10 +5,10 @@ test("list_iterator", () => {
 
   const input = (`
 
-fn iterate!(T)(lst: List!T):
+fn iterate!(f, T)(lst: List!T) @inline: 
   i := 0
   while i < lst.length:
-    print(lst[i])
+    f(lst[i])
     i += 1
 
 fn main():
@@ -21,7 +21,10 @@ fn main():
     print(lst[i])
     i += 1
 
-  iterate!int(lst)
+  f :: |x| print(x)
+  iterate!(f, int)(lst)
+  iterate!(f, int)(lst)
+  iterate!(f, int)(lst)
 
 `)
   const test = runCompilerTest(input, { filename: 'list_iterator' })

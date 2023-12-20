@@ -188,10 +188,20 @@ export type FunctionPrototype = {
   instructionTable: MetaInstructionTable
 }
 
+let uniqueId = 1000
+// const uniqueMap = new WeakMap<object, number>()
+const UNIQUE_ID = Symbol('UNIQUE_ID')
+const getUniqueId = (obj: object) => {
+  if (obj[UNIQUE_ID] !== undefined) return obj[UNIQUE_ID]
+  obj[UNIQUE_ID] = uniqueId++
+  return obj[UNIQUE_ID];
+}
 export const hashValues = (values: unknown[]) => {
   return values.map(value => {
     if (value instanceof PrimitiveType) return `$${value.typeName}`
     if (typeof value === 'number') return value
+    if (value instanceof FunctionDefinition) return getUniqueId(value)
+    if (value instanceof Closure) return getUniqueId(value)
     compilerAssert(false, "Cannot hash value", { value })
   }).join("__")
 }
@@ -431,6 +441,45 @@ export const BuiltinTypes = {
   List: ListType
 }
 
+class TypeTable {
+  array: Type[] = [] // TODO: Use a map here?
+  constructor() { }
+
+  get(type: Type) { 
+    for (const t of this.array) {
+      if (typesEqual(t, type)) return t;
+    }
+  }
+  insert(type: Type) { 
+    this.array.push(type);
+    return type;
+  }
+  getOrInsert(type: Type): Type {
+    let v = this.get(type)
+    if (v) return v;
+    return this.insert(type)
+  }
+  
+}
+
+// Don't use directly, use type table to see if types are equal
+const typesEqual = (t1: Type, t2: any) => {
+  compilerAssert(t1 && t2, "Unexpected", { t1, t2 })
+  if (Object.getPrototypeOf(t1) !== Object.getPrototypeOf(t2)) return false;
+  if (t1 instanceof PrimitiveType) return t1 == t2;
+  if (t1 instanceof ExternalType) return t1 == t2;
+  if (t1 instanceof ConcreteClassType) return t1.compiledClass == t2.compiledClass;
+  if (t1 instanceof AbstractClassType) return t1.classDefinition == t2.compiledClass;
+  if (t1 instanceof GenericType) {
+    if (!typesEqual(t1.baseType, (t2 as any).baseType)) return false;
+    if (t1.args.length !== t2.args.length) return false;
+    return t1.args.every((x, i) => typesEqual(x, t2.args[i]))
+  }
+}
+export const isGenericTypeOf = (a: Type, expected: Type) => {
+  return a instanceof GenericType && a.baseType === expected;
+}
+
 
 export const expectMap = (object: object, key: string, message: string, info: object = {}) => {
   compilerAssert(object[key] !== undefined, message, { object, key, ...info }); 
@@ -503,47 +552,6 @@ export type GlobalCompilerState = {
   typeTable: TypeTable
 }
 
-class TypeTable {
-  // TODO: Use a map here?
-  array: Type[] = []
-  constructor() { }
-
-  // has(type: Type) { return !!this.map.get(type) }
-  get(type: Type) { 
-    for (const t of this.array) {
-      if (typesEqual(t, type)) return t;
-    }
-  }
-  insert(type: Type) { 
-    this.array.push(type);
-    return type;
-  }
-  getOrInsert(type: Type): Type {
-    let v = this.get(type)
-    if (v) return v;
-    return this.insert(type)
-  }
-  
-}
-
-// Don't use directly, use type table to see if types are equal
-const typesEqual = (t1: Type, t2: any) => {
-  compilerAssert(t1 && t2, "Unexpected", { t1, t2 })
-  if (Object.getPrototypeOf(t1) !== Object.getPrototypeOf(t2)) return false;
-  if (t1 instanceof PrimitiveType) return t1 == t2;
-  if (t1 instanceof ExternalType) return t1 == t2;
-  if (t1 instanceof ConcreteClassType) return t1.compiledClass == t2.compiledClass;
-  if (t1 instanceof AbstractClassType) return t1.classDefinition == t2.compiledClass;
-  if (t1 instanceof GenericType) {
-    if (!typesEqual(t1.baseType, (t2 as any).baseType)) return false;
-    if (t1.args.length !== t2.args.length) return false;
-    return t1.args.every((x, i) => typesEqual(x, t2.args[i]))
-  }
-}
-export const isGenericTypeOf = (a: Type, expected: Type) => {
-  return a instanceof GenericType && a.baseType === expected;
-}
-
 export interface TaskContext {
   subCompilerState: SubCompilerState
   globalCompiler: GlobalCompilerState
@@ -601,7 +609,8 @@ export const addFunctionDefinition = (compilerState: GlobalCompilerState, decl: 
   if (decl.id !== undefined) return compilerState.functionDefinitions[decl.id];
 
   decl.id = compilerState.functionDefinitions.length;
-  const inline = !!decl.anonymous
+  const keywords = decl.keywords.map(x => x instanceof ParseNote ? x.expr.token.value : x.token.value)
+  const inline = !!decl.anonymous || keywords.includes('inline')
   const funcDef = new FunctionDefinition(
     decl.id, decl.debugName,
     decl.name, decl.typeArgs, decl.args,
