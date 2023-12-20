@@ -56,6 +56,8 @@ function* tokenize(input: string, state: LexerState): Generator<Token> {
     }
 
     let matchIndent = remain.length > 0 && matchAndTrimLine(/^ */);
+    if (state.significantNewlines && remain[0] === "\n") continue
+    
     if (matchIndent) {
       const numSpaces = match![0].length ?? 0;
 

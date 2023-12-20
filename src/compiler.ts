@@ -866,7 +866,7 @@ const instructions: InstructionMapping = {
     const closure = new Closure(func, vm.scope);
     vm.stack.push(closure);
     if (func.name) {
-      compilerAssert(!Object.hasOwn(vm.scope, func.name.token.value), "$name already in scope", { name: func.name, value: vm.scope[func.name.token.value] })
+      compilerAssert(!Object.hasOwn(vm.scope, func.name.token.value), "$name already in scope", { name: func.name.token, value: vm.scope[func.name.token.value] })
       vm.scope[func.name.token.value] = closure;
     }
   },

@@ -55,7 +55,7 @@ export const createAnonymousParserFunctionDecl = (debugName: string, sourceToken
     debugName: debugName,
     id: undefined,
     args: args,
-    name: new ParseIdentifier(createToken(debugName)),
+    name: null,
     body: body,
     returnType: null,
     anonymous: true,
@@ -525,7 +525,7 @@ export const expectAsts = <T>(expected: unknown[], info: object = {}) => {
 };
 export const createStatements = (location: SourceLocation, list: Ast[]) => {
   if (list.length === 0) return new VoidAst(VoidType, location);
-  compilerAssert(list.length > 0, "Expected statements", { list });
+  if (list.length === 1) return list[0];
   return new StatementsAst(list[list.length - 1].type, location, list);
 };
 
