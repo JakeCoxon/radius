@@ -1,6 +1,6 @@
 import { existsSync, unlinkSync } from "node:fs";
 import { functionTemplateTypeCheckAndCompileTask, runTopLevelTask } from "../src/compiler";
-import { BoolType, Closure, CompilerError, DoubleType, ExternalFunction, FloatType, GlobalCompilerState, IntType, Scope, StringType, VoidType, compilerAssert, createDefaultGlobalCompiler, createScope, expectMap } from "../src/defs";
+import { BoolType, Closure, CompilerError, DoubleType, ExternalFunction, FloatType, GlobalCompilerState, IntType, Scope, StringType, SubCompilerState, TaskContext, VoidType, compilerAssert, createDefaultGlobalCompiler, createScope, expectMap } from "../src/defs";
 import { makeParser } from "../src/parser"
 import { Queue, TaskDef, stepQueue, withContext } from "../src//tasks";
 import { expect } from "bun:test";
@@ -10,13 +10,15 @@ const runTestInner = (input: string, globalCompiler: GlobalCompilerState, rootSc
 
   const queue = new Queue();
   
+  const subCompilerState = new SubCompilerState('root');
+  subCompilerState.scope = rootScope
   const root = (
-    TaskDef(runTopLevelTask, globalCompiler, parser.node, rootScope)
+    TaskDef(runTopLevelTask, parser.node, rootScope)
     .chainFn((task, arg) => {
       const func: Closure = expectMap(rootScope, "main", "No main function found");
       return TaskDef(functionTemplateTypeCheckAndCompileTask, { func: func.func, args: [], typeArgs: [], parentScope: func.scope, concreteTypes: [] })
     })
-    .wrap(withContext({ globalCompiler }))
+    .wrap(withContext({ globalCompiler, subCompilerState } as TaskContext))
   );
   queue.enqueue(root)
 
@@ -105,9 +107,9 @@ export const runCompilerTest = (input: string, { filename, expectError=false }: 
     writer.write("\n")
     writer.write(Bun.inspect(func.body, { depth: 10, colors: true }));
     writer.write("\n\n")
-    writer.flush(); // write buffer to disk
   })
 
+  writer.flush();
   writer.end();
 
   expect(gotError).toBe(expectError)

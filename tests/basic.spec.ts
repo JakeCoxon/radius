@@ -1,7 +1,7 @@
 import { test, expect, describe } from "bun:test";
 import { runCompilerTest } from "./testUtils";
 
-test("Basic", () => {
+test("basic", () => {
 
   const input = (`
 

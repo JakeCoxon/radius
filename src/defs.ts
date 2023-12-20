@@ -426,6 +426,7 @@ export const expectAsts = <T>(expected: unknown[], info: object = {}) => {
   return expected;
 };
 export const createStatements = (location: SourceLocation, list: Ast[]) => {
+  if (list.length === 0) return new VoidAst(VoidType, location);
   compilerAssert(list.length > 0, "Expected statements", { list });
   return new StatementsAst(list[list.length - 1].type, location, list);
 };
@@ -437,13 +438,6 @@ export type Vm = {
   location: SourceLocation,
   bytecode: BytecodeGen,
   context: TaskContext
-}
-export type SubCompilerState = {
-  vm: Vm,
-  func: FunctionDefinition,
-  quoteStack: Ast[][]
-  prevCompilerState: SubCompilerState | undefined
-  labelBlock: LabelBlock | null
 }
 export type LabelBlockType = 'break' | 'continue' | null
 
@@ -495,15 +489,36 @@ export const createDefaultGlobalCompiler = () => {
   return globalCompiler
 }
 
-export const pushSubCompilerState = (ctx: TaskContext, obj: { vm: Vm, func: FunctionDefinition }) => {
-  const state: SubCompilerState = {
-    func: obj.func,
-    vm: obj.vm,
-    quoteStack: [],
-    prevCompilerState: ctx.subCompilerState,
-    labelBlock: null, // TODO: copy from lexical scope
+
+export class SubCompilerState {
+  constructor(
+    public debugName: string,
+    ) {}
+
+  vm: Vm
+  func: FunctionDefinition
+  quoteStack: Ast[][] = []
+  scope: Scope
+  // Enclosing function is used for binding lookup, but not by default because 
+  // not all bindings are accessible across function boundaries
+  functionCompiler: SubCompilerState | undefined
+  lexicalParent: SubCompilerState | undefined
+  prevCompilerState: SubCompilerState | undefined
+  labelBlock: LabelBlock | null
+
+  [Bun.inspect.custom](depth, options, inspect) {
+    return options.stylize(`[CompilerState ${this.debugName}]`, 'special');
   }
+}
+
+export const pushSubCompilerState = (ctx: TaskContext, obj: { debugName: string, vm?: Vm, func?: FunctionDefinition, scope: Scope, lexicalParent: SubCompilerState }) => {
+  const state = new SubCompilerState(obj.debugName)
+  state.prevCompilerState = ctx.subCompilerState;
+  state.lexicalParent = obj.lexicalParent
+  state.scope = obj.scope
+  state.functionCompiler = state.lexicalParent?.functionCompiler
   ctx.subCompilerState = state;
+  return state;
 }
 
 export const addFunctionDefinition = (compilerState: GlobalCompilerState, decl: ParserFunctionDecl) => {
