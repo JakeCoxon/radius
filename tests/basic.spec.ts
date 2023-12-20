@@ -74,6 +74,8 @@ fn foop(a: int, b: int):
 fn main():
   print(2 + 42 * thing(12))
 
+  x := float(200)
+  print(x + float(200))
 
   meta foop(2, 1)
   foop(2, 1)

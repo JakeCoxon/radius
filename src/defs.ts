@@ -330,8 +330,10 @@ export class BlockAst extends AstRoot {      constructor(public type: Type, publ
 export class FieldAst extends AstRoot {      constructor(public type: Type, public location: SourceLocation, public left: Ast, public binding: Binding) { super() } }
 export class SetFieldAst extends AstRoot {   constructor(public type: Type, public location: SourceLocation, public left: Ast, public binding: Binding, public value: Ast) { super() } }
 export class VoidAst extends AstRoot {       constructor(public type: Type, public location: SourceLocation) { super() } }
+export class CastAst extends AstRoot {       constructor(public type: Type, public location: SourceLocation, public expr: Ast) { super() } }
 
-export type Ast = NumberAst | LetAst | SetAst | OperatorAst | IfAst | ListAst | CallAst | AndAst | OrAst | StatementsAst | WhileAst | ReturnAst | SetFieldAst | VoidAst
+export type Ast = NumberAst | LetAst | SetAst | OperatorAst | IfAst | ListAst | CallAst | AndAst |
+  OrAst | StatementsAst | WhileAst | ReturnAst | SetFieldAst | VoidAst | CastAst
 export const isAst = (value: unknown): value is Ast => value instanceof AstRoot;
 
 export class Tuple {
