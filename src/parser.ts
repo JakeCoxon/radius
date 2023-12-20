@@ -128,18 +128,14 @@ const makeAdvancedLexer = (text: string) => {
   return { text, tokens, state, getToken };
 };
 
-
-
 export const tokenString = (token: Token) => token.value;
-
 
 export const makeParser = (input: string) => {
   let token: Token | undefined;
   let previous: Token = undefined!;
   let prevSignificantNewlines;
 
-  const functionDecls: ParserFunctionDecl[] = []
-  const classDecls: ParserClassDecl[] = []
+  const state = { classDecls: [] as ParserClassDecl[], functionDecls: [] as ParserFunctionDecl[], node: null! as ParseNode };
 
   const lexer = makeAdvancedLexer(input);
 
@@ -150,7 +146,7 @@ export const makeParser = (input: string) => {
     if (previous?.type === "NEWLINE") while (token?.type === "NEWLINE") token = lexer.getToken();
   };
 
-  const expectError = (error: string) => {
+  const throwExpectError = (error: string) => {
     const num = token?.location.line ?? previous?.location.line;
     const value = token?.value !== undefined ? `'${token?.value}' (${token?.type})` : "EOL";
     const msg = `${error} got ${value} on line ${num}`;
@@ -158,8 +154,8 @@ export const makeParser = (input: string) => {
   };
   const expect = (expected: string | boolean, error: string) => {
     if (expected === true) return previous;
-    if (expected === false) expectError(error);
-    if (!(token && tokenString(token) === expected)) expectError(error);
+    if (expected === false) throwExpectError(error);
+    if (!(token && tokenString(token) === expected)) throwExpectError(error);
     advance();
     return previous;
   };
@@ -179,7 +175,7 @@ export const makeParser = (input: string) => {
     const listToken = previous;
     if (match("]")) return new ParseList(listToken, []);
 
-    const list = [parseExpr()];       while (match(",")) list.push(parseExpr());
+    const list = [parseExpr()];        while (match(",")) list.push(parseExpr());
     const mapping: ParseNode[] = [];   while (match("|")) mapping.push(parseExpr());
     const reduce = match("|>") ? parseExpr() : null;
     expect("]", `Expected ']' after list item`);
@@ -200,15 +196,8 @@ export const makeParser = (input: string) => {
     return args;
   };
 
-  const matchNumberLiteral = () =>
-    (typeof token?.value === "string" &&
-      ((token.value[0] >= "0" && token.value[0] <= "9") ||
-        (token.value[0] === "-" && token.value[1] >= "0" && token.value[1] <= "9"))) ? (advance(), true) : false;
-
-  const parseIdentifier = () => {
-    const token = expect(matchType("IDENTIFIER"), `Expected identifier`); 
-    return new ParseIdentifier(token);
-  }
+  const parseIdentifier = () => 
+    new ParseIdentifier(expect(matchType("IDENTIFIER"), `Expected identifier`));
 
   const parseDictPair = (): [ParseNode, ParseNode] => {
     return [parseExpr(), (expect(":", "Expected ':' after dict key"), parseExpr())]
@@ -221,21 +210,16 @@ export const makeParser = (input: string) => {
     return new ParseDict(dictToken, pairs);
   };
 
-  const matchStringLiteral = () => typeof token?.value === "string" && token.value[0] === '"' ? (advance(), true) : false;
-
   const parseLiteral = (): ParseNode => {
-    if (match("("))       return parseParens();
-    else if (match("["))  return parseList();
-    // else if (match("`"))  return [createToken("syntax-quote"), parseExpr()];
-    // else if (match("~@")) return [createToken("unquote-splice"), parseExpr()];
-    // else if (match("~"))  return [createToken("unquote"), parseExpr()];
-    // else if (match(":"))  return [createToken("keyword"), parseExpr()];
-    else if (match("'"))  return new ParseSymbol(parseIdentifier().token);
-    else if (match("@"))  return new ParseNote(previous, parseExpr());
-    else if (match("{"))  return match("|") ? parseLambda() : parseDict(previous)
-    else if (match("block"))  return new ParseBlock(previous, parseColonBlockExpr('block'))
-    else if (matchStringLiteral()) return new ParseString(previous)
-    else if (matchNumberLiteral()) return parseNumberLiteral();
+    if (match("("))          return parseParens();
+    else if (match("["))     return parseList();
+    else if (match("'"))     return new ParseSymbol(parseIdentifier().token);
+    else if (match("@"))     return new ParseNote(previous, parseExpr());
+    else if (match("{"))     return match("|") ? parseLambda() : parseDict(previous)
+    else if (match("block")) return new ParseBlock(previous, parseColonBlockExpr('block'))
+    else if (matchType("STRING")) return new ParseString(previous)
+    else if (matchType("NUMBER")) return parseNumberLiteral();
+    else if (matchType("SPECIALNUMBER")) return parseNumberLiteral();
     else if (prevSignificantNewlines && match("|")) return parseBracelessLambda();
     else if (match("true") || match("false")) return new ParseBoolean(previous);
     else return parseIdentifier();
@@ -268,10 +252,9 @@ export const makeParser = (input: string) => {
       return typeArgs;
     }
 
-    const typeArgs = match("(") ? parseTypeArgs() : matchNumberLiteral() ? [parseNumberLiteral()] : [parseIdentifier()];
+    const typeArgs = match("(") ? parseTypeArgs() : matchType("NUMBER") ? [parseNumberLiteral()] : [parseIdentifier()];
     const args = match("(") ? parseArgs() : []
     return new ParseCall(callToken, left, args, typeArgs)
-    
   };
 
   const parseFieldAccess = (left: ParseNode) => new ParseField(previous, left, parseIdentifier())
@@ -363,16 +346,17 @@ export const makeParser = (input: string) => {
     expect(")", `Expected ')' after type parameter list`);
     return params;
   };
+
+  const parseOptionalMetaName = () => match("(") ? trailingEndParen(parseIdentifier()) :  null;
+
   const parseFunctionDef = () => {
-    const defnToken = previous;
 
     const parseOptionalReturnType = () => {
       if (token && token.value !== "@" && token.value !== ":" && token.type !== "NEWLINE")
         return parseExpr();
       return null
     }
-
-    const parseOptionalMetaName = () => match("(") ? trailingEndParen(parseIdentifier()) :  null;
+    const parseFunctionArgList = () => (expect("(", `Expected '(' after function name`), parseArgList(")"))
 
     const parseBody = () => {
       if (matchType("NEWLINE")) return null;
@@ -382,22 +366,9 @@ export const makeParser = (input: string) => {
       else return trailingNewline(parseExpr());
     }
 
-    const decl: ParserFunctionDecl = {
-      id: undefined,
-      token: defnToken,
-      functionMetaName: parseOptionalMetaName(),
-      name: parseIdentifier(),
-      debugName: '',
-      typeArgs: match("!") ? parseFunctionTypeParameters() : [],
-      args: (expect("(", `Expected '(' after function name`), parseArgList(")")),
-      returnType: parseOptionalReturnType(),
-      keywords: parseKeywords(),
-      body: parseBody()
-    };
-    decl.debugName = decl.name!.token.value;
-    functionDecls.push(decl)
-
-    return new ParseFunction(defnToken, decl)
+    return createNamedFunc(state, previous, parseOptionalMetaName(), 
+      parseIdentifier(), match("!") ? parseFunctionTypeParameters() : [], 
+      parseFunctionArgList(), parseOptionalReturnType(), parseKeywords(), parseBody())
   };
   const parseLambda = () => {
     const lambda = parseBracelessLambda();
@@ -416,41 +387,13 @@ export const makeParser = (input: string) => {
     : new ParseStatements(previous, [parseExpr()])
 
   const parseBracelessLambda = (): ParseNode => {
-    const lambdaToken = previous;
-
-    const decl: ParserFunctionDecl = {
-      id: undefined,
-      debugName: `<anonymous line ${lambdaToken.location.line}>`,
-      token: lambdaToken,
-      functionMetaName: null,
-      name: null,
-      typeArgs: [],
-      args: parseArgList("|"),
-      keywords: parseKeywords(),
-      anonymous: true,
-      returnType: parseOptionalReturnType(),
-      body: parseSingleOrMultilineBody()
-    };
-    functionDecls.push(decl)
-
-    return new ParseFunction(lambdaToken, decl)
+    return createAnonymousFunc(state, previous, parseArgList("|"), 
+      parseKeywords(), parseOptionalReturnType(), parseSingleOrMultilineBody())
   };
   const parseClassDef = (): ParseNode => {
-    const classToken = previous;
-    const decl: ParserClassDecl = {
-      id: undefined,
-      token: classToken,
-      debugName: '',
-      metaType: match("(") ? trailingEndParen(parseIdentifier()) : null,
-      name: parseIdentifier(),
-      typeArgs: match("!") ? parseFunctionTypeParameters() : [],
-      keywords: parseKeywords(),
-      body: parseColonBlock("class definition header")
-    }
-    decl.debugName = decl.name!.token.value;
-    classDecls.push(decl)
-
-    return new ParseClass(classToken, decl);
+    return createClassDef(state, previous, parseOptionalMetaName(), 
+      parseIdentifier(), match("!") ? parseFunctionTypeParameters() : [], 
+      parseKeywords(), parseColonBlock("class definition header"))
   };
 
   const parseElse = () => {
@@ -458,9 +401,8 @@ export const makeParser = (input: string) => {
     else if (match("else")) return new ParseElse(previous, parseColonBlock("else"))
     return null
   }
-  const parseIf = (ifToken: Token, message: string = "if condition") => {
-    return new ParseIf(ifToken, parseExpr(), parseColonBlock(message), parseElse());
-  };
+  const parseIf = (ifToken: Token, message: string = "if condition") =>
+    new ParseIf(ifToken, parseExpr(), parseColonBlock(message), parseElse());
 
   const parseWhile = () => new ParseWhile(previous, parseExpr(), parseColonBlock('while condition')); // prettier-ignore
 
@@ -493,10 +435,10 @@ export const makeParser = (input: string) => {
 
   const expectInExpr = () => (expect("in", "Expected 'in' after for identifier"), parseExpr())
   const parseForStatement = () =>
-    new ParseFor(previous, parseIdentifier(), expectInExpr(), parseColonBlock("for list-expression")); // prettier-ignore
+    new ParseFor(previous, parseIdentifier(), expectInExpr(), parseColonBlock("for list-expression"))
 
   const parseMetaStatement = (metaToken) => {
-    if (match("if")) return new ParseMetaIf(metaToken, parseIf(previous));
+    if (match("if"))  return new ParseMetaIf(metaToken, parseIf(previous));
     if (match("for")) return new ParseMetaFor(metaToken, parseForStatement());
     return new ParseMeta(previous, parseStatement());
   }
@@ -523,11 +465,43 @@ export const makeParser = (input: string) => {
     while (token && token.type !== "DEDENT") stmts.push(parseStatement());
     return stmts;
   };
-
+  
   advance();
-  const node = new ParseStatements(createToken(""), parseLines());
+  state.node = new ParseStatements(createToken(""), parseLines());
 
   const msg = `Expected EOF but got ${previous?.value} (${previous?.type})`;
   compilerAssert(token === undefined, msg, { lexer, token: previous });
-  return { classDecls, functionDecls, node };
+  return state;
 };
+
+const createNamedFunc = (state: any, token: Token, functionMetaName: ParseIdentifier | null, name: ParseIdentifier, typeArgs: ParseNode[], args: ArgumentTypePair[], returnType: ParseNode | null, keywords: ParseNode[], body: ParseNode | null) => {
+  const decl: ParserFunctionDecl = {
+    id: undefined,
+    debugName: `${name.token.value}`,
+    token: token, functionMetaName, name, typeArgs, args,
+    keywords, returnType, body
+  };
+  state.functionDecls.push(decl)
+  return new ParseFunction(token, decl)
+}
+
+const createAnonymousFunc = (state: any, token: Token, args: ArgumentTypePair[], keywords: ParseNode[], returnType: ParseNode | null, body: ParseStatements) => {
+  const decl: ParserFunctionDecl = {
+    id: undefined,
+    debugName: `<anonymous line ${token.location.line}>`,
+    token: token, functionMetaName: null, name: null, typeArgs: [], args,
+    keywords, anonymous: true, returnType, body
+  };
+  state.functionDecls.push(decl)
+  return new ParseFunction(token, decl)
+}
+
+const createClassDef = (state: any, token: Token, metaType: ParseIdentifier | null, name: ParseIdentifier, typeArgs: ParseNode[], keywords: ParseNode[], body: ParseNode | null) => {
+  const decl: ParserClassDecl = {
+    id: undefined, token,
+    debugName: `${name.token.value}`,
+    metaType, name, typeArgs, keywords, body
+  };
+  state.classDecls.push(decl)
+  return new ParseClass(token, decl)
+}
