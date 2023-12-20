@@ -691,14 +691,12 @@ function callFunctionTask(ctx: TaskContext, { vm, name, count, tcount }: CallArg
           .chainFn((task, type) => { vm.stack.push(type); return Task.of('success') })
         )
       }
-
       if (func instanceof ExternalType) {
         compilerAssert(values.length === 0, "Expected no args", { values })
         compilerAssert(typeArgs.length === 1, "Expected one type arg", { typeArgs })
         vm.stack.push(createGenericType(ctx.globalCompiler, func, [expectType(typeArgs[0])]))
         return Task.of('success')
       }
-
       compilerAssert(!(func instanceof FunctionDefinition), "$func is not handled", { func })
       compilerAssert(false, "$func is not a function", { func })
     })
@@ -742,8 +740,11 @@ const instructions: InstructionMapping = {
   callast: (vm, { name, count, tcount }) => TaskDef(createCallAstTask, { vm, name, count, tcount }),
   toast: (vm) => vm.stack.push(unknownToAst(vm.location, popStack(vm))),
   setlocalast: (vm, { name }) => {
-    const binding = expectMap(vm.scope, name, `No binding $key`);
-    vm.stack.push(new SetAst(VoidType, vm.location, binding, expectAst(popStack(vm))))
+    return TaskDef(resolveScope, vm.scope, name).chainFn((task, binding) => {
+      compilerAssert(binding instanceof Binding, "Expected binding got $binding", { binding })
+      vm.stack.push(new SetAst(VoidType, vm.location, binding, expectAst(popStack(vm))))
+      return Task.of('success')
+    });
   },
   fieldast: (vm, { name }) => {
     const value = expectAst(popStack(vm));
