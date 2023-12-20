@@ -1,3 +1,4 @@
+import { TCPSocketConnectOptions } from "bun";
 import { Event } from "./tasks";
 
 export class CompilerError extends Error {
@@ -48,6 +49,23 @@ export type ParserFunctionDecl = {
   token: Token, functionMetaName: ParseIdentifier | null,
   name: ParseIdentifier | null, typeArgs: ParseNode[], args: ArgumentTypePair[], 
   returnType: ParseNode | null, body: ParseNode | null, keywords: ParseNode[] }
+
+export const createAnonymousParserFunctionDecl = (debugName: string, sourceToken: Token, args: ArgumentTypePair[], body: ParseNode) => {
+  const decl: ParserFunctionDecl = {
+    debugName: debugName,
+    id: undefined,
+    args: args,
+    name: new ParseIdentifier(createToken(debugName)),
+    body: body,
+    returnType: null,
+    anonymous: true,
+    token: sourceToken,
+    keywords: [],
+    typeArgs: [],
+    functionMetaName: null
+  }
+  return decl;
+}
   
 export type ParserClassDecl = {
   id: number | undefined, debugName: string,

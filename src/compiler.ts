@@ -1,4 +1,4 @@
-import { isParseVoid, BytecodeOut, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, MetaInstructionTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, addFunctionDefinition, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, BytecodeGen, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, findLabelBlockAstByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, ClassField, FieldAst, ParseField, SetFieldAst, makeCyan, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListType, SubscriptAst, ExternalType, GenericType, isGenericTypeOf } from "./defs";
+import { isParseVoid, BytecodeOut, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, MetaInstructionTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, addFunctionDefinition, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, BytecodeGen, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, findLabelBlockAstByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, ClassField, FieldAst, ParseField, SetFieldAst, makeCyan, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListType, SubscriptAst, ExternalType, GenericType, isGenericTypeOf, ParseMeta, createAnonymousParserFunctionDecl, ArgumentTypePair } from "./defs";
 import { Event, Task, TaskDef, isTask, isTaskResult } from "./tasks";
 
 const pushBytecode = <T extends BytecodeInstr>(out: BytecodeOut, token: Token, instr: T) => {
@@ -178,6 +178,15 @@ const bytecodeSecond: MetaInstructionTable = {
     visitParseNode(out, ast.condition)
     pushBytecode(out, ast.token, { type: 'whileast' })
     pushBytecode(out, ast.token, { type: 'endblockast' })
+  },
+  for: (out, ast) => {
+    const fnArgs: ArgumentTypePair[] = [[ast.identifier, null]]
+    const decl = createAnonymousParserFunctionDecl("for", ast.token, fnArgs, ast.body)
+    const fn = new ParseFunction(ast.token, decl)
+    const elemType = new ParseIdentifier(createToken('int')) // Hard code int for now
+    const iterate = new ParseIdentifier(createToken('iterate'))
+    const call = new ParseCall(ast.token, iterate, [ast.expr], [fn, elemType])
+    visitParseNode(out, call)
   },
 
   function: (out, ast) => {
@@ -596,7 +605,7 @@ type CallArgs = { vm: Vm, name: string, count: number, tcount: number }
 function createCallAstTask(ctx: TaskContext, { vm, name, count, tcount }: CallArgs): Task<string, never> {
   const args = popValues(vm, count)
   const typeArgs = popValues(vm, tcount || 0);
-  compilerAssert(args.every(isAst), "Expected ASTs", { args })
+  compilerAssert(args.every(isAst), "Expected ASTs for function call $name", { name, args })
 
   return (
     TaskDef(resolveScope, vm.scope, name)
@@ -679,9 +688,7 @@ function callFunctionTask(ctx: TaskContext, { vm, name, count, tcount }: CallArg
         compilerAssert(values.length === 0, "Not implemented", { values })
         return (
           TaskDef(compileClassTask, { classDef: func, typeArgs })
-          .chainFn((task, type) => {
-            vm.stack.push(type); return Task.of('success')
-          })
+          .chainFn((task, type) => { vm.stack.push(type); return Task.of('success') })
         )
       }
 

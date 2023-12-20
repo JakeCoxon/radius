@@ -15,6 +15,8 @@ fn main():
   lst := [1,2,3]
   print(lst.length)
   print(lst[0])
+
+  # All three should produce the same AST
   
   i := 0
   while i < lst.length:
@@ -23,8 +25,10 @@ fn main():
 
   f :: |x| print(x)
   iterate!(f, int)(lst)
-  iterate!(f, int)(lst)
-  iterate!(f, int)(lst)
+
+  for x in lst:
+    print(x)
+
 
 `)
   const test = runCompilerTest(input, { filename: 'list_iterator' })
