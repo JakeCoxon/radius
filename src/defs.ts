@@ -150,6 +150,7 @@ export type BytecodeInstr =
   { type: 'setlocalast', name: string } |
   { type: 'setfieldast', name: string } |
   { type: 'fieldast', name: string } |
+  { type: 'subscriptast' } |
   { type: 'operatorast', name: string, count: number } |
   { type: 'toast' } |
   { type: 'whileast' } |
@@ -331,9 +332,10 @@ export class FieldAst extends AstRoot {      constructor(public type: Type, publ
 export class SetFieldAst extends AstRoot {   constructor(public type: Type, public location: SourceLocation, public left: Ast, public binding: Binding, public value: Ast) { super() } }
 export class VoidAst extends AstRoot {       constructor(public type: Type, public location: SourceLocation) { super() } }
 export class CastAst extends AstRoot {       constructor(public type: Type, public location: SourceLocation, public expr: Ast) { super() } }
+export class SubscriptAst extends AstRoot {  constructor(public type: Type, public location: SourceLocation, public left: Ast, public right: Ast) { super() } }
 
 export type Ast = NumberAst | LetAst | SetAst | OperatorAst | IfAst | ListAst | CallAst | AndAst |
-  OrAst | StatementsAst | WhileAst | ReturnAst | SetFieldAst | VoidAst | CastAst
+  OrAst | StatementsAst | WhileAst | ReturnAst | SetFieldAst | VoidAst | CastAst | SubscriptAst
 export const isAst = (value: unknown): value is Ast => value instanceof AstRoot;
 
 export class Tuple {
@@ -396,6 +398,7 @@ export class ExternalFunction {
 }
 
 export const VoidType = new PrimitiveType("void")
+export const ListType = new PrimitiveType("list")
 export const IntType = new PrimitiveType("int")
 export const BoolType = new PrimitiveType("bool")
 export const FloatType = new PrimitiveType("float")
@@ -469,7 +472,6 @@ export type GlobalCompilerState = {
   functionDefinitions: FunctionDefinition[],
   classDefinitions: ClassDefinition[],
 
-  subCompilerState: SubCompilerState | undefined,
   allWaitingEvents: Event<unknown, unknown>[],
   logger: Logger
 }
@@ -484,7 +486,6 @@ export const createDefaultGlobalCompiler = () => {
     compiledFunctions: new Map(),
     functionDefinitions: [],
     classDefinitions: [],
-    subCompilerState: undefined,
     allWaitingEvents: [],
     logger: null!
   }

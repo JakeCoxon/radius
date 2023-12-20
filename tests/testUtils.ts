@@ -5,10 +5,8 @@ import { makeParser } from "../src/parser"
 import { Queue, TaskDef, stepQueue, withContext } from "../src//tasks";
 import { expect } from "bun:test";
 
-const runTestInner = (input: string, globalCompiler: GlobalCompilerState, rootScope: Scope) => {
+const runTestInner = (queue: Queue, input: string, globalCompiler: GlobalCompilerState, rootScope: Scope) => {
   const parser = makeParser(input)
-
-  const queue = new Queue();
   
   const subCompilerState = new SubCompilerState('root');
   subCompilerState.scope = rootScope
@@ -73,6 +71,7 @@ export const runCompilerTest = (input: string, { filename, expectError=false }: 
     }),
   });
 
+  const queue = new Queue();
 
   const globalCompiler = createDefaultGlobalCompiler()
   globalCompiler.logger = logger
@@ -82,7 +81,7 @@ export const runCompilerTest = (input: string, { filename, expectError=false }: 
   
 
   try {
-    runTestInner(input, globalCompiler, rootScope)
+    runTestInner(queue, input, globalCompiler, rootScope)
 
   } catch (ex) {
     gotError = true;
@@ -92,6 +91,10 @@ export const runCompilerTest = (input: string, { filename, expectError=false }: 
       else logger.log(ex.toString())
     }
     if (ex instanceof CompilerError) {
+
+      ex.info.currentTask = queue.currentTask.def
+      ex.info.subCompilerState = queue.currentTask._context.subCompilerState
+      ex.info.subCompilerState = {...queue.currentTask._context.subCompilerState}
 
       logger.log("\nError info")
       Object.entries(ex.info).forEach(([name, value]) => {

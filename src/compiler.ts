@@ -1,4 +1,4 @@
-import { isParseVoid, BytecodeOut, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, MetaInstructionTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, addFunctionDefinition, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, BytecodeGen, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, findLabelBlockAstByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, ClassField, FieldAst, ParseField, SetFieldAst, mak, makeCyaneGreen, makeCyan, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst } from "./defs";
+import { isParseVoid, BytecodeOut, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, MetaInstructionTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, addFunctionDefinition, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, BytecodeGen, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, findLabelBlockAstByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, ClassField, FieldAst, ParseField, SetFieldAst, mak, makeCyaneGreen, makeCyan, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListType, SubscriptAst } from "./defs";
 import { Event, Task, TaskDef, isTask, isTaskResult } from "./tasks";
 
 const pushBytecode = <T extends BytecodeInstr>(out: BytecodeOut, token: Token, instr: T) => {
@@ -164,19 +164,6 @@ const bytecodeSecond: MetaInstructionTable = {
   string:  (out, ast) => pushBytecode(out, ast.token, { type: "stringast", value: ast.token.value }), // prettier-ignore
   boolean: (out, ast) => pushBytecode(out, ast.token, { type: "boolast", value: ast.token.value !== 'false' }), // prettier-ignore
 
-  set: (out, ast) => {
-    if (ast.left instanceof ParseIdentifier) {
-      visitParseNode(out, ast.value);
-      pushBytecode(out, ast.token, { type: 'setlocalast', name: ast.left.token.value })
-      return
-    } else if (ast.left instanceof ParseField) {
-      visitParseNode(out, ast.left.expr);
-      visitParseNode(out, ast.value);
-      pushBytecode(out, ast.token, { type: 'setfieldast', name: ast.left.field.token.value })
-      return
-    }
-    compilerAssert(false, "Not implemented")
-  },
   operator: (out, ast) => (visitAll(out, ast.exprs), pushBytecode(out, ast.token, { type: 'operatorast', name: ast.token.value, count: ast.exprs.length })), // prettier-ignore
   meta:     (out, ast) => (writeMeta(out, ast.expr), pushBytecode(out, ast.token, { type: 'toast' })),
   comptime: (out, ast) => writeMeta(out, ast.expr),
@@ -211,6 +198,35 @@ const bytecodeSecond: MetaInstructionTable = {
   field: (out, ast) => {
     visitParseNode(out, ast.expr)
     pushBytecode(out, ast.token, { type: 'fieldast', name: ast.field.token.value })
+  },
+
+  set: (out, ast) => {
+    if (ast.left instanceof ParseIdentifier) {
+      visitParseNode(out, ast.value);
+      pushBytecode(out, ast.token, { type: 'setlocalast', name: ast.left.token.value })
+      return
+    } else if (ast.left instanceof ParseField) {
+      visitParseNode(out, ast.left.expr);
+      visitParseNode(out, ast.value);
+      pushBytecode(out, ast.token, { type: 'setfieldast', name: ast.left.field.token.value })
+      return
+    }
+    compilerAssert(false, "Not implemented")
+  },
+  subscript: (out, ast) => {
+    visitParseNode(out, ast.expr)
+    visitParseNode(out, ast.subscript)
+    pushBytecode(out, ast.token, { type: 'subscriptast' })
+  },
+  opeq: (out, ast) => {
+    if (ast.left instanceof ParseIdentifier) {
+      visitParseNode(out, ast.left)
+      visitParseNode(out, ast.right)
+      pushBytecode(out, ast.token, { type: 'operatorast', name: ast.token.value, count: 2 })
+      pushBytecode(out, ast.token, { type: 'setlocalast', name: ast.left.token.value })
+      return
+    }
+    compilerAssert(false, "Not implemented yet", { ast })
   },
 
   list: (out, ast) => (visitAll(out, ast.exprs), pushBytecode(out, ast.token, { type: 'listast', count: ast.exprs.length })),
@@ -543,7 +559,7 @@ function functionCompileTimeCompileTask(ctx: TaskContext, { vm, func, typeArgs, 
 };
 
 const popValues = (vm: Vm, num: number) => {
-  compilerAssert(vm.stack.length >= num, `Expected ${num} values on stack`)
+  compilerAssert(vm.stack.length >= num, `Expected ${num} values on stack got ${vm.stack.length}`)
   return Array.from(new Array(num)).map(() => vm.stack.pop()).reverse() // prettier-ignore
 };
 const popStack = (vm: Vm) => {
@@ -697,7 +713,7 @@ const instructions: InstructionMapping = {
   boolast: (vm, { value }) =>   vm.stack.push(new BoolAst(BoolType, vm.location, value)),
   orast: (vm, { count }) =>     vm.stack.push(new OrAst(IntType, vm.location, expectAsts(popValues(vm, count)))),
   andast: (vm, { count }) =>    vm.stack.push(new AndAst(IntType, vm.location, expectAsts(popValues(vm, count)))),
-  listast: (vm, { count }) =>   vm.stack.push(new ListAst(IntType, vm.location, expectAsts(popValues(vm, count)))),
+  listast: (vm, { count }) =>   vm.stack.push(new ListAst(ListType, vm.location, expectAsts(popValues(vm, count)))),
   ifast: (vm, { f }) =>         vm.stack.push(new IfAst(IntType, vm.location, expectAst(popStack(vm)), expectAst(popStack(vm)), f ? expectAst(popStack(vm)) : null)),
   whileast: (vm) =>             vm.stack.push(new WhileAst(VoidType, vm.location, expectAst(popStack(vm)), expectAst(popStack(vm)))),
   returnast: (vm, { r }) =>     vm.stack.push(new ReturnAst(VoidType, vm.location, r ? expectAst(popStack(vm)) : null)),
@@ -716,6 +732,11 @@ const instructions: InstructionMapping = {
       vm.stack.push(new FieldAst(field.type, vm.location, value, field.binding))
       return
     }
+    if (value.type === ListType) {
+      compilerAssert(false, "Not implemented yet")
+      vm.stack.push(new FieldAst(IntType, vm.location, value, null))
+      return
+    }
     compilerAssert(false, "No field $name found on type $type", { name, type: value.type })
   },
   setfieldast: (vm, { name }) => {
@@ -729,6 +750,13 @@ const instructions: InstructionMapping = {
       return
     }
     compilerAssert(false, "No field $name found on type $type", { name, type: value.type })
+  },
+  subscriptast: (vm, {}) => {
+    const right = expectAst(popStack(vm));
+    const left = expectAst(popStack(vm));
+    compilerAssert(left.type === ListType, "Expected list got $x", { x: left.type })
+    compilerAssert(right.type === IntType, "Expected int got $x", { x: right.type })
+    vm.stack.push(new SubscriptAst(IntType, vm.location, left, right))
   },
   list: (vm, { count }) => vm.stack.push(popValues(vm, count)),
   
@@ -783,7 +811,6 @@ const instructions: InstructionMapping = {
       );
     }
     compilerAssert(false, "Expected Type got $type", { type })
-    //vm.stack.push(type);
   },
   
   pop: (vm) => vm.stack.pop(),
