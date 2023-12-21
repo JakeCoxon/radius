@@ -1,0 +1,9 @@
+fn main():
+
+  x := 32
+
+  fn thing():
+    print(x)
+    52
+
+  print(thing())

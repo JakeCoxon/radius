@@ -1,0 +1,51 @@
+
+fn iterate!(f, T)(lst: List!T) @inline: 
+  i := 0
+  while i < lst.length:
+    f(lst[i])
+    i += 1
+
+struct Thing:
+  x : int
+  y : int
+
+fn main():
+
+  lst := [1,2,3]
+  print(lst.length)
+  print(lst[0])
+
+  # All three should produce the same AST
+  
+  i := 0
+  while i < lst.length:
+    print(lst[i])
+    i += 1
+
+  f :: |x| print(x)
+  iterate!(f, int)(lst)
+
+  y := 2
+  for x in lst:
+    y += 1
+    print(x)
+  print(y)
+  
+  asdasd := 100_00_00
+  asdasd2 := "asd"
+
+  fn thingthing():
+
+    fn iterate!(f, T)(lst: Thing) @inline: 
+      f(100)
+
+    thing : Thing
+
+    thing.x = 1
+    thing.y = 10
+    print(thing.x + thing.y)
+
+    for z in thing:
+      print(z)
+
+  thingthing()

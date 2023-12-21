@@ -1,10 +1,3 @@
-import { test, expect, describe } from "bun:test";
-import { runCompilerTest } from "./testUtils";
-
-test("Expressions", () => {
-
-  const input = (`
-
 fn foo():
   
   thing := 23 ifx 2 == 2 else 32
@@ -30,8 +23,3 @@ fn foo():
     
 fn main():
   meta foo()
-
-`)
-  const test = runCompilerTest(input, { filename: 'expressions' })
-
-});

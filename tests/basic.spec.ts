@@ -1,92 +1,108 @@
 import { test, expect, describe } from "bun:test";
 import { runCompilerTest } from "./testUtils";
 
-test("basic", () => {
+test("basic", async () => {
 
-  const input = (`
-
-
-foo2 :: foo + 3
-foo :: thing4(5)
-
-
-fn thing(x: int):
-  print(x + 32)
-
-fn thing4(x: int):
-  return x + 2
-
-fn fam!(T)(a: int):
-  print(a)
-  print(T)
-
-fn famz!(T)(a: T):
-  print(a)
-
-fn foop(a: int, b: int):
-  print(2 + 42 * thing(12))
-
-  if 2 < 3:
-    print("OK")
-  elif 3 > 2:
-    print("wow")
-  elif 3 > 2:
-    print("wow")
-  elif 3 > 2:
-    print("wow")
-  else:
-    print(3)
-
-  zzz := 3
-  z : int = 2
-  x : int = z ifx 2 else 2
-
-  print(21) if not 2 == 2
-
-  i := 0
-  while true:
-    i = i + 1
-    if i > 10:
-      break
-  print(i)
-  print("thanks")
-  
-  if 3 and 2:
-    print("asd")
-
-  meta if thing4(2):
-    print("k thing4")
-
-  meta if true:
-    print("this is meta if")
-
-  foo1 :: {|x| x + 1}
-
-  foo1(1)
-  fam!2(1)
-  fam!(1 + 1)(2)
-
-  famz!int(200)
-  famz!bool(true)
-
-  my_list := [1, 2 + 3, 3 + 9]
-  
-  print(meta thing(12))
-
-fn main():
-  print(2 + 42 * thing(12))
-
-  x := float(200)
-  print(x + float(200))
-
-  meta foop(2, 1)
-  foop(2, 1)
-
-  #for x in thing:
-  #  print(x)
-
-
-`)
+  const input = await Bun.file(`${__dirname}/fixtures/basic.rad`).text()
   const test = runCompilerTest(input, { filename: 'basic' })
+
+});
+
+test("closure", async () => {
+
+  const input = await Bun.file(`${__dirname}/fixtures/closure.rad`).text()
+  const test = runCompilerTest(input, { filename: 'closure' })
+
+});
+
+
+test("Comptime", async () => {
+
+  const input = await Bun.file(`${__dirname}/fixtures/comptime.rad`).text()
+  const test = runCompilerTest(input, { filename: "comptime" })
+
+  expect(test.prints).toEqual(
+   [
+     5,
+     "\"thing\"",
+     12,
+     44,
+     1850,
+     "\"thing\"",
+     12,
+     44,
+     44,
+     "\"thing\"",
+     12,
+     44
+   ]
+  )
+
+
+  
+});
+
+test("Expressions", async () => {
+
+  const input = await Bun.file(`${__dirname}/fixtures/expressions.rad`).text()
+  const test = runCompilerTest(input, { filename: 'expressions' })
+
+});
+
+test("Identifier error", async () => {
+
+  const input = await Bun.file(`${__dirname}/fixtures/identifier_error.rad`).text()
+  const test = runCompilerTest(input, { filename: 'identifier_error', expectError: true })
+
+});
+
+
+test("Identifier error2", async () => {
+
+  const input = await Bun.file(`${__dirname}/fixtures/identifier_error2.rad`).text()
+  const test = runCompilerTest(input, { filename: 'identifier_error2', expectError: true })
+
+});
+
+test("list_iterator", async () => {
+
+  const input = await Bun.file(`${__dirname}/fixtures/list_iterator.rad`).text()
+  const test = runCompilerTest(input, { filename: 'list_iterator' })
+
+});
+
+
+test("noclosure", async () => {
+
+  const input = await Bun.file(`${__dirname}/fixtures/noclosure.rad`).text()
+  const test = runCompilerTest(input, { filename: 'noclosure', expectError: true })
+
+});
+
+test.todo("noshadow", async () => {
+
+  const input = await Bun.file(`${__dirname}/fixtures/noshadow.rad`).text()
+  const test = runCompilerTest(input, { filename: "noshadow" })
+
+  // These should be the same
+  expect(test.prints).toEqual([
+    100,
+    100
+  ])
+
+  
+});
+
+test("struct", async () => {
+
+  const input = await Bun.file(`${__dirname}/fixtures/struct.rad`).text()
+  runCompilerTest(input, { filename: 'struct' })
+  
+});
+
+test("random", async () => {
+
+  const input = await Bun.file(`${__dirname}/fixtures/random.rad`).text()
+  const test = runCompilerTest(input, { filename: 'random' })
 
 });

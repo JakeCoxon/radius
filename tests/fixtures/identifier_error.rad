@@ -1,0 +1,5 @@
+foo :: thing()
+
+fn main():
+
+  print(1)

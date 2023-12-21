@@ -1,0 +1,79 @@
+
+foo2 :: foo + 3
+foo :: thing4(5)
+
+
+fn thing(x: int):
+  print(x + 32)
+
+fn thing4(x: int):
+  return x + 2
+
+fn fam!(T)(a: int):
+  print(a)
+  print(T)
+
+fn famz!(T)(a: T):
+  print(a)
+
+fn foop(a: int, b: int):
+  print(2 + 42 * thing(12))
+
+  if 2 < 3:
+    print("OK")
+  elif 3 > 2:
+    print("wow")
+  elif 3 > 2:
+    print("wow")
+  elif 3 > 2:
+    print("wow")
+  else:
+    print(3)
+
+  zzz := 3
+  z : int = 2
+  x : int = z ifx 2 else 2
+
+  print(21) if not 2 == 2
+
+  i := 0
+  while true:
+    i = i + 1
+    if i > 10:
+      break
+  print(i)
+  print("thanks")
+  
+  if 3 and 2:
+    print("asd")
+
+  meta if thing4(2):
+    print("k thing4")
+
+  meta if true:
+    print("this is meta if")
+
+  foo1 :: {|x| x + 1}
+
+  foo1(1)
+  fam!2(1)
+  fam!(1 + 1)(2)
+
+  famz!int(200)
+  famz!bool(true)
+
+  my_list := [1, 2 + 3, 3 + 9]
+  
+  print(meta thing(12))
+
+fn main():
+  print(2 + 42 * thing(12))
+
+  x := float(200)
+  print(x + float(200))
+
+  meta foop(2, 1)
+  foop(2, 1)
+
+  #for x in thing:
+  #  print(x)

@@ -1,9 +1,3 @@
-import { test, expect, describe } from "bun:test";
-import { runCompilerTest } from "./testUtils";
-
-test("list_iterator", () => {
-
-  const input = (`
 
 fn iterate!(f, T)(lst: List!T) @inline: 
   i := 0
@@ -28,9 +22,3 @@ fn main():
 
   for x in lst:
     print(x)
-
-
-`)
-  const test = runCompilerTest(input, { filename: 'list_iterator' })
-
-});
