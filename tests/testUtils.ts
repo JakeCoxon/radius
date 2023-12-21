@@ -35,7 +35,7 @@ const runTestInner = (queue: Queue, input: string, globalCompiler: GlobalCompile
 
 export const runCompilerTest = (input: string, { filename, expectError=false }: { filename: string, expectError?: boolean }) => {
 
-  const path = `${__dirname}/output/${filename}.txt`
+  const path = `${import.meta.dir}/output/${filename}.txt`
   if (existsSync(path)) unlinkSync(path)
   const file = Bun.file(path);
   const writer = file.writer();
