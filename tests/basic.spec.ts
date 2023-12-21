@@ -41,6 +41,8 @@ fn foop(a: int, b: int):
   z : int = 2
   x : int = z ifx 2 else 2
 
+  print(21) if not 2 == 2
+
   i := 0
   while true:
     i = i + 1

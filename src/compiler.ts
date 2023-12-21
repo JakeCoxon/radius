@@ -1,4 +1,4 @@
-import { isParseVoid, BytecodeOut, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, MetaInstructionTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, addFunctionDefinition, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, BytecodeGen, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, findLabelBlockAstByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, ClassField, FieldAst, ParseField, SetFieldAst, makeCyan, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListType, SubscriptAst, ExternalType, GenericType, isGenericTypeOf, ParseMeta, createAnonymousParserFunctionDecl, ArgumentTypePair } from "./defs";
+import { isParseVoid, BytecodeOut, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, MetaInstructionTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, addFunctionDefinition, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, BytecodeGen, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, findLabelBlockAstByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, ClassField, FieldAst, ParseField, SetFieldAst, makeCyan, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListType, SubscriptAst, ExternalType, GenericType, isGenericTypeOf, ParseMeta, createAnonymousParserFunctionDecl, ArgumentTypePair, NotAst } from "./defs";
 import { Event, Task, TaskDef, isTask, isTaskResult } from "./tasks";
 
 const pushBytecode = <T extends BytecodeInstr>(out: BytecodeOut, token: Token, instr: T) => {
@@ -37,6 +37,7 @@ const bytecodeDefault: MetaInstructionTable = {
   letconst: (out, ast) => (visitParseNode(out, ast.value), pushBytecode(out, ast.token, { type: 'letlocal', name: ast.name.token.value, t: false, v: true })), // prettier-ignore
   meta:     (out, ast) => (visitParseNode(out, ast.expr)),
   comptime: (out, ast) => (visitParseNode(out, ast.expr)),
+  not:      (out, ast) => (visitParseNode(out, ast.expr), pushBytecode(out, ast.token, { type: 'not' })),
 
   list:  (out, ast) => (visitAll(out, ast.exprs), pushBytecode(out, ast.token, { type: 'list', count: ast.exprs.length })),
   tuple: (out, ast) => (visitAll(out, ast.exprs), pushBytecode(out, ast.token, { type: 'tuple', count: ast.exprs.length })),
@@ -169,6 +170,7 @@ const bytecodeSecond: MetaInstructionTable = {
   comptime: (out, ast) => writeMeta(out, ast.expr),
   letconst: (out, ast) => (writeMeta(out, ast.value), pushBytecode(out, ast.token, { type: 'letlocal', name: ast.name.token.value, t: false, v: true })),
   tuple:    (out, ast) => (visitAll(out, ast.exprs), pushBytecode(out, ast.token, { type: 'tuple', count: ast.exprs.length })),
+  not:      (out, ast) => (visitParseNode(out, ast.expr), pushBytecode(out, ast.token, { type: 'notast' })),
 
   while: (out, ast) => {
     pushBytecode(out, ast.token, { type: 'beginblockast', breakType: 'break' })
@@ -578,18 +580,30 @@ const popStack = (vm: Vm) => {
 };
 
 
-const operators = {
-  "-": (a, b) => a - b,
-  "*": (a, b) => a * b,
-  "+": (a, b) => a + b,
-  "/": (a, b) => a / b,
-  "<": (a, b) => a < b,
-  ">": (a, b) => a > b,
-  ">=": (a, b) => a >= b,
-  "<=": (a, b) => a <= b,
-  "==": (a, b) => a == b,
-  "!=": (a, b) => a != b,
-};
+const operators: {[key:string]: { op: string, typeCheck: unknown, comptime: (a, b) => unknown, func: (location: SourceLocation, a: Ast, b: Ast) => Ast }} = {};
+const createOperator = (op: string, typeCheck: (a: Type, b: Type) => Type, comptime: (a, b) => unknown) => {
+  operators[op] = { 
+    op, typeCheck, comptime,
+    func: (location: SourceLocation, a: Ast, b: Ast) => {
+      compilerAssert(a.type === b.type, "Can't use operator $op on types $aType and $bType. Both types must be the same", { op, a, b, aType: a.type, bType: b.type  })
+      const returnType = typeCheck(a.type, b.type)
+      return new OperatorAst(returnType, location, op, [a, b])
+    }
+  }
+}
+const typecheckNumberOperator = (a: Type, b: Type) => { compilerAssert(a === IntType || a === FloatType || b === DoubleType); return a }
+const typecheckNumberComparison = (a: Type, b: Type) => { compilerAssert(a === IntType || a === FloatType || b === DoubleType); return BoolType }
+const typecheckEquality = (a: Type, b: Type) => { compilerAssert(a === IntType || a === FloatType || b === DoubleType); return BoolType }
+createOperator("-",  typecheckNumberOperator,   (a, b) => a - b)
+createOperator("*",  typecheckNumberOperator,   (a, b) => a * b)
+createOperator("+",  typecheckNumberOperator,   (a, b) => a + b)
+createOperator("/",  typecheckNumberOperator,   (a, b) => a / b)
+createOperator(">",  typecheckNumberComparison, (a, b) => a > b)
+createOperator("<",  typecheckNumberComparison, (a, b) => a < b)
+createOperator(">=", typecheckNumberComparison, (a, b) => a >= b)
+createOperator("<=", typecheckNumberComparison, (a, b) => a <= b)
+createOperator("==", typecheckEquality,         (a, b) => a == b)
+createOperator("!=", typecheckEquality,         (a, b) => a != b)
 
 
 const letLocal = (vm: Vm, name: string, type: Type | null, value: Ast | null) => {
@@ -717,11 +731,6 @@ const instructions: InstructionMapping = {
   push: (vm, { value }) => vm.stack.push(value),
   nil: (vm) => vm.stack.push(null),
 
-  operatorast: (vm, { name, count }) => {
-    const values = expectAsts(popValues(vm, count));
-    compilerAssert(values.every(x => x.type === values[0].type), "Can't use operator $name on types $a and $b. Both types must be the same", { name, a: values[0].type, b: values[1].type, values })
-    vm.stack.push(new OperatorAst(values[0].type, vm.location, name, values))
-  },
   numberast: (vm, { value }) => vm.stack.push(new NumberAst(IntType, vm.location, value)),
   stringast: (vm, { value }) => vm.stack.push(new StringAst(StringType, vm.location, value)),
   boolast: (vm, { value }) =>   vm.stack.push(new BoolAst(BoolType, vm.location, value)),
@@ -739,6 +748,18 @@ const instructions: InstructionMapping = {
   letast: (vm, { name, t, v }) => vm.stack.push(letLocal(vm, name, t ? expectType(popStack(vm)) : null, v ? expectAst(popStack(vm)) : null)),
   callast: (vm, { name, count, tcount }) => TaskDef(createCallAstTask, { vm, name, count, tcount }),
   toast: (vm) => vm.stack.push(unknownToAst(vm.location, popStack(vm))),
+
+  operatorast: (vm, { name, count }) => {
+    const values = expectAsts(popValues(vm, count));
+    compilerAssert(values.every(x => x.type === values[0].type), "Can't use operator $name on types $a and $b. Both types must be the same", { name, a: values[0].type, b: values[1].type, values })
+    compilerAssert(operators[name], "Unexpected operator $name", { name, values })
+    vm.stack.push(operators[name].func(vm.location, values[0], values[1]))
+  },
+  notast: (vm, {}) => {
+    let expr = expectAst(popStack(vm));
+    if (expr.type !== BoolType) expr = new CastAst(BoolType, vm.location, expr)
+    vm.stack.push(new NotAst(BoolType, vm.location, expr))
+  },
   setlocalast: (vm, { name }) => {
     return TaskDef(resolveScope, vm.scope, name).chainFn((task, binding) => {
       compilerAssert(binding instanceof Binding, "Expected binding got $binding", { binding })
@@ -855,9 +876,10 @@ const instructions: InstructionMapping = {
   operator: (vm, { name, count }) => {
     const values = popValues(vm, count);
     compilerAssert(operators[name], `Invalid operator $name`, { name });
-    const operatorResult = operators[name](...values);
+    const operatorResult = operators[name].comptime(values[0], values[1]);
     vm.stack.push(operatorResult);
   },
+  not: (vm, {}) => void vm.stack.push(!popStack(vm)),
   closure: (vm, { id }) => {
     compilerAssert(typeof id === 'number')
     const globalCompiler = (vm.context as TaskContext).globalCompiler

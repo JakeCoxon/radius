@@ -156,6 +156,7 @@ export type BytecodeInstr =
   { type: 'closure', id: number } |
   { type: 'call', name: string, count: number, tcount: number } |
   { type: 'return', r: boolean } |
+  { type: 'not' } |
   { type: 'pop' } |
   { type: 'nil' } |
   { type: 'beginblockast', breakType: 'break' | 'continue' | null } |
@@ -179,6 +180,7 @@ export type BytecodeInstr =
   { type: 'andast', count: number } |
   { type: 'orast', count: number } |
   { type: 'ifast', f: boolean } |
+  { type: 'notast' } |
   { type: 'letast', name: string, t: boolean, v: boolean } |
   { type: 'callast', name: string, count: number, tcount: number } |
   { type: 'pushqs' } |
@@ -361,6 +363,7 @@ export class SetFieldAst extends AstRoot {   constructor(public type: Type, publ
 export class VoidAst extends AstRoot {       constructor(public type: Type, public location: SourceLocation) { super() } }
 export class CastAst extends AstRoot {       constructor(public type: Type, public location: SourceLocation, public expr: Ast) { super() } }
 export class SubscriptAst extends AstRoot {  constructor(public type: Type, public location: SourceLocation, public left: Ast, public right: Ast) { super() } }
+export class NotAst extends AstRoot {        constructor(public type: Type, public location: SourceLocation, public expr: Ast) { super() } }
 
 export type Ast = NumberAst | LetAst | SetAst | OperatorAst | IfAst | ListAst | CallAst | AndAst |
   OrAst | StatementsAst | WhileAst | ReturnAst | SetFieldAst | VoidAst | CastAst | SubscriptAst
