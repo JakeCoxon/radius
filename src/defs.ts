@@ -1,5 +1,11 @@
 import { Event } from "./tasks";
 
+export const Inspect = globalThis.Bun ? Bun.inspect : (() => {
+  const Inspect = (x) => x
+  Inspect.custom = Symbol('input')
+  return Inspect
+})()
+
 export class CompilerError extends Error {
   constructor(message: string, public info: object) { super(message) }
 }
@@ -8,17 +14,17 @@ export function compilerAssert(expected: unknown, message: string="", info: obje
   let out = message.replace(/\$([a-zA-Z]+)/g, (match, capture) => { 
     const obj = info[capture]
     if (obj === undefined || obj === null) return makeColor(`null`)
-    if (obj[Bun.inspect.custom]) return Bun.inspect(obj, { depth: 0, colors: true });
-    if (typeof obj !== 'object') return Bun.inspect(obj, { depth: 0, colors: true });
+    if (obj[Inspect.custom]) return Inspect(obj, { depth: 0, colors: true });
+    if (typeof obj !== 'object') return Inspect(obj, { depth: 0, colors: true });
     if (obj.constructor) return makeColor(`[${obj.constructor.name}]`)
-    return Bun.inspect(obj)
+    return Inspect(obj)
   }); 
   throw new CompilerError(out, info)
 }
 
 const makeColor = (x) => {
-  return Bun.inspect({
-    [Bun.inspect.custom](depth, options, inspect) {
+  return Inspect({
+    [Inspect.custom](depth, options, inspect) {
       return options.stylize(x, 'special');
     }
   }, { colors: true })
@@ -26,7 +32,7 @@ const makeColor = (x) => {
 
 export class SourceLocation {
   constructor(public line: number, public column:number) {}
-  [Bun.inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth, options, inspect) {
     return options.stylize(`[SourceLocation ${this.line}:${this.column}]`, 'special');
   }
 }
@@ -34,7 +40,7 @@ export class SourceLocation {
 export type Token = { value: string, type: string, location: SourceLocation }
 
 const TokenRoot = {
-  [Bun.inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth, options, inspect) {
     return options.stylize(`[Token ${this.value}]`, 'string');
   }
 }
@@ -74,7 +80,7 @@ export type ParserClassDecl = {
 
 class ParseNodeType {
   key: unknown;
-  [Bun.inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth, options, inspect) {
     if (depth <= 0) return options.stylize(`[${this.constructor.name}]`, 'special');
     const newOptions = Object.assign({}, options, {
       ast: true,
@@ -249,7 +255,7 @@ export class FunctionDefinition {
     public body: ParseNode | null,
     public inline: boolean) {}
 
-  [Bun.inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth, options, inspect) {
     if (options.ast) return options.stylize(`[FunctionDefinition ${this.name}]`, 'special');
     return {...this}
   }
@@ -275,7 +281,7 @@ export class CompiledClass {
     public typeParameters: unknown[],
     public typeParamHash: unknown) {}
 
-  [Bun.inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth, options, inspect) {
     if (options.ast) return options.stylize(`[CompiledClass ${this.debugName}]`, 'special');
     return {...this}
   }
@@ -301,14 +307,14 @@ export class ClassDefinition {
       this.abstract = typeArgs.length > 0
     }
 
-  [Bun.inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth, options, inspect) {
     if (options.ast) return options.stylize(`[ClassDefinition ${this.name}]`, 'special');
     return {...this}
   }
 }
 
 export class AstRoot {
-  [Bun.inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth, options, inspect) {
     if (depth <= 1) return options.stylize(`[${this.constructor.name}]`, 'special');
     const newOptions = Object.assign({}, options, {
       ast: true,
@@ -348,14 +354,14 @@ export const isAst = (value: unknown): value is Ast => value instanceof AstRoot;
 
 export class Tuple {
   constructor(public values: unknown[]) {}
-  [Bun.inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth, options, inspect) {
     return options.stylize(`[Tuple ...]`, 'special');
   }
 }
 
 export class Binding {
   constructor(public name: string, public type: Type) {}
-  [Bun.inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth, options, inspect) {
     return options.stylize(`[Binding ${this.name} ${inspect(this.type)}]`, 'special');
   }
 }
@@ -381,31 +387,31 @@ export const hashValues = (values: unknown[]) => {
 export class TypeRoot {}
 export class PrimitiveType extends TypeRoot {
   constructor(public typeName: string) { super() }
-  [Bun.inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth, options, inspect) {
     return options.stylize(`[PrimitiveType ${this.typeName}]`, 'special');
   }
 }
 export class ExternalType extends TypeRoot {
   constructor(public typeName: string) { super() }
-  [Bun.inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth, options, inspect) {
     return options.stylize(`[ExternalType ${this.typeName}]`, 'special');
   }
 }
 export class AbstractClassType extends TypeRoot {
   constructor(public classDefinition: ClassDefinition) { super() }
-  [Bun.inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth, options, inspect) {
     return options.stylize(`[AbstractClassType ${this.classDefinition.debugName}]`, 'special');
   }
 }
 export class GenericType extends TypeRoot {
   constructor(public baseType: Type, public args: Type[]) { super() }
-  [Bun.inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth, options, inspect) {
     return options.stylize(`[GenericType ...]`, 'special');
   }
 }
 export class ConcreteClassType extends TypeRoot {
   constructor(public compiledClass: CompiledClass) { super() }
-  [Bun.inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth, options, inspect) {
     return options.stylize(`[ConcreteClassType ${this.compiledClass.debugName}]`, 'special');
   }
 }
@@ -422,7 +428,7 @@ export type Scope = object & {
   [ScopeEventsSymbol]: {[key:string]:Event<unknown, never>}
 }
 const RootScope = {
-  [Bun.inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth, options, inspect) {
     if (depth <= 1) return options.stylize(`[Scope]`, 'special');
     return inspect({...this})
   }
@@ -431,7 +437,7 @@ export const createScope = (obj: object) => Object.assign(Object.create(RootScop
 
 export class ExternalFunction {
   constructor(public name: string, public func: Function) {}
-  [Bun.inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth, options, inspect) {
     return options.stylize(`[ExternalFunction ${this.name}]`, 'special');
   }
 }
@@ -602,7 +608,7 @@ export class SubCompilerState {
   prevCompilerState: SubCompilerState | undefined
   labelBlock: LabelBlock | null
 
-  [Bun.inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth, options, inspect) {
     if (depth <= 1) return options.stylize(`[CompilerState ${this.debugName}]`, 'special');
     const newOptions = Object.assign({}, options, {
       depth: options.depth === null ? null : options.depth - 1,

@@ -1,0 +1,8 @@
+{
+  "compilerOptions": {
+    "lib": ["DOM"],
+    "types": [],
+    "strictNullChecks": true,
+    "target": "ES2015"
+  }
+}
