@@ -234,11 +234,11 @@ export interface BytecodeOut {
   state: {
     labelBlock: LabelBlock | null
   }
-  table: MetaInstructionTable
+  table: ParseTreeTable
   globalCompilerState: GlobalCompilerState // Not nice
 }
 
-export type MetaInstructionTable = {
+export type ParseTreeTable = {
   [E in ParseNode as E['key']]: (out: BytecodeOut, ast: E) => void;
 }
 

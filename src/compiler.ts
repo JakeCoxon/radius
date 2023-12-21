@@ -1,4 +1,4 @@
-import { isParseVoid, BytecodeOut, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, MetaInstructionTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, addFunctionDefinition, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, BytecodeGen, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, findLabelBlockAstByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, ClassField, FieldAst, ParseField, SetFieldAst, makeCyan, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListType, SubscriptAst, ExternalType, GenericType, isGenericTypeOf, ParseMeta, createAnonymousParserFunctionDecl, ArgumentTypePair, NotAst } from "./defs";
+import { isParseVoid, BytecodeOut, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, addFunctionDefinition, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, BytecodeGen, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, findLabelBlockAstByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, ClassField, FieldAst, ParseField, SetFieldAst, makeCyan, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListType, SubscriptAst, ExternalType, GenericType, isGenericTypeOf, ParseMeta, createAnonymousParserFunctionDecl, ArgumentTypePair, NotAst } from "./defs";
 import { Event, Task, TaskDef, isTask, isTaskResult } from "./tasks";
 
 const pushBytecode = <T extends BytecodeInstr>(out: BytecodeOut, token: Token, instr: T) => {
@@ -25,108 +25,125 @@ const pushGeneratedBytecode = <T extends BytecodeInstr>(out: BytecodeOut, instr:
   return instr;
 }
 
-const bytecodeDefault: MetaInstructionTable = {
-  identifier: (out, ast) => pushBytecode(out, ast.token, { type: "binding", name: ast.token.value }), // prettier-ignore
-  number:  (out, ast) => pushBytecode(out, ast.token, { type: "push", value: Number(ast.token.value) }), // prettier-ignore
-  string:  (out, ast) => pushBytecode(out, ast.token, { type: "push", value: ast.token.value }), // prettier-ignore
-  nil:     (out, ast) => pushBytecode(out, ast.token, { type: "push", value: null }), // prettier-ignore
-  boolean: (out, ast) => pushBytecode(out, ast.token, { type: "push", value: ast.token.value !== 'false' }), // prettier-ignore
+const bytecodeDefault: ParseTreeTable = {
+  cast:      (out, node) => compilerAssert(false, "Not implemented"),
+  forexpr:   (out, node) => compilerAssert(false, "Not implemented"),
+  whileexpr: (out, node) => compilerAssert(false, "Not implemented"),
+  expand:    (out, node) => compilerAssert(false, "Not implemented"),
+  listcomp:  (out, node) => compilerAssert(false, "Not implemented"),
+  postcall:  (out, node) => compilerAssert(false, "Not implemented"),
+  dict:      (out, node) => compilerAssert(false, "Not implemented"),
+  symbol:    (out, node) => compilerAssert(false, "Not implemented"),
+  note:      (out, node) => compilerAssert(false, "Not implemented"),
+  slice:     (out, node) => compilerAssert(false, "Not implemented"),
+  class:     (out, node) => compilerAssert(false, "Not implemented"),
+  metafor:   (out, node) => compilerAssert(false, "Not implemented"),
+  for:       (out, node) => compilerAssert(false, "Not implemented"),
+  opeq:      (out, node) => compilerAssert(false, "Not implemented"),
+  field:     (out, node) => compilerAssert(false, "Not implemented"),
+  subscript: (out, node) => compilerAssert(false, "Not implemented"),
 
-  operator: (out, ast) => (visitAll(out, ast.exprs), pushBytecode(out, ast.token, { type: 'operator', name: ast.token.value, count: ast.exprs.length })), // prettier-ignore
-  set:      (out, ast) => (visitParseNode(out, ast.value), pushBytecode(out, ast.token, { type: 'setlocal', name: ast.left.token.value })), // prettier-ignore
-  letconst: (out, ast) => (visitParseNode(out, ast.value), pushBytecode(out, ast.token, { type: 'letlocal', name: ast.name.token.value, t: false, v: true })), // prettier-ignore
-  meta:     (out, ast) => (visitParseNode(out, ast.expr)),
-  comptime: (out, ast) => (visitParseNode(out, ast.expr)),
-  not:      (out, ast) => (visitParseNode(out, ast.expr), pushBytecode(out, ast.token, { type: 'not' })),
+  number:  (out, node) => pushBytecode(out, node.token, { type: "push", value: Number(node.token.value) }), 
+  string:  (out, node) => pushBytecode(out, node.token, { type: "push", value: node.token.value }), 
+  nil:     (out, node) => pushBytecode(out, node.token, { type: "push", value: null }), 
+  boolean: (out, node) => pushBytecode(out, node.token, { type: "push", value: node.token.value !== 'false' }), 
+  list:    (out, node) => (visitAll(out, node.exprs), pushBytecode(out, node.token, { type: 'list', count: node.exprs.length })),
+  tuple:   (out, node) => (visitAll(out, node.exprs), pushBytecode(out, node.token, { type: 'tuple', count: node.exprs.length })),
 
-  list:  (out, ast) => (visitAll(out, ast.exprs), pushBytecode(out, ast.token, { type: 'list', count: ast.exprs.length })),
-  tuple: (out, ast) => (visitAll(out, ast.exprs), pushBytecode(out, ast.token, { type: 'tuple', count: ast.exprs.length })),
+  identifier: (out, node) => pushBytecode(out, node.token, { type: "binding", name: node.token.value }), 
+  operator:   (out, node) => (visitAll(out, node.exprs), pushBytecode(out, node.token, { type: 'operator', name: node.token.value, count: node.exprs.length })), 
+  set:        (out, node) => (visitParseNode(out, node.value), pushBytecode(out, node.token, { type: 'setlocal', name: node.left.token.value })), 
+  letconst:   (out, node) => (visitParseNode(out, node.value), pushBytecode(out, node.token, { type: 'letlocal', name: node.name.token.value, t: false, v: true })), 
+  meta:       (out, node) => (visitParseNode(out, node.expr)),
+  comptime:   (out, node) => (visitParseNode(out, node.expr)),
+  not:        (out, node) => (visitParseNode(out, node.expr), pushBytecode(out, node.token, { type: 'not' })),
+
   
-  let: (out, ast) => {
-    if (ast.value) visitParseNode(out, ast.value);
-    if (ast.type) {
-      writeMeta(out, ast.type);
-      pushBytecode(out, ast.type.token, { type: 'totype' });
+  let: (out, node) => {
+    if (node.value) visitParseNode(out, node.value);
+    if (node.type) {
+      writeMeta(out, node.type);
+      pushBytecode(out, node.type.token, { type: 'totype' });
     }
-    pushBytecode(out, ast.token, { type: 'letlocal', name: ast.name.token.value, t: !!ast.type, v: !!ast.value }) // prettier-ignore
+    pushBytecode(out, node.token, { type: 'letlocal', name: node.name.token.value, t: !!node.type, v: !!node.value }) 
   },
 
-  function: (out, ast) => {
-    pushBytecode(out, ast.token, { type: "closure", id: addFunctionDefinition(out.globalCompilerState, ast.functionDecl).id }) // prettier-ignore
+  function: (out, node) => {
+    pushBytecode(out, node.token, { type: "closure", id: addFunctionDefinition(out.globalCompilerState, node.functionDecl).id }) 
   },
-  call: (out, ast) => {
-    // compilerAssert(ast.typeArgs.length === 0, "Not implemented", { ast })
-    visitAll(out, ast.typeArgs)
-    visitAll(out, ast.args);
-    if (ast.left instanceof ParseIdentifier) {
-      pushBytecode(out, ast.token, { type: "call", name: ast.left.token.value, count: ast.args.length, tcount: ast.typeArgs.length }); // prettier-ignore
+  call: (out, node) => {
+    // compilerAssert(node.typeArgs.length === 0, "Not implemented", { node })
+    visitAll(out, node.typeArgs)
+    visitAll(out, node.args);
+    if (node.left instanceof ParseIdentifier) {
+      pushBytecode(out, node.token, { type: "call", name: node.left.token.value, count: node.args.length, tcount: node.typeArgs.length }); 
       return;
     }
     compilerAssert(false, "Call with non-identifier not implemented yet")
   },
-  return: (out, ast) => {
-    if (ast.expr) visitParseNode(out, ast.expr);
-    pushBytecode(out, ast.token, { type: 'return', r: !!ast.expr })
+  return: (out, node) => {
+    if (node.expr) visitParseNode(out, node.expr);
+    pushBytecode(out, node.token, { type: 'return', r: !!node.expr })
   },
-  break: (out, ast) => {
-    if (ast.expr) visitParseNode(out, ast.expr);
-    const instr = pushBytecode(out, ast.token, { type: 'jump', address: 0 })
+  break: (out, node) => {
+    if (node.expr) visitParseNode(out, node.expr);
+    const instr = pushBytecode(out, node.token, { type: 'jump', address: 0 })
     findLabelBlockByType(out.state.labelBlock, "break").completion.push((address: number) => { instr.address = address })
   },
-  continue: (out, ast) => {
-    if (ast.expr) visitParseNode(out, ast.expr);
-    const instr = pushBytecode(out, ast.token, { type: 'jump', address: 0 })
+  continue: (out, node) => {
+    if (node.expr) visitParseNode(out, node.expr);
+    const instr = pushBytecode(out, node.token, { type: 'jump', address: 0 })
     findLabelBlockByType(out.state.labelBlock, "continue").completion.push((address: number) => { instr.address = address })
   },
 
-  statements: (out, ast) => {
-    ast.exprs.forEach((stmt, i) => {
+  statements: (out, node) => {
+    node.exprs.forEach((stmt, i) => {
       visitParseNode(out, stmt);
-      if (i !== ast.exprs.length - 1) pushBytecode(out, ast.token, { type: "pop" });
+      if (i !== node.exprs.length - 1) pushBytecode(out, node.token, { type: "pop" });
     });
   },
-  block: (out, ast) => visitParseNode(out, ast.statements),
+  block: (out, node) => visitParseNode(out, node.statements),
   
-  and: (out, ast) => {
-    visitParseNode(out, ast.exprs[0]);
+  and: (out, node) => {
+    visitParseNode(out, node.exprs[0]);
     const jump1 = { type: "jumpf" as const, address: 0 };
-    pushBytecode(out, ast.exprs[0].token, jump1);
-    pushBytecode(out, ast.exprs[0].token, { type: 'pop' });
-    visitParseNode(out, ast.exprs[1])
+    pushBytecode(out, node.exprs[0].token, jump1);
+    pushBytecode(out, node.exprs[0].token, { type: 'pop' });
+    visitParseNode(out, node.exprs[1])
     jump1.address = out.bytecode.code.length;
   },
 
-  or: (out, ast) => {
-    visitParseNode(out, ast.exprs[0]);
+  or: (out, node) => {
+    visitParseNode(out, node.exprs[0]);
     const jump1 = { type: "jumpf" as const, address: 0 };
-    pushBytecode(out, ast.exprs[0].token, jump1);
+    pushBytecode(out, node.exprs[0].token, jump1);
     const jump2 = { type: "jump" as const, address: 0 };
-    pushBytecode(out, ast.exprs[0].token, jump2);
+    pushBytecode(out, node.exprs[0].token, jump2);
     jump1.address = out.bytecode.code.length;
-    pushBytecode(out, ast.exprs[0].token, { type: 'pop' });
-    visitParseNode(out, ast.exprs[1])
+    pushBytecode(out, node.exprs[0].token, { type: 'pop' });
+    visitParseNode(out, node.exprs[1])
     jump2.address = out.bytecode.code.length;
   },
 
-  else: (out, ast) => visitParseNode(out, ast.body),
-  if: (out, ast) => {
-    visitParseNode(out, ast.condition);
+  else: (out, node) => visitParseNode(out, node.body),
+  if: (out, node) => {
+    visitParseNode(out, node.condition);
     const jump1 = { type: "jumpf" as const, address: 0 };
-    pushBytecode(out, ast.condition.token, jump1);
-    visitParseNode(out, ast.trueBody);
-    if (ast.falseBody) {
+    pushBytecode(out, node.condition.token, jump1);
+    visitParseNode(out, node.trueBody);
+    if (node.falseBody) {
       const jump2 = { type: "jump" as const, address: 0 };
-      pushBytecode(out, ast.trueBody.token, jump2);
+      pushBytecode(out, node.trueBody.token, jump2);
       jump1.address = out.bytecode.code.length;
-      visitParseNode(out, ast.falseBody);
+      visitParseNode(out, node.falseBody);
       jump2.address = out.bytecode.code.length;
     } else {
       jump1.address = out.bytecode.code.length;
     }
   },
-  metaif: (out, ast) => {
+  metaif: (out, node) => {
     // Same as if
-    const if_ = ast.expr;
+    const if_ = node.expr;
     visitParseNode(out, if_.condition);
     const jump1 = pushBytecode(out, if_.condition.token, { type: "jumpf", address: 0 });
     visitParseNode(out, if_.trueBody);
@@ -139,147 +156,161 @@ const bytecodeDefault: MetaInstructionTable = {
       jump1.address = out.bytecode.code.length;
     }
   },
-  while: (out, ast) => {
-    pushBytecode(out, ast.condition.token, { type: "comment", comment: "while begin" });
+  while: (out, node) => {
+    pushBytecode(out, node.condition.token, { type: "comment", comment: "while begin" });
     const breakBlock = new LabelBlock(out.state.labelBlock, "labelblock", 'break', null)
     const continueBlock = new LabelBlock(breakBlock, "labelblock", 'continue', null)
     out.state.labelBlock = continueBlock;
     const loopTarget = out.bytecode.code.length
-    visitParseNode(out, ast.condition);
-    const jump1 = pushBytecode(out, ast.condition.token, { type: "jumpf", address: 0 });
-    visitParseNode(out, ast.body);
+    visitParseNode(out, node.condition);
+    const jump1 = pushBytecode(out, node.condition.token, { type: "jumpf", address: 0 });
+    visitParseNode(out, node.body);
     continueBlock.completion.forEach(f => f(out.bytecode.code.length))
     continueBlock.completion.length = 0
-    pushBytecode(out, ast.condition.token, { type: "jump", address: loopTarget });
+    pushBytecode(out, node.condition.token, { type: "jump", address: loopTarget });
     jump1.address = out.bytecode.code.length
     breakBlock.completion.forEach(f => f(out.bytecode.code.length))
     breakBlock.completion.length = 0
     out.state.labelBlock = breakBlock.parent;
-    pushBytecode(out, ast.condition.token, { type: "comment", comment: "while end" });
+    pushBytecode(out, node.condition.token, { type: "comment", comment: "while end" });
   }
 };
 
-const bytecodeSecond: MetaInstructionTable = {
-  identifier: (out, ast) => pushBytecode(out, ast.token, { type: "bindingast", name: ast.token.value }), // prettier-ignore
-  number:  (out, ast) => pushBytecode(out, ast.token, { type: "numberast", value: Number(ast.token.value) }), // prettier-ignore
-  string:  (out, ast) => pushBytecode(out, ast.token, { type: "stringast", value: ast.token.value }), // prettier-ignore
-  boolean: (out, ast) => pushBytecode(out, ast.token, { type: "boolast", value: ast.token.value !== 'false' }), // prettier-ignore
+const bytecodeSecond: ParseTreeTable = {
+  cast:      (out, node) => compilerAssert(false, "Not implemented"),
+  forexpr:   (out, node) => compilerAssert(false, "Not implemented"),
+  whileexpr: (out, node) => compilerAssert(false, "Not implemented"),
+  expand:    (out, node) => compilerAssert(false, "Not implemented"),
+  listcomp:  (out, node) => compilerAssert(false, "Not implemented"),
+  postcall:  (out, node) => compilerAssert(false, "Not implemented"),
+  dict:      (out, node) => compilerAssert(false, "Not implemented"),
+  symbol:    (out, node) => compilerAssert(false, "Not implemented"),
+  note:      (out, node) => compilerAssert(false, "Not implemented"),
+  slice:     (out, node) => compilerAssert(false, "Not implemented"),
+  class:     (out, node) => compilerAssert(false, "Not implemented"),
+  nil:       (out, node) => compilerAssert(false, "Not implemented"),
+  metafor:   (out, node) => compilerAssert(false, "Not implemented"),
 
-  operator: (out, ast) => (visitAll(out, ast.exprs), pushBytecode(out, ast.token, { type: 'operatorast', name: ast.token.value, count: ast.exprs.length })), // prettier-ignore
-  meta:     (out, ast) => (writeMeta(out, ast.expr), pushBytecode(out, ast.token, { type: 'toast' })),
-  comptime: (out, ast) => writeMeta(out, ast.expr),
-  letconst: (out, ast) => (writeMeta(out, ast.value), pushBytecode(out, ast.token, { type: 'letlocal', name: ast.name.token.value, t: false, v: true })),
-  tuple:    (out, ast) => (visitAll(out, ast.exprs), pushBytecode(out, ast.token, { type: 'tuple', count: ast.exprs.length })),
-  not:      (out, ast) => (visitParseNode(out, ast.expr), pushBytecode(out, ast.token, { type: 'notast' })),
+  identifier: (out, node) => pushBytecode(out, node.token, { type: "bindingast", name: node.token.value }),
+  number:  (out, node) => pushBytecode(out, node.token, { type: "numberast", value: Number(node.token.value) }),
+  string:  (out, node) => pushBytecode(out, node.token, { type: "stringast", value: node.token.value }),
+  boolean: (out, node) => pushBytecode(out, node.token, { type: "boolast", value: node.token.value !== 'false' }),
 
-  while: (out, ast) => {
-    pushBytecode(out, ast.token, { type: 'beginblockast', breakType: 'break' })
-    pushBytecode(out, ast.token, { type: 'beginblockast', breakType: 'continue' })
-    visitParseNode(out, ast.body);
-    pushBytecode(out, ast.token, { type: 'endblockast' })
-    visitParseNode(out, ast.condition)
-    pushBytecode(out, ast.token, { type: 'whileast' })
-    pushBytecode(out, ast.token, { type: 'endblockast' })
+  operator: (out, node) => (visitAll(out, node.exprs), pushBytecode(out, node.token, { type: 'operatorast', name: node.token.value, count: node.exprs.length })),
+  meta:     (out, node) => (writeMeta(out, node.expr), pushBytecode(out, node.token, { type: 'toast' })),
+  comptime: (out, node) => writeMeta(out, node.expr),
+  letconst: (out, node) => (writeMeta(out, node.value), pushBytecode(out, node.token, { type: 'letlocal', name: node.name.token.value, t: false, v: true })),
+  tuple:    (out, node) => (visitAll(out, node.exprs), pushBytecode(out, node.token, { type: 'tuple', count: node.exprs.length })),
+  not:      (out, node) => (visitParseNode(out, node.expr), pushBytecode(out, node.token, { type: 'notast' })),
+
+  while: (out, node) => {
+    pushBytecode(out, node.token, { type: 'beginblockast', breakType: 'break' })
+    pushBytecode(out, node.token, { type: 'beginblockast', breakType: 'continue' })
+    visitParseNode(out, node.body);
+    pushBytecode(out, node.token, { type: 'endblockast' })
+    visitParseNode(out, node.condition)
+    pushBytecode(out, node.token, { type: 'whileast' })
+    pushBytecode(out, node.token, { type: 'endblockast' })
   },
-  for: (out, ast) => {
-    const fnArgs: ArgumentTypePair[] = [[ast.identifier, null]]
-    const decl = createAnonymousParserFunctionDecl("for", ast.token, fnArgs, ast.body)
-    const fn = new ParseFunction(ast.token, decl)
+  for: (out, node) => {
+    const fnArgs: ArgumentTypePair[] = [[node.identifier, null]]
+    const decl = createAnonymousParserFunctionDecl("for", node.token, fnArgs, node.body)
+    const fn = new ParseFunction(node.token, decl)
     const elemType = new ParseIdentifier(createToken('int')) // Hard code int for now
     const iterate = new ParseIdentifier(createToken('iterate'))
-    const call = new ParseCall(ast.token, iterate, [ast.expr], [fn, elemType])
+    const call = new ParseCall(node.token, iterate, [node.expr], [fn, elemType])
     visitParseNode(out, call)
   },
 
-  function: (out, ast) => {
-    pushBytecode(out, ast.token, { type: "closure", id: addFunctionDefinition(out.globalCompilerState, ast.functionDecl).id })
+  function: (out, node) => {
+    pushBytecode(out, node.token, { type: "closure", id: addFunctionDefinition(out.globalCompilerState, node.functionDecl).id })
   },
-  return: (out, ast) => {
-    if (ast.expr) visitParseNode(out, ast.expr);
-    pushBytecode(out, ast.token, { type: 'returnast', r: !!ast.expr })
+  return: (out, node) => {
+    if (node.expr) visitParseNode(out, node.expr);
+    pushBytecode(out, node.token, { type: 'returnast', r: !!node.expr })
   },
-  break: (out, ast) => {
-    if (ast.expr) visitParseNode(out, ast.expr);
-    pushBytecode(out, ast.token, { type: 'breakast', v: !!ast.expr })
+  break: (out, node) => {
+    if (node.expr) visitParseNode(out, node.expr);
+    pushBytecode(out, node.token, { type: 'breakast', v: !!node.expr })
   },
-  continue: (out, ast) => {
-    if (ast.expr) visitParseNode(out, ast.expr);
-    pushBytecode(out, ast.token, { type: 'continueast', v: !!ast.expr })
+  continue: (out, node) => {
+    if (node.expr) visitParseNode(out, node.expr);
+    pushBytecode(out, node.token, { type: 'continueast', v: !!node.expr })
   },
-  field: (out, ast) => {
-    visitParseNode(out, ast.expr)
-    pushBytecode(out, ast.token, { type: 'fieldast', name: ast.field.token.value })
+  field: (out, node) => {
+    visitParseNode(out, node.expr)
+    pushBytecode(out, node.token, { type: 'fieldast', name: node.field.token.value })
   },
 
-  set: (out, ast) => {
-    if (ast.left instanceof ParseIdentifier) {
-      visitParseNode(out, ast.value);
-      pushBytecode(out, ast.token, { type: 'setlocalast', name: ast.left.token.value })
+  set: (out, node) => {
+    if (node.left instanceof ParseIdentifier) {
+      visitParseNode(out, node.value);
+      pushBytecode(out, node.token, { type: 'setlocalast', name: node.left.token.value })
       return
-    } else if (ast.left instanceof ParseField) {
-      visitParseNode(out, ast.left.expr);
-      visitParseNode(out, ast.value);
-      pushBytecode(out, ast.token, { type: 'setfieldast', name: ast.left.field.token.value })
+    } else if (node.left instanceof ParseField) {
+      visitParseNode(out, node.left.expr);
+      visitParseNode(out, node.value);
+      pushBytecode(out, node.token, { type: 'setfieldast', name: node.left.field.token.value })
       return
     }
     compilerAssert(false, "Not implemented")
   },
-  subscript: (out, ast) => {
-    visitParseNode(out, ast.expr)
-    visitParseNode(out, ast.subscript)
-    pushBytecode(out, ast.token, { type: 'subscriptast' })
+  subscript: (out, node) => {
+    visitParseNode(out, node.expr)
+    visitParseNode(out, node.subscript)
+    pushBytecode(out, node.token, { type: 'subscriptast' })
   },
-  opeq: (out, ast) => {
-    if (ast.left instanceof ParseIdentifier) {
-      visitParseNode(out, ast.left)
-      visitParseNode(out, ast.right)
-      const op = ast.token.value.endsWith('=') ? ast.token.value.substring(0, ast.token.value.length - 1) : ast.token.value
-      pushBytecode(out, ast.token, { type: 'operatorast', name: op, count: 2 })
-      pushBytecode(out, ast.token, { type: 'setlocalast', name: ast.left.token.value })
+  opeq: (out, node) => {
+    if (node.left instanceof ParseIdentifier) {
+      visitParseNode(out, node.left)
+      visitParseNode(out, node.right)
+      const op = node.token.value.endsWith('=') ? node.token.value.substring(0, node.token.value.length - 1) : node.token.value
+      pushBytecode(out, node.token, { type: 'operatorast', name: op, count: 2 })
+      pushBytecode(out, node.token, { type: 'setlocalast', name: node.left.token.value })
       return
     }
-    compilerAssert(false, "Not implemented yet", { ast })
+    compilerAssert(false, "Not implemented yet", { node })
   },
 
-  list: (out, ast) => (visitAll(out, ast.exprs), pushBytecode(out, ast.token, { type: 'listast', count: ast.exprs.length })),
+  list: (out, node) => (visitAll(out, node.exprs), pushBytecode(out, node.token, { type: 'listast', count: node.exprs.length })),
 
-  and: (out, ast) => (visitAll(out, ast.exprs), pushBytecode(out, ast.token, { type: "andast", count: ast.exprs.length })),
-  or: (out, ast) =>  (visitAll(out, ast.exprs), pushBytecode(out, ast.token, { type: "orast", count: ast.exprs.length })),
+  and: (out, node) => (visitAll(out, node.exprs), pushBytecode(out, node.token, { type: "andast", count: node.exprs.length })),
+  or: (out, node) =>  (visitAll(out, node.exprs), pushBytecode(out, node.token, { type: "orast", count: node.exprs.length })),
   
-  let: (out, ast) => {
-    if (ast.value) visitParseNode(out, ast.value);
-    if (ast.type) {
-      writeMeta(out, ast.type);
-      pushBytecode(out, ast.type.token, { type: 'totype' });
+  let: (out, node) => {
+    if (node.value) visitParseNode(out, node.value);
+    if (node.type) {
+      writeMeta(out, node.type);
+      pushBytecode(out, node.type.token, { type: 'totype' });
     }
-    pushBytecode(out, ast.token, { type: 'letast', name: ast.name.token.value, t: !!ast.type, v: !!ast.value })
+    pushBytecode(out, node.token, { type: 'letast', name: node.name.token.value, t: !!node.type, v: !!node.value })
   },
 
-  call: (out, ast) => {
-    ast.typeArgs.forEach(x => writeMeta(out, x));
-    visitAll(out, ast.args);
-    if (ast.left instanceof ParseIdentifier) {
-      pushBytecode(out, ast.token, { type: "callast", name: ast.left.token.value, count: ast.args.length, tcount: ast.typeArgs.length }); // prettier-ignore
+  call: (out, node) => {
+    node.typeArgs.forEach(x => writeMeta(out, x));
+    visitAll(out, node.args);
+    if (node.left instanceof ParseIdentifier) {
+      pushBytecode(out, node.token, { type: "callast", name: node.left.token.value, count: node.args.length, tcount: node.typeArgs.length });
       return;
     }
     compilerAssert(false, "Call with non-identifier not implemented yet")
   },
 
-  statements: (out, ast) => {
-    pushBytecode(out, ast.token, { type: "pushqs" });
-    ast.exprs.forEach((stmt, i) => {
+  statements: (out, node) => {
+    pushBytecode(out, node.token, { type: "pushqs" });
+    node.exprs.forEach((stmt, i) => {
       visitParseNode(out, stmt);
-      if (!isParseVoid(stmt)) pushBytecode(out, ast.token, { type: "appendq" });
-      pushBytecode(out, ast.token, { type: "pop" }); // Even pop the final value
+      if (!isParseVoid(stmt)) pushBytecode(out, node.token, { type: "appendq" });
+      pushBytecode(out, node.token, { type: "pop" }); // Even pop the final value
     });
-    pushBytecode(out, ast.token, { type: "popqs" });
+    pushBytecode(out, node.token, { type: "popqs" });
   },
-  block: (out, ast) => visitParseNode(out, ast.statements),
+  block: (out, node) => visitParseNode(out, node.statements),
 
-  else: (out, ast) => visitParseNode(out, ast.body),
+  else: (out, node) => visitParseNode(out, node.body),
 
-  metaif: (out, ast) => {
-    const if_ = ast.expr
+  metaif: (out, node) => {
+    const if_ = node.expr
     writeMeta(out, if_.condition);
     const jump1 = { type: "jumpf" as const, address: 0 };
     pushBytecode(out, if_.condition.token, jump1);
@@ -296,11 +327,11 @@ const bytecodeSecond: MetaInstructionTable = {
     }
   },
 
-  if: (out, ast) => {
-    if (ast.falseBody) visitParseNode(out, ast.falseBody)
-    visitParseNode(out, ast.trueBody)
-    visitParseNode(out, ast.condition)
-    pushBytecode(out, ast.token, { type: "ifast", f: !!ast.falseBody });
+  if: (out, node) => {
+    if (node.falseBody) visitParseNode(out, node.falseBody)
+    visitParseNode(out, node.trueBody)
+    visitParseNode(out, node.condition)
+    pushBytecode(out, node.token, { type: "ifast", f: !!node.falseBody });
   }
 };
 
@@ -363,7 +394,7 @@ function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, args, typ
   
   if (!func.headerPrototype) {
 
-    func.headerPrototype = { name: `${func.debugName} header`, body: null!, instructionTable: bytecodeDefault }; // prettier-ignore
+    func.headerPrototype = { name: `${func.debugName} header`, body: null!, instructionTable: bytecodeDefault };
     func.headerPrototype.bytecode = { code: [], locations: [] }
     const out: BytecodeOut = {
       bytecode: func.headerPrototype.bytecode,
@@ -429,7 +460,7 @@ export function functionTemplateTypeCheckAndCompileTask(ctx: TaskContext, { func
   compilerAssert(func.body)
 
   if (!func.templatePrototype)  {
-    func.templatePrototype = { name: `${func.debugName} template bytecode`, body: func.body, instructionTable: bytecodeSecond }; // prettier-ignore
+    func.templatePrototype = { name: `${func.debugName} template bytecode`, body: func.body, instructionTable: bytecodeSecond };
     compileFunctionPrototype(ctx, func.templatePrototype);
   }
   compilerAssert(func.templatePrototype);
@@ -499,7 +530,7 @@ function functionInlineTask(ctx: TaskContext, { vm, func, typeArgs, args, parent
   compilerAssert(func.body)
 
   if (!func.templatePrototype)  {
-    func.templatePrototype = { name: `${func.debugName} inline bytecode`, body: func.body, instructionTable: bytecodeSecond }; // prettier-ignore
+    func.templatePrototype = { name: `${func.debugName} inline bytecode`, body: func.body, instructionTable: bytecodeSecond };
     compileFunctionPrototype(ctx, func.templatePrototype);
   }
   compilerAssert(func.templatePrototype);
@@ -548,7 +579,7 @@ function functionCompileTimeCompileTask(ctx: TaskContext, { vm, func, typeArgs, 
   compilerAssert(args.length === func.args.length, "Expected $expected arguments got $got", { expected: func.args.length, got: func.args.length, func })
 
   if (!func.compileTimePrototype) 
-    func.compileTimePrototype = { name: `${func.debugName} comptime bytecode`, body: func.body, instructionTable: bytecodeDefault }; // prettier-ignore
+    func.compileTimePrototype = { name: `${func.debugName} comptime bytecode`, body: func.body, instructionTable: bytecodeDefault };
   compilerAssert(func.compileTimePrototype)
 
   const scope = Object.create(parentScope);
@@ -572,7 +603,7 @@ function functionCompileTimeCompileTask(ctx: TaskContext, { vm, func, typeArgs, 
 
 const popValues = (vm: Vm, num: number) => {
   compilerAssert(vm.stack.length >= num, `Expected ${num} values on stack got ${vm.stack.length}`)
-  return Array.from(new Array(num)).map(() => vm.stack.pop()).reverse() // prettier-ignore
+  return Array.from(new Array(num)).map(() => vm.stack.pop()).reverse() 
 };
 const popStack = (vm: Vm) => {
   compilerAssert(vm.stack.length > 0, `Expected 1 value on stack got ${vm.stack.length}`)
@@ -1001,7 +1032,7 @@ function compileClassTask(ctx: TaskContext, { classDef, typeArgs }: { classDef: 
   
   if (!classDef.templatePrototype)  {
     compilerAssert(classDef.body, "Expected class body");
-    classDef.templatePrototype = { name: `${classDef.debugName} class template bytecode`, body: classDef.body, instructionTable: bytecodeSecond }; // prettier-ignore
+    classDef.templatePrototype = { name: `${classDef.debugName} class template bytecode`, body: classDef.body, instructionTable: bytecodeSecond }; 
     compileFunctionPrototype(ctx, classDef.templatePrototype);
   }
 
