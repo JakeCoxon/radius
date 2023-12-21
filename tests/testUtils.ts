@@ -1,9 +1,10 @@
 import { existsSync, unlinkSync } from "node:fs";
-import { functionTemplateTypeCheckAndCompileTask, runTopLevelTask } from "../src/compiler";
+import { runTopLevelTask } from "../src/compiler";
 import { BoolType, Closure, CompilerError, DoubleType, ExternalFunction, FloatType, GlobalCompilerState, IntType, Scope, StringType, SubCompilerState, TaskContext, VoidType, compilerAssert, createDefaultGlobalCompiler, createScope, expectMap, BuiltinTypes } from "../src/defs";
 import { makeParser } from "../src/parser"
 import { Queue, TaskDef, stepQueue, withContext } from "../src//tasks";
 import { expect } from "bun:test";
+import { functionTemplateTypeCheckAndCompileTask } from "../src/compiler_functions";
 
 const runTestInner = (queue: Queue, input: string, globalCompiler: GlobalCompilerState, rootScope: Scope) => {
   const parser = makeParser(input)

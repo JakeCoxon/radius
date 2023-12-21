@@ -1,4 +1,3 @@
-import { TCPSocketConnectOptions } from "bun";
 import { Event } from "./tasks";
 
 export class CompilerError extends Error {
@@ -195,38 +194,11 @@ export type InstructionMapping = {
   [T in BytecodeInstr as T['type']]: (vm: Vm, instr: T) => void;
 }
 
-
-export type BytecodeGen = {
+export type BytecodeProgram = {
   code: BytecodeInstr[]
   locations: SourceLocation[]
 }
-export type FunctionPrototype = {
-  name: string
-  bytecode?: BytecodeGen | undefined
-  // function: FunctionDef,
-  body: ParseNode
-  instructionTable: MetaInstructionTable
-}
-
-let uniqueId = 1000
-// const uniqueMap = new WeakMap<object, number>()
-const UNIQUE_ID = Symbol('UNIQUE_ID')
-const getUniqueId = (obj: object) => {
-  if (obj[UNIQUE_ID] !== undefined) return obj[UNIQUE_ID]
-  obj[UNIQUE_ID] = uniqueId++
-  return obj[UNIQUE_ID];
-}
-export const hashValues = (values: unknown[]) => {
-  return values.map(value => {
-    if (value instanceof PrimitiveType) return `$${value.typeName}`
-    if (typeof value === 'number') return value
-    if (value instanceof FunctionDefinition) return getUniqueId(value)
-    if (value instanceof Closure) return getUniqueId(value)
-    compilerAssert(false, "Cannot hash value", { value })
-  }).join("__")
-}
-
-export interface BytecodeOut {
+export interface BytecodeWriter {
   bytecode: {
     code: BytecodeInstr[]
     locations: SourceLocation[],
@@ -234,12 +206,18 @@ export interface BytecodeOut {
   state: {
     labelBlock: LabelBlock | null
   }
-  table: ParseTreeTable
+  instructionTable: ParseTreeTable
   globalCompilerState: GlobalCompilerState // Not nice
+}
+export type FunctionPrototype = {
+  name: string
+  bytecode?: BytecodeProgram | undefined
+  body: ParseNode
+  initialInstructionTable: ParseTreeTable
 }
 
 export type ParseTreeTable = {
-  [E in ParseNode as E['key']]: (out: BytecodeOut, ast: E) => void;
+  [E in ParseNode as E['key']]: (out: BytecodeWriter, ast: E) => void;
 }
 
 export class CompiledFunction {
@@ -306,7 +284,6 @@ export class CompiledClass {
 export class ClassDefinition {
   headerPrototype?: FunctionPrototype | undefined
   templatePrototype?: FunctionPrototype | undefined
-  // compileTimePrototype?: FunctionPrototype | undefined
 
   compiledClasses: CompiledClass[] = []
   concreteType: ConcreteClassType | undefined
@@ -381,6 +358,24 @@ export class Binding {
   [Bun.inspect.custom](depth, options, inspect) {
     return options.stylize(`[Binding ${this.name} ${inspect(this.type)}]`, 'special');
   }
+}
+
+let uniqueId = 1000
+// const uniqueMap = new WeakMap<object, number>()
+const UNIQUE_ID = Symbol('UNIQUE_ID')
+const getUniqueId = (obj: object) => {
+  if (obj[UNIQUE_ID] !== undefined) return obj[UNIQUE_ID]
+  obj[UNIQUE_ID] = uniqueId++
+  return obj[UNIQUE_ID];
+}
+export const hashValues = (values: unknown[]) => {
+  return values.map(value => {
+    if (value instanceof PrimitiveType) return `$${value.typeName}`
+    if (typeof value === 'number') return value
+    if (value instanceof FunctionDefinition) return getUniqueId(value)
+    if (value instanceof Closure) return getUniqueId(value)
+    compilerAssert(false, "Cannot hash value", { value })
+  }).join("__")
 }
 
 export class TypeRoot {}
@@ -537,7 +532,7 @@ export type Vm = {
   stack: unknown[],
   scope: Scope,
   location: SourceLocation,
-  bytecode: BytecodeGen,
+  bytecode: BytecodeProgram,
   context: TaskContext
 }
 export type LabelBlockType = 'break' | 'continue' | null
@@ -626,24 +621,8 @@ export const pushSubCompilerState = (ctx: TaskContext, obj: { debugName: string,
   return state;
 }
 
-export const addFunctionDefinition = (compilerState: GlobalCompilerState, decl: ParserFunctionDecl) => {
-  if (decl.id !== undefined) return compilerState.functionDefinitions[decl.id];
-
-  decl.id = compilerState.functionDefinitions.length;
-  const keywords = decl.keywords.map(x => x instanceof ParseNote ? x.expr.token.value : x.token.value)
-  const inline = !!decl.anonymous || keywords.includes('inline')
-  const funcDef = new FunctionDefinition(
-    decl.id, decl.debugName,
-    decl.name, decl.typeArgs, decl.args,
-    decl.returnType, decl.body,
-    inline)
-
-  compilerState.functionDefinitions.push(funcDef);
-  return funcDef;
-}
-
-export function bytecodeToString(bytecodeGen: BytecodeGen) {
-  const { locations, code } = bytecodeGen
+export function bytecodeToString(bytecodeProgram: BytecodeProgram) {
+  const { locations, code } = bytecodeProgram
   const instr = (instr) => {
     const { type, ...args } = instr;
     const values = Object.entries(args)
