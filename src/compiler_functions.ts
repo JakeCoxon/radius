@@ -29,8 +29,8 @@ export type TypeCheckHeaderArg = {
 
 export function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, args, typeArgs, parentScope, concreteTypes }: TypeCheckHeaderArg): Task<string, never> {
 
-  compilerAssert(typeArgs.length === func.typeArgs.length, "Expected $expected type parameters, got $got", { expected: func.typeArgs.length, got: typeArgs.length })
-  compilerAssert(args.length === func.args.length, 'Expected $x args got $y', { x: func.args.length, y: args.length })
+  compilerAssert(typeArgs.length === func.typeArgs.length, "Expected $expected type parameters, got $got", { expected: func.typeArgs.length, got: typeArgs.length, func })
+  compilerAssert(args.length === func.args.length, 'Expected $expected args got $got', { expected: func.args.length, got: args.length, func })
   func.args.forEach((arg, i) => {
     // expectArg(arg[0], args[i].type, arg[1])
   })

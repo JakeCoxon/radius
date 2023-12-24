@@ -114,3 +114,10 @@ test("module", async () => {
   const test = runCompilerTest(input, { moduleLoader, filename: 'module' })
 
 });
+
+test("methods", async () => {
+
+  const input = await Bun.file(`${import.meta.dir}/fixtures/methods.rad`).text()
+  const test = runCompilerTest(input, { filename: 'methods' })
+
+});

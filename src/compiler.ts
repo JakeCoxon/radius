@@ -80,7 +80,12 @@ export const BytecodeDefault: ParseTreeTable = {
       pushBytecode(out, node.token, { type: "call", name: node.left.token.value, count: node.args.length, tcount: node.typeArgs.length }); 
       return;
     }
-    compilerAssert(false, "Call with non-identifier not implemented yet")
+    if (node.left instanceof ParseField) {
+      compilerAssert(false, "Call with field not implemented yet")
+      
+      return;
+    }
+    compilerAssert(false, "Call with non-identifier not implemented yet", { left: node.left})
   },
   return: (out, node) => {
     if (node.expr) visitParseNode(out, node.expr);
@@ -290,13 +295,20 @@ export const BytecodeSecondOrder: ParseTreeTable = {
   },
 
   call: (out, node) => {
-    node.typeArgs.forEach(x => writeMeta(out, x));
-    visitAll(out, node.args);
     if (node.left instanceof ParseIdentifier) {
+      node.typeArgs.forEach(x => writeMeta(out, x));
+      visitAll(out, node.args);
       pushBytecode(out, node.token, { type: "callast", name: node.left.token.value, count: node.args.length, tcount: node.typeArgs.length });
       return;
     }
-    compilerAssert(false, "Call with non-identifier not implemented yet")
+    if (node.left instanceof ParseField) {
+      node.typeArgs.forEach(x => writeMeta(out, x));
+      visitParseNode(out, node.left.expr)
+      visitAll(out, node.args);
+      pushBytecode(out, node.token, { type: "callast", name: node.left.field.token.value, count: node.args.length + 1, tcount: node.typeArgs.length });
+      return;
+    }
+    compilerAssert(false, "Call with non-identifier not implemented yet", { left: node.left})
   },
 
   statements: (out, node) => {
