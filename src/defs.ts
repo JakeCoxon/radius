@@ -34,6 +34,7 @@ const makeColor = (x) => {
 }
 
 export class Source {
+  tokens: Token[]
   constructor(public debugName: string, public input: string) {}
 }
 
@@ -663,6 +664,28 @@ export function bytecodeToString(bytecodeProgram: BytecodeProgram) {
 }
 
 // https://gist.github.com/JBlond/2fea43a3049b38287e5e9cefc87b2124
-export const makeYellow = (string: string) => `\x1b[33m${string}\x1b[39m`
-export const makeGreen = (string: string) => `\x1b[32m${string}\x1b[39m`
-export const makeCyan = (string: string) => `\x1b[36m${string}\x1b[39m`
+export const textColors = {
+  red: (string: string) => `\x1b[31m${string}\x1b[39m`,
+  yellow: (string: string) => `\x1b[33m${string}\x1b[39m`,
+  green: (string: string) => `\x1b[32m${string}\x1b[39m`,
+  cyan: (string: string) => `\x1b[36m${string}\x1b[39m`,
+  gray: (string: string) => `\x1b[38;5;242m${string}\x1b[39m`,
+}
+
+export const outputSourceLocation = (location: SourceLocation) => {
+  let out = `${location.source.debugName}:${location.line}:${location.column}`;
+  out += '\n'
+  const lines = location.source.input.split('\n')
+  for (let i = -2; i < 3; i++) {
+    const line = location.line + i
+    if (lines[line - 1] !== undefined) {
+      out += textColors.gray(`${String(line).padStart(2)}|`)
+      out += `  ${lines[line - 1]}\n`
+      if (i === 0) {
+        const repeat = " ".repeat(location.column);
+        out += textColors.red(`     ${repeat}^-- here\n`)
+      }
+    }
+  }
+  return out;
+}

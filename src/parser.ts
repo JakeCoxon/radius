@@ -19,6 +19,7 @@ function* tokenize(source: Source, state: LexerState): Generator<Token> {
   };
 
   const tokens: Token[] = [];
+  source.tokens = tokens
   const indents = [0];
 
   let lineNumber = 1;

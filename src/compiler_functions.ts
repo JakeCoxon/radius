@@ -1,5 +1,5 @@
 import { BytecodeDefault, BytecodeSecondOrder, compileFunctionPrototype, createBytecodeVmAndExecuteTask, pushBytecode, pushGeneratedBytecode, visitParseNode } from "./compiler";
-import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, makeCyan, ParseNote, createAnonymousToken } from "./defs";
+import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors } from "./defs";
 import { Task, TaskDef } from "./tasks";
 
 
@@ -56,7 +56,7 @@ export function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, ar
     pushGeneratedBytecode(out, { type: "tuple", count: func.args.length })
     pushGeneratedBytecode(out, { type: "halt" })
 
-    ctx.globalCompiler.logger.log(makeCyan(`Compiled ${func.headerPrototype.name}`))
+    ctx.globalCompiler.logger.log(textColors.cyan(`Compiled ${func.headerPrototype.name}`))
     ctx.globalCompiler.logger.log(bytecodeToString(func.headerPrototype.bytecode))
     ctx.globalCompiler.logger.log("")
   }
@@ -140,7 +140,7 @@ export function functionTemplateTypeCheckAndCompileTask(ctx: TaskContext, { func
 
       const concreteTypes = []
 
-      ctx.globalCompiler.logger.log(makeCyan(`Compiled template ${func.debugName}`))
+      ctx.globalCompiler.logger.log(textColors.cyan(`Compiled template ${func.debugName}`))
       
       compilerAssert(isAst(ast), "Expected ast got $ast", { ast });
 
@@ -203,7 +203,7 @@ export function functionInlineTask(ctx: TaskContext, { vm, func, typeArgs, args,
 
       compilerAssert(isAst(ast), "Expected ast got $ast", { ast });
 
-      ctx.globalCompiler.logger.log(makeCyan(`Compiled inline ${func.debugName}`))
+      ctx.globalCompiler.logger.log(textColors.cyan(`Compiled inline ${func.debugName}`))
       vm.stack.push(new StatementsAst(ast.type, location, [...statements, ast]));
       
       return Task.of("success")

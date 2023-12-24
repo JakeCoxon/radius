@@ -1,6 +1,6 @@
 import { existsSync, unlinkSync, readFileSync } from "node:fs";
 import { runTopLevelTask } from "../src/compiler";
-import { BoolType, Closure, CompilerError, DoubleType, ExternalFunction, FloatType, GlobalCompilerState, IntType, Scope, StringType, SubCompilerState, TaskContext, VoidType, compilerAssert, createDefaultGlobalCompiler, createScope, expectMap, BuiltinTypes, ModuleLoader, SourceLocation } from "../src/defs";
+import { BoolType, Closure, CompilerError, DoubleType, ExternalFunction, FloatType, GlobalCompilerState, IntType, Scope, StringType, SubCompilerState, TaskContext, VoidType, compilerAssert, createDefaultGlobalCompiler, createScope, expectMap, BuiltinTypes, ModuleLoader, SourceLocation, textColors, outputSourceLocation } from "../src/defs";
 import { makeParser } from "../src/parser"
 import { Queue, TaskDef, stepQueue, withContext } from "../src//tasks";
 import { expect } from "bun:test";
@@ -111,20 +111,8 @@ export const runCompilerTest = (input: string, { moduleLoader, filename, expectE
       // logger.log("\nCompiler stack")
       const location = (ex.info as any).location as SourceLocation
       if (location) {
-        logger.log(location.source.debugName)
-        const lines = location.source.input.split('\n')
-        for (let i = -2; i < 3; i++) {
-          const line = location.line + i
-          if (lines[line - 1] !== undefined) {
-            logger.log(`${String(line).padStart(2)}|  ${lines[line - 1]}`)
-            if (i === 0) {
-              const repeat = " ".repeat(location.column);
-              logger.log(`     ${repeat}^-- here`)
-            }
-          }
-        }
-        
-
+        const text = outputSourceLocation(location)
+        logger.log(text)
       }
 
       logger.log("\nError info")
