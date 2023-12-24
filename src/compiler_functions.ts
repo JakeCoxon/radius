@@ -1,5 +1,5 @@
 import { BytecodeDefault, BytecodeSecondOrder, compileFunctionPrototype, createBytecodeVmAndExecuteTask, pushBytecode, pushGeneratedBytecode, visitParseNode } from "./compiler";
-import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, ExternalFunction, CallAst, IntType, Closure, UserCallAst } from "./defs";
+import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, ExternalFunction, CallAst, IntType, Closure, UserCallAst, ExternalType, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition } from "./defs";
 import { Task, TaskDef, Unit } from "./tasks";
 
 
@@ -254,6 +254,14 @@ export function createCallAstFromValue(vm: Vm, value: unknown, typeArgs: unknown
     return Task.success
   }
 
+  if (value instanceof ClassDefinition) {
+    if (!value.concreteType) compilerAssert(false, "Value not supported", { value })
+    compilerAssert(typeArgs.length === 0, "Expected 0 type arguments got $count", { count: args.length })
+    const constructor = expectMap(value.concreteType.metaobject, 'constructor', "Expected constructor in metaobject for object $obj", { obj: value })
+    // compilerAssert(false, "Not impl", { constructor })
+    return createCallAstFromValue(vm, constructor, [], args)
+  }
+
   if (value instanceof ExternalFunction) {
     vm.stack.push(new CallAst(value.returnType, vm.location, value, args));
     return Task.success
@@ -279,6 +287,7 @@ export function createCallAstFromValue(vm: Vm, value: unknown, typeArgs: unknown
       })
     )
   }
+
   compilerAssert(false, "Not supported value $value", { value })
 
 }

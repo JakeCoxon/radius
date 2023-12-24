@@ -42,6 +42,7 @@ export class SourceLocation {
   static anon = new SourceLocation(-1, -1, null!)
   constructor(public line: number, public column: number, public source: Source) {}
   [Inspect.custom](depth, options, inspect) {
+    if (!this.source) return options.stylize(`[SourceLocation generated]`, 'special');
     return options.stylize(`[SourceLocation ${this.source.debugName}:${this.line}:${this.column}]`, 'special');
   }
 }
@@ -148,6 +149,8 @@ export class ParseSubscript extends ParseNodeType {  key = 'subscript' as const;
 export class ParseTuple extends ParseNodeType {      key = 'tuple' as const;      constructor(public token: Token, public exprs: ParseNode[]) { super();} }
 export class ParseBlock extends ParseNodeType {      key = 'block' as const;      constructor(public token: Token, public statements: ParseStatements) { super();} }
 export class ParseImport extends ParseNodeType {     key = 'import' as const;     constructor(public token: Token, public module: ParseIdentifier, public identifiers: ParseIdentifier[]) { super();} }
+export class ParseValue extends ParseNodeType {      key = 'value' as const;      constructor(public token: Token, public value: unknown) { super();} }
+export class ParseConstructor extends ParseNodeType { key = 'constructor' as const; constructor(public token: Token, public type: ParseNode, public args: ParseNode[]) { super();} }
 export class ParseCompilerIden extends ParseNodeType { key = 'compileriden' as const; constructor(public token: Token, public value: string) { super();} }
 
 export type ParseNode = ParseStatements | ParseLet | ParseSet | ParseOperator | ParseIdentifier | 
@@ -155,7 +158,8 @@ export type ParseNode = ParseStatements | ParseLet | ParseSet | ParseOperator | 
   ParseIf | ParseFunction | ParseString | ParseReturn | ParseBreak | ParseContinue | ParseFor | ParseCast |
   ParseOpEq | ParseWhile | ParseWhileExpr | ParseForExpr | ParseNot | ParseField | ParseExpand | ParseListComp |
   ParseDict | ParsePostCall | ParseSymbol | ParseNote | ParseSlice | ParseSubscript | ParseTuple | ParseClass |
-  ParseNil | ParseBoolean | ParseElse | ParseMetaIf | ParseMetaFor | ParseBlock | ParseImport | ParseCompilerIden
+  ParseNil | ParseBoolean | ParseElse | ParseMetaIf | ParseMetaFor | ParseBlock | ParseImport | ParseCompilerIden | 
+  ParseValue | ParseConstructor
 
 // Void types mean that in secondOrder compilation, the AST doesn't return an AST
 export const isParseVoid = (ast: ParseNode) => ast.key == 'letconst' || ast.key === 'function' || ast.key === 'class' || ast.key === 'comptime';
@@ -189,6 +193,7 @@ export type BytecodeInstr =
   { type: 'fieldast', name: string } |
   { type: 'subscriptast' } |
   { type: 'operatorast', name: string, count: number } |
+  { type: 'constructorast', count: number } |
   { type: 'toast' } |
   { type: 'whileast' } |
   { type: 'returnast', r: boolean } |
@@ -287,7 +292,7 @@ export class TypeField {
   }
 }
 export class CompiledClass {
-  metaobject: {} = {}
+  metaobject: {} = Object.create(null)
 
   constructor(
     public location: SourceLocation,
@@ -366,9 +371,10 @@ export class VoidAst extends AstRoot {       constructor(public type: Type, publ
 export class CastAst extends AstRoot {       constructor(public type: Type, public location: SourceLocation, public expr: Ast) { super() } }
 export class SubscriptAst extends AstRoot {  constructor(public type: Type, public location: SourceLocation, public left: Ast, public right: Ast) { super() } }
 export class NotAst extends AstRoot {        constructor(public type: Type, public location: SourceLocation, public expr: Ast) { super() } }
+export class ConstructorAst extends AstRoot { constructor(public type: Type, public location: SourceLocation, public args: Ast[]) { super() } }
 
 export type Ast = NumberAst | LetAst | SetAst | OperatorAst | IfAst | ListAst | CallAst | AndAst |
-  OrAst | StatementsAst | WhileAst | ReturnAst | SetFieldAst | VoidAst | CastAst | SubscriptAst
+  OrAst | StatementsAst | WhileAst | ReturnAst | SetFieldAst | VoidAst | CastAst | SubscriptAst | ConstructorAst
 export const isAst = (value: unknown): value is Ast => value instanceof AstRoot;
 
 export class Tuple {
@@ -405,22 +411,25 @@ export const hashValues = (values: unknown[]) => {
 
 export class TypeRoot {}
 export class PrimitiveType extends TypeRoot {
-  metaobject: {} = {}
+  metaobject: {} = Object.create(null)
   constructor(public typeName: string) { super() }
   [Inspect.custom](depth, options, inspect) {
     return options.stylize(`[PrimitiveType ${this.typeName}]`, 'special');
   }
 }
 export class ExternalType extends TypeRoot {
-  metaobject: {} = {}
+  metaobject: {} = Object.create(null)
   constructor(public typeName: string) { super() }
   [Inspect.custom](depth, options, inspect) {
     return options.stylize(`[ExternalType ${this.typeName}]`, 'special');
   }
 }
 export class ConcreteClassType extends TypeRoot {
-  metaobject: {} = {}
-  constructor(public compiledClass: CompiledClass) { super() }
+  metaobject: {}
+  constructor(public compiledClass: CompiledClass) { 
+    super()
+    this.metaobject = compiledClass.metaobject
+  }
   [Inspect.custom](depth, options, inspect) {
     return options.stylize(`[ConcreteClassType ${this.compiledClass.debugName}]`, 'special');
   }
@@ -683,6 +692,7 @@ export const textColors = {
 }
 
 export const outputSourceLocation = (location: SourceLocation) => {
+  if (!location?.source) return '<generated code>'
   let out = `${location.source.debugName}:${location.line}:${location.column}`;
   out += '\n'
   const lines = location.source.input.split('\n')

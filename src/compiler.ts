@@ -1,4 +1,4 @@
-import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, ClassField, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListType, SubscriptAst, ExternalType, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, ArgumentTypePair, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField } from "./defs";
+import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, ClassField, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListType, SubscriptAst, ExternalType, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, ArgumentTypePair, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst } from "./defs";
 import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, functionCompileTimeCompileTask, createCallAstFromValue } from "./compiler_functions";
 import { Event, Task, TaskDef, Unit, isTask, isTaskResult } from "./tasks";
 
@@ -45,7 +45,9 @@ export const BytecodeDefault: ParseTreeTable = {
   subscript: (out, node) => compilerAssert(false, "Not implemented"),
   import:    (out, node) => compilerAssert(false, "Not implemented"),
   compileriden: (out, node) => compilerAssert(false, "Not implemented"),
+  constructor: (out, node) => compilerAssert(false, "Not implemented"),
 
+  value:   (out, node) => pushBytecode(out, node.token, { type: "push", value: node.value }), 
   number:  (out, node) => pushBytecode(out, node.token, { type: "push", value: Number(node.token.value) }), 
   string:  (out, node) => pushBytecode(out, node.token, { type: "push", value: node.token.value }), 
   nil:     (out, node) => pushBytecode(out, node.token, { type: "push", value: null }), 
@@ -199,8 +201,10 @@ export const BytecodeSecondOrder: ParseTreeTable = {
   metafor:   (out, node) => compilerAssert(false, "Not implemented"),
   import:    (out, node) => compilerAssert(false, "Not implemented"),
   compileriden: (out, node) => compilerAssert(false, "Not implemented"),
+  constructor: (out, node) => (visitParseNode(out, node.type), visitAll(out, node.args), pushBytecode(out, node.token, { type: 'constructorast', count: node.args.length })),
 
   identifier: (out, node) => pushBytecode(out, node.token, { type: "bindingast", name: node.token.value }),
+  value:   (out, node) => pushBytecode(out, node.token, { type: "push", value: node.value }), 
   number:  (out, node) => pushBytecode(out, node.token, { type: "numberast", value: Number(node.token.value) }),
   string:  (out, node) => pushBytecode(out, node.token, { type: "stringast", value: node.token.value }),
   boolean: (out, node) => pushBytecode(out, node.token, { type: "boolast", value: node.token.value !== 'false' }),
@@ -548,6 +552,16 @@ const instructions: InstructionMapping = {
   },
   toast: (vm) => vm.stack.push(unknownToAst(vm.location, popStack(vm))),
 
+  constructorast: (vm, { count }) => {
+    const args = expectAsts(popValues(vm, count))
+    const type = expectType(popStack(vm))
+    if (type instanceof ConcreteClassType) {
+      type.compiledClass.fields.forEach((field, i) => {
+        compilerAssert(args[i].type === field.fieldType, "Expected $expected but got $got for field $name of constructor for object $obj", { expected: field.fieldType, got: args[i].type, name: field.name, obj: type.compiledClass})
+      })
+    }
+    vm.stack.push(new ConstructorAst(type, vm.location, args))
+  },
   operatorast: (vm, { name, count }) => {
     const values = expectAsts(popValues(vm, count));
     compilerAssert(values.every(x => x.type === values[0].type), "Can't use operator $name on types $a and $b. Both types must be the same", { name, a: values[0].type, b: values[1].type, values })
@@ -817,8 +831,7 @@ function topLevelClassDefinitionTask(ctx: TaskContext, decl: ParserClassDecl, sc
 function compileClassTask(ctx: TaskContext, { classDef, typeArgs }: { classDef: ClassDefinition, typeArgs: unknown[] }) {
   // console.log("Compiling class", classDef)
 
-  const type = new ConcreteClassType(null as any) // set class below
-  const binding = new Binding(classDef.debugName, type);
+  const binding = new Binding(classDef.debugName, VoidType);
   const body = null as any
   compilerAssert(typeArgs.length === classDef.typeArgs.length, "Expected $x type parameters for class $classDef, got $y", { x: classDef.typeArgs.length, y: typeArgs.length, classDef })
   
@@ -850,25 +863,41 @@ function compileClassTask(ctx: TaskContext, { classDef, typeArgs }: { classDef: 
     .chainFn((task, ast) => {
       compilerAssert(isAst(ast), "Expected ast got $ast", { ast });
 
-      const fields: TypeField[] = []
-      let index = 0
-      for (const name of Object.getOwnPropertyNames(templateScope)) {
-        if (templateScope[name] instanceof Binding)
-          fields.push(new TypeField(SourceLocation.anon, name, type, index++, templateScope[name].type))
-      }
-
       const debugName = typeArgs.length === 0 ? classDef.debugName :
         `${classDef.debugName}!(...)`
       const compiledClass = new CompiledClass(
           classDef.location, debugName,
-          binding, classDef, type, body, fields, [], typeParamHash)
-      type.compiledClass = compiledClass
+          binding, classDef, null!, body, [], [], typeParamHash)
+
+      const type = new ConcreteClassType(compiledClass)
+      compiledClass.type = type;
+      binding.type = type;
+
+      let index = 0
+      for (const name of Object.getOwnPropertyNames(templateScope)) {
+        if (templateScope[name] instanceof Binding)
+          compiledClass.fields.push(new TypeField(SourceLocation.anon, name, type, index++, templateScope[name].type))
+      }
+
       classDef.compiledClasses.push(compiledClass)
-      classDef.concreteType = type;
+
+      if (classDef.typeArgs.length === 0) classDef.concreteType = type;
 
       const iterate = templateScope['__iterate']
       compilerAssert(!iterate || iterate instanceof Closure)
-      Object.assign(compiledClass.metaobject, { iterate })
+
+      const fnArgs: ArgumentTypePair[] = compiledClass.fields.map(x => 
+        [new ParseIdentifier(createAnonymousToken(x.name)), 
+        new ParseValue(createAnonymousToken(''), x.fieldType)] as ArgumentTypePair)
+      const constructorBody = new ParseConstructor(
+        createAnonymousToken(''), 
+        new ParseValue(createAnonymousToken(''), type), 
+        compiledClass.fields.map(x => new ParseIdentifier(createAnonymousToken(x.name))))
+      const decl = createAnonymousParserFunctionDecl("constructor", createAnonymousToken(''), fnArgs, constructorBody)
+      const funcDef = insertFunctionDefinition(ctx.globalCompiler, decl)
+      const constructor = new Closure(funcDef, classDef.parentScope)
+
+      Object.assign(compiledClass.metaobject, { iterate, constructor })
 
       return Task.of(type)
 

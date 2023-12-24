@@ -42,3 +42,5 @@ fn main():
 
   famz!int(200)
   famz!bool(true)
+
+  thing2 := Thing(1, float(2))
