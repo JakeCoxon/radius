@@ -1,4 +1,4 @@
-import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, ClassField, FieldAst, ParseField, SetFieldAst, makeCyan, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListType, SubscriptAst, ExternalType, GenericType, isGenericTypeOf, ParseMeta, createAnonymousParserFunctionDecl, ArgumentTypePair, NotAst, BytecodeProgram } from "./defs";
+import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, ClassField, FieldAst, ParseField, SetFieldAst, makeCyan, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListType, SubscriptAst, ExternalType, GenericType, isGenericTypeOf, ParseMeta, createAnonymousParserFunctionDecl, ArgumentTypePair, NotAst, BytecodeProgram, ParseImport } from "./defs";
 import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, compileAndExecuteFunctionHeaderTask, functionCompileTimeCompileTask, functionInlineTask, functionTemplateTypeCheckAndCompileTask } from "./compiler_functions";
 import { Event, Task, TaskDef, isTask, isTaskResult } from "./tasks";
 
@@ -43,6 +43,7 @@ export const BytecodeDefault: ParseTreeTable = {
   opeq:      (out, node) => compilerAssert(false, "Not implemented"),
   field:     (out, node) => compilerAssert(false, "Not implemented"),
   subscript: (out, node) => compilerAssert(false, "Not implemented"),
+  import:    (out, node) => compilerAssert(false, "Not implemented"),
 
   number:  (out, node) => pushBytecode(out, node.token, { type: "push", value: Number(node.token.value) }), 
   string:  (out, node) => pushBytecode(out, node.token, { type: "push", value: node.token.value }), 
@@ -58,7 +59,6 @@ export const BytecodeDefault: ParseTreeTable = {
   meta:       (out, node) => (visitParseNode(out, node.expr)),
   comptime:   (out, node) => (visitParseNode(out, node.expr)),
   not:        (out, node) => (visitParseNode(out, node.expr), pushBytecode(out, node.token, { type: 'not' })),
-
   
   let: (out, node) => {
     if (node.value) visitParseNode(out, node.value);
@@ -191,6 +191,7 @@ export const BytecodeSecondOrder: ParseTreeTable = {
   class:     (out, node) => compilerAssert(false, "Not implemented"),
   nil:       (out, node) => compilerAssert(false, "Not implemented"),
   metafor:   (out, node) => compilerAssert(false, "Not implemented"),
+  import:    (out, node) => compilerAssert(false, "Not implemented"),
 
   identifier: (out, node) => pushBytecode(out, node.token, { type: "bindingast", name: node.token.value }),
   number:  (out, node) => pushBytecode(out, node.token, { type: "numberast", value: Number(node.token.value) }),
@@ -203,6 +204,7 @@ export const BytecodeSecondOrder: ParseTreeTable = {
   letconst: (out, node) => (writeMeta(out, node.value), pushBytecode(out, node.token, { type: 'letlocal', name: node.name.token.value, t: false, v: true })),
   tuple:    (out, node) => (visitAll(out, node.exprs), pushBytecode(out, node.token, { type: 'tuple', count: node.exprs.length })),
   not:      (out, node) => (visitParseNode(out, node.expr), pushBytecode(out, node.token, { type: 'notast' })),
+
 
   while: (out, node) => {
     pushBytecode(out, node.token, { type: 'beginblockast', breakType: 'break' })
@@ -877,7 +879,7 @@ const topLevelLetConst = (ctx: TaskContext, expr: ParseLetConst, rootScope: Scop
   ctx.globalCompiler.logger.log("")
 
   const subCompilerState = pushSubCompilerState(ctx, { debugName: 'top level const', lexicalParent: ctx.subCompilerState, scope: ctx.subCompilerState.scope })
-  
+
   return (
     TaskDef(createBytecodeVmAndExecuteTask, subCompilerState, out.bytecode, rootScope)
     .chainFn((task, result) => {
@@ -887,24 +889,52 @@ const topLevelLetConst = (ctx: TaskContext, expr: ParseLetConst, rootScope: Scop
   );
 }
 
+export const importModule = (ctx: TaskContext, importNode: ParseImport, rootScope: Scope) => {
+  const moduleName = importNode.module.token.value
+  const parsedModule = ctx.globalCompiler.moduleLoader.loadModule(moduleName)
+  const newScope = Object.create(rootScope)
+
+  pushSubCompilerState(ctx, { debugName: `${moduleName} module`, lexicalParent: undefined, scope: newScope })
+
+  return (
+    TaskDef(runTopLevelTask, parsedModule.rootNode, newScope)
+    .chainFn((task, _) => {
+      const tasks = importNode.identifiers.map((iden) => {
+        const name = iden.token.value
+        const insertIntoScope = (task, result) => {
+          setScopeValueAndResolveEvents(rootScope, name, result)
+          return Task.of('success')
+        }
+        return TaskDef(resolveScope, newScope, name).chainFn(insertIntoScope)
+      })
+      
+      return Task.concurrency(tasks)
+    })
+  )
+}
+
+
 export const runTopLevelTask = (ctx: TaskContext, stmts: ParseStatements, rootScope: Scope) => {
   const tasks: Task<unknown, unknown>[] = []
   
-  stmts.exprs.forEach(expr => {
-    if (expr.key === 'letconst') {
-      tasks.push(TaskDef(topLevelLetConst, expr, rootScope));
+  stmts.exprs.forEach(node => {
+    if (node.key === 'import') {
+      tasks.push(TaskDef(importModule, node, rootScope));
       return
     }
-    if (expr.key === 'function') {
-      tasks.push(TaskDef(topLevelFunctionDefinitionTask, expr.functionDecl, rootScope ));
-      return
-
-    }
-    if (expr.key === 'class') {
-      tasks.push(TaskDef(topLevelClassDefinitionTask, expr.classDecl, rootScope ));
+    if (node.key === 'letconst') {
+      tasks.push(TaskDef(topLevelLetConst, node, rootScope));
       return
     }
-    compilerAssert(false, `Not supported at top level $key`, { key: expr.key })
+    if (node.key === 'function') {
+      tasks.push(TaskDef(topLevelFunctionDefinitionTask, node.functionDecl, rootScope ));
+      return
+    }
+    if (node.key === 'class') {
+      tasks.push(TaskDef(topLevelClassDefinitionTask, node.classDecl, rootScope ));
+      return
+    }
+    compilerAssert(false, `Not supported at top level $key`, { key: node.key })
   })
 
   return Task.concurrency(tasks);

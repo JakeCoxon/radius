@@ -1,5 +1,5 @@
 import { test, expect, describe } from "bun:test";
-import { runCompilerTest } from "./testUtils";
+import { createModuleLoader, runCompilerTest } from "./testUtils";
 
 test("basic", async () => {
 
@@ -104,5 +104,13 @@ test("random", async () => {
 
   const input = await Bun.file(`${import.meta.dir}/fixtures/random.rad`).text()
   const test = runCompilerTest(input, { filename: 'random' })
+
+});
+
+test("module", async () => {
+
+  const moduleLoader = createModuleLoader(`${import.meta.dir}/fixtures/imports/`)
+  const input = await Bun.file(`${import.meta.dir}/fixtures/module.rad`).text()
+  const test = runCompilerTest(input, { moduleLoader, filename: 'module' })
 
 });

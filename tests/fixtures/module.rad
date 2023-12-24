@@ -1,0 +1,4 @@
+import my_module for foo
+
+fn main():
+  foo(200)

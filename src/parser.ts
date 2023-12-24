@@ -1,11 +1,11 @@
-import { ArgumentTypePair, ParseAnd, ParseNode, ParseBreak, ParseCall, ParseCast, ParseCompTime, ParseContinue, ParseDict, ParseExpand, ParseField, ParseFor, ParseForExpr, ParseIf, ParseLet, ParseLetConst, ParseList, ParseListComp, ParseMeta, ParseNot, ParseNumber, ParseOpEq, ParseOperator, ParseOr, ParseReturn, ParseSet, ParseStatements, ParseString, ParseIdentifier, ParseWhile, ParseWhileExpr, ParserFunctionDecl, Token, compilerAssert, ParsePostCall, ParseSymbol, ParseNote, ParseSlice, ParseSubscript, ParserClassDecl, ParseClass, ParseFunction, createToken, ParseBoolean, ParseElse, ParseMetaIf, ParseMetaFor, ParseBlock } from "./defs";
+import { ArgumentTypePair, ParseAnd, ParseNode, ParseBreak, ParseCall, ParseCast, ParseCompTime, ParseContinue, ParseDict, ParseExpand, ParseField, ParseFor, ParseForExpr, ParseIf, ParseLet, ParseLetConst, ParseList, ParseListComp, ParseMeta, ParseNot, ParseNumber, ParseOpEq, ParseOperator, ParseOr, ParseReturn, ParseSet, ParseStatements, ParseString, ParseIdentifier, ParseWhile, ParseWhileExpr, ParserFunctionDecl, Token, compilerAssert, ParsePostCall, ParseSymbol, ParseNote, ParseSlice, ParseSubscript, ParserClassDecl, ParseClass, ParseFunction, createToken, ParseBoolean, ParseElse, ParseMetaIf, ParseMetaFor, ParseBlock, ParseImport, ParsedModule } from "./defs";
 
 type LexerState = { significantNewlines: boolean; parenStack: string[] };
 
 function* tokenize(input: string, state: LexerState): Generator<Token> {
   const regexes = {
     KEYWORD:
-      /^(?:and|as\!|as|break|class|continue|comptime|def|defn|elif|else|fn|for|if|ifx|in|lambda|meta|null|not|or|pass|return|try|while|with|struct|interface)(?=\W)/, // note \b
+      /^(?:and|as\!|as|break|class|continue|comptime|def|defn|elif|else|fn|for|if|ifx|in|lambda|meta|null|not|or|pass|return|try|while|with|struct|interface|import)(?=\W)/, // note \b
     IDENTIFIER: /^[a-zA-Z_][a-zA-Z_0-9-]*/,
     STRING: /^(?:"(?:[^"\\]|\\.)*")/,
     SPECIALNUMBER: /^0o[0-7]+|^0x[0-9a-fA-F_]+|^0b[01_]+/,
@@ -437,12 +437,22 @@ export const makeParser = (input: string) => {
   const parseForStatement = () =>
     new ParseFor(previous, parseIdentifier(), expectInExpr(), parseColonBlock("for list-expression"))
 
-  const parseMetaStatement = (metaToken) => {
+  const parseMetaStatement = (metaToken: Token) => {
     if (match("if"))  return new ParseMetaIf(metaToken, parseIf(previous));
     if (match("for")) return new ParseMetaFor(metaToken, parseForStatement());
     return new ParseMeta(previous, parseStatement());
   }
   const parseOptionalExpr = () =>  matchType("NEWLINE") ? null : trailingNewline(parseExpr())
+
+  const parseImport = (importToken: Token) => {
+    const module = parseIdentifier()
+    const idents: ParseIdentifier[] = []
+    if (match("for")) {
+      idents.push(parseIdentifier())
+      while (match(",")) idents.push(parseIdentifier())
+    }
+    return trailingNewline(new ParseImport(importToken, module, idents))
+  }
 
   const parseStatement = (): ParseNode => {
     if (match("fn"))            return parseFunctionDef();
@@ -455,6 +465,7 @@ export const makeParser = (input: string) => {
     else if (match("continue")) return new ParseContinue(previous, parseOptionalExpr());
     else if (match("for"))      return parseForStatement();
     else if (match("meta"))     return parseMetaStatement(previous)
+    else if (match("import"))   return parseImport(previous)
     return parseExpressionStatement();
   };
   const parseLines = () => {
@@ -467,11 +478,11 @@ export const makeParser = (input: string) => {
   };
   
   advance();
-  state.node = new ParseStatements(createToken(""), parseLines());
+  const rootNode = new ParseStatements(createToken(""), parseLines());
 
   const msg = `Expected EOF but got ${previous?.value} (${previous?.type})`;
   compilerAssert(token === undefined, msg, { lexer, token: previous });
-  return state;
+  return <ParsedModule>{ rootNode, classDefs: state.classDecls, functionDecls: state.functionDecls };
 };
 
 const createNamedFunc = (state: any, token: Token, functionMetaName: ParseIdentifier | null, name: ParseIdentifier, typeArgs: ParseNode[], args: ArgumentTypePair[], returnType: ParseNode | null, keywords: ParseNode[], body: ParseNode | null) => {

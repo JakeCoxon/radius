@@ -1,6 +1,6 @@
-import { existsSync, unlinkSync } from "node:fs";
+import { existsSync, unlinkSync, readFileSync } from "node:fs";
 import { runTopLevelTask } from "../src/compiler";
-import { BoolType, Closure, CompilerError, DoubleType, ExternalFunction, FloatType, GlobalCompilerState, IntType, Scope, StringType, SubCompilerState, TaskContext, VoidType, compilerAssert, createDefaultGlobalCompiler, createScope, expectMap, BuiltinTypes } from "../src/defs";
+import { BoolType, Closure, CompilerError, DoubleType, ExternalFunction, FloatType, GlobalCompilerState, IntType, Scope, StringType, SubCompilerState, TaskContext, VoidType, compilerAssert, createDefaultGlobalCompiler, createScope, expectMap, BuiltinTypes, ModuleLoader } from "../src/defs";
 import { makeParser } from "../src/parser"
 import { Queue, TaskDef, stepQueue, withContext } from "../src//tasks";
 import { expect } from "bun:test";
@@ -12,7 +12,7 @@ const runTestInner = (queue: Queue, input: string, globalCompiler: GlobalCompile
   const subCompilerState = new SubCompilerState('root');
   subCompilerState.scope = rootScope
   const root = (
-    TaskDef(runTopLevelTask, parser.node, rootScope)
+    TaskDef(runTopLevelTask, parser.rootNode, rootScope)
     .chainFn((task, arg) => {
       const func: Closure = expectMap(rootScope, "main", "No main function found");
       return TaskDef(functionTemplateTypeCheckAndCompileTask, { func: func.func, args: [], typeArgs: [], parentScope: func.scope, concreteTypes: [] })
@@ -33,7 +33,16 @@ const runTestInner = (queue: Queue, input: string, globalCompiler: GlobalCompile
   compilerAssert(root._success, "Expected success", { root })
 }
 
-export const runCompilerTest = (input: string, { filename, expectError=false }: { filename: string, expectError?: boolean }) => {
+export const createModuleLoader = (basepath: string) => {
+  return <ModuleLoader>{
+    loadModule: (module) => {
+      const input = readFileSync(`${basepath}${module}.rad`, 'utf-8')
+      return makeParser(input)
+    }
+  }
+}
+
+export const runCompilerTest = (input: string, { moduleLoader, filename, expectError=false }: { moduleLoader?: ModuleLoader, filename: string, expectError?: boolean }) => {
 
   const path = `${import.meta.dir}/output/${filename}.txt`
   if (existsSync(path)) unlinkSync(path)
@@ -71,6 +80,11 @@ export const runCompilerTest = (input: string, { filename, expectError=false }: 
 
   const globalCompiler = createDefaultGlobalCompiler()
   globalCompiler.logger = logger
+  globalCompiler.moduleLoader = moduleLoader || {
+    loadModule: (module) => {
+      compilerAssert(false, "Not implemented")
+    }
+  }
 
   let gotError = false;
   let fatalError = false;

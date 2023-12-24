@@ -137,13 +137,14 @@ export class ParseSlice extends ParseNodeType {      key = 'slice' as const;    
 export class ParseSubscript extends ParseNodeType {  key = 'subscript' as const;  constructor(public token: Token, public expr: ParseNode, public subscript: ParseNode, public isStatic: boolean) { super();} }
 export class ParseTuple extends ParseNodeType {      key = 'tuple' as const;      constructor(public token: Token, public exprs: ParseNode[]) { super();} }
 export class ParseBlock extends ParseNodeType {      key = 'block' as const;      constructor(public token: Token, public statements: ParseStatements) { super();} }
+export class ParseImport extends ParseNodeType {     key = 'import' as const;     constructor(public token: Token, public module: ParseIdentifier, public identifiers: ParseIdentifier[]) { super();} }
 
 export type ParseNode = ParseStatements | ParseLet | ParseSet | ParseOperator | ParseIdentifier | 
   ParseNumber | ParseMeta | ParseCompTime | ParseLetConst | ParseCall | ParseList | ParseOr | ParseAnd | 
   ParseIf | ParseFunction | ParseString | ParseReturn | ParseBreak | ParseContinue | ParseFor | ParseCast |
   ParseOpEq | ParseWhile | ParseWhileExpr | ParseForExpr | ParseNot | ParseField | ParseExpand | ParseListComp |
   ParseDict | ParsePostCall | ParseSymbol | ParseNote | ParseSlice | ParseSubscript | ParseTuple | ParseClass |
-  ParseNil | ParseBoolean | ParseElse | ParseMetaIf | ParseMetaFor | ParseBlock
+  ParseNil | ParseBoolean | ParseElse | ParseMetaIf | ParseMetaFor | ParseBlock | ParseImport
 
 // Void types mean that in secondOrder compilation, the AST doesn't return an AST
 export const isParseVoid = (ast: ParseNode) => ast.key == 'letconst' || ast.key === 'function' || ast.key === 'class' || ast.key === 'comptime';
@@ -427,13 +428,13 @@ export type Scope = object & {
   _scope: true,
   [ScopeEventsSymbol]: {[key:string]:Event<unknown, never>}
 }
-const RootScope = {
+const ScopePrototype = {
   [Inspect.custom](depth, options, inspect) {
     if (depth <= 1) return options.stylize(`[Scope]`, 'special');
     return inspect({...this})
   }
 }
-export const createScope = (obj: object) => Object.assign(Object.create(RootScope), obj) as Scope;
+export const createScope = (obj: object) => Object.assign(Object.create(ScopePrototype), obj) as Scope;
 
 export class ExternalFunction {
   constructor(public name: string, public func: Function) {}
@@ -568,10 +569,21 @@ export type GlobalCompilerState = {
   compiledFunctions: Map<Binding, CompiledFunction>;
   functionDefinitions: FunctionDefinition[],
   classDefinitions: ClassDefinition[],
+  moduleLoader: ModuleLoader
 
   allWaitingEvents: Event<unknown, unknown>[],
   logger: Logger,
   typeTable: TypeTable
+}
+
+export interface ParsedModule {
+  classDefs: ParserClassDecl[]
+  functionDecls: ParserFunctionDecl[]
+  rootNode: ParseStatements
+}
+
+export interface ModuleLoader {
+  loadModule: (module: string) => ParsedModule
 }
 
 export interface TaskContext {
@@ -585,6 +597,7 @@ export const createDefaultGlobalCompiler = () => {
     functionDefinitions: [],
     classDefinitions: [],
     allWaitingEvents: [],
+    moduleLoader: null!,
     typeTable: new TypeTable(),
     logger: null!
   }
@@ -617,7 +630,7 @@ export class SubCompilerState {
   }
 }
 
-export const pushSubCompilerState = (ctx: TaskContext, obj: { debugName: string, vm?: Vm, func?: FunctionDefinition, scope: Scope, lexicalParent: SubCompilerState }) => {
+export const pushSubCompilerState = (ctx: TaskContext, obj: { debugName: string, vm?: Vm, func?: FunctionDefinition, scope: Scope, lexicalParent: SubCompilerState | undefined }) => {
   const state = new SubCompilerState(obj.debugName)
   state.prevCompilerState = ctx.subCompilerState;
   state.lexicalParent = obj.lexicalParent
