@@ -1,6 +1,6 @@
 import { BytecodeDefault, BytecodeSecondOrder, compileFunctionPrototype, createBytecodeVmAndExecuteTask, pushBytecode, pushGeneratedBytecode, visitParseNode } from "./compiler";
 import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, ExternalFunction, CallAst, IntType, Closure, UserCallAst } from "./defs";
-import { Task, TaskDef } from "./tasks";
+import { Task, TaskDef, Unit } from "./tasks";
 
 
 export const insertFunctionDefinition = (compilerState: GlobalCompilerState, decl: ParserFunctionDecl) => {
@@ -34,7 +34,7 @@ function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, args, typ
   func.args.forEach((arg, i) => {
     // expectArg(arg[0], args[i].type, arg[1])
   })
-  if (func.args.length === 0) return Task.of("success");
+  if (func.args.length === 0) return Task.success;
   
   if (!func.headerPrototype) {
 
@@ -85,7 +85,7 @@ function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, args, typ
         compilerAssert(args[i].type === type, "Argument $name of type $value does not match $expected", { name: func.args[i][0].token, value: args[i].type, expected: type })
         concreteTypes.push(type)
       })
-      return Task.of("success")
+      return Task.success
     })
   )
 }
@@ -206,7 +206,7 @@ function functionInlineTask(ctx: TaskContext, { vm, func, typeArgs, args, parent
       ctx.globalCompiler.logger.log(textColors.cyan(`Compiled inline ${func.debugName}`))
       vm.stack.push(new StatementsAst(ast.type, location, [...statements, ast]));
       
-      return Task.of("success")
+      return Task.success
     })
   )
 
@@ -220,7 +220,7 @@ export type CompileTimeFunctionCallArg = {
   parentScope: Scope
 }
 
-export function functionCompileTimeCompileTask(ctx: TaskContext, { vm, func, typeArgs, args, parentScope }: CompileTimeFunctionCallArg): Task<string, CompilerError> {
+export function functionCompileTimeCompileTask(ctx: TaskContext, { vm, func, typeArgs, args, parentScope }: CompileTimeFunctionCallArg): Task<Unit, CompilerError> {
   compilerAssert(func.body, "Expected body");
   compilerAssert(args.length === func.args.length, "Expected $expected arguments got $got", { expected: func.args.length, got: func.args.length, func })
 
@@ -243,7 +243,7 @@ export function functionCompileTimeCompileTask(ctx: TaskContext, { vm, func, typ
 
   return (
     TaskDef(createBytecodeVmAndExecuteTask, subCompilerState, func.compileTimePrototype.bytecode!, scope)
-    .chainFn((task, res) => { vm.stack.push(res); return Task.of("success") })
+    .chainFn((task, res) => { vm.stack.push(res); return Task.success })
   );
 };
 
@@ -251,12 +251,12 @@ export function createCallAstFromValue(vm: Vm, value: unknown, typeArgs: unknown
   if (value instanceof PrimitiveType) {
     compilerAssert(args.length === 1 && typeArgs.length === 0, "Expected 1 arg got $count", { count: args.length })
     vm.stack.push(new CastAst(value, vm.location, args[0]))
-    return Task.of("success")
+    return Task.success
   }
 
   if (value instanceof ExternalFunction) {
-    vm.stack.push(new CallAst(IntType, vm.location, value, args));
-    return Task.of("success")
+    vm.stack.push(new CallAst(value.returnType, vm.location, value, args));
+    return Task.success
   }
 
   if (value instanceof Closure) {
@@ -275,7 +275,7 @@ export function createCallAstFromValue(vm: Vm, value: unknown, typeArgs: unknown
         const binding = compiledFunction.binding;
         const returnType = compiledFunction.returnType;
         vm.stack.push(new UserCallAst(returnType, vm.location, binding, args));
-        return Task.of("success")
+        return Task.success
       })
     )
   }

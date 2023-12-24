@@ -50,6 +50,8 @@ export class Task<S, F> {
     this.id = uniqueId++;
   }
 
+  static success: Task<Success, never>
+
   static of<S>(value: S): Task<S, never> {
     return new TaskOf(value);
   }
@@ -110,6 +112,9 @@ class TaskOf<S> extends Task<S, never> {
 
   _toString() { return `of(${this.id}, ..)`; }
 }
+
+export type Unit = { _type: 'unit' }
+Task.success = Task.of({} as Unit)
 
 class Rejected<F> extends Task<never, F> {
   _error: F;

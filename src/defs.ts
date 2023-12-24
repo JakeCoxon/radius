@@ -39,9 +39,10 @@ export class Source {
 }
 
 export class SourceLocation {
+  static anon = new SourceLocation(-1, -1, null!)
   constructor(public line: number, public column: number, public source: Source) {}
   [Inspect.custom](depth, options, inspect) {
-    return options.stylize(`[SourceLocation ${this.source.debugName} ${this.line}:${this.column}]`, 'special');
+    return options.stylize(`[SourceLocation ${this.source.debugName}:${this.line}:${this.column}]`, 'special');
   }
 }
 
@@ -273,13 +274,17 @@ export class FunctionDefinition {
   }
 }
 
-export class ClassField {
+export class TypeField {
   constructor(
     public location: SourceLocation,
     public name: string,
-    public type: Type,
-    public binding: Binding // May not be needed
+    public sourceType: Type,
+    public index: number,
+    public fieldType: Type,
     ) {}
+  [Inspect.custom](depth, options, inspect) {
+    return options.stylize(`[TypeField ${this.index} ${inspect(this.sourceType)} ${this.name}]`, 'special');
+  }
 }
 export class CompiledClass {
   metaobject: {} = {}
@@ -291,7 +296,7 @@ export class CompiledClass {
     public classDefinition: ClassDefinition,
     public type: Type,
     public body: Ast,
-    public fields: ClassField[],
+    public fields: TypeField[],
     public typeParameters: unknown[],
     public typeParamHash: unknown) {}
 
@@ -355,8 +360,8 @@ export class WhileAst extends AstRoot {      constructor(public type: Type, publ
 export class ReturnAst extends AstRoot {     constructor(public type: Type, public location: SourceLocation, public expr: Ast | null) { super() } }
 export class BreakAst extends AstRoot {      constructor(public type: Type, public location: SourceLocation, public binding: Binding, public expr: Ast | null) { super() } }
 export class BlockAst extends AstRoot {      constructor(public type: Type, public location: SourceLocation, public binding: Binding, public body: Ast) { super() } }
-export class FieldAst extends AstRoot {      constructor(public type: Type, public location: SourceLocation, public left: Ast, public binding: Binding) { super() } }
-export class SetFieldAst extends AstRoot {   constructor(public type: Type, public location: SourceLocation, public left: Ast, public binding: Binding, public value: Ast) { super() } }
+export class FieldAst extends AstRoot {      constructor(public type: Type, public location: SourceLocation, public left: Ast, public field: TypeField) { super() } }
+export class SetFieldAst extends AstRoot {   constructor(public type: Type, public location: SourceLocation, public left: Ast, public field: TypeField, public value: Ast) { super() } }
 export class VoidAst extends AstRoot {       constructor(public type: Type, public location: SourceLocation) { super() } }
 export class CastAst extends AstRoot {       constructor(public type: Type, public location: SourceLocation, public expr: Ast) { super() } }
 export class SubscriptAst extends AstRoot {  constructor(public type: Type, public location: SourceLocation, public left: Ast, public right: Ast) { super() } }
@@ -412,12 +417,6 @@ export class ExternalType extends TypeRoot {
     return options.stylize(`[ExternalType ${this.typeName}]`, 'special');
   }
 }
-export class AbstractClassType extends TypeRoot {
-  constructor(public classDefinition: ClassDefinition) { super() }
-  [Inspect.custom](depth, options, inspect) {
-    return options.stylize(`[AbstractClassType ${this.classDefinition.debugName}]`, 'special');
-  }
-}
 export class GenericType extends TypeRoot {
   constructor(public baseType: Type, public args: Type[]) { super() }
   [Inspect.custom](depth, options, inspect) {
@@ -430,7 +429,7 @@ export class ConcreteClassType extends TypeRoot {
     return options.stylize(`[ConcreteClassType ${this.compiledClass.debugName}]`, 'special');
   }
 }
-export type Type = PrimitiveType | AbstractClassType | ConcreteClassType | ExternalType | GenericType
+export type Type = PrimitiveType | ConcreteClassType | ExternalType | GenericType
 export const isType = (type: unknown): type is Type => type instanceof TypeRoot
 
 export class Closure {
@@ -465,8 +464,9 @@ export const DoubleType = new PrimitiveType("double")
 export const StringType = new PrimitiveType("string")
 export const FunctionType = new PrimitiveType("function")
 export const ListType = Object.assign(new ExternalType("List"), {
-  lengthBinding: new Binding("length", IntType)
+  lengthField: null! as TypeField
 });
+ListType.lengthField = new TypeField(new SourceLocation(-1, -1, null!), "length", ListType, 0, IntType)
 
 export const BuiltinTypes = {
   int: IntType,
@@ -506,7 +506,6 @@ const typesEqual = (t1: Type, t2: any) => {
   if (t1 instanceof PrimitiveType) return t1 == t2;
   if (t1 instanceof ExternalType) return t1 == t2;
   if (t1 instanceof ConcreteClassType) return t1.compiledClass == t2.compiledClass;
-  if (t1 instanceof AbstractClassType) return t1.classDefinition == t2.compiledClass;
   if (t1 instanceof GenericType) {
     if (!typesEqual(t1.baseType, (t2 as any).baseType)) return false;
     if (t1.args.length !== t2.args.length) return false;

@@ -5,6 +5,7 @@ foo :: thing4(5)
 fn thing(x: int):
   print("thing", x)
   print(x + 32)
+  x + 32
 
 fn thing4(x: int):
   print(x)
