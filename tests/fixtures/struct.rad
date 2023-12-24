@@ -9,11 +9,11 @@ fn fam!(T)(a: int):
 fn famz!(T)(a: T):
   print(a)
 
-struct Thing:
+type Thing:
   x : int
   y : float
 
-struct List!(T):
+type List!(T):
   elem : T
 
 fn foothing(a: Thing):

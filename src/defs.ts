@@ -147,13 +147,14 @@ export class ParseSubscript extends ParseNodeType {  key = 'subscript' as const;
 export class ParseTuple extends ParseNodeType {      key = 'tuple' as const;      constructor(public token: Token, public exprs: ParseNode[]) { super();} }
 export class ParseBlock extends ParseNodeType {      key = 'block' as const;      constructor(public token: Token, public statements: ParseStatements) { super();} }
 export class ParseImport extends ParseNodeType {     key = 'import' as const;     constructor(public token: Token, public module: ParseIdentifier, public identifiers: ParseIdentifier[]) { super();} }
+export class ParseCompilerIden extends ParseNodeType { key = 'compileriden' as const; constructor(public token: Token, public value: string) { super();} }
 
 export type ParseNode = ParseStatements | ParseLet | ParseSet | ParseOperator | ParseIdentifier | 
   ParseNumber | ParseMeta | ParseCompTime | ParseLetConst | ParseCall | ParseList | ParseOr | ParseAnd | 
   ParseIf | ParseFunction | ParseString | ParseReturn | ParseBreak | ParseContinue | ParseFor | ParseCast |
   ParseOpEq | ParseWhile | ParseWhileExpr | ParseForExpr | ParseNot | ParseField | ParseExpand | ParseListComp |
   ParseDict | ParsePostCall | ParseSymbol | ParseNote | ParseSlice | ParseSubscript | ParseTuple | ParseClass |
-  ParseNil | ParseBoolean | ParseElse | ParseMetaIf | ParseMetaFor | ParseBlock | ParseImport
+  ParseNil | ParseBoolean | ParseElse | ParseMetaIf | ParseMetaFor | ParseBlock | ParseImport | ParseCompilerIden
 
 // Void types mean that in secondOrder compilation, the AST doesn't return an AST
 export const isParseVoid = (ast: ParseNode) => ast.key == 'letconst' || ast.key === 'function' || ast.key === 'class' || ast.key === 'comptime';
@@ -170,6 +171,7 @@ export type BytecodeInstr =
   { type: 'tuple', count: number } |
   { type: 'closure', id: number } |
   { type: 'call', name: string, count: number, tcount: number } |
+  { type: 'compilerfn', name: string, count: number, tcount: number } |
   { type: 'return', r: boolean } |
   { type: 'not' } |
   { type: 'pop' } |
@@ -280,6 +282,8 @@ export class ClassField {
     ) {}
 }
 export class CompiledClass {
+  metaobject: {} = {}
+
   constructor(
     public location: SourceLocation,
     public debugName: string,
@@ -402,6 +406,7 @@ export class PrimitiveType extends TypeRoot {
   }
 }
 export class ExternalType extends TypeRoot {
+  metaobject: {} = {}
   constructor(public typeName: string) { super() }
   [Inspect.custom](depth, options, inspect) {
     return options.stylize(`[ExternalType ${this.typeName}]`, 'special');

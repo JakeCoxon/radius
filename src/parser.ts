@@ -5,7 +5,7 @@ type LexerState = { significantNewlines: boolean; parenStack: string[] };
 function* tokenize(source: Source, state: LexerState): Generator<Token> {
   const regexes = {
     KEYWORD:
-      /^(?:and|as\!|as|break|class|continue|comptime|def|defn|elif|else|fn|for|if|ifx|in|lambda|meta|null|not|or|pass|return|try|while|with|struct|interface|import)(?=\W)/, // note \b
+      /^(?:and|as\!|as|break|class|continue|comptime|def|defn|elif|else|fn|for|if|ifx|in|lambda|meta|null|not|or|pass|return|try|while|with|type|interface|import)(?=\W)/, // note \b
     IDENTIFIER: /^[a-zA-Z_][a-zA-Z_0-9-]*/,
     STRING: /^(?:"(?:[^"\\]|\\.)*")/,
     SPECIALNUMBER: /^0o[0-7]+|^0x[0-9a-fA-F_]+|^0b[01_]+/,
@@ -459,7 +459,7 @@ export const makeParser = (input: string, debugName: string) => {
 
   const parseStatement = (): ParseNode => {
     if (match("fn"))            return parseFunctionDef();
-    else if (match("struct"))   return parseClassDef();
+    else if (match("type"))   return parseClassDef();
     else if (match("if"))       return parseIf(previous);
     else if (match("while"))    return parseWhile();
     else if (match("comptime")) return new ParseCompTime(previous, parseColonBlock("comptime"));

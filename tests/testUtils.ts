@@ -45,6 +45,8 @@ export const createModuleLoader = (basepath: string) => {
   }
 }
 
+const originalLog = console.log;
+
 export const runCompilerTest = (input: string, { moduleLoader, filename, expectError=false }: { moduleLoader?: ModuleLoader, filename: string, expectError?: boolean }) => {
 
   const path = `${import.meta.dir}/output/${filename}.txt`
@@ -67,6 +69,11 @@ export const runCompilerTest = (input: string, { moduleLoader, filename, expectE
   const logger = { log: (...args) => {
     writeToFile(...args)
   } }
+
+  globalThis.console.log = (...args) => {
+    originalLog(...args)
+    logger.log(...args)
+  }
 
   const rootScope: Scope = createScope({
     ...BuiltinTypes,

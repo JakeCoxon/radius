@@ -71,6 +71,13 @@ test("list_iterator", async () => {
 
 });
 
+test("custom_iterator", async () => {
+
+  const input = await Bun.file(`${import.meta.dir}/fixtures/custom_iterator.rad`).text()
+  const test = runCompilerTest(input, { filename: 'custom_iterator' })
+
+});
+
 
 test("noclosure", async () => {
 

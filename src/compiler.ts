@@ -1,4 +1,4 @@
-import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, ClassField, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListType, SubscriptAst, ExternalType, GenericType, isGenericTypeOf, ParseMeta, createAnonymousParserFunctionDecl, ArgumentTypePair, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors } from "./defs";
+import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, ClassField, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListType, SubscriptAst, ExternalType, GenericType, isGenericTypeOf, ParseMeta, createAnonymousParserFunctionDecl, ArgumentTypePair, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden } from "./defs";
 import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, compileAndExecuteFunctionHeaderTask, functionCompileTimeCompileTask, functionInlineTask, functionTemplateTypeCheckAndCompileTask } from "./compiler_functions";
 import { Event, Task, TaskDef, isTask, isTaskResult } from "./tasks";
 
@@ -44,6 +44,7 @@ export const BytecodeDefault: ParseTreeTable = {
   field:     (out, node) => compilerAssert(false, "Not implemented"),
   subscript: (out, node) => compilerAssert(false, "Not implemented"),
   import:    (out, node) => compilerAssert(false, "Not implemented"),
+  compileriden: (out, node) => compilerAssert(false, "Not implemented"),
 
   number:  (out, node) => pushBytecode(out, node.token, { type: "push", value: Number(node.token.value) }), 
   string:  (out, node) => pushBytecode(out, node.token, { type: "push", value: node.token.value }), 
@@ -197,6 +198,7 @@ export const BytecodeSecondOrder: ParseTreeTable = {
   nil:       (out, node) => compilerAssert(false, "Not implemented"),
   metafor:   (out, node) => compilerAssert(false, "Not implemented"),
   import:    (out, node) => compilerAssert(false, "Not implemented"),
+  compileriden: (out, node) => compilerAssert(false, "Not implemented"),
 
   identifier: (out, node) => pushBytecode(out, node.token, { type: "bindingast", name: node.token.value }),
   number:  (out, node) => pushBytecode(out, node.token, { type: "numberast", value: Number(node.token.value) }),
@@ -224,9 +226,8 @@ export const BytecodeSecondOrder: ParseTreeTable = {
     const fnArgs: ArgumentTypePair[] = [[node.identifier, null]]
     const decl = createAnonymousParserFunctionDecl("for", node.token, fnArgs, node.body)
     const fn = new ParseFunction(node.token, decl)
-    const elemType = new ParseIdentifier(createAnonymousToken('int')) // Hard code int for now
-    const iterate = new ParseIdentifier(createAnonymousToken('iterate'))
-    const call = new ParseCall(node.token, iterate, [node.expr], [fn, elemType])
+    const iterateFn = new ParseCompilerIden(createAnonymousToken(''), 'iteratefn');
+    const call = new ParseCall(node.token, iterateFn, [node.expr], [fn])
     visitParseNode(out, call)
   },
 
@@ -295,6 +296,12 @@ export const BytecodeSecondOrder: ParseTreeTable = {
   },
 
   call: (out, node) => {
+    if (node.left instanceof ParseCompilerIden) {
+      node.typeArgs.forEach(x => writeMeta(out, x));
+      visitAll(out, node.args);
+      pushBytecode(out, node.token, { type: "compilerfn", name: node.left.value, count: node.args.length, tcount: node.typeArgs.length });
+      return
+    }
     if (node.left instanceof ParseIdentifier) {
       node.typeArgs.forEach(x => writeMeta(out, x));
       visitAll(out, node.args);
@@ -380,7 +387,7 @@ export function createBytecodeVmAndExecuteTask(ctx: TaskContext, subCompilerStat
   return (
     TaskDef(executeVmTask, { vm })
     .mapRejected(error => {
-      (error.info as any).location = vm.location;
+      if (!(error.info as any).location) (error.info as any).location = vm.location;
       (error.info as any).subCompilerState = subCompilerState
       return error
     })
@@ -441,7 +448,7 @@ const letLocal = (vm: Vm, name: string, type: Type | null, value: Ast | null) =>
 
 type CallArgs = { vm: Vm, name: string, count: number, tcount: number }
 
-function createCallAstFromValue(vm: Vm, value: unknown, typeArgs: unknown[], args: Ast[]): Task<string, never> {
+function createCallAstFromValue(vm: Vm, value: unknown, typeArgs: unknown[], args: Ast[]): Task<string, CompilerError> {
   if (value instanceof PrimitiveType) {
     compilerAssert(args.length === 1 && typeArgs.length === 0, "Expected 1 arg got $count", { count: args.length })
     vm.stack.push(new CastAst(value, vm.location, args[0]))
@@ -491,8 +498,38 @@ function resolveScope(ctx: TaskContext, scope: Scope, name: string): Task<unknow
   ctx.globalCompiler.allWaitingEvents.push(scope[ScopeEventsSymbol][name])
   return Task.waitFor(scope[ScopeEventsSymbol][name]).mapRejected((error) => {
     // compilerAssert(false, "Binding $name not found in scope", { name, scope })
-    return new CompilerError('Binding $name not found in scope', {})
+    return createCompilerError('Binding $name not found in scope', { name })
   })
+}
+
+function callFunctionFromValueTask(ctx: TaskContext, vm: Vm, func: unknown, typeArgs: unknown[], values: Ast[]): Task<string, CompilerError> {
+  if (func instanceof ExternalFunction) {
+    const functionResult = func.func(...values);
+    vm.stack.push(functionResult);
+    return Task.of('success');
+  }
+
+  if (func instanceof Closure) {
+    const call: CompileTimeFunctionCallArg = { vm, func: func.func, typeArgs, args: values, parentScope: func.scope };
+    return TaskDef(functionCompileTimeCompileTask, call)
+  }
+
+  if (func instanceof ClassDefinition) {
+    compilerAssert(func.abstract, "Expected abstract class got $func", { func });
+    compilerAssert(values.length === 0, "Not implemented", { values })
+    return (
+      TaskDef(compileClassTask, { classDef: func, typeArgs })
+      .chainFn((task, type) => { vm.stack.push(type); return Task.of('success') })
+    )
+  }
+  if (func instanceof ExternalType) {
+    compilerAssert(values.length === 0, "Expected no args", { values })
+    compilerAssert(typeArgs.length === 1, "Expected one type arg", { typeArgs })
+    vm.stack.push(createGenericType(ctx.globalCompiler, func, [expectType(typeArgs[0])]))
+    return Task.of('success')
+  }
+  compilerAssert(!(func instanceof FunctionDefinition), "$func is not handled", { func })
+  compilerAssert(false, "$func is not a function", { func })
 }
 
 function callFunctionTask(ctx: TaskContext, { vm, name, count, tcount }: CallArgs): Task<string, CompilerError> {
@@ -501,34 +538,7 @@ function callFunctionTask(ctx: TaskContext, { vm, name, count, tcount }: CallArg
   return (
     TaskDef(resolveScope, vm.scope, name)
     .chainFn((task, func) => {
-
-      if (func instanceof ExternalFunction) {
-        const functionResult = func.func(...values);
-        vm.stack.push(functionResult);
-        return Task.of('success');
-      }
-
-      if (func instanceof Closure) {
-        const call: CompileTimeFunctionCallArg = { vm, func: func.func, typeArgs, args: values, parentScope: func.scope };
-        return TaskDef(functionCompileTimeCompileTask, call)
-      }
-
-      if (func instanceof ClassDefinition) {
-        compilerAssert(func.abstract, "Expected abstract class got $func", { func });
-        compilerAssert(values.length === 0, "Not implemented", { values })
-        return (
-          TaskDef(compileClassTask, { classDef: func, typeArgs })
-          .chainFn((task, type) => { vm.stack.push(type); return Task.of('success') })
-        )
-      }
-      if (func instanceof ExternalType) {
-        compilerAssert(values.length === 0, "Expected no args", { values })
-        compilerAssert(typeArgs.length === 1, "Expected one type arg", { typeArgs })
-        vm.stack.push(createGenericType(ctx.globalCompiler, func, [expectType(typeArgs[0])]))
-        return Task.of('success')
-      }
-      compilerAssert(!(func instanceof FunctionDefinition), "$func is not handled", { func })
-      compilerAssert(false, "$func is not a function", { func })
+      return TaskDef(callFunctionFromValueTask, vm, func, typeArgs, values)
     })
   )
 }
@@ -705,6 +715,35 @@ const instructions: InstructionMapping = {
   },
   jump: (vm, { address }) => void (vm.ip = address),
   call: (vm, { name, count, tcount }) => TaskDef(callFunctionTask, { vm, name, count, tcount }),
+  compilerfn: (vm, { name, count, tcount }) => {
+    const values = expectAsts(popValues(vm, count))
+    const typeArgs = popValues(vm, tcount || 0);
+
+    const getMetaObject = (type: Type) => {
+      if (type instanceof ConcreteClassType && type.compiledClass.metaobject) return type.compiledClass.metaobject
+      if (type instanceof GenericType) return getMetaObject(type.baseType)
+      if (type instanceof ExternalType) return type.metaobject
+      compilerAssert(false, "Cannot find metaobject for type $type", { type })
+    }
+
+    if (name === 'iteratefn') {
+      const metaObject = getMetaObject(values[0].type);
+      if (metaObject['iterate']) return createCallAstFromValue(vm, metaObject['iterate'], [typeArgs[0]], [values[0]])
+      return (
+        TaskDef(resolveScope, vm.scope, 'iterate')
+        .chainFn((task, func) => {
+          compilerAssert(func instanceof Closure, "Expected closure", { func })
+          const iterateTypeArgs = func.func.typeArgs.length == 2 ? [typeArgs[0], IntType] : [typeArgs[0]]
+          return createCallAstFromValue(vm, func, iterateTypeArgs, [values[0]])
+        })
+        .mapRejected(error => {
+          return createCompilerError(`No iterate meta function, and no 'iterate' function found in scope for type $type`, { type: values[0].type })
+        })
+      )
+    }
+
+    compilerAssert(false, "No nuch compiler function $name", { name, values, typeArgs })
+  },
   operator: (vm, { name, count }) => {
     const values = popValues(vm, count);
     compilerAssert(operators[name], `Invalid operator $name`, { name });
@@ -818,7 +857,6 @@ function topLevelClassDefinitionTask(ctx: TaskContext, decl: ParserClassDecl, sc
 
   setScopeValueAndResolveEvents(scope, decl.name!.token.value, classDef)
 
-
   return Task.of("Success")
 
 }
@@ -861,8 +899,10 @@ function compileClassTask(ctx: TaskContext, { classDef, typeArgs }: { classDef: 
 
       const fields: ClassField[] = []
       for (const name of Object.getOwnPropertyNames(templateScope)) {
-        fields.push(new ClassField(null, name, templateScope[name].type, templateScope[name]))
+        if (templateScope[name] instanceof Binding)
+          fields.push(new ClassField(null as any, name, templateScope[name].type, templateScope[name]))
       }
+
       const debugName = typeArgs.length === 0 ? classDef.debugName :
         `${classDef.debugName}!(...)`
       const compiledClass = new CompiledClass(
@@ -872,11 +912,14 @@ function compileClassTask(ctx: TaskContext, { classDef, typeArgs }: { classDef: 
       classDef.compiledClasses.push(compiledClass)
       classDef.concreteType = type;
 
+      const iterate = templateScope['__iterate']
+      compilerAssert(!iterate || iterate instanceof Closure)
+      Object.assign(compiledClass.metaobject, { iterate })
+
       return Task.of(type)
 
     })
   )
-
   
 }
 

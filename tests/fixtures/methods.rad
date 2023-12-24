@@ -1,5 +1,5 @@
 
-struct Thing:
+type Thing:
   x : int
   y : int
 
