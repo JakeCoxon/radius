@@ -405,6 +405,7 @@ export const hashValues = (values: unknown[]) => {
 
 export class TypeRoot {}
 export class PrimitiveType extends TypeRoot {
+  metaobject: {} = {}
   constructor(public typeName: string) { super() }
   [Inspect.custom](depth, options, inspect) {
     return options.stylize(`[PrimitiveType ${this.typeName}]`, 'special');
@@ -417,19 +418,24 @@ export class ExternalType extends TypeRoot {
     return options.stylize(`[ExternalType ${this.typeName}]`, 'special');
   }
 }
-export class GenericType extends TypeRoot {
-  constructor(public baseType: Type, public args: Type[]) { super() }
-  [Inspect.custom](depth, options, inspect) {
-    return options.stylize(`[GenericType ...]`, 'special');
-  }
-}
 export class ConcreteClassType extends TypeRoot {
+  metaobject: {} = {}
   constructor(public compiledClass: CompiledClass) { super() }
   [Inspect.custom](depth, options, inspect) {
     return options.stylize(`[ConcreteClassType ${this.compiledClass.debugName}]`, 'special');
   }
 }
-export type Type = PrimitiveType | ConcreteClassType | ExternalType | GenericType
+export class ParameterizedType extends TypeRoot {
+  metaobject: {}
+  constructor(public typeConstructor: Type, public args: Type[]) {
+    super()
+    this.metaobject = typeConstructor.metaobject
+  }
+  [Inspect.custom](depth, options, inspect) {
+    return options.stylize(`[ParameterizedType ...]`, 'special');
+  }
+}
+export type Type = PrimitiveType | ExternalType | ConcreteClassType | ParameterizedType
 export const isType = (type: unknown): type is Type => type instanceof TypeRoot
 
 export class Closure {
@@ -506,14 +512,14 @@ const typesEqual = (t1: Type, t2: any) => {
   if (t1 instanceof PrimitiveType) return t1 == t2;
   if (t1 instanceof ExternalType) return t1 == t2;
   if (t1 instanceof ConcreteClassType) return t1.compiledClass == t2.compiledClass;
-  if (t1 instanceof GenericType) {
-    if (!typesEqual(t1.baseType, (t2 as any).baseType)) return false;
+  if (t1 instanceof ParameterizedType) {
+    if (!typesEqual(t1.typeConstructor, (t2 as any).typeConstructor)) return false;
     if (t1.args.length !== t2.args.length) return false;
     return t1.args.every((x, i) => typesEqual(x, t2.args[i]))
   }
 }
-export const isGenericTypeOf = (a: Type, expected: Type) => {
-  return a instanceof GenericType && a.baseType === expected;
+export const isParameterizedTypeOf = (a: Type, expected: Type) => {
+  return a instanceof ParameterizedType && a.typeConstructor === expected;
 }
 
 

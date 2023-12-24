@@ -1,4 +1,4 @@
-import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, ClassField, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListType, SubscriptAst, ExternalType, GenericType, isGenericTypeOf, ParseMeta, createAnonymousParserFunctionDecl, ArgumentTypePair, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField } from "./defs";
+import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, ClassField, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListType, SubscriptAst, ExternalType, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, ArgumentTypePair, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField } from "./defs";
 import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, functionCompileTimeCompileTask, createCallAstFromValue } from "./compiler_functions";
 import { Event, Task, TaskDef, Unit, isTask, isTaskResult } from "./tasks";
 
@@ -489,7 +489,7 @@ function callFunctionFromValueTask(ctx: TaskContext, vm: Vm, func: unknown, type
   if (func instanceof ExternalType) {
     compilerAssert(values.length === 0, "Expected no args", { values })
     compilerAssert(typeArgs.length === 1, "Expected one type arg", { typeArgs })
-    vm.stack.push(createGenericType(ctx.globalCompiler, func, [expectType(typeArgs[0])]))
+    vm.stack.push(createParameterizedType(ctx.globalCompiler, func, [expectType(typeArgs[0])]))
     return Task.success
   }
   compilerAssert(!(func instanceof FunctionDefinition), "$func is not handled", { func })
@@ -533,7 +533,7 @@ const instructions: InstructionMapping = {
   listast: (vm, { count }) => {
     const values = expectAsts(popValues(vm, count));
     const elementType = getCommonType(values.map(x => x.type))
-    const type = createGenericType(vm.context.globalCompiler, ListType, [elementType]);
+    const type = createParameterizedType(vm.context.globalCompiler, ListType, [elementType]);
     vm.stack.push(new ListAst(type, vm.location, values))
   },
   callast: (vm, { name, count, tcount }) => {
@@ -575,9 +575,9 @@ const instructions: InstructionMapping = {
         return
       }
     }
-    if (value.type instanceof GenericType) {
-      if (value.type.baseType === ListType) {
-        const field = (value.type.baseType as typeof ListType).lengthField
+    if (value.type instanceof ParameterizedType) {
+      if (value.type.typeConstructor === ListType) {
+        const field = (value.type.typeConstructor as typeof ListType).lengthField
         vm.stack.push(new FieldAst(IntType, vm.location, value, field))
         return
       }
@@ -603,7 +603,7 @@ const instructions: InstructionMapping = {
   subscriptast: (vm, {}) => {
     const right = expectAst(popStack(vm));
     const left = expectAst(popStack(vm));
-    compilerAssert(isGenericTypeOf(left.type, ListType), "Expected list got $x", { x: left.type })
+    compilerAssert(isParameterizedTypeOf(left.type, ListType), "Expected list got $x", { x: left.type })
     compilerAssert(right.type === IntType, "Expected int got $x", { x: right.type })
     vm.stack.push(new SubscriptAst(IntType, vm.location, left, right))
   },
@@ -681,25 +681,16 @@ const instructions: InstructionMapping = {
     const values = expectAsts(popValues(vm, count))
     const typeArgs = popValues(vm, tcount || 0);
 
-    const getMetaObject = (type: Type) => {
-      if (type instanceof ConcreteClassType && type.compiledClass.metaobject) return type.compiledClass.metaobject
-      if (type instanceof GenericType) return getMetaObject(type.baseType)
-      if (type instanceof ExternalType) return type.metaobject
-      compilerAssert(false, "Cannot find metaobject for type $type", { type })
-    }
-
     if (name === 'iteratefn') {
-      const metaObject = getMetaObject(values[0].type);
+      const metaObject = values[0].type.metaobject;
       if (metaObject['iterate']) return createCallAstFromValue(vm, metaObject['iterate'], [typeArgs[0]], [values[0]])
       return (
         TaskDef(resolveScope, vm.scope, 'iterate')
+        .mapRejected(error => createCompilerError(`No iterate meta function, and no 'iterate' function found in scope for type $type`, { type: values[0].type }))
         .chainFn((task, func) => {
           compilerAssert(func instanceof Closure, "Expected closure", { func })
           const iterateTypeArgs = func.func.typeArgs.length == 2 ? [typeArgs[0], IntType] : [typeArgs[0]]
           return createCallAstFromValue(vm, func, iterateTypeArgs, [values[0]])
-        })
-        .mapRejected(error => {
-          return createCompilerError(`No iterate meta function, and no 'iterate' function found in scope for type $type`, { type: values[0].type })
         })
       )
     }
@@ -890,8 +881,8 @@ const getCommonType = (types: Type[]): Type => {
   compilerAssert(types.every(x => x === types[0]), "Expected types to be the same")
   return types[0];
 }
-const createGenericType = (globalCompiler: GlobalCompilerState, baseType: Type, argTypes: Type[]): Type => {
-  const newType = new GenericType(baseType, argTypes);
+const createParameterizedType = (globalCompiler: GlobalCompilerState, baseType: Type, argTypes: Type[]): Type => {
+  const newType = new ParameterizedType(baseType, argTypes);
   return globalCompiler.typeTable.getOrInsert(newType)
 }
 
