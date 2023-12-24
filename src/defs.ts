@@ -451,7 +451,7 @@ const ScopePrototype = {
 export const createScope = (obj: object) => Object.assign(Object.create(ScopePrototype), obj) as Scope;
 
 export class ExternalFunction {
-  constructor(public name: string, public func: Function) {}
+  constructor(public name: string, public returnType: Type, public func: Function) {}
   [Inspect.custom](depth, options, inspect) {
     return options.stylize(`[ExternalFunction ${this.name}]`, 'special');
   }

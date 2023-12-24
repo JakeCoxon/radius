@@ -12,7 +12,7 @@ const runTestInner = (input: string) => {
     ...BuiltinTypes,
     compfoo: { _function: (a, b) => 65 + a + b },
     bar: 123,
-    print: new ExternalFunction('print', (...args) => {
+    print: new ExternalFunction('print', VoidType, (...args) => {
       console.log(...args)
       return args[0];
     }),
@@ -20,12 +20,12 @@ const runTestInner = (input: string) => {
 
   const queue = new Queue();
   
-  const parser = makeParser(input)
+  const parser = makeParser(input, 'main')
   
   const subCompilerState = new SubCompilerState('root');
   subCompilerState.scope = rootScope
   const root = (
-    TaskDef(runTopLevelTask, parser.node, rootScope)
+    TaskDef(runTopLevelTask, parser.rootNode, rootScope)
     .chainFn((task, arg) => {
       const func: Closure = expectMap(rootScope, "main", "No main function found");
       return TaskDef(functionTemplateTypeCheckAndCompileTask, { func: func.func, args: [], typeArgs: [], parentScope: func.scope, concreteTypes: [] })

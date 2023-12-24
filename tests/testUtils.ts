@@ -79,7 +79,7 @@ export const runCompilerTest = (input: string, { moduleLoader, filename, expectE
     ...BuiltinTypes,
     compfoo: { _function: (a, b) => 65 + a + b },
     bar: 123,
-    print: new ExternalFunction('print', (...args) => {
+    print: new ExternalFunction('print', VoidType, (...args) => {
       logger.log("print called", ...args);
       prints.push(...args)
       return args[0];

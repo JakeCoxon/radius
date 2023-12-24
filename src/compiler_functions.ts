@@ -1,5 +1,5 @@
 import { BytecodeDefault, BytecodeSecondOrder, compileFunctionPrototype, createBytecodeVmAndExecuteTask, pushBytecode, pushGeneratedBytecode, visitParseNode } from "./compiler";
-import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError } from "./defs";
+import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, ExternalFunction, CallAst, IntType, Closure, UserCallAst } from "./defs";
 import { Task, TaskDef } from "./tasks";
 
 
@@ -27,7 +27,7 @@ export type TypeCheckHeaderArg = {
   concreteTypes: Type[] // output
 }
 
-export function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, args, typeArgs, parentScope, concreteTypes }: TypeCheckHeaderArg): Task<string, CompilerError> {
+function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, args, typeArgs, parentScope, concreteTypes }: TypeCheckHeaderArg): Task<string, CompilerError> {
 
   compilerAssert(typeArgs.length === func.typeArgs.length, "Expected $expected type parameters, got $got", { expected: func.typeArgs.length, got: typeArgs.length, func })
   compilerAssert(args.length === func.args.length, 'Expected $expected args got $got', { expected: func.args.length, got: args.length, func })
@@ -98,7 +98,7 @@ export type TypeCheckAndCompileArg = {
   concreteTypes: Type[]
 }
 
-export function functionTemplateTypeCheckAndCompileTask(ctx: TaskContext, { func, typeArgs, args, parentScope, concreteTypes }: TypeCheckAndCompileArg): Task<CompiledFunction, never> {
+export function functionTemplateTypeCheckAndCompileTask(ctx: TaskContext, { func, typeArgs, args, parentScope, concreteTypes }: TypeCheckAndCompileArg): Task<CompiledFunction, CompilerError> {
 
   const argBindings: Binding[] = [];
 
@@ -167,7 +167,7 @@ export type FunctionCallArg = {
   concreteTypes: Type[]
 }
 
-export function functionInlineTask(ctx: TaskContext, { vm, func, typeArgs, args, parentScope, concreteTypes }: FunctionCallArg): Task<string, never> {
+function functionInlineTask(ctx: TaskContext, { vm, func, typeArgs, args, parentScope, concreteTypes }: FunctionCallArg): Task<string, CompilerError> {
 
   const argBindings: Binding[] = [];
   const statements: Ast[] = []
@@ -220,7 +220,7 @@ export type CompileTimeFunctionCallArg = {
   parentScope: Scope
 }
 
-export function functionCompileTimeCompileTask(ctx: TaskContext, { vm, func, typeArgs, args, parentScope }: CompileTimeFunctionCallArg): Task<string, never> {
+export function functionCompileTimeCompileTask(ctx: TaskContext, { vm, func, typeArgs, args, parentScope }: CompileTimeFunctionCallArg): Task<string, CompilerError> {
   compilerAssert(func.body, "Expected body");
   compilerAssert(args.length === func.args.length, "Expected $expected arguments got $got", { expected: func.args.length, got: func.args.length, func })
 
@@ -246,3 +246,39 @@ export function functionCompileTimeCompileTask(ctx: TaskContext, { vm, func, typ
     .chainFn((task, res) => { vm.stack.push(res); return Task.of("success") })
   );
 };
+
+export function createCallAstFromValue(vm: Vm, value: unknown, typeArgs: unknown[], args: Ast[]): Task<string, CompilerError> {
+  if (value instanceof PrimitiveType) {
+    compilerAssert(args.length === 1 && typeArgs.length === 0, "Expected 1 arg got $count", { count: args.length })
+    vm.stack.push(new CastAst(value, vm.location, args[0]))
+    return Task.of("success")
+  }
+
+  if (value instanceof ExternalFunction) {
+    vm.stack.push(new CallAst(IntType, vm.location, value, args));
+    return Task.of("success")
+  }
+
+  if (value instanceof Closure) {
+
+    const { func, scope: parentScope } = value
+    const call: FunctionCallArg = { vm, func, typeArgs, args, parentScope, concreteTypes: [] }
+    
+    if (func.inline) return (
+      TaskDef(compileAndExecuteFunctionHeaderTask, call)
+      .chain(TaskDef(functionInlineTask, call))
+    )
+    return (
+      TaskDef(compileAndExecuteFunctionHeaderTask, call)
+      .chain(TaskDef(functionTemplateTypeCheckAndCompileTask, call))
+      .chainFn((task, compiledFunction) => {
+        const binding = compiledFunction.binding;
+        const returnType = compiledFunction.returnType;
+        vm.stack.push(new UserCallAst(returnType, vm.location, binding, args));
+        return Task.of("success")
+      })
+    )
+  }
+  compilerAssert(false, "Not supported value $value", { value })
+
+}

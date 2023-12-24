@@ -1,5 +1,5 @@
 import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, ClassField, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListType, SubscriptAst, ExternalType, GenericType, isGenericTypeOf, ParseMeta, createAnonymousParserFunctionDecl, ArgumentTypePair, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden } from "./defs";
-import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, compileAndExecuteFunctionHeaderTask, functionCompileTimeCompileTask, functionInlineTask, functionTemplateTypeCheckAndCompileTask } from "./compiler_functions";
+import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, functionCompileTimeCompileTask, createCallAstFromValue } from "./compiler_functions";
 import { Event, Task, TaskDef, isTask, isTaskResult } from "./tasks";
 
 export const pushBytecode = <T extends BytecodeInstr>(out: BytecodeWriter, token: Token, instr: T) => {
@@ -448,42 +448,6 @@ const letLocal = (vm: Vm, name: string, type: Type | null, value: Ast | null) =>
 
 type CallArgs = { vm: Vm, name: string, count: number, tcount: number }
 
-function createCallAstFromValue(vm: Vm, value: unknown, typeArgs: unknown[], args: Ast[]): Task<string, CompilerError> {
-  if (value instanceof PrimitiveType) {
-    compilerAssert(args.length === 1 && typeArgs.length === 0, "Expected 1 arg got $count", { count: args.length })
-    vm.stack.push(new CastAst(value, vm.location, args[0]))
-    return Task.of("success")
-  }
-
-  if (value instanceof ExternalFunction) {
-    vm.stack.push(new CallAst(IntType, vm.location, value, args));
-    return Task.of("success")
-  }
-
-  if (value instanceof Closure) {
-
-    const { func, scope: parentScope } = value
-    const call: FunctionCallArg = { vm, func, typeArgs, args, parentScope, concreteTypes: [] }
-    
-    if (func.inline) return (
-      TaskDef(compileAndExecuteFunctionHeaderTask, call)
-      .chain(TaskDef(functionInlineTask, call))
-    )
-    return (
-      TaskDef(compileAndExecuteFunctionHeaderTask, call)
-      .chain(TaskDef(functionTemplateTypeCheckAndCompileTask, call))
-      .chainFn((task, compiledFunction) => {
-        const binding = compiledFunction.binding;
-        const returnType = compiledFunction.returnType;
-        vm.stack.push(new UserCallAst(returnType, vm.location, binding, args));
-        return Task.of("success")
-      })
-    )
-  }
-  compilerAssert(false, "Not supported value $value", { value })
-
-}
-
 function resolveScope(ctx: TaskContext, scope: Scope, name: string): Task<unknown, CompilerError> {
   let compilerState: SubCompilerState | undefined = ctx.subCompilerState;
   compilerAssert(scope === compilerState.scope, "Expected scope of current compiler state", { fatal: true })
@@ -620,9 +584,7 @@ const instructions: InstructionMapping = {
     }
     return (
       TaskDef(resolveScope, vm.scope, name)
-      .mapRejected((error) => {
-        return createCompilerError('No field $name found on type $type, and no binding found in scope', { name, type: value.type, scope: vm.scope })
-      })
+      .mapRejected((error) => createCompilerError('No field $name found on type $type, and no binding found in scope', { name, type: value.type, scope: vm.scope }))
       .chainFn((task, func) => createCallAstFromValue(vm, func, [], [value]))
     )
   },
