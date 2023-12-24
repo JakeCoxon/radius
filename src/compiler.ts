@@ -435,6 +435,41 @@ const letLocal = (vm: Vm, name: string, type: Type | null, value: Ast | null) =>
 
 type CallArgs = { vm: Vm, name: string, count: number, tcount: number }
 
+function createCallAstFromValue(vm: Vm, value: unknown, typeArgs: unknown[], args: Ast[], ) {
+  if (value instanceof PrimitiveType) {
+    compilerAssert(args.length === 1 && typeArgs.length === 0, "Expected 1 arg got $count", { count: args.length })
+    vm.stack.push(new CastAst(value, vm.location, args[0]))
+    return Task.of("success")
+  }
+
+  if (value instanceof ExternalFunction) {
+    vm.stack.push(new CallAst(IntType, vm.location, value, args));
+    return Task.of("success")
+  }
+
+  if (value instanceof Closure) {
+
+    const { func, scope: parentScope } = value
+    const call: FunctionCallArg = { vm, func, typeArgs, args, parentScope, concreteTypes: [] }
+    
+    if (func.inline) return (
+      TaskDef(compileAndExecuteFunctionHeaderTask, call)
+      .chain(TaskDef(functionInlineTask, call))
+    )
+    return (
+      TaskDef(compileAndExecuteFunctionHeaderTask, call)
+      .chain(TaskDef(functionTemplateTypeCheckAndCompileTask, call))
+      .chainFn((task, compiledFunction) => {
+        const binding = compiledFunction.binding;
+        const returnType = compiledFunction.returnType;
+        vm.stack.push(new UserCallAst(returnType, vm.location, binding, args));
+        return Task.of("success")
+      })
+    )
+  }
+  compilerAssert(false, "Not supported value $value", { value })
+
+}
 function createCallAstTask(ctx: TaskContext, { vm, name, count, tcount }: CallArgs): Task<string, never> {
   const args = popValues(vm, count)
   const typeArgs = popValues(vm, tcount || 0);
@@ -443,40 +478,7 @@ function createCallAstTask(ctx: TaskContext, { vm, name, count, tcount }: CallAr
   return (
     TaskDef(resolveScope, vm.scope, name)
     .chainFn((task, value) => {
-
-      if (value instanceof PrimitiveType) {
-        compilerAssert(count === 1 && tcount === 0, "Expected 1 arg got $count", { count})
-        vm.stack.push(new CastAst(value, vm.location, args[0]))
-        return Task.of("success")
-      }
-
-      if (value instanceof ExternalFunction) {
-        vm.stack.push(new CallAst(IntType, vm.location, value, args));
-        return Task.of("success")
-      }
-
-      if (value instanceof Closure) {
-
-        const { func, scope: parentScope } = value
-        const call: FunctionCallArg = { vm, func, typeArgs, args, parentScope, concreteTypes: [] }
-        
-        if (func.inline) return (
-          TaskDef(compileAndExecuteFunctionHeaderTask, call)
-          .chain(TaskDef(functionInlineTask, call))
-        )
-        return (
-          TaskDef(compileAndExecuteFunctionHeaderTask, call)
-          .chain(TaskDef(functionTemplateTypeCheckAndCompileTask, call))
-          .chainFn((task, compiledFunction) => {
-            const binding = compiledFunction.binding;
-            const returnType = compiledFunction.returnType;
-            vm.stack.push(new UserCallAst(returnType, vm.location, binding, args));
-            return Task.of("success")
-          })
-        )
-      }
-      compilerAssert(false, "Not supported value $value", { value })
-
+      return createCallAstFromValue(vm, value, typeArgs, args)
     })
   )
 }
@@ -590,9 +592,10 @@ const instructions: InstructionMapping = {
     const value = expectAst(popStack(vm));
     if (value.type instanceof ConcreteClassType) {
       const field = value.type.compiledClass.fields.find(x => x.name === name)
-      compilerAssert(field, "No field $name found on type $type", { name, type: value.type })
-      vm.stack.push(new FieldAst(field.type, vm.location, value, field.binding))
-      return
+      if (field) {
+        vm.stack.push(new FieldAst(field.type, vm.location, value, field.binding))
+        return
+      }
     }
     if (value.type instanceof GenericType) {
       if (value.type.baseType === ListType) {
@@ -601,7 +604,11 @@ const instructions: InstructionMapping = {
         return
       }
     }
-    compilerAssert(false, "No field $name found on type $type", { name, type: value.type })
+    return (
+      TaskDef(resolveScope, vm.scope, name)
+      .chainFn((task, func) => createCallAstFromValue(vm, func, [], [value]))
+    )
+    // compilerAssert(false, "No field $name found on type $type", { name, type: value.type })
   },
   setfieldast: (vm, { name }) => {
     const value = expectAst(popStack(vm));

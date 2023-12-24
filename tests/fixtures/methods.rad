@@ -6,6 +6,9 @@ struct Thing:
 fn foo(thing: Thing, z: int):
   print(thing.x + z)
 
+fn bam(thing: Thing):
+  print(thing.x)
+
 fn main():
 
   thing : Thing
@@ -15,3 +18,8 @@ fn main():
   print(thing.x + thing.y)
 
   thing.foo(200)
+  thing.bam
+
+  fam :: {|x| x + 100}
+
+  x := 2.fam
