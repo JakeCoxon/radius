@@ -435,7 +435,7 @@ const letLocal = (vm: Vm, name: string, type: Type | null, value: Ast | null) =>
 
 type CallArgs = { vm: Vm, name: string, count: number, tcount: number }
 
-function createCallAstFromValue(vm: Vm, value: unknown, typeArgs: unknown[], args: Ast[], ) {
+function createCallAstFromValue(vm: Vm, value: unknown, typeArgs: unknown[], args: Ast[]): Task<string, never> {
   if (value instanceof PrimitiveType) {
     compilerAssert(args.length === 1 && typeArgs.length === 0, "Expected 1 arg got $count", { count: args.length })
     vm.stack.push(new CastAst(value, vm.location, args[0]))
@@ -471,16 +471,7 @@ function createCallAstFromValue(vm: Vm, value: unknown, typeArgs: unknown[], arg
 
 }
 function createCallAstTask(ctx: TaskContext, { vm, name, count, tcount }: CallArgs): Task<string, never> {
-  const args = popValues(vm, count)
-  const typeArgs = popValues(vm, tcount || 0);
-  compilerAssert(args.every(isAst), "Expected ASTs for function call $name", { name, args })
 
-  return (
-    TaskDef(resolveScope, vm.scope, name)
-    .chainFn((task, value) => {
-      return createCallAstFromValue(vm, value, typeArgs, args)
-    })
-  )
 }
 
 function resolveScope(ctx: TaskContext, scope: Scope, name: string): Task<unknown, never> {
@@ -567,7 +558,16 @@ const instructions: InstructionMapping = {
   whileast: (vm) =>             vm.stack.push(new WhileAst(VoidType, vm.location, expectAst(popStack(vm)), expectAst(popStack(vm)))),
   returnast: (vm, { r }) =>     vm.stack.push(new ReturnAst(VoidType, vm.location, r ? expectAst(popStack(vm)) : null)),
   letast: (vm, { name, t, v }) => vm.stack.push(letLocal(vm, name, t ? expectType(popStack(vm)) : null, v ? expectAst(popStack(vm)) : null)),
-  callast: (vm, { name, count, tcount }) => TaskDef(createCallAstTask, { vm, name, count, tcount }),
+  callast: (vm, { name, count, tcount }) => {
+    const args = popValues(vm, count)
+    const typeArgs = popValues(vm, tcount || 0);
+    compilerAssert(args.every(isAst), "Expected ASTs for function call $name", { name, args })
+
+    return (
+      TaskDef(resolveScope, vm.scope, name)
+      .chainFn((task, value) => createCallAstFromValue(vm, value, typeArgs, args))
+    )
+  },
   toast: (vm) => vm.stack.push(unknownToAst(vm.location, popStack(vm))),
 
   operatorast: (vm, { name, count }) => {

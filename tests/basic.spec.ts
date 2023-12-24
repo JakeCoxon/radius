@@ -121,3 +121,10 @@ test("methods", async () => {
   const test = runCompilerTest(input, { filename: 'methods' })
 
 });
+
+test("nomethod", async () => {
+
+  const input = await Bun.file(`${import.meta.dir}/fixtures/nomethod.rad`).text()
+  const test = runCompilerTest(input, { filename: 'nomethod', expectError: true })
+
+});
