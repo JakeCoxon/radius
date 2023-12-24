@@ -62,6 +62,10 @@ export class Task<S, F> {
     return new Empty();
   }
 
+  mapRejected(fn: (rejected: F) => F) {
+    return new MapRejected(this, fn)
+  }
+
   chain<S1, F1 extends F>(chainable: Chainable<S, S1, F>): Task<S1, F | F1> {
     return chainable.chainFrom(this);
   }
@@ -120,6 +124,26 @@ class Rejected<F> extends Task<never, F> {
 
 class Empty extends Task<never, never> {
   _toString() { return `empty()`; }
+}
+
+class MapRejected<S, F> extends Task<S, F> {
+  constructor(public task: Task<S, F>, public fn: (rejected: F) => F) { super() }
+  
+  _start(queue: Queue) {
+    this._state = "started";
+    queue.enqueue(this.task);
+  }
+  _step(queue: Queue) {
+    this._state = "completed";
+    if (this.task._failure) {
+      this._failure = this.fn(this.task!._failure);
+    } else {
+      this._success = this.task!._success;
+    }
+  }
+
+  _toString() { return `mapRejected(${this.id}, ..)`; }
+
 }
 
 export class InitFn<SIn, SOut, F, F1 extends F> extends Task<SOut, F> implements Chainable<void, SOut, F> {

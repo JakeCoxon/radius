@@ -9,8 +9,7 @@ export const Inspect = globalThis.Bun ? Bun.inspect : (() => {
 export class CompilerError extends Error {
   constructor(message: string, public info: object) { super(message) }
 }
-export function compilerAssert(expected: unknown, message: string="", info: object={}): asserts expected {
-  if (expected) return;
+export const createCompilerError = (message: string, info: object) => {
   let out = message.replace(/\$([a-zA-Z]+)/g, (match, capture) => { 
     const obj = info[capture]
     if (obj === undefined || obj === null) return makeColor(`null`)
@@ -19,7 +18,11 @@ export function compilerAssert(expected: unknown, message: string="", info: obje
     if (obj.constructor) return makeColor(`[${obj.constructor.name}]`)
     return Inspect(obj)
   }); 
-  throw new CompilerError(out, info)
+  return new CompilerError(out, info);
+}
+export function compilerAssert(expected: unknown, message: string="", info: object={}): asserts expected {
+  if (expected) return;
+  throw createCompilerError(message, info)
 }
 
 const makeColor = (x) => {
@@ -30,10 +33,14 @@ const makeColor = (x) => {
   }, { colors: true })
 }
 
+export class Source {
+  constructor(public debugName: string, public input: string) {}
+}
+
 export class SourceLocation {
-  constructor(public line: number, public column:number) {}
+  constructor(public line: number, public column: number, public source: Source) {}
   [Inspect.custom](depth, options, inspect) {
-    return options.stylize(`[SourceLocation ${this.line}:${this.column}]`, 'special');
+    return options.stylize(`[SourceLocation ${this.source.debugName} ${this.line}:${this.column}]`, 'special');
   }
 }
 
@@ -44,7 +51,8 @@ const TokenRoot = {
     return options.stylize(`[Token ${this.value}]`, 'string');
   }
 }
-export const createToken = (value: any, type = "NONE"): Token => Object.assign(Object.create(TokenRoot), { value, type, location: new SourceLocation(0, 0) });
+export const createToken = (source: Source, value: any, type = "NONE"): Token => Object.assign(Object.create(TokenRoot), { value, type, location: new SourceLocation(0, 0, source) });
+export const createAnonymousToken = (value: any, type = "NONE"): Token => Object.assign(Object.create(TokenRoot), { value, type, location: new SourceLocation(-1, -1, null!) });
 
 export type ArgumentTypePair = [ParseIdentifier, ParseNode | null];
 
@@ -426,7 +434,7 @@ export class Closure {
 export const ScopeEventsSymbol = Symbol('ScopeEventsSymbol')
 export type Scope = object & {
   _scope: true,
-  [ScopeEventsSymbol]: {[key:string]:Event<unknown, never>}
+  [ScopeEventsSymbol]: {[key:string]:Event<unknown, CompilerError>}
 }
 const ScopePrototype = {
   [Inspect.custom](depth, options, inspect) {

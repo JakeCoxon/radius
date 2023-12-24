@@ -1,5 +1,5 @@
 import { BytecodeDefault, BytecodeSecondOrder, compileFunctionPrototype, createBytecodeVmAndExecuteTask, pushBytecode, pushGeneratedBytecode, visitParseNode } from "./compiler";
-import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, makeCyan, ParseNote } from "./defs";
+import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, makeCyan, ParseNote, createAnonymousToken } from "./defs";
 import { Task, TaskDef } from "./tasks";
 
 
@@ -48,7 +48,7 @@ export function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, ar
     }
     // visitParseNode(out, func.headerPrototype.body);
     func.args.forEach(([name, type], i) => {
-      if (type === null) return visitParseNode(out, new ParseNil(createToken('')));
+      if (type === null) return visitParseNode(out, new ParseNil(createAnonymousToken('')));
       visitParseNode(out, type)
       pushBytecode(out, type.token, { type: 'totype' });
     })
@@ -63,6 +63,7 @@ export function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, ar
 
   const scope = createScope({})
   const subCompilerState = pushSubCompilerState(ctx, { debugName: `${func.debugName} header`, scope, lexicalParent: ctx.subCompilerState });
+  ;(subCompilerState as any).location = func.name?.token.location
   subCompilerState.functionCompiler = subCompilerState
 
   func.typeArgs.forEach((typeArg, i) => {
@@ -119,6 +120,7 @@ export function functionTemplateTypeCheckAndCompileTask(ctx: TaskContext, { func
 
   const templateScope = createScope({})
   const subCompilerState = pushSubCompilerState(ctx, { debugName: `${func.debugName} template`, scope: templateScope, lexicalParent: ctx.subCompilerState });
+  ;(subCompilerState as any).location = func.name?.token.location
   subCompilerState.functionCompiler = subCompilerState
   
   func.args.forEach(([iden, type], i) => {

@@ -1,13 +1,13 @@
 import { existsSync, unlinkSync, readFileSync } from "node:fs";
 import { runTopLevelTask } from "../src/compiler";
-import { BoolType, Closure, CompilerError, DoubleType, ExternalFunction, FloatType, GlobalCompilerState, IntType, Scope, StringType, SubCompilerState, TaskContext, VoidType, compilerAssert, createDefaultGlobalCompiler, createScope, expectMap, BuiltinTypes, ModuleLoader } from "../src/defs";
+import { BoolType, Closure, CompilerError, DoubleType, ExternalFunction, FloatType, GlobalCompilerState, IntType, Scope, StringType, SubCompilerState, TaskContext, VoidType, compilerAssert, createDefaultGlobalCompiler, createScope, expectMap, BuiltinTypes, ModuleLoader, SourceLocation } from "../src/defs";
 import { makeParser } from "../src/parser"
 import { Queue, TaskDef, stepQueue, withContext } from "../src//tasks";
 import { expect } from "bun:test";
 import { functionTemplateTypeCheckAndCompileTask } from "../src/compiler_functions";
 
-const runTestInner = (queue: Queue, input: string, globalCompiler: GlobalCompilerState, rootScope: Scope) => {
-  const parser = makeParser(input)
+const runTestInner = (queue: Queue, input: string, filepath: string, globalCompiler: GlobalCompilerState, rootScope: Scope) => {
+  const parser = makeParser(input, filepath)
   
   const subCompilerState = new SubCompilerState('root');
   subCompilerState.scope = rootScope
@@ -22,22 +22,25 @@ const runTestInner = (queue: Queue, input: string, globalCompiler: GlobalCompile
   queue.enqueue(root)
 
   for (let i = 0; i < 10000; i++) {
-    if (queue.list.length === 0) break;
+    if (queue.list.length === 0) {
+      if (root._state !== 'completed') {
+        // TODO: remove events after they are completed
+        globalCompiler.allWaitingEvents.forEach(e => e.failure({}))
+      }
+      if (queue.list.length === 0) break
+    }
     stepQueue(queue);
   }
-
-  if (root._state !== 'completed') {
-    // TODO: remove events after they are completed
-    globalCompiler.allWaitingEvents.forEach(e => e.failure({}))
-  }
-  compilerAssert(root._success, "Expected success", { root })
+  if (root._failure) throw root._failure
+  // compilerAssert(root._success, "Expected success", { root })
 }
 
 export const createModuleLoader = (basepath: string) => {
   return <ModuleLoader>{
     loadModule: (module) => {
-      const input = readFileSync(`${basepath}${module}.rad`, 'utf-8')
-      return makeParser(input)
+      const path = `${basepath}${module}.rad`
+      const input = readFileSync(path, 'utf-8')
+      return makeParser(input, path)
     }
   }
 }
@@ -91,7 +94,7 @@ export const runCompilerTest = (input: string, { moduleLoader, filename, expectE
   
 
   try {
-    runTestInner(queue, input, globalCompiler, rootScope)
+    runTestInner(queue, input, `${filename}.rad`, globalCompiler, rootScope)
 
   } catch (ex) {
     gotError = true;
@@ -102,8 +105,27 @@ export const runCompilerTest = (input: string, { moduleLoader, filename, expectE
     }
     if (ex instanceof CompilerError) {
 
-      (ex.info as any).currentTask = (queue.currentTask as any)?.def;
-      (ex.info as any).subCompilerState = (queue.currentTask?._context as TaskContext).subCompilerState
+      // (ex.info as any).currentTask = (queue.currentTask as any)?.def;
+      // (ex.info as any).subCompilerState = (queue.currentTask?._context as TaskContext).subCompilerState
+
+      // logger.log("\nCompiler stack")
+      const location = (ex.info as any).location as SourceLocation
+      if (location) {
+        logger.log(location.source.debugName)
+        const lines = location.source.input.split('\n')
+        for (let i = -2; i < 3; i++) {
+          const line = location.line + i
+          if (lines[line - 1] !== undefined) {
+            logger.log(`${String(line).padStart(2)}|  ${lines[line - 1]}`)
+            if (i === 0) {
+              const repeat = " ".repeat(location.column);
+              logger.log(`     ${repeat}^-- here`)
+            }
+          }
+        }
+        
+
+      }
 
       logger.log("\nError info")
       Object.entries(ex.info).forEach(([name, value]) => {

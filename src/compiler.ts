@@ -1,4 +1,4 @@
-import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, ClassField, FieldAst, ParseField, SetFieldAst, makeCyan, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListType, SubscriptAst, ExternalType, GenericType, isGenericTypeOf, ParseMeta, createAnonymousParserFunctionDecl, ArgumentTypePair, NotAst, BytecodeProgram, ParseImport } from "./defs";
+import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, ClassField, FieldAst, ParseField, SetFieldAst, makeCyan, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListType, SubscriptAst, ExternalType, GenericType, isGenericTypeOf, ParseMeta, createAnonymousParserFunctionDecl, ArgumentTypePair, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken } from "./defs";
 import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, compileAndExecuteFunctionHeaderTask, functionCompileTimeCompileTask, functionInlineTask, functionTemplateTypeCheckAndCompileTask } from "./compiler_functions";
 import { Event, Task, TaskDef, isTask, isTaskResult } from "./tasks";
 
@@ -22,7 +22,7 @@ export const writeMeta = (out: BytecodeWriter, expr: ParseNode) => {
 }
 export const pushGeneratedBytecode = <T extends BytecodeInstr>(out: BytecodeWriter, instr: T) => {
   out.bytecode.code.push(instr);
-  out.bytecode.locations.push(new SourceLocation(-1, -1));
+  out.bytecode.locations.push(new SourceLocation(-1, -1, null!));
   return instr;
 }
 
@@ -224,8 +224,8 @@ export const BytecodeSecondOrder: ParseTreeTable = {
     const fnArgs: ArgumentTypePair[] = [[node.identifier, null]]
     const decl = createAnonymousParserFunctionDecl("for", node.token, fnArgs, node.body)
     const fn = new ParseFunction(node.token, decl)
-    const elemType = new ParseIdentifier(createToken('int')) // Hard code int for now
-    const iterate = new ParseIdentifier(createToken('iterate'))
+    const elemType = new ParseIdentifier(createAnonymousToken('int')) // Hard code int for now
+    const iterate = new ParseIdentifier(createAnonymousToken('iterate'))
     const call = new ParseCall(node.token, iterate, [node.expr], [fn, elemType])
     visitParseNode(out, call)
   },
@@ -369,15 +369,21 @@ export const compileFunctionPrototype = (ctx: TaskContext, prototype: FunctionPr
   return prototype.bytecode;
 };
 
-export function createBytecodeVmAndExecuteTask(ctx: TaskContext, subCompilerState: SubCompilerState, bytecode: BytecodeProgram, scope: Scope): Task<unknown, never> {
+export function createBytecodeVmAndExecuteTask(ctx: TaskContext, subCompilerState: SubCompilerState, bytecode: BytecodeProgram, scope: Scope): Task<unknown, CompilerError> {
   compilerAssert(ctx.subCompilerState === subCompilerState, "Subcompiler state must have been set already", { fatal: true, subCompilerState, ctxSubCompilerState: ctx.subCompilerState })
   compilerAssert(scope, "Expected scope", { fatal: true })
 
   const vm: Vm = { ip: 0, stack: [], scope, location: undefined!, bytecode: bytecode!, context: ctx };
   compilerAssert(bytecode, "", { fatal: true })
+  subCompilerState.vm = vm
 
   return (
     TaskDef(executeVmTask, { vm })
+    .mapRejected(error => {
+      (error.info as any).location = vm.location;
+      (error.info as any).subCompilerState = subCompilerState
+      return error
+    })
     .chainFn((task, arg) => {
 
       compilerAssert(vm.stack.length === 1, "Expected 1 value on stack at end of function. Got $num", { num: vm.stack.length, vm })
@@ -470,11 +476,8 @@ function createCallAstFromValue(vm: Vm, value: unknown, typeArgs: unknown[], arg
   compilerAssert(false, "Not supported value $value", { value })
 
 }
-function createCallAstTask(ctx: TaskContext, { vm, name, count, tcount }: CallArgs): Task<string, never> {
 
-}
-
-function resolveScope(ctx: TaskContext, scope: Scope, name: string): Task<unknown, never> {
+function resolveScope(ctx: TaskContext, scope: Scope, name: string): Task<unknown, CompilerError> {
   let compilerState: SubCompilerState | undefined = ctx.subCompilerState;
   compilerAssert(scope === compilerState.scope, "Expected scope of current compiler state", { fatal: true })
   while (compilerState) {
@@ -484,14 +487,15 @@ function resolveScope(ctx: TaskContext, scope: Scope, name: string): Task<unknow
 
   // TODO: This should attach events to every ancestor in the scope chain
   if (!scope[ScopeEventsSymbol]) scope[ScopeEventsSymbol] = {}
-  if (!scope[ScopeEventsSymbol][name]) scope[ScopeEventsSymbol][name] = new Event<string, never>()
+  if (!scope[ScopeEventsSymbol][name]) scope[ScopeEventsSymbol][name] = new Event<string, CompilerError>()
   ctx.globalCompiler.allWaitingEvents.push(scope[ScopeEventsSymbol][name])
-  return Task.waitForOrError(scope[ScopeEventsSymbol][name], (f) => {
-    compilerAssert(false, "Binding $name not found in scope", { name, scope })
+  return Task.waitFor(scope[ScopeEventsSymbol][name]).mapRejected((error) => {
+    // compilerAssert(false, "Binding $name not found in scope", { name, scope })
+    return new CompilerError('Binding $name not found in scope', {})
   })
 }
 
-function callFunctionTask(ctx: TaskContext, { vm, name, count, tcount }: CallArgs): Task<string, never> {
+function callFunctionTask(ctx: TaskContext, { vm, name, count, tcount }: CallArgs): Task<string, CompilerError> {
   const values = popValues(vm, count);
   const typeArgs = popValues(vm, tcount || 0);
   return (
@@ -548,16 +552,16 @@ const instructions: InstructionMapping = {
   boolast: (vm, { value }) =>   vm.stack.push(new BoolAst(BoolType, vm.location, value)),
   orast: (vm, { count }) =>     vm.stack.push(new OrAst(IntType, vm.location, expectAsts(popValues(vm, count)))),
   andast: (vm, { count }) =>    vm.stack.push(new AndAst(IntType, vm.location, expectAsts(popValues(vm, count)))),
+  ifast: (vm, { f }) =>         vm.stack.push(new IfAst(IntType, vm.location, expectAst(popStack(vm)), expectAst(popStack(vm)), f ? expectAst(popStack(vm)) : null)),
+  whileast: (vm) =>             vm.stack.push(new WhileAst(VoidType, vm.location, expectAst(popStack(vm)), expectAst(popStack(vm)))),
+  returnast: (vm, { r }) =>     vm.stack.push(new ReturnAst(VoidType, vm.location, r ? expectAst(popStack(vm)) : null)),
+  letast: (vm, { name, t, v }) => vm.stack.push(letLocal(vm, name, t ? expectType(popStack(vm)) : null, v ? expectAst(popStack(vm)) : null)),
   listast: (vm, { count }) => {
     const values = expectAsts(popValues(vm, count));
     const elementType = getCommonType(values.map(x => x.type))
     const type = createGenericType(vm.context.globalCompiler, ListType, [elementType]);
     vm.stack.push(new ListAst(type, vm.location, values))
   },
-  ifast: (vm, { f }) =>         vm.stack.push(new IfAst(IntType, vm.location, expectAst(popStack(vm)), expectAst(popStack(vm)), f ? expectAst(popStack(vm)) : null)),
-  whileast: (vm) =>             vm.stack.push(new WhileAst(VoidType, vm.location, expectAst(popStack(vm)), expectAst(popStack(vm)))),
-  returnast: (vm, { r }) =>     vm.stack.push(new ReturnAst(VoidType, vm.location, r ? expectAst(popStack(vm)) : null)),
-  letast: (vm, { name, t, v }) => vm.stack.push(letLocal(vm, name, t ? expectType(popStack(vm)) : null, v ? expectAst(popStack(vm)) : null)),
   callast: (vm, { name, count, tcount }) => {
     const args = popValues(vm, count)
     const typeArgs = popValues(vm, tcount || 0);
@@ -606,9 +610,11 @@ const instructions: InstructionMapping = {
     }
     return (
       TaskDef(resolveScope, vm.scope, name)
+      .mapRejected((error) => {
+        return createCompilerError('No field $name found on type $type, and no binding found in scope', { name, type: value.type, scope: vm.scope })
+      })
       .chainFn((task, func) => createCallAstFromValue(vm, func, [], [value]))
     )
-    // compilerAssert(false, "No field $name found on type $type", { name, type: value.type })
   },
   setfieldast: (vm, { name }) => {
     const value = expectAst(popStack(vm));
@@ -743,7 +749,7 @@ const ensureBindingIsNotClosedOver = (subCompilerState: SubCompilerState, name: 
   compilerAssert(found?.functionCompiler === subCompilerState.functionCompiler, "Name $name is declared in an external function which isn't supported in this compiler. You might want to use an inline function", { name, found, subCompilerState })
 }
 
-function executeVmTask(ctx: TaskContext, { vm } : { vm: Vm }, p: void): Task<string, never> {
+function executeVmTask(ctx: TaskContext, { vm } : { vm: Vm }, p: void): Task<string, CompilerError> {
   const {locations, code} = vm.bytecode;
   let current = code[vm.ip];
   vm.location = locations[vm.ip];
@@ -765,7 +771,7 @@ function executeVmTask(ctx: TaskContext, { vm } : { vm: Vm }, p: void): Task<str
       current = code[vm.ip];
       vm.location = locations[vm.ip];
     } else {
-      return (res as Task<string, never>).chainFn(() => {
+      return (res as Task<string, CompilerError>).chainFn(() => {
         if (vm.ip === startIp) vm.ip++;
         current = code[vm.ip];
         vm.location = locations[vm.ip];
@@ -913,7 +919,8 @@ export const importModule = (ctx: TaskContext, importNode: ParseImport, rootScop
   const parsedModule = ctx.globalCompiler.moduleLoader.loadModule(moduleName)
   const newScope = Object.create(rootScope)
 
-  pushSubCompilerState(ctx, { debugName: `${moduleName} module`, lexicalParent: undefined, scope: newScope })
+  const subCompilerState = pushSubCompilerState(ctx, { debugName: `${moduleName} module`, lexicalParent: undefined, scope: newScope })
+  ;(subCompilerState as any).location = importNode.token.location
 
   return (
     TaskDef(runTopLevelTask, parsedModule.rootNode, newScope)

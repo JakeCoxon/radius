@@ -1,8 +1,8 @@
-import { ArgumentTypePair, ParseAnd, ParseNode, ParseBreak, ParseCall, ParseCast, ParseCompTime, ParseContinue, ParseDict, ParseExpand, ParseField, ParseFor, ParseForExpr, ParseIf, ParseLet, ParseLetConst, ParseList, ParseListComp, ParseMeta, ParseNot, ParseNumber, ParseOpEq, ParseOperator, ParseOr, ParseReturn, ParseSet, ParseStatements, ParseString, ParseIdentifier, ParseWhile, ParseWhileExpr, ParserFunctionDecl, Token, compilerAssert, ParsePostCall, ParseSymbol, ParseNote, ParseSlice, ParseSubscript, ParserClassDecl, ParseClass, ParseFunction, createToken, ParseBoolean, ParseElse, ParseMetaIf, ParseMetaFor, ParseBlock, ParseImport, ParsedModule } from "./defs";
+import { ArgumentTypePair, ParseAnd, ParseNode, ParseBreak, ParseCall, ParseCast, ParseCompTime, ParseContinue, ParseDict, ParseExpand, ParseField, ParseFor, ParseForExpr, ParseIf, ParseLet, ParseLetConst, ParseList, ParseListComp, ParseMeta, ParseNot, ParseNumber, ParseOpEq, ParseOperator, ParseOr, ParseReturn, ParseSet, ParseStatements, ParseString, ParseIdentifier, ParseWhile, ParseWhileExpr, ParserFunctionDecl, Token, compilerAssert, ParsePostCall, ParseSymbol, ParseNote, ParseSlice, ParseSubscript, ParserClassDecl, ParseClass, ParseFunction, createToken, ParseBoolean, ParseElse, ParseMetaIf, ParseMetaFor, ParseBlock, ParseImport, ParsedModule, Source } from "./defs";
 
 type LexerState = { significantNewlines: boolean; parenStack: string[] };
 
-function* tokenize(input: string, state: LexerState): Generator<Token> {
+function* tokenize(source: Source, state: LexerState): Generator<Token> {
   const regexes = {
     KEYWORD:
       /^(?:and|as\!|as|break|class|continue|comptime|def|defn|elif|else|fn|for|if|ifx|in|lambda|meta|null|not|or|pass|return|try|while|with|struct|interface|import)(?=\W)/, // note \b
@@ -38,7 +38,7 @@ function* tokenize(input: string, state: LexerState): Generator<Token> {
   };
   const pushToken = (type: string, value: string = match![0]) => {
     // (state as any).remain = remain; // debug
-    const token = createToken(value, type)
+    const token = createToken(source, value, type)
     token.location.column = charIndex - lineStart;
     token.location.line = lineNumber;
     tokens.push(token);
@@ -46,7 +46,7 @@ function* tokenize(input: string, state: LexerState): Generator<Token> {
   };
 
   // First is line by line
-  let remain = input;
+  let remain = source.input;
   while (remain.length > 0) {
     if (matchAndTrimLine(regexes.NEWLINE)) {
       yield pushToken("NEWLINE");
@@ -81,7 +81,7 @@ function* tokenize(input: string, state: LexerState): Generator<Token> {
       })();
 
       if (!matchType) {
-        const errline = input.substring(lineStart, input.indexOf("\n", lineStart));
+        const errline = source.input.substring(lineStart, source.input.indexOf("\n", lineStart));
         const repeat = " ".repeat(charIndex - lineStart);
         const message = `Unable to tokenize line ${lineNumber} \n${errline}\n${repeat}^-- here`;
         throw new Error(message);
@@ -100,9 +100,9 @@ function* tokenize(input: string, state: LexerState): Generator<Token> {
   yield pushToken("NEWLINE", "");
 }
 
-const makeAdvancedLexer = (text: string) => {
+const makeAdvancedLexer = (source: Source) => {
   const state = { significantNewlines: true, parenStack: [] as string[] };
-  const generator = tokenize(text, state);
+  const generator = tokenize(source, state);
   let tokens: Token[] = [];
   let previous: Token;
   const getToken = () => {
@@ -125,19 +125,21 @@ const makeAdvancedLexer = (text: string) => {
     previous = token;
     return token;
   };
-  return { text, tokens, state, getToken };
+  return { source, tokens, state, getToken };
 };
 
 export const tokenString = (token: Token) => token.value;
 
-export const makeParser = (input: string) => {
+export const makeParser = (input: string, debugName: string) => {
   let token: Token | undefined;
   let previous: Token = undefined!;
   let prevSignificantNewlines;
 
+  const source = new Source(debugName, input)
+
   const state = { classDecls: [] as ParserClassDecl[], functionDecls: [] as ParserFunctionDecl[], node: null! as ParseNode };
 
-  const lexer = makeAdvancedLexer(input);
+  const lexer = makeAdvancedLexer(source);
 
   const advance = () => {
     prevSignificantNewlines = lexer.state.significantNewlines;
@@ -478,7 +480,7 @@ export const makeParser = (input: string) => {
   };
   
   advance();
-  const rootNode = new ParseStatements(createToken(""), parseLines());
+  const rootNode = new ParseStatements(createToken(null!, ""), parseLines());
 
   const msg = `Expected EOF but got ${previous?.value} (${previous?.type})`;
   compilerAssert(token === undefined, msg, { lexer, token: previous });
