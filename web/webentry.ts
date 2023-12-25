@@ -11,7 +11,6 @@ const runTestInner = (input: string) => {
   const rootScope: Scope = createScope({
     ...BuiltinTypes,
     compfoo: { _function: (a, b) => 65 + a + b },
-    bar: 123,
     print: new ExternalFunction('print', VoidType, (...args) => {
       console.log(...args)
       return args[0];

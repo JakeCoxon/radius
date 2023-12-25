@@ -1,0 +1,9 @@
+
+fn bar!(T)() int @inline:
+  x := 43
+  x + (meta T + 10)
+
+fn main():
+
+  z := bar!(123)()
+  

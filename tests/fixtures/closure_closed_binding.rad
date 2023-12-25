@@ -1,0 +1,10 @@
+
+fn foo!(t)():
+  z := 123
+
+  baz :: {|| z * 10}
+  print(baz())
+
+fn main():
+  foo!(1)()
+  foo!(2)()

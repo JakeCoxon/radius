@@ -1,0 +1,18 @@
+
+fn iterate!(f, T)(lst: List!T) @inline: 
+  i := 0
+  while i < lst.length:
+    f(lst[i])
+    i += 1
+
+
+fn transduce(iterable) any @inline:
+  acc := 1
+  for x in iterable:
+    zzz := 1
+    print(zzz)
+
+fn main():
+
+  my_list := [1, 2, 3, 2, 1]
+  transduce(my_list)

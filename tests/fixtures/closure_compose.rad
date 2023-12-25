@@ -1,0 +1,18 @@
+fn compose3(a, b, c) any:
+  {|x| c(b(a(x)))}
+
+fn add(y) any:
+  {|x| x + y}
+
+fn mul(y) any:
+  {|x| x * y}
+
+fn main():
+
+  z := 41
+  baz :: compose3(
+    mul(10),
+    add(34),
+    mul(2)
+  )
+  print(baz(z))

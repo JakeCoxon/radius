@@ -29,6 +29,44 @@ test("closure_binding", async () => {
 
 });
 
+test("closure_closed_binding", async () => {
+
+  const input = await Bun.file(`${import.meta.dir}/fixtures/closure_closed_binding.rad`).text()
+  const test = runCompilerTest(input, { filename: 'closure_closed_binding' })
+
+});
+
+test("closure_closed_inline_binding", async () => {
+
+  const input = await Bun.file(`${import.meta.dir}/fixtures/closure_closed_inline_binding.rad`).text()
+  const test = runCompilerTest(input, { filename: 'closure_closed_inline_binding' })
+
+});
+test("closure_compose", async () => {
+
+  const input = await Bun.file(`${import.meta.dir}/fixtures/closure_compose.rad`).text()
+  const test = runCompilerTest(input, { filename: 'closure_compose' })
+
+});
+test("closure_escape", async () => {
+
+  const input = await Bun.file(`${import.meta.dir}/fixtures/closure_escape.rad`).text()
+  const test = runCompilerTest(input, { filename: 'closure_escape' })
+
+});
+test("inline", async () => {
+
+  const input = await Bun.file(`${import.meta.dir}/fixtures/inline.rad`).text()
+  const test = runCompilerTest(input, { filename: 'inline' })
+
+});
+test("inline_shadow", async () => {
+
+  const input = await Bun.file(`${import.meta.dir}/fixtures/inline_shadow.rad`).text()
+  const test = runCompilerTest(input, { filename: 'inline_shadow' })
+
+});
+
 
 test("comptime", async () => {
 
