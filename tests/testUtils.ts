@@ -21,7 +21,8 @@ const runTestInner = (queue: Queue, input: string, filepath: string, globalCompi
   );
   queue.enqueue(root)
 
-  for (let i = 0; i < 10000; i++) {
+  let i;
+  for (i = 0; i < 100000; i++) {
     if (queue.list.length === 0) {
       if (root._state !== 'completed') {
         // TODO: remove events after they are completed
@@ -32,7 +33,10 @@ const runTestInner = (queue: Queue, input: string, filepath: string, globalCompi
     stepQueue(queue);
   }
   if (root._failure) throw root._failure
-  // compilerAssert(root._success, "Expected success", { root })
+  if (!root._success && i === 100000) {
+    compilerAssert(false, "Exhausted. maybe an infinite loop", { root })
+  }
+  compilerAssert(root._success, "Expected success", { root })
 }
 
 export const createModuleLoader = (basepath: string) => {
@@ -80,6 +84,11 @@ export const runCompilerTest = (input: string, { moduleLoader, filename, expectE
     compfoo: { _function: (a, b) => 65 + a + b },
     print: new ExternalFunction('print', VoidType, (...args) => {
       logger.log("print called", ...args);
+      prints.push(...args)
+      return args[0];
+    }),
+    static_print: new ExternalFunction('static_print', VoidType, (...args) => {
+      logger.log("static_print called", ...args);
       prints.push(...args)
       return args[0];
     }),

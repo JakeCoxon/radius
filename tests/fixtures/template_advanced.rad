@@ -1,0 +1,16 @@
+fn bar!(T)() int:
+  meta if T == 123:
+    65
+  else:
+    32
+
+fn main():
+
+  bar!(122)()
+  bar!(123)()
+  bar!(124)()
+
+  meta f := 0
+  meta while f < 10:
+    print(meta f)
+    meta f = f + 1

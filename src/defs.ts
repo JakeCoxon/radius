@@ -119,6 +119,7 @@ export class ParseNote extends ParseNodeType {       key = 'note' as const;     
 export class ParseMeta extends ParseNodeType {       key = 'meta' as const;       constructor(public token: Token, public expr: ParseNode) { super();} }
 export class ParseMetaIf extends ParseNodeType {     key = 'metaif' as const;     constructor(public token: Token, public expr: ParseIf) { super();} }
 export class ParseMetaFor extends ParseNodeType {    key = 'metafor' as const;    constructor(public token: Token, public expr: ParseFor) { super();} }
+export class ParseMetaWhile extends ParseNodeType {  key = 'metawhile' as const;  constructor(public token: Token, public expr: ParseWhile) { super();} }
 export class ParseCompTime extends ParseNodeType {   key = 'comptime' as const;   constructor(public token: Token, public expr: ParseNode) { super();} }
 export class ParseCall extends ParseNodeType {       key = 'call' as const;       constructor(public token: Token, public left: ParseNode, public args: ParseNode[], public typeArgs: ParseNode[]) { super();} }
 export class ParseList extends ParseNodeType {       key = 'list' as const;       constructor(public token: Token, public exprs: ParseNode[]) { super();} }
@@ -158,11 +159,11 @@ export type ParseNode = ParseStatements | ParseLet | ParseSet | ParseOperator | 
   ParseIf | ParseFunction | ParseString | ParseReturn | ParseBreak | ParseContinue | ParseFor | ParseCast |
   ParseOpEq | ParseWhile | ParseWhileExpr | ParseForExpr | ParseNot | ParseField | ParseExpand | ParseListComp |
   ParseDict | ParsePostCall | ParseSymbol | ParseNote | ParseSlice | ParseSubscript | ParseTuple | ParseClass |
-  ParseNil | ParseBoolean | ParseElse | ParseMetaIf | ParseMetaFor | ParseBlock | ParseImport | ParseCompilerIden | 
-  ParseValue | ParseConstructor
+  ParseNil | ParseBoolean | ParseElse | ParseMetaIf | ParseMetaFor | ParseMetaWhile | ParseBlock | ParseImport | 
+  ParseCompilerIden | ParseValue | ParseConstructor
 
 // Void types mean that in secondOrder compilation, the AST doesn't return an AST
-export const isParseVoid = (ast: ParseNode) => ast.key == 'letconst' || ast.key === 'function' || ast.key === 'class' || ast.key === 'comptime';
+export const isParseVoid = (ast: ParseNode) => ast.key == 'letconst' || ast.key === 'function' || ast.key === 'class' || ast.key === 'comptime' || ast.key === 'metawhile';
 export const isParseNode = (ast: unknown): ast is ParseNode => ast instanceof ParseNodeType
 
 export type BytecodeInstr = 

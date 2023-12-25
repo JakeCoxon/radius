@@ -182,7 +182,8 @@ export const BytecodeDefault: ParseTreeTable = {
     breakBlock.completion.length = 0
     out.state.labelBlock = breakBlock.parent;
     pushBytecode(out, node.condition.token, { type: "comment", comment: "while end" });
-  }
+  },
+  metawhile: (out, node) => BytecodeDefault['while'](out, node.expr)
 };
 
 export const BytecodeSecondOrder: ParseTreeTable = {
@@ -337,7 +338,7 @@ export const BytecodeSecondOrder: ParseTreeTable = {
 
   metaif: (out, node) => {
     const if_ = node.expr
-    writeMeta(out, if_.condition);
+    writeMeta(out, if_.condition); // Meta part
     const jump1 = { type: "jumpf" as const, address: 0 };
     pushBytecode(out, if_.condition.token, jump1);
     visitParseNode(out, if_.trueBody);
@@ -358,7 +359,34 @@ export const BytecodeSecondOrder: ParseTreeTable = {
     visitParseNode(out, node.trueBody)
     visitParseNode(out, node.condition)
     pushBytecode(out, node.token, { type: "ifast", f: !!node.falseBody });
-  }
+  },
+
+  metawhile: (out, node) => {
+    // Can write this in terms on regular while?
+    const condition = node.expr.condition
+    const body = node.expr.body
+    pushBytecode(out, condition.token, { type: "comment", comment: "while begin" });
+    const breakBlock = new LabelBlock(out.state.labelBlock, "labelblock", 'break', null)
+    const continueBlock = new LabelBlock(breakBlock, "labelblock", 'continue', null)
+    out.state.labelBlock = continueBlock;
+    const loopTarget = out.bytecode.code.length
+    writeMeta(out, condition); // Meta part
+    const jump1 = pushBytecode(out, condition.token, { type: "jumpf", address: 0 });
+    visitParseNode(out, body);
+
+    pushBytecode(out, condition.token, { type: "appendq" });
+    pushBytecode(out, condition.token, { type: "pop" });
+
+    continueBlock.completion.forEach(f => f(out.bytecode.code.length))
+    continueBlock.completion.length = 0
+    pushBytecode(out, condition.token, { type: "jump", address: loopTarget });
+    jump1.address = out.bytecode.code.length
+    breakBlock.completion.forEach(f => f(out.bytecode.code.length))
+    breakBlock.completion.length = 0
+    out.state.labelBlock = breakBlock.parent;
+    pushBytecode(out, condition.token, { type: "comment", comment: "while end" });
+
+  },
 };
 
 export const compileFunctionPrototype = (ctx: TaskContext, prototype: FunctionPrototype) => {
@@ -688,6 +716,7 @@ const instructions: InstructionMapping = {
   setlocal: (vm, { name }) => {
     expect(Object.hasOwn(vm.scope, name), `$name not existing in scope`, { name });
     vm.scope[name] = popStack(vm);
+    vm.stack.push(null) // statement expression
   },
   jump: (vm, { address }) => void (vm.ip = address),
   call: (vm, { name, count, tcount }) => TaskDef(callFunctionTask, { vm, name, count, tcount }),

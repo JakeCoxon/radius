@@ -1,0 +1,19 @@
+fn bamp(x: int):
+  print(x)
+
+fn foop!(T)(x: T) int:
+  12 + x
+
+fn bar!(T)() int:
+  12 + (meta T + 10)
+
+fn main():
+  x := 1 + 3
+  y := 32
+  bamp(x)
+  bamp(y)
+  bamp(y)
+  foop!int(y)
+  foop!int(y)
+
+  bar!(123)()

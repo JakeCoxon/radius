@@ -187,3 +187,17 @@ test("nomethod", async () => {
   const test = runCompilerTest(input, { filename: 'nomethod', expectError: true })
 
 });
+
+test("template_basic", async () => {
+
+  const input = await Bun.file(`${import.meta.dir}/fixtures/template_basic.rad`).text()
+  const test = runCompilerTest(input, { filename: 'template_basic' })
+
+});
+
+test("template_advanced", async () => {
+
+  const input = await Bun.file(`${import.meta.dir}/fixtures/template_advanced.rad`).text()
+  const test = runCompilerTest(input, { filename: 'template_advanced' })
+
+});
