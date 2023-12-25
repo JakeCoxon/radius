@@ -22,7 +22,7 @@ const runTestInner = (queue: Queue, input: string, filepath: string, globalCompi
   queue.enqueue(root)
 
   let i;
-  for (i = 0; i < 100000; i++) {
+  for (i = 0; i < 10000; i++) {
     if (queue.list.length === 0) {
       if (root._state !== 'completed') {
         // TODO: remove events after they are completed
@@ -33,7 +33,7 @@ const runTestInner = (queue: Queue, input: string, filepath: string, globalCompi
     stepQueue(queue);
   }
   if (root._failure) throw root._failure
-  if (!root._success && i === 100000) {
+  if (!root._success && i === 10000) {
     compilerAssert(false, "Exhausted. maybe an infinite loop", { root })
   }
   compilerAssert(root._success, "Expected success", { root })

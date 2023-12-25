@@ -1,4 +1,4 @@
-import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListType, SubscriptAst, ExternalType, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, ArgumentTypePair, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher } from "./defs";
+import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListType, SubscriptAst, ExternalTypeConstructor, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, ArgumentTypePair, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo } from "./defs";
 import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, functionCompileTimeCompileTask, createCallAstFromValue } from "./compiler_functions";
 import { Event, Task, TaskDef, Unit, isTask, isTaskResult } from "./tasks";
 
@@ -205,13 +205,14 @@ export const BytecodeSecondOrder: ParseTreeTable = {
   metafor:   (out, node) => compilerAssert(false, "Not implemented"),
   import:    (out, node) => compilerAssert(false, "Not implemented"),
   compileriden: (out, node) => compilerAssert(false, "Not implemented"),
-  constructor: (out, node) => (visitParseNode(out, node.type), visitAll(out, node.args), pushBytecode(out, node.token, { type: 'constructorast', count: node.args.length })),
 
-  identifier: (out, node) => pushBytecode(out, node.token, { type: "bindingast", name: node.token.value }),
-  value:   (out, node) => pushBytecode(out, node.token, { type: "push", value: node.value }), 
-  number:  (out, node) => pushBytecode(out, node.token, { type: "numberast", value: Number(node.token.value) }),
-  string:  (out, node) => pushBytecode(out, node.token, { type: "stringast", value: node.token.value }),
-  boolean: (out, node) => pushBytecode(out, node.token, { type: "boolast", value: node.token.value !== 'false' }),
+  constructor:  (out, node) => (visitParseNode(out, node.type), visitAll(out, node.args), pushBytecode(out, node.token, { type: 'constructorast', count: node.args.length })),
+  identifier:   (out, node) => pushBytecode(out, node.token, { type: "bindingast", name: node.token.value }),
+
+  value:    (out, node) => pushBytecode(out, node.token, { type: "push", value: node.value }), 
+  number:   (out, node) => pushBytecode(out, node.token, { type: "numberast", value: Number(node.token.value) }),
+  string:   (out, node) => pushBytecode(out, node.token, { type: "stringast", value: node.token.value }),
+  boolean:  (out, node) => pushBytecode(out, node.token, { type: "boolast", value: node.token.value !== 'false' }),
 
   operator: (out, node) => (visitAll(out, node.exprs), pushBytecode(out, node.token, { type: 'operatorast', name: node.token.value, count: node.exprs.length })),
   meta:     (out, node) => (writeMeta(out, node.expr), pushBytecode(out, node.token, { type: 'toast' })),
@@ -514,7 +515,7 @@ function callFunctionFromValueTask(ctx: TaskContext, vm: Vm, func: unknown, type
   }
 
   if (func instanceof ClassDefinition) {
-    compilerAssert(func.abstract, "Expected abstract class got $func", { func });
+    compilerAssert(func.isTypeConstructor, "Expected type constructor class got $func", { func });
     compilerAssert(values.length === 0, "Not implemented", { values })
     const typeVars = typeArgs.filter((x): x is TypeVariable => x instanceof TypeVariable)
     if (typeVars.length) {
@@ -526,7 +527,7 @@ function callFunctionFromValueTask(ctx: TaskContext, vm: Vm, func: unknown, type
       .chainFn((task, type) => { vm.stack.push(type); return Task.success })
     )
   }
-  if (func instanceof ExternalType) {
+  if (func instanceof ExternalTypeConstructor) {
     compilerAssert(values.length === 0, "Expected no args", { values })
     compilerAssert(typeArgs.length === 1, "Expected one type arg", { typeArgs })
     const typeVars = typeArgs.filter((x): x is TypeVariable => x instanceof TypeVariable)
@@ -623,20 +624,20 @@ const instructions: InstructionMapping = {
   },
   fieldast: (vm, { name }) => {
     const value = expectAst(popStack(vm));
-    if (value.type instanceof ConcreteClassType) {
-      const field = value.type.compiledClass.fields.find(x => x.name === name)
-      if (field) {
-        vm.stack.push(new FieldAst(field.fieldType, vm.location, value, field))
-        return
-      }
+    const field = value.type.typeInfo.fields.find(x => x.name === name)
+    if (field) {
+      vm.stack.push(new FieldAst(field.fieldType, vm.location, value, field))
+      return
     }
-    if (value.type instanceof ParameterizedType) {
-      if (value.type.typeConstructor === ListType) {
-        const field = (value.type.typeConstructor as typeof ListType).lengthField
-        vm.stack.push(new FieldAst(IntType, vm.location, value, field))
-        return
-      }
-    }
+    // if (value.type instanceof ConcreteClassType) {
+    // }
+    // if (value.type instanceof ParameterizedType) {
+    //   if (value.type.typeConstructor === ListType) {
+    //     const field = (value.type.typeConstructor as typeof ListType).lengthField
+    //     vm.stack.push(new FieldAst(IntType, vm.location, value, field))
+    //     return
+    //   }
+    // }
     return (
       TaskDef(resolveScope, vm.scope, name)
       .mapRejected((error) => createCompilerError('No field $name found on type $type, and no binding found in scope', { name, type: value.type, scope: vm.scope }))
@@ -646,14 +647,11 @@ const instructions: InstructionMapping = {
   setfieldast: (vm, { name }) => {
     const value = expectAst(popStack(vm));
     const expr = expectAst(popStack(vm));
-    if (expr.type instanceof ConcreteClassType) {
-      const field = expr.type.compiledClass.fields.find(x => x.name === name)
-      compilerAssert(field, "No field $name found on type $type", { name, type: value.type })
-      compilerAssert(field.fieldType === value.type, "Type $type does not match field $name type of $fieldType on object $objType", { name, objType: expr.type, type: value.type, fieldType: field.fieldType })
-      vm.stack.push(new SetFieldAst(VoidType, vm.location, expr, field, value))
-      return
-    }
-    compilerAssert(false, "No field $name found on type $type", { name, type: value.type })
+    
+    const field = expr.type.typeInfo.fields.find(x => x.name === name)
+    compilerAssert(field, "No field $name found on type $type", { name, type: expr.type })
+    compilerAssert(field.fieldType === value.type, "Type $type does not match field $name type of $fieldType on object $objType", { name, objType: expr.type, type: value.type, fieldType: field.fieldType })
+    vm.stack.push(new SetFieldAst(VoidType, vm.location, expr, field, value))
   },
   subscriptast: (vm, {}) => {
     const right = expectAst(popStack(vm));
@@ -875,7 +873,7 @@ function topLevelClassDefinitionTask(ctx: TaskContext, decl: ParserClassDecl, sc
 
 }
 
-export function compileClassTask(ctx: TaskContext, { classDef, typeArgs }: { classDef: ClassDefinition, typeArgs: unknown[] }): Task<ConcreteClassType, CompilerError> {
+export function compileClassTask(ctx: TaskContext, { classDef, typeArgs }: { classDef: ClassDefinition, typeArgs: unknown[] }): Task<ConcreteClassType | ParameterizedType, CompilerError> {
   // console.log("Compiling class", classDef)
 
   const binding = new Binding(classDef.debugName, VoidType);
@@ -916,7 +914,10 @@ export function compileClassTask(ctx: TaskContext, { classDef, typeArgs }: { cla
           classDef.location, debugName,
           binding, classDef, null!, body, [], typeArgs, typeParamHash)
 
-      const type = new ConcreteClassType(compiledClass)
+      const typeInfo: TypeInfo = { fields: compiledClass.fields }
+      const type = classDef.typeArgs.length === 0 ? 
+        new ConcreteClassType(compiledClass, typeInfo)
+        : new ParameterizedType(compiledClass, typeArgs, typeInfo)
       compiledClass.type = type;
       binding.type = type;
 
@@ -928,7 +929,8 @@ export function compileClassTask(ctx: TaskContext, { classDef, typeArgs }: { cla
 
       classDef.compiledClasses.push(compiledClass)
 
-      if (classDef.typeArgs.length === 0) classDef.concreteType = type;
+      if (classDef.typeArgs.length === 0 && type instanceof ConcreteClassType)
+        classDef.concreteType = type;
 
       const iterate = templateScope['__iterate']
       compilerAssert(!iterate || iterate instanceof Closure)
@@ -957,8 +959,11 @@ const getCommonType = (types: Type[]): Type => {
   compilerAssert(types.every(x => x === types[0]), "Expected types to be the same")
   return types[0];
 }
-const createParameterizedType = (globalCompiler: GlobalCompilerState, baseType: Type, argTypes: Type[]): Type => {
-  const newType = new ParameterizedType(baseType, argTypes);
+const createParameterizedType = (globalCompiler: GlobalCompilerState, typeConstructor: TypeConstructor, argTypes: Type[]): Type => {
+  if (typeConstructor instanceof CompiledClass) {
+    typeInfo = { fields: typeConstructor.fields }
+  }
+  const newType = new ParameterizedType(typeConstructor, argTypes, typeInfo);
   return globalCompiler.typeTable.getOrInsert(newType)
 }
 

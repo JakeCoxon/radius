@@ -13,14 +13,14 @@ type Thing:
   x : int
   y : float
 
-type List!(T):
+type MyList!(T):
   elem : T
 
 fn foothing(a: Thing):
   print(a.x)
   print(a)
 
-fn foo_list!(E)(a: List!E):
+fn foo_list!(E)(a: MyList!E):
   print(a.elem)
 
 fn main():
@@ -29,7 +29,7 @@ fn main():
 
   foo(1)
 
-  my_list: List!int
+  my_list: MyList!int
   my_list.elem = 32
   foo_list!int(my_list)
 

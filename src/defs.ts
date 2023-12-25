@@ -300,7 +300,7 @@ export class CompiledClass {
     public debugName: string,
     public binding: Binding,
     public classDefinition: ClassDefinition,
-    public type: ConcreteClassType,
+    public type: ParameterizedType | ConcreteClassType,
     public body: Ast,
     public fields: TypeField[],
     public typeArguments: unknown[],
@@ -319,7 +319,7 @@ export class ClassDefinition {
   compiledClasses: CompiledClass[] = []
   concreteType: ConcreteClassType | undefined
 
-  abstract: boolean = false
+  isTypeConstructor: boolean = false
 
   constructor(
     public id: number,
@@ -329,7 +329,7 @@ export class ClassDefinition {
     public name: ParseIdentifier | null,
     public typeArgs: ParseNode[],
     public body: ParseNode | null) {
-      this.abstract = typeArgs.length > 0
+      this.isTypeConstructor = typeArgs.length > 0
     }
 
   [Inspect.custom](depth, options, inspect) {
@@ -410,24 +410,21 @@ export const hashValues = (values: unknown[]) => {
   }).join("__")
 }
 
+export interface TypeInfo {
+  fields: TypeField[]
+}
 export class TypeRoot {}
 export class PrimitiveType extends TypeRoot {
   metaobject: {} = Object.create(null)
-  constructor(public typeName: string) { super() }
+  constructor(public typeName: string, public typeInfo: TypeInfo) { super() }
   [Inspect.custom](depth, options, inspect) {
     return options.stylize(`[PrimitiveType ${this.typeName}]`, 'special');
   }
 }
-export class ExternalType extends TypeRoot {
-  metaobject: {} = Object.create(null)
-  constructor(public typeName: string) { super() }
-  [Inspect.custom](depth, options, inspect) {
-    return options.stylize(`[ExternalType ${this.typeName}]`, 'special');
-  }
-}
+
 export class ConcreteClassType extends TypeRoot {
   metaobject: {}
-  constructor(public compiledClass: CompiledClass) { 
+  constructor(public compiledClass: CompiledClass, public typeInfo: TypeInfo) { 
     super()
     this.metaobject = compiledClass.metaobject
   }
@@ -437,13 +434,13 @@ export class ConcreteClassType extends TypeRoot {
 }
 export class ParameterizedType extends TypeRoot {
   metaobject: {}
-  constructor(public typeConstructor: Type, public args: unknown[]) {
+  constructor(public typeConstructor: TypeConstructor, public args: unknown[], public typeInfo: TypeInfo) {
     super()
     this.metaobject = typeConstructor.metaobject
   }
   [Inspect.custom](depth, options, inspect) {
     if (depth <= 1 || depth < options.depth) return options.stylize(`[ParameterizedType ...]`, 'special');
-    return options.stylize(`[ParameterizedType ${inspect(this.typeConstructor)}, ${this.args.map(inspect).join(", ")}]`, 'special');
+    return options.stylize(`[ParameterizedType ...]`, 'special');
   }
 }
 
@@ -452,13 +449,24 @@ export class TypeVariable {
   [Inspect.custom](depth, options, inspect) {
     return options.stylize(`[TypeVariable ${this.name}]`, 'special');
   }
-  
-}
-export class TypeMatcher {
-  constructor(public typeContructor: ClassDefinition | ExternalType, public args: unknown[], public typeVariables: TypeVariable[]) {}
 }
 
-export type Type = PrimitiveType | ExternalType | ConcreteClassType | ParameterizedType
+export class TypeMatcher {
+  constructor(public typeConstructor: ExternalTypeConstructor | ClassDefinition, public args: unknown[], public typeVariables: TypeVariable[]) {}
+  [Inspect.custom](depth, options, inspect) {
+    return options.stylize(`[TypeMatcher]`, 'special');
+  }
+}
+export class ExternalTypeConstructor {
+  metaobject: {} = Object.create(null)
+  constructor(public typeName: string) { }
+  [Inspect.custom](depth, options, inspect) {
+    return options.stylize(`[ExternalTypeConstructor ${this.typeName}]`, 'special');
+  }
+}
+
+export type Type = PrimitiveType | ConcreteClassType | ParameterizedType
+export type TypeConstructor = ExternalTypeConstructor | CompiledClass // Type constructor for already-compiled types
 export const isType = (type: unknown): type is Type => type instanceof TypeRoot
 
 export class Closure {
@@ -493,7 +501,7 @@ export const FloatType = new PrimitiveType("float")
 export const DoubleType = new PrimitiveType("double")
 export const StringType = new PrimitiveType("string")
 export const FunctionType = new PrimitiveType("function")
-export const ListType = Object.assign(new ExternalType("List"), {
+export const ListType = Object.assign(new ExternalTypeConstructor("List"), {
   lengthField: null! as TypeField
 });
 ListType.lengthField = new TypeField(new SourceLocation(-1, -1, null!), "length", ListType, 0, IntType)
@@ -531,13 +539,13 @@ class TypeTable {
 
 // Don't use directly, use type table to see if types are equal
 const typesEqual = (t1: unknown, t2: any) => {
+  if (t1 instanceof ExternalTypeConstructor) return t1 === t2;
   if (!isType(t1)) {
     return hashValues([t1]) === hashValues([t2])
   }
   compilerAssert(t1 && t2, "Unexpected", { t1, t2 })
   if (Object.getPrototypeOf(t1) !== Object.getPrototypeOf(t2)) return false;
   if (t1 instanceof PrimitiveType) return t1 == t2;
-  if (t1 instanceof ExternalType) return t1 == t2;
   if (t1 instanceof ConcreteClassType) return t1.compiledClass == t2.compiledClass;
   if (t1 instanceof ParameterizedType) {
     if (!typesEqual(t1.typeConstructor, t2.typeConstructor)) return false;
@@ -549,8 +557,8 @@ const typesEqual = (t1: unknown, t2: any) => {
 export const typeMatcherEquals = (matcher: TypeMatcher, expected: Type, output: {}) => {
   const test = (matcher: unknown, expected: unknown) => {
     if (matcher instanceof TypeMatcher && expected instanceof ConcreteClassType) {
-      if (matcher.typeContructor !== expected.compiledClass.classDefinition) return false
-
+      if (matcher.typeConstructor !== expected.compiledClass.classDefinition) return false
+compilerAssert(false, "", {})
       let i = 0;
       for (const arg of matcher.args) {
         if (!test(arg, expected.compiledClass.typeArguments[i])) return false;
@@ -558,8 +566,9 @@ export const typeMatcherEquals = (matcher: TypeMatcher, expected: Type, output: 
       }
       return true;
     }
+    compilerAssert(false, "", { matcher, expected })
     if (matcher instanceof TypeMatcher && expected instanceof ParameterizedType) {
-      if (matcher.typeContructor !== expected.typeConstructor) return false
+      if (matcher.typeConstructor !== expected.typeConstructor) return false
 
       let i = 0;
       for (const arg of matcher.args) {
@@ -578,7 +587,7 @@ export const typeMatcherEquals = (matcher: TypeMatcher, expected: Type, output: 
   return test(matcher, expected)
 }
 
-export const isParameterizedTypeOf = (a: Type, expected: Type) => {
+export const isParameterizedTypeOf = (a: Type, expected: TypeConstructor) => {
   return a instanceof ParameterizedType && a.typeConstructor === expected;
 }
 
