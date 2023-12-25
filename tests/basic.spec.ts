@@ -201,3 +201,10 @@ test("template_advanced", async () => {
   const test = runCompilerTest(input, { filename: 'template_advanced' })
 
 });
+
+test("list_struct", async () => {
+
+  const input = await Bun.file(`${import.meta.dir}/fixtures/list_struct.rad`).text()
+  const test = runCompilerTest(input, { filename: 'list_struct' })
+
+});

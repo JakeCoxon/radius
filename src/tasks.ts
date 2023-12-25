@@ -50,7 +50,7 @@ export class Task<S, F> {
     this.id = uniqueId++;
   }
 
-  static success: Task<Success, never>
+  static success: Task<Unit, never>
 
   static of<S>(value: S): Task<S, never> {
     return new TaskOf(value);

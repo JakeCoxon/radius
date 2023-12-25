@@ -1,5 +1,5 @@
-import { BytecodeDefault, BytecodeSecondOrder, compileFunctionPrototype, createBytecodeVmAndExecuteTask, pushBytecode, pushGeneratedBytecode, visitParseNode } from "./compiler";
-import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, ExternalFunction, CallAst, IntType, Closure, UserCallAst, ExternalType, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition } from "./defs";
+import { BytecodeDefault, BytecodeSecondOrder, compileClassTask, compileFunctionPrototype, createBytecodeVmAndExecuteTask, pushBytecode, pushGeneratedBytecode, visitParseNode } from "./compiler";
+import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, ExternalFunction, CallAst, IntType, Closure, UserCallAst, ExternalType, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition, ParseTypeCheck, ParseCall, TypeVariable, TypeMatcher, typeMatcherEquals } from "./defs";
 import { Task, TaskDef, Unit } from "./tasks";
 
 
@@ -27,13 +27,11 @@ export type TypeCheckHeaderArg = {
   concreteTypes: Type[] // output
 }
 
-function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, args, typeArgs, parentScope, concreteTypes }: TypeCheckHeaderArg): Task<string, CompilerError> {
+function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, args, typeArgs, parentScope, concreteTypes }: TypeCheckHeaderArg): Task<Unit, CompilerError> {
 
-  compilerAssert(typeArgs.length === func.typeArgs.length, "Expected $expected type parameters, got $got", { expected: func.typeArgs.length, got: typeArgs.length, func })
+  compilerAssert(typeArgs.length <= func.typeArgs.length, "Expected $expected type parameters, got $got", { expected: func.typeArgs.length, got: typeArgs.length, func })
   compilerAssert(args.length === func.args.length, 'Expected $expected args got $got', { expected: func.args.length, got: args.length, func })
-  func.args.forEach((arg, i) => {
-    // expectArg(arg[0], args[i].type, arg[1])
-  })
+
   if (func.args.length === 0) return Task.success;
   
   if (!func.headerPrototype) {
@@ -66,9 +64,13 @@ function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, args, typ
   ;(subCompilerState as any).location = func.name?.token.location
   subCompilerState.functionCompiler = subCompilerState
 
+  func.args.forEach((arg, i) => {
+    scope[arg[0].token.value] = args[i]
+  })
   func.typeArgs.forEach((typeArg, i) => {
     compilerAssert(typeArg instanceof ParseIdentifier)
-    scope[typeArg.token.value] = typeArgs[i];
+    if (!typeArgs[i]) scope[typeArg.token.value] = new TypeVariable(typeArg.token.value)
+    else scope[typeArg.token.value] = typeArgs[i];
   })
 
   return (
@@ -81,9 +83,16 @@ function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, args, typ
           concreteTypes.push(args[i].type)
           return
         }
-        compilerAssert(isType(type));
-        compilerAssert(args[i].type === type, "Argument $name of type $value does not match $expected", { name: func.args[i][0].token, value: args[i].type, expected: type })
-        concreteTypes.push(type)
+        if (type instanceof TypeMatcher) {
+          const output = {}
+          const matches = typeMatcherEquals(type, args[i].type, output)
+          compilerAssert(matches, "Type check failed. Expected $expected got $got", { expected: type, got: args[i].type })
+          concreteTypes.push(args[i].type) // TODO: Fill in the type for real
+        } else {
+          compilerAssert(isType(type));
+          compilerAssert(args[i].type === type, "Argument $name of type $value does not match $expected", { name: func.args[i][0].token, value: args[i].type, expected: type })
+          concreteTypes.push(type)
+        }
       })
       return Task.success
     })
@@ -167,7 +176,7 @@ export type FunctionCallArg = {
   concreteTypes: Type[]
 }
 
-function functionInlineTask(ctx: TaskContext, { vm, func, typeArgs, args, parentScope, concreteTypes }: FunctionCallArg): Task<string, CompilerError> {
+function functionInlineTask(ctx: TaskContext, { vm, func, typeArgs, args, parentScope, concreteTypes }: FunctionCallArg): Task<Unit, CompilerError> {
 
   const argBindings: Binding[] = [];
   const statements: Ast[] = []
@@ -247,7 +256,7 @@ export function functionCompileTimeCompileTask(ctx: TaskContext, { vm, func, typ
   );
 };
 
-export function createCallAstFromValue(vm: Vm, value: unknown, typeArgs: unknown[], args: Ast[]): Task<string, CompilerError> {
+export function createCallAstFromValue(vm: Vm, value: unknown, typeArgs: unknown[], args: Ast[]): Task<Unit, CompilerError> {
   if (value instanceof PrimitiveType) {
     compilerAssert(args.length === 1 && typeArgs.length === 0, "Expected 1 arg got $count", { count: args.length })
     vm.stack.push(new CastAst(value, vm.location, args[0]))
@@ -255,11 +264,13 @@ export function createCallAstFromValue(vm: Vm, value: unknown, typeArgs: unknown
   }
 
   if (value instanceof ClassDefinition) {
-    if (!value.concreteType) compilerAssert(false, "Value not supported", { value })
-    compilerAssert(typeArgs.length === 0, "Expected 0 type arguments got $count", { count: args.length })
-    const constructor = expectMap(value.concreteType.metaobject, 'constructor', "Expected constructor in metaobject for object $obj", { obj: value })
-    // compilerAssert(false, "Not impl", { constructor })
-    return createCallAstFromValue(vm, constructor, [], args)
+    return (
+      TaskDef(compileClassTask, { classDef: value, typeArgs }).
+      chainFn((task, clssType) => {
+        const constructor = expectMap(clssType.metaobject, 'constructor', "Expected constructor in metaobject for object $obj", { obj: value })
+        return createCallAstFromValue(vm, constructor, [], args)
+      })
+    )
   }
 
   if (value instanceof ExternalFunction) {

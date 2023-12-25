@@ -242,7 +242,7 @@ export type FunctionPrototype = {
 }
 
 export type ParseTreeTable = {
-  [E in ParseNode as E['key']]: (out: BytecodeWriter, ast: E) => void;
+  [E in ParseNode as E['key']]: (out: BytecodeWriter, node: E) => void;
 }
 
 export class CompiledFunction {
@@ -300,11 +300,11 @@ export class CompiledClass {
     public debugName: string,
     public binding: Binding,
     public classDefinition: ClassDefinition,
-    public type: Type,
+    public type: ConcreteClassType,
     public body: Ast,
     public fields: TypeField[],
-    public typeParameters: unknown[],
-    public typeParamHash: unknown) {}
+    public typeArguments: unknown[],
+    public typeArgHash: unknown) {}
 
   [Inspect.custom](depth, options, inspect) {
     if (options.ast) return options.stylize(`[CompiledClass ${this.debugName}]`, 'special');
@@ -437,14 +437,27 @@ export class ConcreteClassType extends TypeRoot {
 }
 export class ParameterizedType extends TypeRoot {
   metaobject: {}
-  constructor(public typeConstructor: Type, public args: Type[]) {
+  constructor(public typeConstructor: Type, public args: unknown[]) {
     super()
     this.metaobject = typeConstructor.metaobject
   }
   [Inspect.custom](depth, options, inspect) {
-    return options.stylize(`[ParameterizedType ...]`, 'special');
+    if (depth <= 1 || depth < options.depth) return options.stylize(`[ParameterizedType ...]`, 'special');
+    return options.stylize(`[ParameterizedType ${inspect(this.typeConstructor)}, ${this.args.map(inspect).join(", ")}]`, 'special');
   }
 }
+
+export class TypeVariable {
+  constructor(public name: string) {}
+  [Inspect.custom](depth, options, inspect) {
+    return options.stylize(`[TypeVariable ${this.name}]`, 'special');
+  }
+  
+}
+export class TypeMatcher {
+  constructor(public typeContructor: ClassDefinition | ExternalType, public args: unknown[], public typeVariables: TypeVariable[]) {}
+}
+
 export type Type = PrimitiveType | ExternalType | ConcreteClassType | ParameterizedType
 export const isType = (type: unknown): type is Type => type instanceof TypeRoot
 
@@ -460,6 +473,7 @@ export type Scope = object & {
 const ScopePrototype = {
   [Inspect.custom](depth, options, inspect) {
     if (depth <= 1) return options.stylize(`[Scope]`, 'special');
+    if (depth <= options.depth) return options.stylize(`[Scope]`, 'special');
     return inspect({...this})
   }
 }
@@ -516,18 +530,54 @@ class TypeTable {
 }
 
 // Don't use directly, use type table to see if types are equal
-const typesEqual = (t1: Type, t2: any) => {
+const typesEqual = (t1: unknown, t2: any) => {
+  if (!isType(t1)) {
+    return hashValues([t1]) === hashValues([t2])
+  }
   compilerAssert(t1 && t2, "Unexpected", { t1, t2 })
   if (Object.getPrototypeOf(t1) !== Object.getPrototypeOf(t2)) return false;
   if (t1 instanceof PrimitiveType) return t1 == t2;
   if (t1 instanceof ExternalType) return t1 == t2;
   if (t1 instanceof ConcreteClassType) return t1.compiledClass == t2.compiledClass;
   if (t1 instanceof ParameterizedType) {
-    if (!typesEqual(t1.typeConstructor, (t2 as any).typeConstructor)) return false;
+    if (!typesEqual(t1.typeConstructor, t2.typeConstructor)) return false;
     if (t1.args.length !== t2.args.length) return false;
     return t1.args.every((x, i) => typesEqual(x, t2.args[i]))
   }
 }
+
+export const typeMatcherEquals = (matcher: TypeMatcher, expected: Type, output: {}) => {
+  const test = (matcher: unknown, expected: unknown) => {
+    if (matcher instanceof TypeMatcher && expected instanceof ConcreteClassType) {
+      if (matcher.typeContructor !== expected.compiledClass.classDefinition) return false
+
+      let i = 0;
+      for (const arg of matcher.args) {
+        if (!test(arg, expected.compiledClass.typeArguments[i])) return false;
+        i++
+      }
+      return true;
+    }
+    if (matcher instanceof TypeMatcher && expected instanceof ParameterizedType) {
+      if (matcher.typeContructor !== expected.typeConstructor) return false
+
+      let i = 0;
+      for (const arg of matcher.args) {
+        if (!test(arg, expected.args[i])) return false;
+        i++
+      }
+      return true;
+    }
+    if (matcher instanceof TypeVariable) {
+      if (output[matcher.name]) return output[matcher.name] === expected;
+      output[matcher.name] = expected;
+      return true
+    }
+    compilerAssert(false, "Not implemented", { matcher, expected })
+  }
+  return test(matcher, expected)
+}
+
 export const isParameterizedTypeOf = (a: Type, expected: Type) => {
   return a instanceof ParameterizedType && a.typeConstructor === expected;
 }
