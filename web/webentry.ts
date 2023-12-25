@@ -16,7 +16,7 @@ const runTestInner = (input: string) => {
       console.log(...args)
       return args[0];
     }),
-  });
+  }, undefined);
 
   const queue = new Queue();
   

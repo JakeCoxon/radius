@@ -1,0 +1,8 @@
+fn create_adder(x) any:
+  {|y| y + x}
+
+fn main():
+
+  z := 41
+  baz :: create_adder(z)
+  print(baz(3))

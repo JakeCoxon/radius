@@ -1,0 +1,9 @@
+fn main():
+
+  foo :: 90
+  make_number :: {|a,b| a + b + foo}
+  bamp :: make_number(32, 12)
+
+  x := make_number(1, 2)
+
+  print(bamp)

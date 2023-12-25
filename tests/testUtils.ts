@@ -84,7 +84,7 @@ export const runCompilerTest = (input: string, { moduleLoader, filename, expectE
       prints.push(...args)
       return args[0];
     }),
-  });
+  }, undefined);
 
   const queue = new Queue();
 

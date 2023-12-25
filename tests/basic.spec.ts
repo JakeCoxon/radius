@@ -15,8 +15,22 @@ test("closure", async () => {
 
 });
 
+test("closure2", async () => {
 
-test("Comptime", async () => {
+  const input = await Bun.file(`${import.meta.dir}/fixtures/closure2.rad`).text()
+  const test = runCompilerTest(input, { filename: 'closure2' })
+
+});
+
+test("closure_binding", async () => {
+
+  const input = await Bun.file(`${import.meta.dir}/fixtures/closure_binding.rad`).text()
+  const test = runCompilerTest(input, { filename: 'closure_binding' })
+
+});
+
+
+test("comptime", async () => {
 
   const input = await Bun.file(`${import.meta.dir}/fixtures/comptime.rad`).text()
   const test = runCompilerTest(input, { filename: "comptime" })

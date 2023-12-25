@@ -61,7 +61,7 @@ function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, args, typ
     ctx.globalCompiler.logger.log("")
   }
 
-  const scope = createScope({})
+  const scope = createScope({}, undefined) // TODO: parent scope
   const subCompilerState = pushSubCompilerState(ctx, { debugName: `${func.debugName} header`, scope, lexicalParent: ctx.subCompilerState });
   ;(subCompilerState as any).location = func.name?.token.location
   subCompilerState.functionCompiler = subCompilerState
@@ -118,7 +118,7 @@ export function functionTemplateTypeCheckAndCompileTask(ctx: TaskContext, { func
   })
   if (existing) return Task.of(existing);
 
-  const templateScope = createScope({})
+  const templateScope = createScope({}, undefined); // TODO: parent scope
   const subCompilerState = pushSubCompilerState(ctx, { debugName: `${func.debugName} template`, scope: templateScope, lexicalParent: ctx.subCompilerState });
   ;(subCompilerState as any).location = func.name?.token.location
   subCompilerState.functionCompiler = subCompilerState
@@ -181,7 +181,7 @@ function functionInlineTask(ctx: TaskContext, { vm, func, typeArgs, args, parent
   }
   compilerAssert(func.templatePrototype);
   
-  const templateScope = createScope({})
+  const templateScope = createScope({}, parentScope)
   const subCompilerState = pushSubCompilerState(ctx, { debugName: `${func.debugName} inline`, lexicalParent: ctx.subCompilerState, scope: templateScope })
   
   func.args.forEach(([iden, type], i) => {

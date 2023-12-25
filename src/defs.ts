@@ -462,7 +462,7 @@ const ScopePrototype = {
     return inspect({...this})
   }
 }
-export const createScope = (obj: object) => Object.assign(Object.create(ScopePrototype), obj) as Scope;
+export const createScope = (obj: object, parentScope: Scope | undefined) => Object.assign(Object.create(parentScope || ScopePrototype), obj) as Scope;
 
 export class ExternalFunction {
   constructor(public name: string, public returnType: Type, public func: Function) {}
