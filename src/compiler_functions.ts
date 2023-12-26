@@ -88,8 +88,10 @@ function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, args, typ
           const matches = typeMatcherEquals(type, args[i].type, output)
           compilerAssert(matches, "Type check failed. Expected $expected got $got", { expected: type, got: args[i].type })
           concreteTypes.push(args[i].type) // TODO: Fill in the type for real
+        } else if (type instanceof TypeVariable) {
+          concreteTypes.push(args[i].type)
         } else {
-          compilerAssert(isType(type));
+          compilerAssert(isType(type), "Expected type got $type", { type });
           compilerAssert(args[i].type === type, "Argument $name of type $value does not match $expected", { name: func.args[i][0].token, value: args[i].type, expected: type })
           concreteTypes.push(type)
         }

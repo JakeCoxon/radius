@@ -1,0 +1,12 @@
+type Thing!(T):
+  x : int
+  y : int
+
+fn foo!(T)(thing: Thing!T):
+  print(1)
+
+fn main():
+
+  x : Thing!int
+
+  foo(x)

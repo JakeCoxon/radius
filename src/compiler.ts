@@ -707,6 +707,7 @@ const instructions: InstructionMapping = {
   totype: (vm, {}) => {
     const type = popStack(vm);
     if (isType(type)) return vm.stack.push(type);
+    if (type instanceof TypeVariable) return vm.stack.push(type)
     if (type instanceof TypeMatcher) return vm.stack.push(type)
     if (type instanceof ClassDefinition) {
       if (type.concreteType) return vm.stack.push(type.concreteType)
@@ -915,9 +916,13 @@ export function compileClassTask(ctx: TaskContext, { classDef, typeArgs }: { cla
           binding, classDef, null!, body, [], typeArgs, typeParamHash)
 
       const typeInfo: TypeInfo = { fields: compiledClass.fields }
-      const type = classDef.typeArgs.length === 0 ? 
-        new ConcreteClassType(compiledClass, typeInfo)
-        : new ParameterizedType(compiledClass, typeArgs, typeInfo)
+      let type: Type
+      if (classDef.typeArgs.length === 0) { 
+        type = new ConcreteClassType(compiledClass, typeInfo)
+        classDef.concreteType = type;
+      } else {
+        type = ctx.globalCompiler.typeTable.getOrInsert(new ParameterizedType(compiledClass, typeArgs, typeInfo))
+      }
       compiledClass.type = type;
       binding.type = type;
 
@@ -928,9 +933,6 @@ export function compileClassTask(ctx: TaskContext, { classDef, typeArgs }: { cla
       }
 
       classDef.compiledClasses.push(compiledClass)
-
-      if (classDef.typeArgs.length === 0 && type instanceof ConcreteClassType)
-        classDef.concreteType = type;
 
       const iterate = templateScope['__iterate']
       compilerAssert(!iterate || iterate instanceof Closure)
@@ -961,10 +963,12 @@ const getCommonType = (types: Type[]): Type => {
 }
 const createParameterizedType = (globalCompiler: GlobalCompilerState, typeConstructor: TypeConstructor, argTypes: Type[]): Type => {
   if (typeConstructor instanceof CompiledClass) {
-    typeInfo = { fields: typeConstructor.fields }
+    const newType = typeConstructor.type
+    return globalCompiler.typeTable.getOrInsert(newType)
+  } else {
+    const newType = typeConstructor.createType(argTypes)
+    return globalCompiler.typeTable.getOrInsert(newType)
   }
-  const newType = new ParameterizedType(typeConstructor, argTypes, typeInfo);
-  return globalCompiler.typeTable.getOrInsert(newType)
 }
 
 const topLevelLetConst = (ctx: TaskContext, expr: ParseLetConst, rootScope: Scope) => {

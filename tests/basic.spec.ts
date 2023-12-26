@@ -208,3 +208,24 @@ test("list_struct", async () => {
   const test = runCompilerTest(input, { filename: 'list_struct' })
 
 });
+
+test("generic", async () => {
+
+  const input = await Bun.file(`${import.meta.dir}/fixtures/generic.rad`).text()
+  const test = runCompilerTest(input, { filename: 'generic' })
+
+});
+
+test("generic2", async () => {
+
+  const input = await Bun.file(`${import.meta.dir}/fixtures/generic2.rad`).text()
+  const test = runCompilerTest(input, { filename: 'generic2' })
+
+});
+
+test("generic3", async () => {
+
+  const input = await Bun.file(`${import.meta.dir}/fixtures/generic3.rad`).text()
+  const test = runCompilerTest(input, { filename: 'generic3', expectError: true })
+
+});

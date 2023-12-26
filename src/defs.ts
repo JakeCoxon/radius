@@ -459,7 +459,7 @@ export class TypeMatcher {
 }
 export class ExternalTypeConstructor {
   metaobject: {} = Object.create(null)
-  constructor(public typeName: string) { }
+  constructor(public typeName: string, public createType: (argTypes: Type[]) => ParameterizedType) { }
   [Inspect.custom](depth, options, inspect) {
     return options.stylize(`[ExternalTypeConstructor ${this.typeName}]`, 'special');
   }
@@ -494,17 +494,18 @@ export class ExternalFunction {
   }
 }
 
-export const VoidType = new PrimitiveType("void")
-export const IntType = new PrimitiveType("int")
-export const BoolType = new PrimitiveType("bool")
-export const FloatType = new PrimitiveType("float")
-export const DoubleType = new PrimitiveType("double")
-export const StringType = new PrimitiveType("string")
-export const FunctionType = new PrimitiveType("function")
-export const ListType = Object.assign(new ExternalTypeConstructor("List"), {
-  lengthField: null! as TypeField
-});
-ListType.lengthField = new TypeField(new SourceLocation(-1, -1, null!), "length", ListType, 0, IntType)
+export const VoidType = new PrimitiveType("void", { fields: [] })
+export const IntType = new PrimitiveType("int", { fields: [] })
+export const BoolType = new PrimitiveType("bool", { fields: [] })
+export const FloatType = new PrimitiveType("float", { fields: [] })
+export const DoubleType = new PrimitiveType("double", { fields: [] })
+export const StringType = new PrimitiveType("string", { fields: [] })
+export const FunctionType = new PrimitiveType("function", { fields: [] })
+export const ListType: ExternalTypeConstructor = new ExternalTypeConstructor("List", (argTypes) => {
+  const type = new ParameterizedType(ListType, argTypes, { fields: [] });
+  type.typeInfo.fields.push(new TypeField(new SourceLocation(-1, -1, null!), "length", type, 0, IntType))
+  return type;
+})
 
 export const BuiltinTypes = {
   int: IntType,
@@ -525,13 +526,13 @@ class TypeTable {
       if (typesEqual(t, type)) return t;
     }
   }
-  insert(type: Type) { 
+  insert<T extends Type>(type: T) { 
     this.array.push(type);
     return type;
   }
-  getOrInsert(type: Type): Type {
+  getOrInsert<T extends Type>(type: T): T {
     let v = this.get(type)
-    if (v) return v;
+    if (v) return v as T;
     return this.insert(type)
   }
   
@@ -555,20 +556,23 @@ const typesEqual = (t1: unknown, t2: any) => {
 }
 
 export const typeMatcherEquals = (matcher: TypeMatcher, expected: Type, output: {}) => {
-  const test = (matcher: unknown, expected: unknown) => {
-    if (matcher instanceof TypeMatcher && expected instanceof ConcreteClassType) {
-      if (matcher.typeConstructor !== expected.compiledClass.classDefinition) return false
-compilerAssert(false, "", {})
-      let i = 0;
-      for (const arg of matcher.args) {
-        if (!test(arg, expected.compiledClass.typeArguments[i])) return false;
-        i++
-      }
-      return true;
+  const testTypeConstructor = (matcher: ExternalTypeConstructor | ClassDefinition, expected: TypeConstructor) => {
+    if (matcher instanceof ExternalTypeConstructor) {
+      if (matcher === expected) return true
+      compilerAssert(false, "$matcher does not equal $expected", { matcher, expected })
     }
-    compilerAssert(false, "", { matcher, expected })
+    if (expected instanceof CompiledClass) {
+      if (matcher !== expected.classDefinition) {
+        compilerAssert(false, "$matcher does not equal $expected", { matcher, expected: expected.classDefinition })
+        return false;
+      }
+      return true
+    }
+  }
+  
+  const test = (matcher: unknown, expected: unknown) => {
     if (matcher instanceof TypeMatcher && expected instanceof ParameterizedType) {
-      if (matcher.typeConstructor !== expected.typeConstructor) return false
+      if (!testTypeConstructor(matcher.typeConstructor, expected.typeConstructor)) return false;
 
       let i = 0;
       for (const arg of matcher.args) {
@@ -581,6 +585,9 @@ compilerAssert(false, "", {})
       if (output[matcher.name]) return output[matcher.name] === expected;
       output[matcher.name] = expected;
       return true
+    }
+    if (matcher instanceof TypeMatcher && expected instanceof ConcreteClassType) {
+      return false;
     }
     compilerAssert(false, "Not implemented", { matcher, expected })
   }
