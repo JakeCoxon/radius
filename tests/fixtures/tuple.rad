@@ -1,0 +1,23 @@
+type Thing:
+  x : int
+  y : int
+
+
+fn foo(tup: Tuple!(int, float, Thing)):
+  print(tup._1 + int(tup._2) + tup._3.x + tup._3.y)
+
+fn foo2(tup: (int, float, Thing)):
+  print(tup._1 + int(tup._2) + tup._3.x + tup._3.y)
+
+
+fn main():
+  thing := Thing(4, 3)
+
+  tup := (1, float(2), thing)
+
+  print(tup._1 + int(tup._2) + tup._3.x + tup._3.y)
+
+  tup = (14124, float(23123), thing)
+
+  foo(tup)
+  foo2(tup)

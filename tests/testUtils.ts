@@ -1,6 +1,6 @@
 import { existsSync, unlinkSync, readFileSync } from "node:fs";
 import { runTopLevelTask } from "../src/compiler";
-import { BoolType, Closure, CompilerError, DoubleType, ExternalFunction, FloatType, GlobalCompilerState, IntType, Scope, StringType, SubCompilerState, TaskContext, VoidType, compilerAssert, createDefaultGlobalCompiler, createScope, expectMap, BuiltinTypes, ModuleLoader, SourceLocation, textColors, outputSourceLocation } from "../src/defs";
+import { BoolType, Closure, CompilerError, DoubleType, ExternalFunction, FloatType, GlobalCompilerState, IntType, Scope, StringType, SubCompilerState, TaskContext, VoidType, compilerAssert, createDefaultGlobalCompiler, createScope, expectMap, BuiltinTypes, ModuleLoader, SourceLocation, textColors, outputSourceLocation, TokenRoot } from "../src/defs";
 import { makeParser } from "../src/parser"
 import { Queue, TaskDef, stepQueue, withContext } from "../src//tasks";
 import { expect } from "bun:test";
@@ -128,6 +128,16 @@ export const runCompilerTest = (input: string, { moduleLoader, filename, expectE
       if (location) {
         const text = outputSourceLocation(location)
         logger.log(text)
+      }
+
+      if ((ex.info as any)._userinfo) {
+        (ex.info as any)._userinfo.forEach(name => {
+          const item = ex.info[name]
+          if (Object.getPrototypeOf(item) === TokenRoot) {
+            const text = outputSourceLocation(item.location)
+            logger.log(text)
+          }
+        })
       }
 
       logger.log("\nError info")

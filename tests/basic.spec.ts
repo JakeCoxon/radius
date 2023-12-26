@@ -229,3 +229,10 @@ test("generic3", async () => {
   const test = runCompilerTest(input, { filename: 'generic3', expectError: true })
 
 });
+
+test("tuple", async () => {
+
+  const input = await Bun.file(`${import.meta.dir}/fixtures/tuple.rad`).text()
+  const test = runCompilerTest(input, { filename: 'tuple' })
+
+});

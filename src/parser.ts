@@ -1,4 +1,4 @@
-import { ArgumentTypePair, ParseAnd, ParseNode, ParseBreak, ParseCall, ParseCast, ParseCompTime, ParseContinue, ParseDict, ParseExpand, ParseField, ParseFor, ParseForExpr, ParseIf, ParseLet, ParseLetConst, ParseList, ParseListComp, ParseMeta, ParseNot, ParseNumber, ParseOpEq, ParseOperator, ParseOr, ParseReturn, ParseSet, ParseStatements, ParseString, ParseIdentifier, ParseWhile, ParseWhileExpr, ParserFunctionDecl, Token, compilerAssert, ParsePostCall, ParseSymbol, ParseNote, ParseSlice, ParseSubscript, ParserClassDecl, ParseClass, ParseFunction, createToken, ParseBoolean, ParseElse, ParseMetaIf, ParseMetaFor, ParseBlock, ParseImport, ParsedModule, Source, ParseMetaWhile } from "./defs";
+import { ArgumentTypePair, ParseAnd, ParseNode, ParseBreak, ParseCall, ParseCast, ParseCompTime, ParseContinue, ParseDict, ParseExpand, ParseField, ParseFor, ParseForExpr, ParseIf, ParseLet, ParseLetConst, ParseList, ParseListComp, ParseMeta, ParseNot, ParseNumber, ParseOpEq, ParseOperator, ParseOr, ParseReturn, ParseSet, ParseStatements, ParseString, ParseIdentifier, ParseWhile, ParseWhileExpr, ParserFunctionDecl, Token, compilerAssert, ParsePostCall, ParseSymbol, ParseNote, ParseSlice, ParseSubscript, ParserClassDecl, ParseClass, ParseFunction, createToken, ParseBoolean, ParseElse, ParseMetaIf, ParseMetaFor, ParseBlock, ParseImport, ParsedModule, Source, ParseMetaWhile, ParseTuple } from "./defs";
 
 type LexerState = { significantNewlines: boolean; parenStack: string[] };
 
@@ -169,10 +169,13 @@ export const makeParser = (input: string, debugName: string) => {
   
   const assertIdentifier = (node: ParseNode): ParseIdentifier => (compilerAssert(node instanceof ParseIdentifier, "Expected identifier"), node);
 
-  const parseParens = () => {
+  const parseParens = (tupleToken: Token) => {
     const expr = parseExpr();
-    expect(")", `Expected ')' after expression`);
-    return expr;
+    if (!match(",")) { expect(")", `Expected ')' after expression`); return expr; }
+    let exprs = [expr, parseExpr()]
+    while (match(",")) exprs.push(parseExpr())
+    expect(")", `Expected ')' after tuple expression`)
+    return new ParseTuple(tupleToken, exprs)
   };
   const parseList = (): ParseNode => {
     const listToken = previous;
@@ -214,7 +217,7 @@ export const makeParser = (input: string, debugName: string) => {
   };
 
   const parseLiteral = (): ParseNode => {
-    if (match("("))          return parseParens();
+    if (match("("))          return parseParens(previous);
     else if (match("["))     return parseList();
     else if (match("'"))     return new ParseSymbol(parseIdentifier().token);
     else if (match("@"))     return new ParseNote(previous, parseExpr());

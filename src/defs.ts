@@ -10,14 +10,17 @@ export class CompilerError extends Error {
   constructor(message: string, public info: object) { super(message) }
 }
 export const createCompilerError = (message: string, info: object) => {
+  const userinfo: string[] = []
   let out = message.replace(/\$([a-zA-Z]+)/g, (match, capture) => { 
     const obj = info[capture]
+    userinfo.push(capture)
     if (obj === undefined || obj === null) return makeColor(`null`)
     if (obj[Inspect.custom]) return Inspect(obj, { depth: 0, colors: true });
     if (typeof obj !== 'object') return Inspect(obj, { depth: 0, colors: true });
     if (obj.constructor) return makeColor(`[${obj.constructor.name}]`)
     return Inspect(obj)
   }); 
+  (info as any)._userinfo = userinfo
   return new CompilerError(out, info);
 }
 export function compilerAssert(expected: unknown, message: string="", info: object={}): asserts expected {
@@ -49,7 +52,7 @@ export class SourceLocation {
 
 export type Token = { value: string, type: string, location: SourceLocation }
 
-const TokenRoot = {
+export const TokenRoot = {
   [Inspect.custom](depth, options, inspect) {
     return options.stylize(`[Token ${this.value}]`, 'string');
   }
@@ -175,6 +178,7 @@ export type BytecodeInstr =
   { type: 'setlocal', name: string } |
   { type: 'list', count: number } |
   { type: 'tuple', count: number } |
+  { type: 'tupleast', count: number } |
   { type: 'closure', id: number } |
   { type: 'call', name: string, count: number, tcount: number } |
   { type: 'compilerfn', name: string, count: number, tcount: number } |
@@ -307,7 +311,7 @@ export class CompiledClass {
     public typeArgHash: unknown) {}
 
   [Inspect.custom](depth, options, inspect) {
-    if (options.ast) return options.stylize(`[CompiledClass ${this.debugName}]`, 'special');
+    if (depth <= 1 || depth <= options.depth || options.ast) return options.stylize(`[CompiledClass ${this.debugName}]`, 'special');
     return {...this}
   }
 }
@@ -333,7 +337,7 @@ export class ClassDefinition {
     }
 
   [Inspect.custom](depth, options, inspect) {
-    if (options.ast) return options.stylize(`[ClassDefinition ${this.name}]`, 'special');
+    if (depth <= 1 || depth <= options.depth || options.ast) return options.stylize(`[ClassDefinition ${this.debugName}]`, 'special');
     return {...this}
   }
 }
@@ -343,9 +347,8 @@ export class AstRoot {
     if (depth <= 1) return options.stylize(`[${this.constructor.name}]`, 'special');
     const newOptions = Object.assign({}, options, {
       ast: true,
-      depth: options.depth === null ? null : options.depth - 1,
     });
-    return inspect({ast: this.constructor.name, ...this}, newOptions)
+    return options.stylize(`${this.constructor.name} `, 'string') + inspect({ ...this}, newOptions)
   }
 }
 export class NumberAst extends AstRoot {     constructor(public type: Type, public location: SourceLocation, public value: number) { super() } }
@@ -436,7 +439,7 @@ export class ParameterizedType extends TypeRoot {
   }
   [Inspect.custom](depth, options, inspect) {
     if (depth <= 1 || depth < options.depth) return options.stylize(`[ParameterizedType ...]`, 'special');
-    return options.stylize(`[ParameterizedType ...]`, 'special');
+    return options.stylize(`[ParameterizedType ${inspect(this.typeConstructor, { depth: 0})}, ${this.args.map(x => inspect(x)).join(', ')}]`, 'special')
   }
 }
 
@@ -476,8 +479,7 @@ export type Scope = object & {
 }
 const ScopePrototype = {
   [Inspect.custom](depth, options, inspect) {
-    if (depth <= 1) return options.stylize(`[Scope]`, 'special');
-    if (depth <= options.depth) return options.stylize(`[Scope]`, 'special');
+    if (depth <= 1 || depth <= options.depth) return options.stylize(`[Scope]`, 'special');
     return inspect({...this})
   }
 }
@@ -497,9 +499,18 @@ export const FloatType = new PrimitiveType("float", { fields: [], metaobject: Ob
 export const DoubleType = new PrimitiveType("double", { fields: [], metaobject: Object.create(null) })
 export const StringType = new PrimitiveType("string", { fields: [], metaobject: Object.create(null) })
 export const FunctionType = new PrimitiveType("function", { fields: [], metaobject: Object.create(null) })
-export const ListType: ExternalTypeConstructor = new ExternalTypeConstructor("List", (argTypes) => {
-  const type = new ParameterizedType(ListType, argTypes, { fields: [], metaobject: Object.create(null) });
-  type.typeInfo.fields.push(new TypeField(new SourceLocation(-1, -1, null!), "length", type, 0, IntType))
+export const ListTypeConstructor: ExternalTypeConstructor = new ExternalTypeConstructor("List", (argTypes) => {
+  compilerAssert(argTypes.length === 1, "Expected one type arg", { argTypes })
+  const type = new ParameterizedType(ListTypeConstructor, argTypes, { fields: [], metaobject: Object.create(null) });
+  type.typeInfo.fields.push(new TypeField(SourceLocation.anon, "length", type, 0, IntType))
+  return type;
+})
+export const TupleTypeConstructor: ExternalTypeConstructor = new ExternalTypeConstructor("Tuple", (argTypes) => {
+  const type = new ParameterizedType(TupleTypeConstructor, argTypes, { fields: [], metaobject: Object.create(null) });
+  type.typeInfo.fields.push(new TypeField(SourceLocation.anon, "length", type, 0, IntType))
+  argTypes.forEach((argType, i) => {
+    type.typeInfo.fields.push(new TypeField(SourceLocation.anon, `_${i+1}`, type, i, argType))
+  })
   return type;
 })
 
@@ -510,7 +521,8 @@ export const BuiltinTypes = {
   void: VoidType,
   string: StringType,
   bool: BoolType,
-  List: ListType
+  List: ListTypeConstructor,
+  Tuple: TupleTypeConstructor,
 }
 
 class TypeTable {
@@ -559,16 +571,20 @@ export const typeMatcherEquals = (matcher: TypeMatcher, expected: Type, output: 
     }
     if (expected instanceof ClassDefinition) {
       if (matcher !== expected) {
-        compilerAssert(false, "$matcher does not equal $expected", { matcher, expected: expected.classDefinition })
+        compilerAssert(false, "$matcher does not equal $expected", { matcher, expected: expected })
         return false;
       }
       return true
     }
+    compilerAssert(false, "Not implemented", { matcher, expected })
   }
   
   const test = (matcher: unknown, expected: unknown) => {
     if (matcher instanceof TypeMatcher && expected instanceof ParameterizedType) {
-      if (!testTypeConstructor(matcher.typeConstructor, expected.typeConstructor)) return false;
+      if (!testTypeConstructor(matcher.typeConstructor, expected.typeConstructor)) {
+        compilerAssert(false, "Not implemented", { matcher, expected })
+        return false;
+      }
 
       let i = 0;
       for (const arg of matcher.args) {
@@ -583,6 +599,7 @@ export const typeMatcherEquals = (matcher: TypeMatcher, expected: Type, output: 
       return true
     }
     if (matcher instanceof TypeMatcher && expected instanceof ConcreteClassType) {
+      compilerAssert(false, "Not implemented", { matcher, expected })
       return false;
     }
     compilerAssert(false, "Not implemented", { matcher, expected })
