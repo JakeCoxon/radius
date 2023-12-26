@@ -95,7 +95,7 @@ export type ParserClassDecl = {
 class ParseNodeType {
   key: unknown;
   [Inspect.custom](depth, options, inspect) {
-    if (depth <= 0) return options.stylize(`[${this.constructor.name}]`, 'special');
+    if (depth <= 1) return options.stylize(`[${this.constructor.name}]`, 'special');
     const newOptions = Object.assign({}, options, {
       ast: true,
       depth: options.depth === null ? null : options.depth - 1,
@@ -279,8 +279,13 @@ export class FunctionDefinition {
     public inline: boolean) {}
 
   [Inspect.custom](depth, options, inspect) {
-    if (options.ast) return options.stylize(`[FunctionDefinition ${this.name}]`, 'special');
-    return {...this}
+    if (depth <= 1) return options.stylize(`[FunctionDefinition ${this.debugName}]`, 'special');
+    const mini = depth < options.depth;
+    const newOptions = Object.assign({}, options, {
+      ast: true,
+      depth: mini ? 3 : options.depth === null ? null : options.depth - 1,
+    });
+    return `${options.stylize(this.constructor.name, 'special')} ${inspect({...this}, newOptions)}`
   }
 }
 
@@ -470,6 +475,17 @@ export const isType = (type: unknown): type is Type => type instanceof TypeRoot
 
 export class Closure {
   constructor(public func: FunctionDefinition, public scope: Scope) {}
+
+  [Inspect.custom](depth, options, inspect) {
+    if (depth <= 1) return options.stylize(`[${this.constructor.name}]`, 'special');
+    const newOptions = Object.assign({}, options, {
+      ast: true,
+      depth: options.depth === null ? null : options.depth - 1,
+    });
+
+    const props = {...this}
+    return `${options.stylize(this.constructor.name, 'special')} ${inspect(props, newOptions)}`
+  }
 }
 
 export const ScopeEventsSymbol = Symbol('ScopeEventsSymbol')
@@ -624,15 +640,15 @@ export const expectAll = <T>(fn: (x: unknown) => x is T, expected: unknown[], in
   compilerAssert(expected.every(fn), "Expected something got $expected", { expected, ...info }); 
   return expected;
 };
-export const expectAst = <T>(expected: unknown, info: object = {}) => {
+export const expectAst = (expected: unknown, info: object = {}) => {
   compilerAssert(isAst(expected), "Expected AST got $expected", { expected, ...info }); 
   return expected;
 };
-export const expectType = <T>(expected: unknown, info: object = {}) => {
+export const expectType = (expected: unknown, info: object = {}) => {
   compilerAssert(isType(expected), "Expected Type got $expected", { expected, ...info }); 
   return expected;
 };
-export const expectAsts = <T>(expected: unknown[], info: object = {}) => {
+export const expectAsts = (expected: unknown[], info: object = {}) => {
   compilerAssert(expected.every(isAst), "Expected ASTs got $expected", { expected, ...info }); 
   return expected;
 };
@@ -731,10 +747,11 @@ export class SubCompilerState {
 
   [Inspect.custom](depth, options, inspect) {
     if (depth <= 1) return options.stylize(`[CompilerState ${this.debugName}]`, 'special');
+    const mini = depth < options.depth;
     const newOptions = Object.assign({}, options, {
-      depth: options.depth === null ? null : options.depth - 1,
+      depth: mini ? 1 : options.depth === null ? null : options.depth - 1,
     });
-    return inspect({ast: this.constructor.name, ...this}, newOptions)
+    return inspect({...this}, newOptions)
   }
 }
 

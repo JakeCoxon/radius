@@ -4,7 +4,7 @@ import { BoolType, Closure, CompilerError, DoubleType, ExternalFunction, FloatTy
 import { makeParser } from "../src/parser"
 import { Queue, TaskDef, stepQueue, withContext } from "../src//tasks";
 import { expect } from "bun:test";
-import { functionTemplateTypeCheckAndCompileTask } from "../src/compiler_functions";
+import { createCallAstFromValue, functionTemplateTypeCheckAndCompileTask } from "../src/compiler_functions";
 
 const runTestInner = (queue: Queue, input: string, filepath: string, globalCompiler: GlobalCompilerState, rootScope: Scope) => {
   const parser = makeParser(input, filepath)
@@ -15,7 +15,7 @@ const runTestInner = (queue: Queue, input: string, filepath: string, globalCompi
     TaskDef(runTopLevelTask, parser.rootNode, rootScope)
     .chainFn((task, arg) => {
       const func: Closure = expectMap(rootScope, "main", "No main function found");
-      return TaskDef(functionTemplateTypeCheckAndCompileTask, { func: func.func, args: [], typeArgs: [], parentScope: func.scope, concreteTypes: [] })
+      return TaskDef(createCallAstFromValue, func, [], [])
     })
     .wrap(withContext({ globalCompiler, subCompilerState } as TaskContext))
   );
@@ -133,7 +133,7 @@ export const runCompilerTest = (input: string, { moduleLoader, filename, expectE
       if ((ex.info as any)._userinfo) {
         (ex.info as any)._userinfo.forEach(name => {
           const item = ex.info[name]
-          if (Object.getPrototypeOf(item) === TokenRoot) {
+          if (item && Object.getPrototypeOf(item) === TokenRoot) {
             const text = outputSourceLocation(item.location)
             logger.log(text)
           }
@@ -142,7 +142,7 @@ export const runCompilerTest = (input: string, { moduleLoader, filename, expectE
 
       logger.log("\nError info")
       Object.entries(ex.info).forEach(([name, value]) => {
-        logger.log(`${name}:`, Bun.inspect(value, { depth: 4, colors: true }))
+        logger.log(`${name}:`, Bun.inspect(value, { depth: 10, colors: true }))
       })
       if ((ex.info as any).fatal) fatalError = true
       

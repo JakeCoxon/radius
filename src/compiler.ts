@@ -1,5 +1,5 @@
 import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, ArgumentTypePair, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor } from "./defs";
-import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, functionCompileTimeCompileTask, createCallAstFromValue } from "./compiler_functions";
+import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, functionCompileTimeCompileTask, createCallAstFromValue, createCallAstFromValueAndPushValue } from "./compiler_functions";
 import { Event, Task, TaskDef, Unit, isTask, isTaskResult } from "./tasks";
 
 export const pushBytecode = <T extends BytecodeInstr>(out: BytecodeWriter, token: Token, instr: T) => {
@@ -589,7 +589,7 @@ const instructions: InstructionMapping = {
 
     return (
       TaskDef(resolveScope, vm.scope, name)
-      .chainFn((task, value) => createCallAstFromValue(vm, value, typeArgs, args))
+      .chainFn((task, value) => createCallAstFromValueAndPushValue(vm, value, typeArgs, args))
     )
   },
   toast: (vm) => vm.stack.push(unknownToAst(vm.location, popStack(vm))),
@@ -632,7 +632,7 @@ const instructions: InstructionMapping = {
     return (
       TaskDef(resolveScope, vm.scope, name)
       .mapRejected((error) => createCompilerError('No field $name found on type $type, and no binding found in scope', { name, type: value.type, scope: vm.scope }))
-      .chainFn((task, func) => createCallAstFromValue(vm, func, [], [value]))
+      .chainFn((task, func) => createCallAstFromValueAndPushValue(vm, func, [], [value]))
     )
   },
   setfieldast: (vm, { name }) => {
@@ -736,15 +736,14 @@ const instructions: InstructionMapping = {
     if (name === 'iteratefn') {
       const v = expectAst(values[0])
       const metaObject = v.type.typeInfo.metaobject;
-      if (metaObject['iterate']) return createCallAstFromValue(vm, metaObject['iterate'], [typeArgs[0]], [v])
+      if (metaObject['iterate']) return createCallAstFromValueAndPushValue(vm, metaObject['iterate'], [typeArgs[0]], [v])
       return (
         TaskDef(resolveScope, vm.scope, 'iterate')
         .mapRejected(error => createCompilerError(`No iterate meta function, and no 'iterate' function found in scope for type $type`, { type: v.type }))
         .chainFn((task, func) => {
           compilerAssert(func instanceof Closure, "Expected closure", { func })
-          // const iterateTypeArgs = func.func.typeArgs.length == 2 ? [typeArgs[0], IntType] : [typeArgs[0]]
           const iterateTypeArgs = [typeArgs[0]]
-          return createCallAstFromValue(vm, func, iterateTypeArgs, [v])
+          return createCallAstFromValueAndPushValue(vm, func, iterateTypeArgs, [v])
         })
       )
     }
@@ -847,33 +846,6 @@ const setScopeValueAndResolveEvents = (scope: Scope, name: string, value: unknow
   }
 }
 
-function topLevelFunctionDefinitionTask(ctx: TaskContext, funcDecl: ParserFunctionDecl, scope: Scope) {
-  const funcDef = insertFunctionDefinition(ctx.globalCompiler, funcDecl)
-
-  compilerAssert(!Object.hasOwn(scope, funcDef.name!.token.value), "$name already in scope", { name: funcDef.name!.token.value, value: scope[funcDef.name!.token.value] })
-
-  setScopeValueAndResolveEvents(scope, funcDef.name!.token.value, new Closure(funcDef, scope))
-
-  return Task.of("Success")
-}
-function topLevelClassDefinitionTask(ctx: TaskContext, decl: ParserClassDecl, scope: Scope) {
-
-  const g = ctx.globalCompiler
-  if (decl.id !== undefined) return Task.of("Success");
-
-  decl.id = g.functionDefinitions.length;
-  const classDef = new ClassDefinition(
-    decl.id, decl.token.location, scope, decl.debugName,
-    decl.name, decl.typeArgs, decl.body)
-
-  g.classDefinitions.push(classDef);
-
-  setScopeValueAndResolveEvents(scope, decl.name!.token.value, classDef)
-
-  return Task.of("Success")
-
-}
-
 export function compileClassTask(ctx: TaskContext, { classDef, typeArgs }: { classDef: ClassDefinition, typeArgs: unknown[] }): Task<ConcreteClassType | ParameterizedType, CompilerError> {
   // console.log("Compiling class", classDef)
 
@@ -971,6 +943,34 @@ const createParameterizedExternalType = (globalCompiler: GlobalCompilerState, ty
   })
   const newType = typeConstructor.createType(newArgTypes)
   return globalCompiler.typeTable.getOrInsert(newType)
+}
+
+
+function topLevelFunctionDefinitionTask(ctx: TaskContext, funcDecl: ParserFunctionDecl, scope: Scope) {
+  const funcDef = insertFunctionDefinition(ctx.globalCompiler, funcDecl)
+
+  compilerAssert(!Object.hasOwn(scope, funcDef.name!.token.value), "$name already in scope", { name: funcDef.name!.token.value, value: scope[funcDef.name!.token.value] })
+
+  setScopeValueAndResolveEvents(scope, funcDef.name!.token.value, new Closure(funcDef, scope))
+
+  return Task.of("Success")
+}
+function topLevelClassDefinitionTask(ctx: TaskContext, decl: ParserClassDecl, scope: Scope) {
+
+  const g = ctx.globalCompiler
+  if (decl.id !== undefined) return Task.success;
+
+  decl.id = g.functionDefinitions.length;
+  const classDef = new ClassDefinition(
+    decl.id, decl.token.location, scope, decl.debugName,
+    decl.name, decl.typeArgs, decl.body)
+
+  g.classDefinitions.push(classDef);
+
+  setScopeValueAndResolveEvents(scope, decl.name!.token.value, classDef)
+
+  return Task.success
+
 }
 
 const topLevelLetConst = (ctx: TaskContext, expr: ParseLetConst, rootScope: Scope) => {
