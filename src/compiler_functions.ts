@@ -269,7 +269,7 @@ export function createCallAstFromValue(vm: Vm, value: unknown, typeArgs: unknown
     return (
       TaskDef(compileClassTask, { classDef: value, typeArgs }).
       chainFn((task, clssType) => {
-        const constructor = expectMap(clssType.metaobject, 'constructor', "Expected constructor in metaobject for object $obj", { obj: value })
+        const constructor = expectMap(clssType.typeInfo.metaobject, 'constructor', "Expected constructor in metaobject for object $obj", { obj: value })
         return createCallAstFromValue(vm, constructor, [], args)
       })
     )

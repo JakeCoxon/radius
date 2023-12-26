@@ -535,7 +535,7 @@ function callFunctionFromValueTask(ctx: TaskContext, vm: Vm, func: unknown, type
       vm.stack.push(new TypeMatcher(func, typeArgs, typeVars))
       return Task.success;
     }
-    vm.stack.push(createParameterizedType(ctx.globalCompiler, func, [expectType(typeArgs[0], { func, location: vm.location })]))
+    vm.stack.push(createParameterizedExternalType(ctx.globalCompiler, func, [expectType(typeArgs[0], { func, location: vm.location })]))
     return Task.success
   }
   compilerAssert(!(func instanceof FunctionDefinition), "$func is not handled", { func })
@@ -579,7 +579,8 @@ const instructions: InstructionMapping = {
   listast: (vm, { count }) => {
     const values = expectAsts(popValues(vm, count));
     const elementType = getCommonType(values.map(x => x.type))
-    const type = createParameterizedType(vm.context.globalCompiler, ListType, [elementType]);
+    const type = createParameterizedExternalType(vm.context.globalCompiler, ListType, [elementType]);
+    
     vm.stack.push(new ListAst(type, vm.location, values))
   },
   callast: (vm, { name, count, tcount }) => {
@@ -629,15 +630,6 @@ const instructions: InstructionMapping = {
       vm.stack.push(new FieldAst(field.fieldType, vm.location, value, field))
       return
     }
-    // if (value.type instanceof ConcreteClassType) {
-    // }
-    // if (value.type instanceof ParameterizedType) {
-    //   if (value.type.typeConstructor === ListType) {
-    //     const field = (value.type.typeConstructor as typeof ListType).lengthField
-    //     vm.stack.push(new FieldAst(IntType, vm.location, value, field))
-    //     return
-    //   }
-    // }
     return (
       TaskDef(resolveScope, vm.scope, name)
       .mapRejected((error) => createCompilerError('No field $name found on type $type, and no binding found in scope', { name, type: value.type, scope: vm.scope }))
@@ -741,7 +733,7 @@ const instructions: InstructionMapping = {
 
     if (name === 'iteratefn') {
       const v = expectAst(values[0])
-      const metaObject = v.type.metaobject;
+      const metaObject = v.type.typeInfo.metaobject;
       if (metaObject['iterate']) return createCallAstFromValue(vm, metaObject['iterate'], [typeArgs[0]], [v])
       return (
         TaskDef(resolveScope, vm.scope, 'iterate')
@@ -915,13 +907,13 @@ export function compileClassTask(ctx: TaskContext, { classDef, typeArgs }: { cla
           classDef.location, debugName,
           binding, classDef, null!, body, [], typeArgs, typeParamHash)
 
-      const typeInfo: TypeInfo = { fields: compiledClass.fields }
+      const typeInfo: TypeInfo = { fields: compiledClass.fields, metaobject: compiledClass.metaobject }
       let type: Type
       if (classDef.typeArgs.length === 0) { 
         type = new ConcreteClassType(compiledClass, typeInfo)
         classDef.concreteType = type;
       } else {
-        type = ctx.globalCompiler.typeTable.getOrInsert(new ParameterizedType(compiledClass, typeArgs, typeInfo))
+        type = ctx.globalCompiler.typeTable.getOrInsert(new ParameterizedType(classDef, typeArgs, typeInfo))
       }
       compiledClass.type = type;
       binding.type = type;
@@ -961,14 +953,9 @@ const getCommonType = (types: Type[]): Type => {
   compilerAssert(types.every(x => x === types[0]), "Expected types to be the same")
   return types[0];
 }
-const createParameterizedType = (globalCompiler: GlobalCompilerState, typeConstructor: TypeConstructor, argTypes: Type[]): Type => {
-  if (typeConstructor instanceof CompiledClass) {
-    const newType = typeConstructor.type
-    return globalCompiler.typeTable.getOrInsert(newType)
-  } else {
-    const newType = typeConstructor.createType(argTypes)
-    return globalCompiler.typeTable.getOrInsert(newType)
-  }
+const createParameterizedExternalType = (globalCompiler: GlobalCompilerState, typeConstructor: ExternalTypeConstructor, argTypes: Type[]): Type => {
+  const newType = typeConstructor.createType(argTypes)
+  return globalCompiler.typeTable.getOrInsert(newType)
 }
 
 const topLevelLetConst = (ctx: TaskContext, expr: ParseLetConst, rootScope: Scope) => {

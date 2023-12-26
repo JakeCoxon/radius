@@ -412,10 +412,10 @@ export const hashValues = (values: unknown[]) => {
 
 export interface TypeInfo {
   fields: TypeField[]
+  metaobject: {}
 }
 export class TypeRoot {}
 export class PrimitiveType extends TypeRoot {
-  metaobject: {} = Object.create(null)
   constructor(public typeName: string, public typeInfo: TypeInfo) { super() }
   [Inspect.custom](depth, options, inspect) {
     return options.stylize(`[PrimitiveType ${this.typeName}]`, 'special');
@@ -423,20 +423,16 @@ export class PrimitiveType extends TypeRoot {
 }
 
 export class ConcreteClassType extends TypeRoot {
-  metaobject: {}
   constructor(public compiledClass: CompiledClass, public typeInfo: TypeInfo) { 
     super()
-    this.metaobject = compiledClass.metaobject
   }
   [Inspect.custom](depth, options, inspect) {
     return options.stylize(`[ConcreteClassType ${this.compiledClass.debugName}]`, 'special');
   }
 }
 export class ParameterizedType extends TypeRoot {
-  metaobject: {}
   constructor(public typeConstructor: TypeConstructor, public args: unknown[], public typeInfo: TypeInfo) {
     super()
-    this.metaobject = typeConstructor.metaobject
   }
   [Inspect.custom](depth, options, inspect) {
     if (depth <= 1 || depth < options.depth) return options.stylize(`[ParameterizedType ...]`, 'special');
@@ -466,7 +462,7 @@ export class ExternalTypeConstructor {
 }
 
 export type Type = PrimitiveType | ConcreteClassType | ParameterizedType
-export type TypeConstructor = ExternalTypeConstructor | CompiledClass // Type constructor for already-compiled types
+export type TypeConstructor = ExternalTypeConstructor | ClassDefinition // Type constructor for already-compiled types
 export const isType = (type: unknown): type is Type => type instanceof TypeRoot
 
 export class Closure {
@@ -494,15 +490,15 @@ export class ExternalFunction {
   }
 }
 
-export const VoidType = new PrimitiveType("void", { fields: [] })
-export const IntType = new PrimitiveType("int", { fields: [] })
-export const BoolType = new PrimitiveType("bool", { fields: [] })
-export const FloatType = new PrimitiveType("float", { fields: [] })
-export const DoubleType = new PrimitiveType("double", { fields: [] })
-export const StringType = new PrimitiveType("string", { fields: [] })
-export const FunctionType = new PrimitiveType("function", { fields: [] })
+export const VoidType = new PrimitiveType("void", { fields: [], metaobject: Object.create(null) })
+export const IntType = new PrimitiveType("int", { fields: [], metaobject: Object.create(null) })
+export const BoolType = new PrimitiveType("bool", { fields: [], metaobject: Object.create(null) })
+export const FloatType = new PrimitiveType("float", { fields: [], metaobject: Object.create(null) })
+export const DoubleType = new PrimitiveType("double", { fields: [], metaobject: Object.create(null) })
+export const StringType = new PrimitiveType("string", { fields: [], metaobject: Object.create(null) })
+export const FunctionType = new PrimitiveType("function", { fields: [], metaobject: Object.create(null) })
 export const ListType: ExternalTypeConstructor = new ExternalTypeConstructor("List", (argTypes) => {
-  const type = new ParameterizedType(ListType, argTypes, { fields: [] });
+  const type = new ParameterizedType(ListType, argTypes, { fields: [], metaobject: Object.create(null) });
   type.typeInfo.fields.push(new TypeField(new SourceLocation(-1, -1, null!), "length", type, 0, IntType))
   return type;
 })
@@ -561,8 +557,8 @@ export const typeMatcherEquals = (matcher: TypeMatcher, expected: Type, output: 
       if (matcher === expected) return true
       compilerAssert(false, "$matcher does not equal $expected", { matcher, expected })
     }
-    if (expected instanceof CompiledClass) {
-      if (matcher !== expected.classDefinition) {
+    if (expected instanceof ClassDefinition) {
+      if (matcher !== expected) {
         compilerAssert(false, "$matcher does not equal $expected", { matcher, expected: expected.classDefinition })
         return false;
       }
