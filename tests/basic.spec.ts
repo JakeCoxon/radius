@@ -236,3 +236,10 @@ test("tuple", async () => {
   const test = runCompilerTest(input, { filename: 'tuple' })
 
 });
+
+test("dict", async () => {
+
+  const input = await Bun.file(`${import.meta.dir}/fixtures/dict.rad`).text()
+  const test = runCompilerTest(input, { filename: 'dict' })
+
+});

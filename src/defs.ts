@@ -179,7 +179,9 @@ export type BytecodeInstr =
   { type: 'setlocal', name: string } |
   { type: 'list', count: number } |
   { type: 'tuple', count: number } |
+  { type: 'dict', count: number } |
   { type: 'tupleast', count: number } |
+  { type: 'dictast', count: number } |
   { type: 'closure', id: number } |
   { type: 'call', name: string, count: number, tcount: number } |
   { type: 'compilerfn', name: string, count: number, tcount: number } |
@@ -197,6 +199,7 @@ export type BytecodeInstr =
   { type: 'setlocalast', name: string } |
   { type: 'setfieldast', name: string } |
   { type: 'fieldast', name: string } |
+  { type: 'field', name: string } |
   { type: 'subscriptast' } |
   { type: 'operatorast', name: string, count: number } |
   { type: 'constructorast', count: number } |

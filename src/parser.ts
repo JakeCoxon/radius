@@ -206,7 +206,7 @@ export const makeParser = (input: string, debugName: string) => {
     new ParseIdentifier(expect(matchType("IDENTIFIER"), `Expected identifier`));
 
   const parseDictPair = (): [ParseNode, ParseNode] => {
-    return [parseExpr(), (expect(":", "Expected ':' after dict key"), parseExpr())]
+    return [parseIdentifier(), (expect("=", "Expected '=' after dict key"), parseExpr())]
   }
   const parseDict = (dictToken: Token): ParseNode => {
     if (match("}")) return new ParseDict(dictToken, [])

@@ -1,4 +1,4 @@
-import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, ArgumentTypePair, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module } from "./defs";
+import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, ArgumentTypePair, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol } from "./defs";
 import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, functionCompileTimeCompileTask, createCallAstFromValue, createCallAstFromValueAndPushValue } from "./compiler_functions";
 import { Event, Task, TaskDef, Unit, isTask, isTaskResult, withContext } from "./tasks";
 
@@ -27,25 +27,23 @@ export const pushGeneratedBytecode = <T extends BytecodeInstr>(out: BytecodeWrit
 }
 
 export const BytecodeDefault: ParseTreeTable = {
-  cast:      (out, node) => compilerAssert(false, "Not implemented"),
-  forexpr:   (out, node) => compilerAssert(false, "Not implemented"),
-  whileexpr: (out, node) => compilerAssert(false, "Not implemented"),
-  expand:    (out, node) => compilerAssert(false, "Not implemented"),
-  listcomp:  (out, node) => compilerAssert(false, "Not implemented"),
-  postcall:  (out, node) => compilerAssert(false, "Not implemented"),
-  dict:      (out, node) => compilerAssert(false, "Not implemented"),
-  symbol:    (out, node) => compilerAssert(false, "Not implemented"),
-  note:      (out, node) => compilerAssert(false, "Not implemented"),
-  slice:     (out, node) => compilerAssert(false, "Not implemented"),
-  class:     (out, node) => compilerAssert(false, "Not implemented"),
-  metafor:   (out, node) => compilerAssert(false, "Not implemented"),
-  for:       (out, node) => compilerAssert(false, "Not implemented"),
-  opeq:      (out, node) => compilerAssert(false, "Not implemented"),
-  field:     (out, node) => compilerAssert(false, "Not implemented"),
-  subscript: (out, node) => compilerAssert(false, "Not implemented"),
-  import:    (out, node) => compilerAssert(false, "Not implemented"),
-  compileriden: (out, node) => compilerAssert(false, "Not implemented"),
-  constructor: (out, node) => compilerAssert(false, "Not implemented"),
+  cast:      (out, node) => compilerAssert(false, "Not implemented 'cast'"),
+  forexpr:   (out, node) => compilerAssert(false, "Not implemented 'forexpr'"),
+  whileexpr: (out, node) => compilerAssert(false, "Not implemented 'whileexpr'"),
+  expand:    (out, node) => compilerAssert(false, "Not implemented 'expand'"),
+  listcomp:  (out, node) => compilerAssert(false, "Not implemented 'listcomp'"),
+  postcall:  (out, node) => compilerAssert(false, "Not implemented 'postcall'"),
+  
+  note:      (out, node) => compilerAssert(false, "Not implemented 'note'"),
+  slice:     (out, node) => compilerAssert(false, "Not implemented 'slice'"),
+  class:     (out, node) => compilerAssert(false, "Not implemented 'class'"),
+  metafor:   (out, node) => compilerAssert(false, "Not implemented 'metafor'"),
+  for:       (out, node) => compilerAssert(false, "Not implemented 'for'"),
+  opeq:      (out, node) => compilerAssert(false, "Not implemented 'opeq'"),
+  subscript: (out, node) => compilerAssert(false, "Not implemented 'subscript'"),
+  import:    (out, node) => compilerAssert(false, "Not implemented 'import'"),
+  compileriden: (out, node) => compilerAssert(false, "Not implemented 'compileriden'"),
+  constructor: (out, node) => compilerAssert(false, "Not implemented 'constructor'"),
 
   value:   (out, node) => pushBytecode(out, node.token, { type: "push", value: node.value }), 
   number:  (out, node) => pushBytecode(out, node.token, { type: "push", value: Number(node.token.value) }), 
@@ -54,6 +52,7 @@ export const BytecodeDefault: ParseTreeTable = {
   boolean: (out, node) => pushBytecode(out, node.token, { type: "push", value: node.token.value !== 'false' }), 
   list:    (out, node) => (visitAll(out, node.exprs), pushBytecode(out, node.token, { type: 'list', count: node.exprs.length })),
   tuple:   (out, node) => (visitAll(out, node.exprs), pushBytecode(out, node.token, { type: 'tuple', count: node.exprs.length })),
+  symbol:  (out, node) => pushBytecode(out, node.token, { type: "push", value: node.token.value }),
 
   identifier: (out, node) => pushBytecode(out, node.token, { type: "binding", name: node.token.value }), 
   operator:   (out, node) => (visitAll(out, node.exprs), pushBytecode(out, node.token, { type: 'operator', name: node.token.value, count: node.exprs.length })), 
@@ -62,6 +61,19 @@ export const BytecodeDefault: ParseTreeTable = {
   meta:       (out, node) => (visitParseNode(out, node.expr)),
   comptime:   (out, node) => (visitParseNode(out, node.expr)),
   not:        (out, node) => (visitParseNode(out, node.expr), pushBytecode(out, node.token, { type: 'not' })),
+
+  dict: (out, node) => {
+    node.pairs.forEach(([key, value]) => {
+      visitParseNode(out, new ParseSymbol(key.token))
+      visitParseNode(out, value)
+    })
+    pushBytecode(out, node.token, { type: 'dict', count: node.pairs.length })
+  },
+  field: (out, node) => {
+    visitParseNode(out, node.expr)
+    compilerAssert(node.field instanceof ParseIdentifier, "Not supported");
+    pushBytecode(out, node.token, { type: 'field', name: node.field.token.value })
+  },
   
   let: (out, node) => {
     if (node.value) visitParseNode(out, node.value);
@@ -190,21 +202,20 @@ export const BytecodeDefault: ParseTreeTable = {
 };
 
 export const BytecodeSecondOrder: ParseTreeTable = {
-  cast:      (out, node) => compilerAssert(false, "Not implemented"),
-  forexpr:   (out, node) => compilerAssert(false, "Not implemented"),
-  whileexpr: (out, node) => compilerAssert(false, "Not implemented"),
-  expand:    (out, node) => compilerAssert(false, "Not implemented"),
-  listcomp:  (out, node) => compilerAssert(false, "Not implemented"),
-  postcall:  (out, node) => compilerAssert(false, "Not implemented"),
-  dict:      (out, node) => compilerAssert(false, "Not implemented"),
-  symbol:    (out, node) => compilerAssert(false, "Not implemented"),
-  note:      (out, node) => compilerAssert(false, "Not implemented"),
-  slice:     (out, node) => compilerAssert(false, "Not implemented"),
-  class:     (out, node) => compilerAssert(false, "Not implemented"),
-  nil:       (out, node) => compilerAssert(false, "Not implemented"),
-  metafor:   (out, node) => compilerAssert(false, "Not implemented"),
-  import:    (out, node) => compilerAssert(false, "Not implemented"),
-  compileriden: (out, node) => compilerAssert(false, "Not implemented"),
+  cast:      (out, node) => compilerAssert(false, "Not implemented 'cast'"),
+  forexpr:   (out, node) => compilerAssert(false, "Not implemented 'forexpr'"),
+  whileexpr: (out, node) => compilerAssert(false, "Not implemented 'whileexpr'"),
+  expand:    (out, node) => compilerAssert(false, "Not implemented 'expand'"),
+  listcomp:  (out, node) => compilerAssert(false, "Not implemented 'listcomp'"),
+  postcall:  (out, node) => compilerAssert(false, "Not implemented 'postcall'"),
+  symbol:    (out, node) => compilerAssert(false, "Not implemented 'symbol'"),
+  note:      (out, node) => compilerAssert(false, "Not implemented 'note'"),
+  slice:     (out, node) => compilerAssert(false, "Not implemented 'slice'"),
+  class:     (out, node) => compilerAssert(false, "Not implemented 'class'"),
+  nil:       (out, node) => compilerAssert(false, "Not implemented 'nil'"),
+  metafor:   (out, node) => compilerAssert(false, "Not implemented 'metafor'"),
+  import:    (out, node) => compilerAssert(false, "Not implemented 'import'"),
+  compileriden: (out, node) => compilerAssert(false, "Not implemented 'compileriden'"),
 
   constructor:  (out, node) => (visitParseNode(out, node.type), visitAll(out, node.args), pushBytecode(out, node.token, { type: 'constructorast', count: node.args.length })),
   identifier:   (out, node) => pushBytecode(out, node.token, { type: "bindingast", name: node.token.value }),
@@ -221,6 +232,13 @@ export const BytecodeSecondOrder: ParseTreeTable = {
   tuple:    (out, node) => (visitAll(out, node.exprs), pushBytecode(out, node.token, { type: 'tupleast', count: node.exprs.length })),
   not:      (out, node) => (visitParseNode(out, node.expr), pushBytecode(out, node.token, { type: 'notast' })),
 
+  dict: (out, node) => {
+    node.pairs.forEach(([key, value]) => {
+      visitParseNode(out, new ParseSymbol(key.token))
+      visitParseNode(out, value)
+    })
+    pushBytecode(out, node.token, { type: 'dictast', count: node.pairs.length })
+  },
 
   while: (out, node) => {
     pushBytecode(out, node.token, { type: 'beginblockast', breakType: 'break' })
@@ -606,6 +624,16 @@ const instructions: InstructionMapping = {
   },
   toast: (vm) => vm.stack.push(unknownToAst(vm.location, popStack(vm))),
 
+  field: (vm, { name }) => {
+    const expr = popStack(vm)
+    if (expr && typeof expr === 'object' && Object.getPrototypeOf(expr) === Object.prototype) {
+      compilerAssert(name in expr, "Not found $name in object $expr", { name, expr })
+      vm.stack.push(expr[name])
+      return
+    }
+    compilerAssert(false, "Not impl", { expr, name })
+  },
+
   constructorast: (vm, { count }) => {
     const args = expectAsts(popValues(vm, count))
     const type = expectType(popStack(vm))
@@ -783,6 +811,16 @@ const instructions: InstructionMapping = {
     }
   },
   tuple: (vm, { count }) => vm.stack.push(new Tuple(popValues(vm, count))),
+  dict: (vm, { count }) => {
+    const dict = {}
+    for (let i = 0; i < count; i++) {
+      const value = popStack(vm)
+      const key = popStack(vm)
+      compilerAssert(typeof key === 'string', "Expected string key")
+      dict[key] = value;
+    }
+    vm.stack.push(dict)
+  },
   tupleast: (vm, { count }) => {
     const values = expectAsts(popValues(vm, count))
     const argTypes = values.map(x => x.type)
@@ -1054,7 +1092,6 @@ export const importModule = (ctx: TaskContext, importNode: ParseImport, rootScop
     })
   )
 }
-
 
 export const runTopLevelTask = (ctx: TaskContext, stmts: ParseStatements, rootScope: Scope, moduleScope: Scope) => {
   const tasks: Task<unknown, unknown>[] = []
