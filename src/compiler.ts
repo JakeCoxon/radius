@@ -1,4 +1,4 @@
-import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, ArgumentTypePair, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol } from "./defs";
+import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, ArgumentTypePair, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol, ScopeParentSymbol } from "./defs";
 import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, functionCompileTimeCompileTask, createCallAstFromValue, createCallAstFromValueAndPushValue } from "./compiler_functions";
 import { Event, Task, TaskDef, Unit, isTask, isTaskResult, withContext } from "./tasks";
 
@@ -497,17 +497,17 @@ const letLocal = (vm: Vm, name: string, type: Type | null, value: Ast | null) =>
   compilerAssert(!Object.hasOwn(vm.scope, name), `Already defined $name`, { name });
   const inferType = type || value!.type
   const binding = (vm.scope[name] = new Binding(name, inferType));
+  binding.definitionCompiler = vm.context.subCompilerState
   return new LetAst(VoidType, vm.location, binding, value);
 }
 
 type CallArgs = { vm: Vm, name: string, count: number, tcount: number }
 
 function resolveScope(ctx: TaskContext, scope: Scope, name: string): Task<unknown, CompilerError> {
-  let compilerState: SubCompilerState | undefined = ctx.subCompilerState;
-  compilerAssert(scope === compilerState.scope, "Expected scope of current compiler state", { fatal: true })
-  while (compilerState) {
-    if (compilerState.scope[name] !== undefined) return Task.of(compilerState.scope[name])
-    compilerState = compilerState.lexicalParent
+  let checkScope: Scope | undefined = scope;
+  while (checkScope) {
+    if (checkScope[name] !== undefined) return Task.of(checkScope[name])
+    checkScope = checkScope[ScopeParentSymbol]
   }
 
   // TODO: This should attach events to every ancestor in the scope chain
@@ -821,6 +821,7 @@ const instructions: InstructionMapping = {
     }
     vm.stack.push(dict)
   },
+  dictast: (vm, {}) => compilerAssert(false, "Not implemented 'dictast'"),
   tupleast: (vm, { count }) => {
     const values = expectAsts(popValues(vm, count))
     const argTypes = values.map(x => x.type)
@@ -842,13 +843,14 @@ const instructions: InstructionMapping = {
 };
 
 const ensureBindingIsNotClosedOver = (subCompilerState: SubCompilerState, name: string, value: Binding) => {
-  let compilerState: SubCompilerState | undefined = subCompilerState
-  let found: SubCompilerState | undefined = undefined!
-  while (compilerState) {
-    if (compilerState.scope[name] === value) { found = compilerState; break }
-    compilerState = compilerState.lexicalParent
-  }
-  compilerAssert(found?.functionCompiler === subCompilerState.functionCompiler, "Name $name is declared in an external function which isn't supported in this compiler. You might want to use an inline function", { name, found, subCompilerState })
+  const found = (() => {
+    let compiler: SubCompilerState | undefined = subCompilerState
+    while (compiler) {
+      if (compiler === value.definitionCompiler) return true;
+      compiler = compiler.inlineIntoCompiler
+    }
+  })()
+  compilerAssert(found, "Name $name is declared in an external function which isn't supported in this compiler. You might want to use an inline function", { name, found, subCompilerState })
 }
 
 function executeVmTask(ctx: TaskContext, { vm } : { vm: Vm }, p: void): Task<Unit, CompilerError> {

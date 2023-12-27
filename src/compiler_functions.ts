@@ -59,7 +59,7 @@ function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, args, typ
     ctx.globalCompiler.logger.log("")
   }
 
-  const scope = createScope({}, undefined) // TODO: parent scope
+  const scope = createScope({}, parentScope)
   const subCompilerState = pushSubCompilerState(ctx, { debugName: `${func.debugName} header`, scope, lexicalParent: ctx.subCompilerState });
   ;(subCompilerState as any).location = func.name?.token.location
   subCompilerState.functionCompiler = subCompilerState
@@ -129,13 +129,14 @@ export function functionTemplateTypeCheckAndCompileTask(ctx: TaskContext, { func
   })
   if (existing) return Task.of(existing);
 
-  const templateScope = createScope({}, undefined); // TODO: parent scope
+  const templateScope = createScope({}, parentScope); // TODO: parent scope
   const subCompilerState = pushSubCompilerState(ctx, { debugName: `${func.debugName} template`, scope: templateScope, lexicalParent: ctx.subCompilerState });
   ;(subCompilerState as any).location = func.name?.token.location
   subCompilerState.functionCompiler = subCompilerState
   
   func.args.forEach(([iden, type], i) => {
     const binding = new Binding(iden.token.value, concreteTypes[i]);
+    binding.definitionCompiler = subCompilerState
     templateScope[iden.token.value] = binding;
     argBindings.push(binding);
   });
@@ -191,12 +192,15 @@ function functionInlineTask(ctx: TaskContext, { location, func, typeArgs, args, 
   }
   compilerAssert(func.templatePrototype);
   
+  const inlineInto = ctx.subCompilerState
   const templateScope = createScope({}, parentScope)
   const subCompilerState = pushSubCompilerState(ctx, { debugName: `${func.debugName} inline`, lexicalParent: ctx.subCompilerState, scope: templateScope })
+  subCompilerState.inlineIntoCompiler = inlineInto
   
   func.args.forEach(([iden, type], i) => {
     compilerAssert(concreteTypes[i], `Expected type`, { args, concreteTypes })
     const binding = new Binding(iden.token.value, concreteTypes[i]);
+    binding.definitionCompiler = inlineInto;
     templateScope[iden.token.value] = binding;
     statements.push(new LetAst(VoidType, location, binding, args[i]))
     argBindings.push(binding);
@@ -236,7 +240,7 @@ export function functionCompileTimeCompileTask(ctx: TaskContext, { vm, func, typ
     func.compileTimePrototype = { name: `${func.debugName} comptime bytecode`, body: func.body, initialInstructionTable: BytecodeDefault };
   compilerAssert(func.compileTimePrototype)
 
-  const scope = createScope({}, undefined)
+  const scope = createScope({}, parentScope)
   const subCompilerState = pushSubCompilerState(ctx, { debugName: `${func.debugName} comptime`, lexicalParent: ctx.subCompilerState, scope })
   subCompilerState.functionCompiler = subCompilerState
 

@@ -398,6 +398,7 @@ export class Tuple {
 }
 
 export class Binding {
+  definitionCompiler: SubCompilerState | undefined
   constructor(public name: string, public type: Type) {}
   [Inspect.custom](depth, options, inspect) {
     return options.stylize(`[Binding ${this.name} ${inspect(this.type)}]`, 'special');
@@ -493,17 +494,22 @@ export class Closure {
 }
 
 export const ScopeEventsSymbol = Symbol('ScopeEventsSymbol')
+export const ScopeParentSymbol = Symbol('ScopeParentSymbol')
 export type Scope = object & {
   _scope: true,
   [ScopeEventsSymbol]: {[key:string]:Event<unknown, CompilerError>}
 }
-const ScopePrototype = {
+const ScopePrototype = Object.assign(Object.create(null), {
   [Inspect.custom](depth, options, inspect) {
     if (depth <= 1 || depth <= options.depth) return options.stylize(`[Scope]`, 'special');
     return inspect({...this})
   }
-}
-export const createScope = (obj: object, parentScope: Scope | undefined) => Object.assign(Object.create(parentScope || ScopePrototype), obj) as Scope;
+});
+export const createScope = (obj: object, parentScope: Scope | undefined) => 
+  Object.assign(Object.create(ScopePrototype), {
+    [ScopeParentSymbol]: parentScope,
+    ...obj
+  }) as Scope;
 
 export class ExternalFunction {
   constructor(public name: string, public returnType: Type, public func: Function) {}
@@ -755,6 +761,7 @@ export class SubCompilerState {
   functionCompiler: SubCompilerState | undefined
   lexicalParent: SubCompilerState | undefined
   prevCompilerState: SubCompilerState | undefined
+  inlineIntoCompiler: SubCompilerState | undefined
   labelBlock: LabelBlock | null
 
   [Inspect.custom](depth, options, inspect) {
@@ -773,6 +780,7 @@ export const pushSubCompilerState = (ctx: TaskContext, obj: { debugName: string,
   state.lexicalParent = obj.lexicalParent
   state.scope = obj.scope
   state.functionCompiler = state.lexicalParent?.functionCompiler
+  state.inlineIntoCompiler = state.lexicalParent?.inlineIntoCompiler
   ctx.subCompilerState = state;
   return state;
 }
