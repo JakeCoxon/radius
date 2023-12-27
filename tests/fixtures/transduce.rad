@@ -1,0 +1,39 @@
+
+fn iterate!(f, T)(lst: List!T) @inline: 
+  i := 0
+  while i < lst.length:
+    f(lst[i])
+    i += 1
+    
+fn compose3(a, b, c) any:
+  {|x| c(b(a(x)))}
+
+fn transduce!(trx, reducer)(iterable) any @inline:
+  final_reducer :: trx(reducer)
+  acc := final_reducer.a()
+  for x in iterable:
+    acc = final_reducer.c(acc, x)
+  final_reducer.b(acc)
+
+fn map(mapping) any:
+  {|next| {
+    a = next.a,
+    b = next.b,
+    c = {|acc, x| next.c(acc, mapping(x))}
+  } }
+
+fn sum() any: {
+  a = {|| 0},
+  b = {|acc| acc},
+  c = {|acc, x| acc + x} }
+
+fn main():
+  trx :: compose3(
+    map({|x| x + 1}),
+    map({|x| x + 2}),
+    map({|x| x + 4})
+  )
+
+  list := [1, 2, 3]
+  transduce!(trx, sum())(list)
+  

@@ -1,0 +1,17 @@
+fn my_map():
+  {|x| 
+    {
+      a = x,
+      b = 2,
+      c = 3
+    }
+  }
+
+fn thing():
+  f := my_map()
+  map := f(23)
+  print(map.a + map.b + map.c)
+  map.a + map.b + map.c
+
+fn main():
+  x := meta thing()

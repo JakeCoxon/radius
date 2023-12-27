@@ -243,3 +243,17 @@ test("dict", async () => {
   const test = runCompilerTest(input, { filename: 'dict' })
 
 });
+
+test("dict2", async () => {
+
+  const input = await Bun.file(`${import.meta.dir}/fixtures/dict2.rad`).text()
+  const test = runCompilerTest(input, { filename: 'dict2' })
+
+});
+
+test("transduce", async () => {
+
+  const input = await Bun.file(`${import.meta.dir}/fixtures/transduce.rad`).text()
+  const test = runCompilerTest(input, { filename: 'transduce' })
+
+});

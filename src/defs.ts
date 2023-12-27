@@ -397,6 +397,10 @@ export class Tuple {
   }
 }
 
+export const isPlainObject = (obj: unknown): obj is Object => {
+  return !!obj && typeof obj === 'object' && Object.getPrototypeOf(obj) === Object.prototype
+}
+
 export class Binding {
   definitionCompiler: SubCompilerState | undefined
   constructor(public name: string, public type: Type) {}
