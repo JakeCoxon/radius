@@ -32,7 +32,7 @@ function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, args, typ
   compilerAssert(typeArgs.length <= func.typeArgs.length, "Expected $expected type parameters, got $got", { expected: func.typeArgs.length, got: typeArgs.length, func })
   compilerAssert(args.length === func.args.length, 'Expected $expected args got $got', { expected: func.args.length, got: args.length, func })
 
-  if (func.args.length === 0) return Task.success;
+  if (func.args.length === 0) return Task.success();
   
   if (!func.headerPrototype) {
 
@@ -96,7 +96,7 @@ function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, args, typ
           concreteTypes.push(type)
         }
       })
-      return Task.success
+      return Task.success()
     })
   )
 }
@@ -236,7 +236,7 @@ export function functionCompileTimeCompileTask(ctx: TaskContext, { vm, func, typ
     func.compileTimePrototype = { name: `${func.debugName} comptime bytecode`, body: func.body, initialInstructionTable: BytecodeDefault };
   compilerAssert(func.compileTimePrototype)
 
-  const scope = Object.create(parentScope);
+  const scope = createScope({}, undefined)
   const subCompilerState = pushSubCompilerState(ctx, { debugName: `${func.debugName} comptime`, lexicalParent: ctx.subCompilerState, scope })
   subCompilerState.functionCompiler = subCompilerState
 
@@ -251,14 +251,14 @@ export function functionCompileTimeCompileTask(ctx: TaskContext, { vm, func, typ
 
   return (
     TaskDef(createBytecodeVmAndExecuteTask, subCompilerState, func.compileTimePrototype.bytecode!, scope)
-    .chainFn((task, res) => { vm.stack.push(res); return Task.success })
+    .chainFn((task, res) => { vm.stack.push(res); return Task.success() })
   );
 };
 
 export function createCallAstFromValueAndPushValue(vm: Vm, value: unknown, typeArgs: unknown[], args: Ast[]): Task<Unit, CompilerError> {
   return (
     createCallAstFromValue(vm.location, value, typeArgs, args)
-    .chainFn((task, ast) => {vm.stack.push(ast); return Task.success })
+    .chainFn((task, ast) => {vm.stack.push(ast); return Task.success() })
   )
 }
 

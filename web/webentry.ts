@@ -7,6 +7,12 @@ import { functionTemplateTypeCheckAndCompileTask } from "../src/compiler_functio
 const runTestInner = (input: string) => {
   const globalCompiler = createDefaultGlobalCompiler()
   globalCompiler.logger = logger
+  globalCompiler.moduleLoader = {
+    cache: {},
+    loadModule: (module) => {
+      return makeParser(module1, module)
+    }
+  }
   
   const rootScope: Scope = createScope({
     ...BuiltinTypes,
@@ -17,16 +23,20 @@ const runTestInner = (input: string) => {
     }),
   }, undefined);
 
+  const moduleScope = Object.create(rootScope)
+
   const queue = new Queue();
   
   const parser = makeParser(input, 'main')
+
+
   
-  const subCompilerState = new SubCompilerState('root');
-  subCompilerState.scope = rootScope
+  const subCompilerState = new SubCompilerState('moduleScope');
+  subCompilerState.scope = moduleScope
   const root = (
-    TaskDef(runTopLevelTask, parser.rootNode, rootScope)
+    TaskDef(runTopLevelTask, parser.rootNode, rootScope, moduleScope)
     .chainFn((task, arg) => {
-      const func: Closure = expectMap(rootScope, "main", "No main function found");
+      const func: Closure = expectMap(moduleScope, "main", "No main function found");
       return TaskDef(functionTemplateTypeCheckAndCompileTask, { func: func.func, args: [], typeArgs: [], parentScope: func.scope, concreteTypes: [] })
     })
     .wrap(withContext({ globalCompiler, subCompilerState } as TaskContext))
@@ -57,16 +67,21 @@ const logger = { log: (...args) => {
 
 
 
+const module1 = `
+fn foo(x: int):
+  print(x)
 
+fn foo2(x: int):
+  print(x)
+`
 
 const input = `
 
-fn main():
-  thing(3, 2, 1)
-  print("Hello")
+import my_module for foo
 
-fn thing(x: int, y: int, z: int):
-  print(x + y * z)
+fn main():
+  foo(200)
+
 
 `
 

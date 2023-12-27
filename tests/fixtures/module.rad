@@ -1,4 +1,12 @@
 import my_module for foo
+import my_module for foo2, foo as foop
+import my_module
+import my_module as mm
 
 fn main():
   foo(200)
+  foo2(210)
+  foop(210)
+
+  mm.foo(2)
+  my_module.foo(12)

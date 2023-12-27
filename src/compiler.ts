@@ -1,6 +1,6 @@
-import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, ArgumentTypePair, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor } from "./defs";
+import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, ArgumentTypePair, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module } from "./defs";
 import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, functionCompileTimeCompileTask, createCallAstFromValue, createCallAstFromValueAndPushValue } from "./compiler_functions";
-import { Event, Task, TaskDef, Unit, isTask, isTaskResult } from "./tasks";
+import { Event, Task, TaskDef, Unit, isTask, isTaskResult, withContext } from "./tasks";
 
 export const pushBytecode = <T extends BytecodeInstr>(out: BytecodeWriter, token: Token, instr: T) => {
   out.bytecode.locations.push(token.location);
@@ -321,7 +321,7 @@ export const BytecodeSecondOrder: ParseTreeTable = {
       node.typeArgs.forEach(x => writeMeta(out, x));
       visitParseNode(out, node.left.expr)
       visitAll(out, node.args);
-      pushBytecode(out, node.token, { type: "callast", name: node.left.field.token.value, count: node.args.length + 1, tcount: node.typeArgs.length });
+      pushBytecode(out, node.token, { type: "callast", name: node.left.field.token.value, count: node.args.length + 1, tcount: node.typeArgs.length, method: true });
       return;
     }
     compilerAssert(false, "Call with non-identifier not implemented yet", { left: node.left})
@@ -497,7 +497,6 @@ function resolveScope(ctx: TaskContext, scope: Scope, name: string): Task<unknow
   if (!scope[ScopeEventsSymbol][name]) scope[ScopeEventsSymbol][name] = new Event<string, CompilerError>()
   ctx.globalCompiler.allWaitingEvents.push(scope[ScopeEventsSymbol][name])
   return Task.waitFor(scope[ScopeEventsSymbol][name]).mapRejected((error) => {
-    // compilerAssert(false, "Binding $name not found in scope", { name, scope })
     return createCompilerError('Binding $name not found in scope', { name })
   })
 }
@@ -506,7 +505,7 @@ function callFunctionFromValueTask(ctx: TaskContext, vm: Vm, func: unknown, type
   if (func instanceof ExternalFunction) {
     const functionResult = func.func(...values);
     vm.stack.push(functionResult);
-    return Task.success;
+    return Task.success();
   }
 
   if (func instanceof Closure) {
@@ -520,11 +519,11 @@ function callFunctionFromValueTask(ctx: TaskContext, vm: Vm, func: unknown, type
     const typeVars = typeArgs.filter((x): x is TypeVariable => x instanceof TypeVariable)
     if (typeVars.length) {
       vm.stack.push(new TypeMatcher(func, typeArgs, typeVars))
-      return Task.success;
+      return Task.success();
     }
     return (
       TaskDef(compileClassTask, { classDef: func, typeArgs })
-      .chainFn((task, type) => { vm.stack.push(type); return Task.success })
+      .chainFn((task, type) => { vm.stack.push(type); return Task.success() })
     )
   }
   if (func instanceof ExternalTypeConstructor) {
@@ -532,10 +531,10 @@ function callFunctionFromValueTask(ctx: TaskContext, vm: Vm, func: unknown, type
     const typeVars = typeArgs.filter((x): x is TypeVariable => x instanceof TypeVariable)
     if (typeVars.length) {
       vm.stack.push(new TypeMatcher(func, typeArgs, typeVars))
-      return Task.success;
+      return Task.success();
     }
     vm.stack.push(createParameterizedExternalType(ctx.globalCompiler, func, typeArgs))
-    return Task.success
+    return Task.success()
   }
   compilerAssert(!(func instanceof FunctionDefinition), "$func is not handled", { func })
   compilerAssert(false, "$func is not a function", { func })
@@ -582,10 +581,23 @@ const instructions: InstructionMapping = {
     
     vm.stack.push(new ListAst(type, vm.location, values))
   },
-  callast: (vm, { name, count, tcount }) => {
+  callast: (vm, { name, count, tcount, method }) => {
     const args = popValues(vm, count)
     const typeArgs = popValues(vm, tcount || 0);
+    const receiver = method ? args.shift() : null
     compilerAssert(args.every(isAst), "Expected ASTs for function call $name", { name, args })
+
+    if (receiver) {
+      if (receiver instanceof Module) {
+        // TODO: Can this be better?
+        return (
+          TaskDef(resolveScope, receiver.compilerState.scope, name)
+          .chainFn((task, value) => createCallAstFromValueAndPushValue(vm, value, typeArgs, args))
+          .wrap(withContext({ subCompilerState: receiver.compilerState }))
+        )
+      }
+      args.unshift(expectAst(receiver))
+    }
 
     return (
       TaskDef(resolveScope, vm.scope, name)
@@ -619,7 +631,7 @@ const instructions: InstructionMapping = {
     return TaskDef(resolveScope, vm.scope, name).chainFn((task, binding) => {
       compilerAssert(binding instanceof Binding, "Expected binding got $binding", { binding })
       vm.stack.push(new SetAst(VoidType, vm.location, binding, expectAst(popStack(vm))))
-      return Task.success
+      return Task.success()
     });
   },
   fieldast: (vm, { name }) => {
@@ -669,8 +681,9 @@ const instructions: InstructionMapping = {
       TaskDef(resolveScope, vm.scope, name)
       .chainFn((task, value) => {
         if (value instanceof Binding) ensureBindingIsNotClosedOver(vm.context.subCompilerState, name, value);
-        vm.stack.push(unknownToAst(vm.location, value))
-        return Task.success
+        if (value instanceof Module) vm.stack.push(value)
+        else vm.stack.push(unknownToAst(vm.location, value))
+        return Task.success()
       })
     )
   },
@@ -707,7 +720,7 @@ const instructions: InstructionMapping = {
       if (type.concreteType) return vm.stack.push(type.concreteType)
       return (
         TaskDef(compileClassTask, { classDef: type, typeArgs: [] })
-        .chainFn((task, res) => { vm.stack.push(res); return Task.success })
+        .chainFn((task, res) => { vm.stack.push(res); return Task.success() })
       );
     }
     compilerAssert(false, "Expected Type got $type", { type })
@@ -831,7 +844,7 @@ function executeVmTask(ctx: TaskContext, { vm } : { vm: Vm }, p: void): Task<Uni
       })
     }
   }
-  return Task.success
+  return Task.success()
 };
 
 const setScopeValueAndResolveEvents = (scope: Scope, name: string, value: unknown) => {
@@ -953,12 +966,12 @@ function topLevelFunctionDefinitionTask(ctx: TaskContext, funcDecl: ParserFuncti
 
   setScopeValueAndResolveEvents(scope, funcDef.name!.token.value, new Closure(funcDef, scope))
 
-  return Task.of("Success")
+  return Task.success()
 }
 function topLevelClassDefinitionTask(ctx: TaskContext, decl: ParserClassDecl, scope: Scope) {
 
   const g = ctx.globalCompiler
-  if (decl.id !== undefined) return Task.success;
+  if (decl.id !== undefined) return Task.success();
 
   decl.id = g.functionDefinitions.length;
   const classDef = new ClassDefinition(
@@ -969,7 +982,7 @@ function topLevelClassDefinitionTask(ctx: TaskContext, decl: ParserClassDecl, sc
 
   setScopeValueAndResolveEvents(scope, decl.name!.token.value, classDef)
 
-  return Task.success
+  return Task.success()
 
 }
 
@@ -993,55 +1006,74 @@ const topLevelLetConst = (ctx: TaskContext, expr: ParseLetConst, rootScope: Scop
     TaskDef(createBytecodeVmAndExecuteTask, subCompilerState, out.bytecode, rootScope)
     .chainFn((task, result) => {
       setScopeValueAndResolveEvents(rootScope, expr.name.token.value, result)
-      return Task.success
+      return Task.success()
     })
   );
 }
 
-export const importModule = (ctx: TaskContext, importNode: ParseImport, rootScope: Scope) => {
+export const importModule = (ctx: TaskContext, importNode: ParseImport, rootScope: Scope, existingScope: Scope) => {
   const moduleName = importNode.module.token.value
-  const parsedModule = ctx.globalCompiler.moduleLoader.loadModule(moduleName)
-  const newScope = Object.create(rootScope)
+  const ml = ctx.globalCompiler.moduleLoader
 
-  const subCompilerState = pushSubCompilerState(ctx, { debugName: `${moduleName} module`, lexicalParent: undefined, scope: newScope })
+  const expandIntoScope = (module: Module) => {
+    if (importNode.imports.length === 0) {
+      const newName = importNode.rename ? importNode.rename.token.value : importNode.module.token.value
+      setScopeValueAndResolveEvents(existingScope, newName, module)
+    }
+
+    const tasks = importNode.imports.map((importName) => {
+      const originalName = importName.token.value
+      const newName = importName.rename ? importName.rename.token.value : originalName
+      const insertIntoScope = (task, result) => {
+        setScopeValueAndResolveEvents(existingScope, newName, result)
+        return Task.success()
+      }
+      return TaskDef(resolveScope, module.compilerState.scope, originalName).chainFn(insertIntoScope)
+    })
+    
+    return Task.concurrency(tasks)
+  }
+  
+  if (ml.cache[moduleName]) {
+    ctx.subCompilerState = ml.cache[moduleName].compilerState
+    
+    return expandIntoScope(ml.cache[moduleName])
+  }
+  const parsedModule = ml.loadModule(moduleName)
+  const moduleScope = createScope({ ...rootScope }, undefined)
+
+  const subCompilerState = pushSubCompilerState(ctx, { debugName: `${moduleName} module`, lexicalParent: undefined, scope: moduleScope })
   ;(subCompilerState as any).location = importNode.token.location
 
   return (
-    TaskDef(runTopLevelTask, parsedModule.rootNode, newScope)
+    TaskDef(runTopLevelTask, parsedModule.rootNode, rootScope, moduleScope)
     .chainFn((task, _) => {
-      const tasks = importNode.identifiers.map((iden) => {
-        const name = iden.token.value
-        const insertIntoScope = (task, result) => {
-          setScopeValueAndResolveEvents(rootScope, name, result)
-          return Task.success
-        }
-        return TaskDef(resolveScope, newScope, name).chainFn(insertIntoScope)
-      })
-      
-      return Task.concurrency(tasks)
+      const module = new Module(moduleName, subCompilerState, parsedModule)
+      ml.cache[moduleName] = module
+      return expandIntoScope(module)
     })
   )
 }
 
 
-export const runTopLevelTask = (ctx: TaskContext, stmts: ParseStatements, rootScope: Scope) => {
+export const runTopLevelTask = (ctx: TaskContext, stmts: ParseStatements, rootScope: Scope, moduleScope: Scope) => {
   const tasks: Task<unknown, unknown>[] = []
   
   stmts.exprs.forEach(node => {
     if (node.key === 'import') {
-      tasks.push(TaskDef(importModule, node, rootScope));
+      tasks.push(TaskDef(importModule, node, rootScope, moduleScope));
       return
     }
     if (node.key === 'letconst') {
-      tasks.push(TaskDef(topLevelLetConst, node, rootScope));
+      tasks.push(TaskDef(topLevelLetConst, node, moduleScope));
       return
     }
     if (node.key === 'function') {
-      tasks.push(TaskDef(topLevelFunctionDefinitionTask, node.functionDecl, rootScope ));
+      tasks.push(TaskDef(topLevelFunctionDefinitionTask, node.functionDecl, moduleScope ));
       return
     }
     if (node.key === 'class') {
-      tasks.push(TaskDef(topLevelClassDefinitionTask, node.classDecl, rootScope ));
+      tasks.push(TaskDef(topLevelClassDefinitionTask, node.classDecl, moduleScope ));
       return
     }
     compilerAssert(false, `Not supported at top level $key`, { key: node.key })

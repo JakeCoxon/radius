@@ -9,12 +9,14 @@ import { createCallAstFromValue, functionTemplateTypeCheckAndCompileTask } from 
 const runTestInner = (queue: Queue, input: string, filepath: string, globalCompiler: GlobalCompilerState, rootScope: Scope) => {
   const parser = makeParser(input, filepath)
   
-  const subCompilerState = new SubCompilerState('root');
-  subCompilerState.scope = rootScope
+  const subCompilerState = new SubCompilerState('testmodule');
+  const moduleScope = createScope({ ...rootScope }, undefined)
+  subCompilerState.scope = moduleScope
+
   const root = (
-    TaskDef(runTopLevelTask, parser.rootNode, rootScope)
+    TaskDef(runTopLevelTask, parser.rootNode, rootScope, moduleScope)
     .chainFn((task, arg) => {
-      const func: Closure = expectMap(rootScope, "main", "No main function found");
+      const func: Closure = expectMap(moduleScope, "main", "No main function found");
       return TaskDef(createCallAstFromValue, func, [], [])
     })
     .wrap(withContext({ globalCompiler, subCompilerState } as TaskContext))
@@ -41,6 +43,7 @@ const runTestInner = (queue: Queue, input: string, filepath: string, globalCompi
 
 export const createModuleLoader = (basepath: string) => {
   return <ModuleLoader>{
+    cache: {},
     loadModule: (module) => {
       const path = `${basepath}${module}.rad`
       const input = readFileSync(path, 'utf-8')
@@ -99,6 +102,7 @@ export const runCompilerTest = (input: string, { moduleLoader, filename, expectE
   const globalCompiler = createDefaultGlobalCompiler()
   globalCompiler.logger = logger
   globalCompiler.moduleLoader = moduleLoader || {
+    cache: {},
     loadModule: (module) => {
       compilerAssert(false, "Not implemented")
     }

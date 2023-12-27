@@ -152,7 +152,8 @@ export class ParseSlice extends ParseNodeType {      key = 'slice' as const;    
 export class ParseSubscript extends ParseNodeType {  key = 'subscript' as const;  constructor(public token: Token, public expr: ParseNode, public subscript: ParseNode, public isStatic: boolean) { super();} }
 export class ParseTuple extends ParseNodeType {      key = 'tuple' as const;      constructor(public token: Token, public exprs: ParseNode[]) { super();} }
 export class ParseBlock extends ParseNodeType {      key = 'block' as const;      constructor(public token: Token, public statements: ParseStatements) { super();} }
-export class ParseImport extends ParseNodeType {     key = 'import' as const;     constructor(public token: Token, public module: ParseIdentifier, public identifiers: ParseIdentifier[]) { super();} }
+export class ParseImportName extends ParseNodeType { key = 'importname' as const; constructor(public token: Token, public identifier: ParseIdentifier, public rename: ParseIdentifier | null) { super();} }
+export class ParseImport extends ParseNodeType {     key = 'import' as const;     constructor(public token: Token, public module: ParseIdentifier, public rename: ParseIdentifier | null, public imports: ParseImportName[]) { super();} }
 export class ParseValue extends ParseNodeType {      key = 'value' as const;      constructor(public token: Token, public value: unknown) { super();} }
 export class ParseConstructor extends ParseNodeType { key = 'constructor' as const; constructor(public token: Token, public type: ParseNode, public args: ParseNode[]) { super();} }
 export class ParseCompilerIden extends ParseNodeType { key = 'compileriden' as const; constructor(public token: Token, public value: string) { super();} }
@@ -210,7 +211,7 @@ export type BytecodeInstr =
   { type: 'ifast', f: boolean } |
   { type: 'notast' } |
   { type: 'letast', name: string, t: boolean, v: boolean } |
-  { type: 'callast', name: string, count: number, tcount: number } |
+  { type: 'callast', name: string, count: number, tcount: number, method?: boolean } |
   { type: 'pushqs' } |
   { type: 'popqs' } |
   { type: 'appendq' } |
@@ -705,8 +706,16 @@ export interface ParsedModule {
   functionDecls: ParserFunctionDecl[]
   rootNode: ParseStatements
 }
+export class Module {
+  constructor(public debugName: string, public compilerState: SubCompilerState, public parsedModule: ParsedModule) {}
+
+  [Inspect.custom](depth, options, inspect) {
+    return options.stylize(`[Module ${this.debugName}]`, 'special');
+  }
+}
 
 export interface ModuleLoader {
+  cache: {[key:string]: Module}
   loadModule: (module: string) => ParsedModule
 }
 

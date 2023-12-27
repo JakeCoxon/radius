@@ -1,4 +1,4 @@
-import { ArgumentTypePair, ParseAnd, ParseNode, ParseBreak, ParseCall, ParseCast, ParseCompTime, ParseContinue, ParseDict, ParseExpand, ParseField, ParseFor, ParseForExpr, ParseIf, ParseLet, ParseLetConst, ParseList, ParseListComp, ParseMeta, ParseNot, ParseNumber, ParseOpEq, ParseOperator, ParseOr, ParseReturn, ParseSet, ParseStatements, ParseString, ParseIdentifier, ParseWhile, ParseWhileExpr, ParserFunctionDecl, Token, compilerAssert, ParsePostCall, ParseSymbol, ParseNote, ParseSlice, ParseSubscript, ParserClassDecl, ParseClass, ParseFunction, createToken, ParseBoolean, ParseElse, ParseMetaIf, ParseMetaFor, ParseBlock, ParseImport, ParsedModule, Source, ParseMetaWhile, ParseTuple } from "./defs";
+import { ArgumentTypePair, ParseAnd, ParseNode, ParseBreak, ParseCall, ParseCast, ParseCompTime, ParseContinue, ParseDict, ParseExpand, ParseField, ParseFor, ParseForExpr, ParseIf, ParseLet, ParseLetConst, ParseList, ParseListComp, ParseMeta, ParseNot, ParseNumber, ParseOpEq, ParseOperator, ParseOr, ParseReturn, ParseSet, ParseStatements, ParseString, ParseIdentifier, ParseWhile, ParseWhileExpr, ParserFunctionDecl, Token, compilerAssert, ParsePostCall, ParseSymbol, ParseNote, ParseSlice, ParseSubscript, ParserClassDecl, ParseClass, ParseFunction, createToken, ParseBoolean, ParseElse, ParseMetaIf, ParseMetaFor, ParseBlock, ParseImport, ParsedModule, Source, ParseMetaWhile, ParseTuple, ParseImportName } from "./defs";
 
 type LexerState = { significantNewlines: boolean; parenStack: string[] };
 
@@ -453,12 +453,18 @@ export const makeParser = (input: string, debugName: string) => {
 
   const parseImport = (importToken: Token) => {
     const module = parseIdentifier()
-    const idents: ParseIdentifier[] = []
-    if (match("for")) {
-      idents.push(parseIdentifier())
-      while (match(",")) idents.push(parseIdentifier())
+    const rename = match("as") ? parseIdentifier() : null
+    const idents: ParseImportName[] = []
+    const parseImportName = () => {
+      const name = parseIdentifier()
+      const rename = match("as") ? parseIdentifier() : null
+      return new ParseImportName(name.token, name, rename)
     }
-    return trailingNewline(new ParseImport(importToken, module, idents))
+    if (match("for")) {
+      idents.push(parseImportName())
+      while (match(",")) idents.push(parseImportName())
+    }
+    return trailingNewline(new ParseImport(importToken, module, rename, idents))
   }
 
   const parseStatement = (): ParseNode => {

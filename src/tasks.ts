@@ -33,6 +33,8 @@ export function isTaskResult(value: unknown): value is TaskOf<unknown> {
   return value instanceof TaskOf;
 }
 
+export type Unit = { _type: 'unit' }
+
 export class Task<S, F> {
   _state = "created" as "created" | "started" | "completed";
   _success: S | undefined;
@@ -50,7 +52,9 @@ export class Task<S, F> {
     this.id = uniqueId++;
   }
 
-  static success: Task<Unit, never>
+  static success(): Task<Unit, never> {
+    return Task.of({} as Unit)
+  }
 
   static of<S>(value: S): Task<S, never> {
     return new TaskOf(value);
@@ -113,9 +117,6 @@ class TaskOf<S> extends Task<S, never> {
   _toString() { return `of(${this.id}, ..)`; }
 }
 
-export type Unit = { _type: 'unit' }
-Task.success = Task.of({} as Unit)
-
 class Rejected<F> extends Task<never, F> {
   _error: F;
 
@@ -177,7 +178,9 @@ export class InitFn<SIn, SOut, F, F1 extends F> extends Task<SOut, F> implements
     this._failure = this._childTask!._failure;
   }
 
-  _toString() { return `init(${this.id}, ..)`; }
+  _toString() { 
+    if (this.def) return `init(${this.id}, ${this.def})`
+    return `init(${this.id}, ..)`; }
 }
 
 
@@ -232,8 +235,13 @@ export class ConcurrentTask<SIn, F, F1> extends Task<SIn[], F1 | F> {
   }
 
   _start(queue: Queue) {
+    if (this._tasks.length === 0) {
+      this._state = "completed";
+      this._success = []
+      return
+    }
     this._state = "started";
-    // Reverse order for debuggability
+    // Reverse order so the first one is next
     for (let i = this._tasks.length-1; i >= 0; i--) {
       const task = this._tasks[i];
       queue.enqueue(task);
@@ -337,6 +345,7 @@ export class Queue {
   allTasks: UnknownTask[] = []
 
   enqueue(task: Task<unknown, unknown>) {
+    if (task._dependant) throw new Error("Task already has a dependant")
     task._dependant = this.currentTask!;
     if (this.currentTask!) task._acceptContext(this.currentTask._context);
     if (task instanceof WaitForEventTask) {
