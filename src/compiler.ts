@@ -31,7 +31,6 @@ export const BytecodeDefault: ParseTreeTable = {
   forexpr:   (out, node) => compilerAssert(false, "Not implemented 'forexpr'"),
   whileexpr: (out, node) => compilerAssert(false, "Not implemented 'whileexpr'"),
   expand:    (out, node) => compilerAssert(false, "Not implemented 'expand'"),
-  listcomp:  (out, node) => compilerAssert(false, "Not implemented 'listcomp'"),
   postcall:  (out, node) => compilerAssert(false, "Not implemented 'postcall'"),
   
   note:      (out, node) => compilerAssert(false, "Not implemented 'note'"),
@@ -120,6 +119,14 @@ export const BytecodeDefault: ParseTreeTable = {
     findLabelBlockByType(out.state.labelBlock, "continue").completion.push((address: number) => { instr.address = address })
   },
 
+  listcomp: (out, node) => {
+    const list = new ParseList(node.token, node.exprs)
+    const trx = node.mapping[0]
+    const reducer = node.reduce!
+    const call = new ParseCall(node.token, new ParseIdentifier(createAnonymousToken('transduce')), [list], [trx, reducer])
+    visitParseNode(out, call)
+  },
+
   statements: (out, node) => {
     node.exprs.forEach((stmt, i) => {
       visitParseNode(out, stmt);
@@ -206,7 +213,6 @@ export const BytecodeSecondOrder: ParseTreeTable = {
   forexpr:   (out, node) => compilerAssert(false, "Not implemented 'forexpr'"),
   whileexpr: (out, node) => compilerAssert(false, "Not implemented 'whileexpr'"),
   expand:    (out, node) => compilerAssert(false, "Not implemented 'expand'"),
-  listcomp:  (out, node) => compilerAssert(false, "Not implemented 'listcomp'"),
   postcall:  (out, node) => compilerAssert(false, "Not implemented 'postcall'"),
   symbol:    (out, node) => compilerAssert(false, "Not implemented 'symbol'"),
   note:      (out, node) => compilerAssert(false, "Not implemented 'note'"),
@@ -306,6 +312,17 @@ export const BytecodeSecondOrder: ParseTreeTable = {
       return
     }
     compilerAssert(false, "Not implemented yet", { node })
+  },
+
+  listcomp: (out, node) => {
+    let list: ParseNode = new ParseList(node.token, node.exprs)
+    if (node.exprs.length === 1 && node.exprs[0] instanceof ParseExpand) {
+      list = node.exprs[0].expr
+    }
+    const trx = node.mapping[0]
+    const reducer = node.reduce!
+    const call = new ParseCall(node.token, new ParseIdentifier(createAnonymousToken('transduce')), [list], [trx, reducer])
+    visitParseNode(out, call)
   },
 
   list: (out, node) => (visitAll(out, node.exprs), pushBytecode(out, node.token, { type: 'listast', count: node.exprs.length })),

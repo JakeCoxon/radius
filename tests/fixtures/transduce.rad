@@ -15,6 +15,13 @@ fn transduce!(trx, reducer)(iterable) any @inline:
     acc = final_reducer.c(acc, x)
   final_reducer.b(acc)
 
+fn transduce_s!(trx, reducer, iterable)() any @inline:
+  final_reducer :: trx(reducer)
+  acc := final_reducer.a()
+  for x in iterable:
+    acc = final_reducer.c(acc, x)
+  final_reducer.b(acc)
+
 fn map(mapping) any:
   {|next| {
     a = next.a,
@@ -22,18 +29,28 @@ fn map(mapping) any:
     c = {|acc, x| next.c(acc, mapping(x))}
   } }
 
-fn sum() any: {
-  a = {|| 0},
-  b = {|acc| acc},
-  c = {|acc, x| acc + x} }
+fn filter(predicate) any:
+  {|next| {
+    a = next.a,
+    b = next.b,
+    c = {|acc, x| next.c(acc, x) ifx predicate(x) else acc}
+  } }
+
+fn sum() any: 
+  { a = {|| 0},
+    b = {|acc| acc},
+    c = {|acc, x| acc + x} }
 
 fn main():
   trx :: compose3(
     map({|x| x + 1}),
-    map({|x| x + 2}),
+    filter({|x| x < 4}),
     map({|x| x + 4})
   )
 
-  list := [1, 2, 3]
-  transduce!(trx, sum())(list)
+  list := [1, 2, 3, 4, 5, 6, 7]
+  sum_result := transduce!(trx, sum())(list)
   
+  sum_result2 := [1, 2, 3, 4, 5, 6, 7 | trx |> sum()]
+
+  sum_result3 := [list... | trx |> sum()]
