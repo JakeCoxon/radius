@@ -27,22 +27,21 @@ export const pushGeneratedBytecode = <T extends BytecodeInstr>(out: BytecodeWrit
 }
 
 export const BytecodeDefault: ParseTreeTable = {
-  cast:      (out, node) => compilerAssert(false, "Not implemented 'cast'"),
-  forexpr:   (out, node) => compilerAssert(false, "Not implemented 'forexpr'"),
-  whileexpr: (out, node) => compilerAssert(false, "Not implemented 'whileexpr'"),
-  expand:    (out, node) => compilerAssert(false, "Not implemented 'expand'"),
-  postcall:  (out, node) => compilerAssert(false, "Not implemented 'postcall'"),
+  cast:      (out, node) => compilerAssert(false, "Not implemented 'cast' in BytecodeDefault"),
+  forexpr:   (out, node) => compilerAssert(false, "Not implemented 'forexpr' in BytecodeDefault"),
+  whileexpr: (out, node) => compilerAssert(false, "Not implemented 'whileexpr' in BytecodeDefault"),
+  expand:    (out, node) => compilerAssert(false, "Not implemented 'expand' in BytecodeDefault"),
   
-  note:      (out, node) => compilerAssert(false, "Not implemented 'note'"),
-  slice:     (out, node) => compilerAssert(false, "Not implemented 'slice'"),
-  class:     (out, node) => compilerAssert(false, "Not implemented 'class'"),
-  metafor:   (out, node) => compilerAssert(false, "Not implemented 'metafor'"),
-  for:       (out, node) => compilerAssert(false, "Not implemented 'for'"),
-  opeq:      (out, node) => compilerAssert(false, "Not implemented 'opeq'"),
-  subscript: (out, node) => compilerAssert(false, "Not implemented 'subscript'"),
-  import:    (out, node) => compilerAssert(false, "Not implemented 'import'"),
-  compileriden: (out, node) => compilerAssert(false, "Not implemented 'compileriden'"),
-  constructor: (out, node) => compilerAssert(false, "Not implemented 'constructor'"),
+  note:      (out, node) => compilerAssert(false, "Not implemented 'note' in BytecodeDefault"),
+  slice:     (out, node) => compilerAssert(false, "Not implemented 'slice' in BytecodeDefault"),
+  class:     (out, node) => compilerAssert(false, "Not implemented 'class' in BytecodeDefault"),
+  metafor:   (out, node) => compilerAssert(false, "Not implemented 'metafor' in BytecodeDefault"),
+  for:       (out, node) => compilerAssert(false, "Not implemented 'for' in BytecodeDefault"),
+  opeq:      (out, node) => compilerAssert(false, "Not implemented 'opeq' in BytecodeDefault"),
+  subscript: (out, node) => compilerAssert(false, "Not implemented 'subscript' in BytecodeDefault"),
+  import:    (out, node) => compilerAssert(false, "Not implemented 'import' in BytecodeDefault"),
+  compileriden: (out, node) => compilerAssert(false, "Not implemented 'compileriden' in BytecodeDefault"),
+  constructor: (out, node) => compilerAssert(false, "Not implemented 'constructor' in BytecodeDefault"),
 
   value:   (out, node) => pushBytecode(out, node.token, { type: "push", value: node.value }), 
   number:  (out, node) => pushBytecode(out, node.token, { type: "push", value: Number(node.token.value) }), 
@@ -87,7 +86,6 @@ export const BytecodeDefault: ParseTreeTable = {
     pushBytecode(out, node.token, { type: "closure", id: insertFunctionDefinition(out.globalCompilerState, node.functionDecl).id }) 
   },
   call: (out, node) => {
-    // compilerAssert(node.typeArgs.length === 0, "Not implemented", { node })
     visitAll(out, node.typeArgs)
     visitAll(out, node.args);
     if (node.left instanceof ParseIdentifier) {
@@ -104,6 +102,14 @@ export const BytecodeDefault: ParseTreeTable = {
     }
     compilerAssert(false, "Call with non-identifier not implemented yet", { left: node.left})
   },
+  postcall:  (out, node) => {
+    if (node.expr instanceof ParseIdentifier) {
+      visitParseNode(out, new ParseCall(node.token, node.expr, [node.arg], []))
+      return
+    }
+    compilerAssert(false, "Not implemented 'postcall' in BytecodeDefault", { node })
+  },
+
   return: (out, node) => {
     if (node.expr) visitParseNode(out, node.expr);
     pushBytecode(out, node.token, { type: 'return', r: !!node.expr })
@@ -213,7 +219,6 @@ export const BytecodeSecondOrder: ParseTreeTable = {
   forexpr:   (out, node) => compilerAssert(false, "Not implemented 'forexpr'"),
   whileexpr: (out, node) => compilerAssert(false, "Not implemented 'whileexpr'"),
   expand:    (out, node) => compilerAssert(false, "Not implemented 'expand'"),
-  postcall:  (out, node) => compilerAssert(false, "Not implemented 'postcall'"),
   symbol:    (out, node) => compilerAssert(false, "Not implemented 'symbol'"),
   note:      (out, node) => compilerAssert(false, "Not implemented 'note'"),
   slice:     (out, node) => compilerAssert(false, "Not implemented 'slice'"),
@@ -323,6 +328,9 @@ export const BytecodeSecondOrder: ParseTreeTable = {
     const reducer = node.reduce!
     const call = new ParseCall(node.token, new ParseIdentifier(createAnonymousToken('transduce')), [list], [trx, reducer])
     visitParseNode(out, call)
+  },
+  postcall: (out, node) => {
+    compilerAssert(false, "Not implemented 'postcall' asd ", { node })
   },
 
   list: (out, node) => (visitAll(out, node.exprs), pushBytecode(out, node.token, { type: 'listast', count: node.exprs.length })),
@@ -575,17 +583,6 @@ function callFunctionFromValueTask(ctx: TaskContext, vm: Vm, func: unknown, type
   compilerAssert(false, "$func is not a function", { func })
 }
 
-function callFunctionTask(ctx: TaskContext, { vm, name, count, tcount }: CallArgs): Task<Unit, CompilerError> {
-  const values = popValues(vm, count);
-  const typeArgs = popValues(vm, tcount || 0);
-  return (
-    TaskDef(resolveScope, vm.scope, name)
-    .chainFn((task, func) => {
-      return TaskDef(callFunctionFromValueTask, vm, func, typeArgs, values)
-    })
-  )
-}
-
 const unknownToAst = (location: SourceLocation, value: unknown) => {
   if (typeof value === 'number') return new NumberAst(IntType, location, value);
   if (isAst(value)) return value;
@@ -788,7 +785,17 @@ const instructions: InstructionMapping = {
     vm.stack.push(null) // statement expression
   },
   jump: (vm, { address }) => void (vm.ip = address),
-  call: (vm, { name, count, tcount }) => TaskDef(callFunctionTask, { vm, name, count, tcount }),
+  call: (vm, { name, count, tcount }) => {
+    const values = popValues(vm, count);
+    const typeArgs = popValues(vm, tcount || 0);
+    return (
+      TaskDef(resolveScope, vm.scope, name)
+      .chainFn((task, func) => {
+        return TaskDef(callFunctionFromValueTask, vm, func, typeArgs, values)
+      })
+    )
+  },
+
   compilerfn: (vm, { name, count, tcount }) => {
     const values = popValues(vm, count)
     const typeArgs = popValues(vm, tcount || 0);

@@ -43,9 +43,9 @@ fn sum() any:
 
 fn main():
   trx :: compose3(
-    map({|x| x + 1}),
-    filter({|x| x < 4}),
-    map({|x| x + 4})
+    map {|x| x + 1},
+    filter {|x| x < 4},
+    map {|x| x + 4}
   )
 
   list := [1, 2, 3, 4, 5, 6, 7]
