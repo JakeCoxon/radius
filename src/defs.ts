@@ -271,6 +271,7 @@ export class FunctionDefinition {
   compileTimePrototype?: FunctionPrototype | undefined
 
   compiledFunctions: CompiledFunction[] = []
+  keywords: string[] = []
 
   constructor(
     public id: number,
@@ -397,7 +398,7 @@ export class Tuple {
   }
 }
 
-export const isPlainObject = (obj: unknown): obj is Object => {
+export const isPlainObject = (obj: unknown): obj is { _object: true } => {
   return !!obj && typeof obj === 'object' && Object.getPrototypeOf(obj) === Object.prototype
 }
 
@@ -708,6 +709,7 @@ export type GlobalCompilerState = {
   functionDefinitions: FunctionDefinition[],
   classDefinitions: ClassDefinition[],
   moduleLoader: ModuleLoader
+  methods: WeakMap<Scope, [TypeConstructor, Closure][]>;
 
   allWaitingEvents: Event<unknown, unknown>[],
   logger: Logger,
@@ -744,6 +746,7 @@ export const createDefaultGlobalCompiler = () => {
     classDefinitions: [],
     allWaitingEvents: [],
     moduleLoader: null!,
+    methods: new WeakMap(),
     typeTable: new TypeTable(),
     logger: null!
   }

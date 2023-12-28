@@ -1,5 +1,5 @@
 import { BytecodeDefault, BytecodeSecondOrder, compileClassTask, compileFunctionPrototype, createBytecodeVmAndExecuteTask, pushBytecode, pushGeneratedBytecode, visitParseNode } from "./compiler";
-import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, ExternalFunction, CallAst, IntType, Closure, UserCallAst, ExternalType, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition, ParseTypeCheck, ParseCall, TypeVariable, TypeMatcher, typeMatcherEquals, SourceLocation, OverloadSet } from "./defs";
+import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, ExternalFunction, CallAst, IntType, Closure, UserCallAst, ExternalType, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition, ParseTypeCheck, ParseCall, TypeVariable, TypeMatcher, typeMatcherEquals, SourceLocation, OverloadSet, ExternalTypeConstructor, ScopeParentSymbol } from "./defs";
 import { Task, TaskDef, Unit } from "./tasks";
 
 
@@ -14,6 +14,7 @@ export const insertFunctionDefinition = (compilerState: GlobalCompilerState, dec
     decl.name, decl.typeArgs, decl.args,
     decl.returnType, decl.body,
     inline)
+  funcDef.keywords.push(...keywords)
 
   compilerState.functionDefinitions.push(funcDef);
   return funcDef;
@@ -307,5 +308,29 @@ export function createCallAstFromValue(location: SourceLocation, value: unknown,
   }
 
   compilerAssert(false, "Not supported value $value", { value })
+
+}
+
+export const createMethodCall = (vm: Vm, receiver: Ast, name: string, typeArgs: unknown[], args: Ast[]) => {
+  const type = receiver.type instanceof ParameterizedType ? receiver.type.typeConstructor : receiver.type
+  const t = type instanceof ConcreteClassType ? type.compiledClass.classDefinition : type;
+  compilerAssert(t instanceof ClassDefinition || t instanceof ExternalTypeConstructor || t instanceof PrimitiveType, "Expected class, type or type constructor got $t", { t })
+
+  // TODO: Must wait for event if not found
+  const closure = (() => {
+    let checkScope: Scope | undefined = vm.scope;
+    while (checkScope) {
+      const methods = vm.context.globalCompiler.methods.get(checkScope)
+      if (methods) {
+        const found = methods.find(x => x[0] === t && x[1].func.name?.token.value === name)
+        if (found) return found[1]
+      }
+      if (checkScope[name] !== undefined) return checkScope[name]
+      checkScope = checkScope[ScopeParentSymbol]
+    }
+  })()
+
+  compilerAssert(closure && closure instanceof Closure, "No method $name found for type $t", { name, t })
+  return createCallAstFromValueAndPushValue(vm, closure, typeArgs, [receiver, ...args])
 
 }

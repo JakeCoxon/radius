@@ -1,0 +1,25 @@
+
+type Thing:
+  x : int
+  y : int
+
+fn foo(thing: Thing, z: int) @method:
+  print(thing.x + z)
+
+fn bam(thing: Thing) @method:
+  print(thing.x)
+
+fn main():
+
+  thing : Thing
+
+  thing.x = 1
+  thing.y = 10
+  print(thing.x + thing.y)
+
+  thing.foo(200)
+  thing.bam
+
+  fam :: {|x| x + 100}
+
+  x := 2.fam

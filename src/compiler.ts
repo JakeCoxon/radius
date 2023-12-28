@@ -1,5 +1,5 @@
-import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, ArgumentTypePair, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol, ScopeParentSymbol, isPlainObject } from "./defs";
-import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, functionCompileTimeCompileTask, createCallAstFromValue, createCallAstFromValueAndPushValue } from "./compiler_functions";
+import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, ArgumentTypePair, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol, ScopeParentSymbol, isPlainObject, ParseLet, ParseList, ParseExpand } from "./defs";
+import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, functionCompileTimeCompileTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall } from "./compiler_functions";
 import { Event, Task, TaskDef, Unit, isTask, isTaskResult, withContext } from "./tasks";
 
 export const pushBytecode = <T extends BytecodeInstr>(out: BytecodeWriter, token: Token, instr: T) => {
@@ -616,6 +616,8 @@ const instructions: InstructionMapping = {
       } else if (isPlainObject(receiver)) {
         const func = expectMap(receiver, name, "Expected field $name in object $receiver", { name, receiver })
         return createCallAstFromValueAndPushValue(vm, func, typeArgs, args)
+      } else if (isAst(receiver)) {
+        return createMethodCall(vm, receiver, name, typeArgs, args)
       }
       args.unshift(expectAst(receiver))
     }
@@ -672,11 +674,7 @@ const instructions: InstructionMapping = {
       vm.stack.push(new FieldAst(field.fieldType, vm.location, value, field))
       return
     }
-    return (
-      TaskDef(resolveScope, vm.scope, name)
-      .mapRejected((error) => createCompilerError('No field $name found on type $type, and no binding found in scope', { name, type: value.type, scope: vm.scope }))
-      .chainFn((task, func) => createCallAstFromValueAndPushValue(vm, func, [], [value]))
-    )
+    return createMethodCall(vm, value, name, [], [])
   },
   setfieldast: (vm, { name }) => {
     const value = expectAst(popStack(vm));
@@ -779,18 +777,10 @@ const instructions: InstructionMapping = {
     const typeArgs = popValues(vm, tcount || 0);
 
     if (name === 'iteratefn') {
-      const v = expectAst(values[0])
-      const metaObject = v.type.typeInfo.metaobject;
-      if (metaObject['iterate']) return createCallAstFromValueAndPushValue(vm, metaObject['iterate'], [typeArgs[0]], [v])
-      return (
-        TaskDef(resolveScope, vm.scope, 'iterate')
-        .mapRejected(error => createCompilerError(`No iterate meta function, and no 'iterate' function found in scope for type $type`, { type: v.type }))
-        .chainFn((task, func) => {
-          compilerAssert(func instanceof Closure, "Expected closure", { func })
-          const iterateTypeArgs = [typeArgs[0]]
-          return createCallAstFromValueAndPushValue(vm, func, iterateTypeArgs, [v])
-        })
-      )
+      const iterator = expectAst(values[0])
+      const metaObject = iterator.type.typeInfo.metaobject;
+      if (metaObject['iterate']) return createCallAstFromValueAndPushValue(vm, metaObject['iterate'], [typeArgs[0]], [iterator])
+      return createMethodCall(vm, iterator, 'iterate', [typeArgs[0]], [])
     }
 
     compilerAssert(false, "No nuch compiler function $name", { name, values, typeArgs })
@@ -809,7 +799,7 @@ const instructions: InstructionMapping = {
     const func = globalCompiler.functionDefinitions[id];
     const closure = new Closure(func, vm.scope);
     vm.stack.push(closure);
-    if (func.name) {
+    if (func.name && !func.keywords.includes('method')) {
       compilerAssert(!Object.hasOwn(vm.scope, func.name.token.value), "$name already in scope", { name: func.name.token, value: vm.scope[func.name.token.value] })
       vm.scope[func.name.token.value] = closure;
     }
@@ -1005,6 +995,24 @@ const createParameterizedExternalType = (globalCompiler: GlobalCompilerState, ty
 
 function topLevelFunctionDefinitionTask(ctx: TaskContext, funcDecl: ParserFunctionDecl, scope: Scope) {
   const funcDef = insertFunctionDefinition(ctx.globalCompiler, funcDecl)
+
+  if (funcDef.keywords.includes('method')) {
+    compilerAssert(funcDecl.args[0]?.[0], "Expected type for first argument")
+    let t = funcDecl.args[0][1]!;
+    const type = t instanceof ParseCall ? t.left : t
+    return (
+      TaskDef(resolveScope, scope, type.token.value)
+      .chainFn((task, result) => {
+        let methods = ctx.globalCompiler.methods.get(scope)
+        if (!methods) { methods = []; ctx.globalCompiler.methods.set(scope, methods) }
+        compilerAssert(result instanceof ClassDefinition || result instanceof ExternalTypeConstructor, "Expected class definition or type constructor, got $result", { result })
+
+        methods.push([result, new Closure(funcDef, scope)])
+        return Task.success()
+      })
+    )
+    
+  }
 
   compilerAssert(!Object.hasOwn(scope, funcDef.name!.token.value), "$name already in scope", { name: funcDef.name!.token.value, value: scope[funcDef.name!.token.value] })
 

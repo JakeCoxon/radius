@@ -1,5 +1,5 @@
 
-fn iterate!(f, T)(lst: List!T) @inline: 
+fn iterate!(f, T)(lst: List!T) @inline @method: 
   i := 0
   while i < lst.length:
     f(lst[i])

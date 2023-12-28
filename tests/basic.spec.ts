@@ -181,6 +181,13 @@ test("methods", async () => {
 
 });
 
+test("methods2", async () => {
+
+  const input = await Bun.file(`${import.meta.dir}/fixtures/methods2.rad`).text()
+  const test = runCompilerTest(input, { filename: 'methods2' })
+
+});
+
 test("nomethod", async () => {
 
   const input = await Bun.file(`${import.meta.dir}/fixtures/nomethod.rad`).text()
@@ -255,5 +262,12 @@ test("transduce", async () => {
 
   const input = await Bun.file(`${import.meta.dir}/fixtures/transduce.rad`).text()
   const test = runCompilerTest(input, { filename: 'transduce' })
+
+});
+
+test("list", async () => {
+
+  const input = await Bun.file(`${import.meta.dir}/fixtures/list.rad`).text()
+  const test = runCompilerTest(input, { filename: 'list' })
 
 });
