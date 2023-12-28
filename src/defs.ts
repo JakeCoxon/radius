@@ -361,34 +361,35 @@ export class AstRoot {
     return options.stylize(`${this.constructor.name} `, 'string') + inspect({ ...this}, newOptions)
   }
 }
-export class NumberAst extends AstRoot {     constructor(public type: Type, public location: SourceLocation, public value: number) { super() } }
-export class StringAst extends AstRoot {     constructor(public type: Type, public location: SourceLocation, public value: string) { super() } }
-export class BindingAst extends AstRoot {    constructor(public type: Type, public location: SourceLocation, public binding: Binding) { super() } }
-export class BoolAst extends AstRoot {       constructor(public type: Type, public location: SourceLocation, public value: boolean) { super() } }
-export class LetAst extends AstRoot {        constructor(public type: Type, public location: SourceLocation, public binding: Binding, public value: Ast | null) { super() } }
-export class SetAst extends AstRoot {        constructor(public type: Type, public location: SourceLocation, public binding: Binding, public value: Ast) { super() } }
-export class OperatorAst extends AstRoot {   constructor(public type: Type, public location: SourceLocation, public operator: string, public args: Ast[]) { super() } }
-export class IfAst extends AstRoot {         constructor(public type: Type, public location: SourceLocation, public expr: Ast, public trueBody: Ast, public falseBody: Ast | null) { super() } }
-export class ListAst extends AstRoot {       constructor(public type: Type, public location: SourceLocation, public args: Ast[]) { super() } }
-export class CallAst extends AstRoot {       constructor(public type: Type, public location: SourceLocation, public func: ExternalFunction, public args: Ast[]) { super() } }
-export class UserCallAst extends AstRoot {   constructor(public type: Type, public location: SourceLocation, public binding: Binding, public args: Ast[]) { super() } }
-export class AndAst extends AstRoot {        constructor(public type: Type, public location: SourceLocation, public args: Ast[]) { super() } }
-export class OrAst extends AstRoot {         constructor(public type: Type, public location: SourceLocation, public args: Ast[]) { super() } }
-export class StatementsAst extends AstRoot { constructor(public type: Type, public location: SourceLocation, public statements: Ast[]) { super() } }
-export class WhileAst extends AstRoot {      constructor(public type: Type, public location: SourceLocation, public condition: Ast, public body: Ast) { super() } }
-export class ReturnAst extends AstRoot {     constructor(public type: Type, public location: SourceLocation, public expr: Ast | null) { super() } }
-export class BreakAst extends AstRoot {      constructor(public type: Type, public location: SourceLocation, public binding: Binding, public expr: Ast | null) { super() } }
-export class BlockAst extends AstRoot {      constructor(public type: Type, public location: SourceLocation, public binding: Binding, public body: Ast) { super() } }
-export class FieldAst extends AstRoot {      constructor(public type: Type, public location: SourceLocation, public left: Ast, public field: TypeField) { super() } }
-export class SetFieldAst extends AstRoot {   constructor(public type: Type, public location: SourceLocation, public left: Ast, public field: TypeField, public value: Ast) { super() } }
-export class VoidAst extends AstRoot {       constructor(public type: Type, public location: SourceLocation) { super() } }
-export class CastAst extends AstRoot {       constructor(public type: Type, public location: SourceLocation, public expr: Ast) { super() } }
-export class SubscriptAst extends AstRoot {  constructor(public type: Type, public location: SourceLocation, public left: Ast, public right: Ast) { super() } }
-export class NotAst extends AstRoot {        constructor(public type: Type, public location: SourceLocation, public expr: Ast) { super() } }
-export class ConstructorAst extends AstRoot { constructor(public type: Type, public location: SourceLocation, public args: Ast[]) { super() } }
+export class NumberAst extends AstRoot {      key = 'number' as const;      constructor(public type: Type, public location: SourceLocation, public value: number) { super() } }
+export class StringAst extends AstRoot {      key = 'string' as const;      constructor(public type: Type, public location: SourceLocation, public value: string) { super() } }
+export class BindingAst extends AstRoot {     key = 'binding' as const;     constructor(public type: Type, public location: SourceLocation, public binding: Binding) { super() } }
+export class BoolAst extends AstRoot {        key = 'bool' as const;        constructor(public type: Type, public location: SourceLocation, public value: boolean) { super() } }
+export class LetAst extends AstRoot {         key = 'let' as const;         constructor(public type: Type, public location: SourceLocation, public binding: Binding, public value: Ast | null) { super() } }
+export class SetAst extends AstRoot {         key = 'set' as const;         constructor(public type: Type, public location: SourceLocation, public binding: Binding, public value: Ast) { super() } }
+export class OperatorAst extends AstRoot {    key = 'operator' as const;    constructor(public type: Type, public location: SourceLocation, public operator: string, public args: Ast[]) { super() } }
+export class IfAst extends AstRoot {          key = 'if' as const;          constructor(public type: Type, public location: SourceLocation, public expr: Ast, public trueBody: Ast, public falseBody: Ast | null) { super() } }
+export class ListAst extends AstRoot {        key = 'list' as const;        constructor(public type: Type, public location: SourceLocation, public args: Ast[]) { super() } }
+export class CallAst extends AstRoot {        key = 'call' as const;        constructor(public type: Type, public location: SourceLocation, public func: ExternalFunction, public args: Ast[]) { super() } }
+export class UserCallAst extends AstRoot {    key = 'usercall' as const;    constructor(public type: Type, public location: SourceLocation, public binding: Binding, public args: Ast[]) { super() } }
+export class AndAst extends AstRoot {         key = 'and' as const;         constructor(public type: Type, public location: SourceLocation, public args: Ast[]) { super() } }
+export class OrAst extends AstRoot {          key = 'or' as const;          constructor(public type: Type, public location: SourceLocation, public args: Ast[]) { super() } }
+export class StatementsAst extends AstRoot {  key = 'statements' as const;  constructor(public type: Type, public location: SourceLocation, public statements: Ast[]) { super() } }
+export class WhileAst extends AstRoot {       key = 'while' as const;       constructor(public type: Type, public location: SourceLocation, public condition: Ast, public body: Ast) { super() } }
+export class ReturnAst extends AstRoot {      key = 'return' as const;      constructor(public type: Type, public location: SourceLocation, public expr: Ast | null) { super() } }
+export class BreakAst extends AstRoot {       key = 'break' as const;       constructor(public type: Type, public location: SourceLocation, public binding: Binding, public expr: Ast | null) { super() } }
+export class BlockAst extends AstRoot {       key = 'block' as const;       constructor(public type: Type, public location: SourceLocation, public binding: Binding, public body: Ast) { super() } }
+export class FieldAst extends AstRoot {       key = 'field' as const;       constructor(public type: Type, public location: SourceLocation, public left: Ast, public field: TypeField) { super() } }
+export class SetFieldAst extends AstRoot {    key = 'setfield' as const;    constructor(public type: Type, public location: SourceLocation, public left: Ast, public field: TypeField, public value: Ast) { super() } }
+export class VoidAst extends AstRoot {        key = 'void' as const;        constructor(public type: Type, public location: SourceLocation) { super() } }
+export class CastAst extends AstRoot {        key = 'cast' as const;        constructor(public type: Type, public location: SourceLocation, public expr: Ast) { super() } }
+export class SubscriptAst extends AstRoot {   key = 'subscript' as const;   constructor(public type: Type, public location: SourceLocation, public left: Ast, public right: Ast) { super() } }
+export class NotAst extends AstRoot {         key = 'not' as const;         constructor(public type: Type, public location: SourceLocation, public expr: Ast) { super() } }
+export class ConstructorAst extends AstRoot { key = 'constructor' as const; constructor(public type: Type, public location: SourceLocation, public args: Ast[]) { super() } }
 
-export type Ast = NumberAst | LetAst | SetAst | OperatorAst | IfAst | ListAst | CallAst | AndAst |
-  OrAst | StatementsAst | WhileAst | ReturnAst | SetFieldAst | VoidAst | CastAst | SubscriptAst | ConstructorAst
+export type Ast = NumberAst | LetAst | SetAst | OperatorAst | IfAst | ListAst | CallAst | AndAst | UserCallAst |
+  OrAst | StatementsAst | WhileAst | ReturnAst | SetFieldAst | VoidAst | CastAst | SubscriptAst | ConstructorAst |
+  BindingAst | StringAst | NotAst
 export const isAst = (value: unknown): value is Ast => value instanceof AstRoot;
 
 export class Tuple {
@@ -832,4 +833,29 @@ export const outputSourceLocation = (location: SourceLocation) => {
     }
   }
   return out;
+}
+
+export type FileWriter = {
+  write(
+    chunk: string | ArrayBufferView | ArrayBuffer | SharedArrayBuffer,
+  ): number;
+}
+export type AstWriterTable = {
+  [A in Ast as A['key']]: (writer: CodegenFunctionWriter, ast: A) => void;
+}
+export type CodegenFunctionWriter = {
+  writer: CodegenWriter
+  argSlots: number
+  returnSlots: number
+  bytecode: number[]
+  constants: Map<unknown, number>
+  constantSlots: number[]
+  nextConstantSlot: number
+  locals: Map<Binding, number>
+  nextLocalSlot: number
+}
+export type CodegenWriter = {
+  functions: CodegenFunctionWriter[]
+  globalCompilerState: GlobalCompilerState
+  functionToIndex: Map<Binding, number>
 }

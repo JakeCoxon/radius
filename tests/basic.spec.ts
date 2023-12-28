@@ -271,3 +271,10 @@ test("list", async () => {
   const test = runCompilerTest(input, { filename: 'list' })
 
 });
+
+test("meta", async () => {
+
+  const input = await Bun.file(`${import.meta.dir}/fixtures/meta.rad`).text()
+  const test = runCompilerTest(input, { filename: 'meta' })
+
+});

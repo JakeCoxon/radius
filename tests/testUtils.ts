@@ -5,6 +5,7 @@ import { makeParser } from "../src/parser"
 import { Queue, TaskDef, stepQueue, withContext } from "../src//tasks";
 import { expect } from "bun:test";
 import { createCallAstFromValue, functionTemplateTypeCheckAndCompileTask } from "../src/compiler_functions";
+import { writeFinalBytecode } from "../src/codegen";
 
 const runTestInner = (queue: Queue, input: string, filepath: string, globalCompiler: GlobalCompilerState, rootScope: Scope) => {
   const parser = makeParser(input, filepath)
@@ -110,10 +111,27 @@ export const runCompilerTest = (input: string, { moduleLoader, filename, expectE
 
   let gotError = false;
   let fatalError = false;
-  
+
+  const writeBytecodeFile = () => {
+      const path = `${import.meta.dir}/output/${filename}.raw`
+      if (existsSync(path)) unlinkSync(path)
+      const file = Bun.file(path);
+      const bytecodeWriter = file.writer();
+      writeFinalBytecode(globalCompiler, bytecodeWriter)
+      bytecodeWriter.end()
+  }  
 
   try {
     runTestInner(queue, input, `${filename}.rad`, globalCompiler, rootScope)
+
+    globalCompiler.compiledFunctions.forEach((func) => {
+      writer.write(func.functionDefinition.debugName)
+      writer.write("\n")
+      writer.write(Bun.inspect(func.body, { depth: 100, colors: true }));
+      writer.write("\n\n")
+    })
+
+    writeBytecodeFile()
 
   } catch (ex) {
     gotError = true;
@@ -153,12 +171,6 @@ export const runCompilerTest = (input: string, { moduleLoader, filename, expectE
     }
   }
 
-  globalCompiler.compiledFunctions.forEach((func) => {
-    writer.write(func.functionDefinition.debugName)
-    writer.write("\n")
-    writer.write(Bun.inspect(func.body, { depth: 100, colors: true }));
-    writer.write("\n\n")
-  })
 
   writer.flush();
   writer.end();
