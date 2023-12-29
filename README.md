@@ -211,20 +211,30 @@ type Range2d:
 
 # the loop body is passed as a template parameter 'f'. and the function must be marked @inline
 fn range2d_iterate!(f)(range: Range2d) void @inline:
-  j := 0
-  while j < range.h:
-    i := 0
-    while i < range.w:
+  for j in Range(0, range.h):
+    for i in Range(0, range.w):
       f(vec2i(i, j))
-      i += 1
-    j += 1
+
+type Range:
+  start: int
+  end: int
+  __iterate :: range_iterate
+
+fn range_iterate!(f)(range: Range) void @inline:
+  i := range.start
+  while i < range.end:
+    f(i)
+    i += 1
+
+type vec2i:
+  x: int
+  y: int
 
 fn main():
-  # Usage
   range := Range2d(32, 64)
   for vec in range:
     if vec.x * vec.y > 256:
-      continue
+      continue # continue does the right thing
     print(vec.x, vec.y)
 
 ```
