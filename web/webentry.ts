@@ -45,7 +45,11 @@ const runTestInner = (input: string) => {
 
   function step() {
     if (queue.list.length === 0) end()
-    stepQueue(queue);
+    while (true) {
+      stepQueue(queue);
+      if ((queue.currentTask as any).def) break
+    }
+    
   }
   function end() {
     if (root._state !== 'completed') {
@@ -118,7 +122,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
 
     text += `Functions:\n`;
-    [...compiler.compiledFunctions.entries()].forEach(([key, value]) => {
+    Array.from(compiler.compiledFunctions.entries()).forEach(([key, value]) => {
       text += `${key}: ${inspect(value, { depth: 1 })}\n`
     });
 
