@@ -503,12 +503,12 @@ const createOperator = (op: string, operatorName: string, typeCheck: (a: Type, b
   operators[op] = { 
     op, typeCheck, comptime,
     func: (location: SourceLocation, a: Ast, b: Ast) => {
-      compilerAssert(a.type === b.type, "Can't use operator $op on types $aType and $bType. Both types must be the same", { op, a, b, aType: a.type, bType: b.type  })
       const metafunc = a.type.typeInfo.metaobject[operatorName]
       if (metafunc) {
         compilerAssert(metafunc instanceof ExternalFunction, "Not implemented yet", { metafunc })
         return metafunc.func(location, a, b)
       }
+      compilerAssert(a.type === b.type, "Can't use operator $op on types $aType and $bType. Both types must be the same", { op, a, b, aType: a.type, bType: b.type  })
       const returnType = typeCheck(a.type, b.type)
       return new OperatorAst(returnType, location, op, [a, b])
     }
@@ -675,7 +675,6 @@ const instructions: InstructionMapping = {
   },
   operatorast: (vm, { name, count }) => {
     const values = expectAsts(popValues(vm, count));
-    compilerAssert(values.every(x => x.type === values[0].type), "Can't use operator $name on types $a and $b. Both types must be the same", { name, a: values[0].type, b: values[1].type, values })
     compilerAssert(operators[name], "Unexpected operator $name", { name, values })
     vm.stack.push(operators[name].func(vm.location, values[0], values[1]))
   },
@@ -1038,6 +1037,18 @@ export function compileClassTask(ctx: TaskContext, { classDef, typeArgs }: { cla
 
 const insertMetaObjectPairwiseOperator = (compiledClass: CompiledClass, operatorName: string, operatorSymbol: string) => {
   compiledClass.metaobject[operatorName] = new ExternalFunction(operatorName, VoidType, (location: SourceLocation, a: Ast, b: Ast) => {
+    if (b.type instanceof ParameterizedType && b.type.typeConstructor === TupleTypeConstructor) {
+      compilerAssert(b.type.args.length === compiledClass.fields.length, `Expected tuple of size ${compiledClass.fields.length}, got ${b.type.args.length}`, { type: b.type })
+      const constructorArgs = compiledClass.fields.map((field, i) => {
+        const otherField = b.type.typeInfo.fields.find(x => x.name === `_${i+1}`)
+        compilerAssert(otherField?.fieldType === field.fieldType, `Expected type of tuple field ${i+1} to be $fieldType got $otherFieldType`, { fieldType: field.fieldType, otherFieldType: otherField.fieldType })
+        return operators[operatorSymbol].func(location, 
+          new FieldAst(field.fieldType, location, a, field),
+          new FieldAst(otherField.fieldType, location, b, otherField))
+      })
+      return new ConstructorAst(compiledClass.type, location, constructorArgs)
+    }
+    compilerAssert(b.type === a.type, "Expected vec or tuple. got $type", { type: b.type })
     const constructorArgs = compiledClass.fields.map(field => 
       operators[operatorSymbol].func(location, 
         new FieldAst(field.fieldType, location, a, field),
