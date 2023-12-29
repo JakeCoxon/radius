@@ -1,4 +1,4 @@
-import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, ArgumentTypePair, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol, ScopeParentSymbol, isPlainObject, ParseLet, ParseList, ParseExpand } from "./defs";
+import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, ArgumentTypePair, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol, ScopeParentSymbol, isPlainObject, ParseLet, ParseList, ParseExpand, ParseBlock } from "./defs";
 import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, functionCompileTimeCompileTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall } from "./compiler_functions";
 import { Event, Task, TaskDef, Unit, isTask, isTaskResult, withContext } from "./tasks";
 
@@ -262,11 +262,13 @@ export const BytecodeSecondOrder: ParseTreeTable = {
   },
   for: (out, node) => {
     const fnArgs: ArgumentTypePair[] = [[node.identifier, null]]
-    const decl = createAnonymousParserFunctionDecl("for", node.token, fnArgs, node.body)
+    const continueBlock = new ParseBlock(node.token, new ParseStatements(node.token, [node.body]), 'continue', null)
+    const decl = createAnonymousParserFunctionDecl("for", node.token, fnArgs, continueBlock)
     const fn = new ParseFunction(node.token, decl)
     const iterateFn = new ParseCompilerIden(createAnonymousToken(''), 'iteratefn');
     const call = new ParseCall(node.token, iterateFn, [node.expr], [fn])
-    visitParseNode(out, call)
+    const breakBlock = new ParseBlock(node.token, new ParseStatements(node.token, [call]), 'break', null)
+    visitParseNode(out, breakBlock)
   },
 
   function: (out, node) => {
@@ -379,7 +381,11 @@ export const BytecodeSecondOrder: ParseTreeTable = {
     });
     pushBytecode(out, node.token, { type: "popqs" });
   },
-  block: (out, node) => visitParseNode(out, node.statements),
+  block: (out, node) => {
+    if (node.breakType !== null) pushBytecode(out, node.token, { type: 'beginblockast', breakType: node.breakType })
+    visitParseNode(out, node.statements)
+    if (node.breakType !== null) pushBytecode(out, node.token, { type: 'endblockast' })
+  },
 
   else: (out, node) => visitParseNode(out, node.body),
 
@@ -413,6 +419,7 @@ export const BytecodeSecondOrder: ParseTreeTable = {
     const condition = node.expr.condition
     const body = node.expr.body
     pushBytecode(out, condition.token, { type: "comment", comment: "while begin" });
+
     const breakBlock = new LabelBlock(out.state.labelBlock, "labelblock", 'break', null)
     const continueBlock = new LabelBlock(breakBlock, "labelblock", 'continue', null)
     out.state.labelBlock = continueBlock;
@@ -738,11 +745,18 @@ const instructions: InstructionMapping = {
     vm.ip = vm.bytecode.code.length - 1;
   },
   beginblockast: (vm, { breakType }) => {
-    const binding = new Binding(`labelbreakast`, VoidType);
+    const index = vm.context.subCompilerState.nextLabelBlockDepth ++
+    const binding = new Binding(`labelbreak${index}`, VoidType);
     vm.context.subCompilerState.labelBlock = new LabelBlock(vm.context.subCompilerState.labelBlock, null, breakType, binding)
   },
   endblockast: (vm, {}) => {
+    vm.context.subCompilerState.nextLabelBlockDepth --
     compilerAssert(vm.context.subCompilerState.labelBlock, "Invalid endblockast")
+    const binding = vm.context.subCompilerState.labelBlock.binding
+    compilerAssert(binding, "Expected binding", { labelBlock: vm.context.subCompilerState.labelBlock })
+    const body = expectAst(vm.stack.pop())
+    vm.stack.push(new BlockAst(body.type, vm.location, binding, body))
+    ;(vm.stack[vm.stack.length - 1] as any).breakType = vm.context.subCompilerState.labelBlock.type
     vm.context.subCompilerState.labelBlock = vm.context.subCompilerState.labelBlock.parent
   },
 
@@ -821,7 +835,7 @@ const instructions: InstructionMapping = {
     const globalCompiler = (vm.context as TaskContext).globalCompiler
     compilerAssert(id in globalCompiler.functionDefinitions, "Not found in func $id", { id })
     const func = globalCompiler.functionDefinitions[id];
-    const closure = new Closure(func, vm.scope);
+    const closure = new Closure(func, vm.scope, vm.context.subCompilerState);
     vm.stack.push(closure);
     if (func.name && !func.keywords.includes('method')) {
       compilerAssert(!Object.hasOwn(vm.scope, func.name.token.value), "$name already in scope", { name: func.name.token, value: vm.scope[func.name.token.value] })
@@ -989,7 +1003,7 @@ export function compileClassTask(ctx: TaskContext, { classDef, typeArgs }: { cla
         compiledClass.fields.map(x => new ParseIdentifier(createAnonymousToken(x.name))))
       const decl = createAnonymousParserFunctionDecl("constructor", createAnonymousToken(''), fnArgs, constructorBody)
       const funcDef = insertFunctionDefinition(ctx.globalCompiler, decl)
-      const constructor = new Closure(funcDef, classDef.parentScope)
+      const constructor = new Closure(funcDef, classDef.parentScope, subCompilerState.lexicalParent!)
 
       Object.assign(compiledClass.metaobject, { iterate, constructor })
 
@@ -1031,7 +1045,7 @@ function topLevelFunctionDefinitionTask(ctx: TaskContext, funcDecl: ParserFuncti
         if (!methods) { methods = []; ctx.globalCompiler.methods.set(scope, methods) }
         compilerAssert(result instanceof ClassDefinition || result instanceof ExternalTypeConstructor, "Expected class definition or type constructor, got $result", { result })
 
-        methods.push([result, new Closure(funcDef, scope)])
+        methods.push([result, new Closure(funcDef, scope, ctx.subCompilerState)])
         return Task.success()
       })
     )
@@ -1040,7 +1054,7 @@ function topLevelFunctionDefinitionTask(ctx: TaskContext, funcDecl: ParserFuncti
 
   compilerAssert(!Object.hasOwn(scope, funcDef.name!.token.value), "$name already in scope", { name: funcDef.name!.token.value, value: scope[funcDef.name!.token.value] })
 
-  setScopeValueAndResolveEvents(scope, funcDef.name!.token.value, new Closure(funcDef, scope))
+  setScopeValueAndResolveEvents(scope, funcDef.name!.token.value, new Closure(funcDef, scope, ctx.subCompilerState))
 
   return Task.success()
 }

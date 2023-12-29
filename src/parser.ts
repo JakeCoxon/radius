@@ -222,7 +222,7 @@ export const makeParser = (input: string, debugName: string) => {
     else if (match("'"))     return new ParseSymbol(parseIdentifier().token);
     else if (match("@"))     return new ParseNote(previous, parseExpr());
     else if (match("{"))     return match("|") ? parseLambda() : parseDict(previous)
-    else if (match("block")) return new ParseBlock(previous, parseColonBlockExpr('block'))
+    else if (match("block")) return new ParseBlock(previous, parseColonBlockExpr('block'), null, null)
     else if (matchType("STRING")) return new ParseString(previous)
     else if (matchType("NUMBER")) return parseNumberLiteral();
     else if (matchType("SPECIALNUMBER")) return parseNumberLiteral();

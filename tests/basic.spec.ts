@@ -271,3 +271,10 @@ test("list", async () => {
   const test = runCompilerTest(input, { filename: 'list' })
 
 });
+
+test("range2d", async () => {
+
+  const input = await Bun.file(`${import.meta.dir}/fixtures/range2d.rad`).text()
+  const test = runCompilerTest(input, { filename: 'range2d' })
+
+});

@@ -151,7 +151,7 @@ export class ParsePostCall extends ParseNodeType {   key = 'postcall' as const; 
 export class ParseSlice extends ParseNodeType {      key = 'slice' as const;      constructor(public token: Token, public expr: ParseNode, public a: ParseNode | null, public b: ParseNode | null, public c: ParseNode | null, public isStatic: boolean) { super();} }
 export class ParseSubscript extends ParseNodeType {  key = 'subscript' as const;  constructor(public token: Token, public expr: ParseNode, public subscript: ParseNode, public isStatic: boolean) { super();} }
 export class ParseTuple extends ParseNodeType {      key = 'tuple' as const;      constructor(public token: Token, public exprs: ParseNode[]) { super();} }
-export class ParseBlock extends ParseNodeType {      key = 'block' as const;      constructor(public token: Token, public statements: ParseStatements) { super();} }
+export class ParseBlock extends ParseNodeType {      key = 'block' as const;      constructor(public token: Token, public statements: ParseStatements, public breakType: BreakType | null, public name: ParseIdentifier | null) { super();} }
 export class ParseImportName extends ParseNodeType { key = 'importname' as const; constructor(public token: Token, public identifier: ParseIdentifier, public rename: ParseIdentifier | null) { super();} }
 export class ParseImport extends ParseNodeType {     key = 'import' as const;     constructor(public token: Token, public module: ParseIdentifier, public rename: ParseIdentifier | null, public imports: ParseImportName[]) { super();} }
 export class ParseValue extends ParseNodeType {      key = 'value' as const;      constructor(public token: Token, public value: unknown) { super();} }
@@ -169,6 +169,8 @@ export type ParseNode = ParseStatements | ParseLet | ParseSet | ParseOperator | 
 // Void types mean that in secondOrder compilation, the AST doesn't return an AST
 export const isParseVoid = (ast: ParseNode) => ast.key == 'letconst' || ast.key === 'function' || ast.key === 'class' || ast.key === 'comptime' || ast.key === 'metawhile';
 export const isParseNode = (ast: unknown): ast is ParseNode => ast instanceof ParseNodeType
+
+export type BreakType = 'break' | 'continue'
 
 export type BytecodeInstr = 
   { type: 'comment', comment: string } |
@@ -189,8 +191,8 @@ export type BytecodeInstr =
   { type: 'not' } |
   { type: 'pop' } |
   { type: 'nil' } |
-  { type: 'beginblockast', breakType: 'break' | 'continue' | null } |
-  { type: 'endblockast'  } |
+  { type: 'beginblockast', breakType: BreakType | null } |
+  { type: 'endblockast' } |
   { type: 'bindingast', name: string } |
   { type: 'totype' } |
   { type: 'numberast', value: number } |
@@ -484,7 +486,7 @@ export type TypeConstructor = ExternalTypeConstructor | ClassDefinition // Type 
 export const isType = (type: unknown): type is Type => type instanceof TypeRoot
 
 export class Closure {
-  constructor(public func: FunctionDefinition, public scope: Scope) {}
+  constructor(public func: FunctionDefinition, public scope: Scope, public lexicalParent: SubCompilerState) {}
 
   [Inspect.custom](depth, options, inspect) {
     if (depth <= 1) return options.stylize(`[${this.constructor.name}]`, 'special');
@@ -681,7 +683,6 @@ export type Vm = {
   bytecode: BytecodeProgram,
   context: TaskContext
 }
-export type LabelBlockType = 'break' | 'continue' | null
 
 // Isn't it weird that these are similar but not the same?
 export class LabelBlock {
@@ -689,17 +690,17 @@ export class LabelBlock {
   constructor(
     public parent: LabelBlock | null,
     public name: string | null,
-    public type: LabelBlockType,
+    public type: BreakType | null,
     public binding: Binding | null) {}
 }
 
-export const findLabelBlockByType = (labelBlock: LabelBlock | null, type: LabelBlockType) => {
+export const findLabelBlockByType = (labelBlock: LabelBlock | null, type: BreakType | null) => {
   let block = labelBlock
   while (block) {
     if (block.type === type) return block
     block = block.parent;
   }
-  compilerAssert(false, `Invalid ${type} outside a block`, { labelBlock })
+  compilerAssert(false, type === 'continue' ? `Invalid continue outside a loop` : `Invalid ${type} outside a block`, { labelBlock })
 }
 
 export type Logger = { log: (...args: any[]) => void }
@@ -770,6 +771,7 @@ export class SubCompilerState {
   prevCompilerState: SubCompilerState | undefined
   inlineIntoCompiler: SubCompilerState | undefined
   labelBlock: LabelBlock | null
+  nextLabelBlockDepth: number = 0; // Just used for debug labelling
 
   [Inspect.custom](depth, options, inspect) {
     if (depth <= 1) return options.stylize(`[CompilerState ${this.debugName}]`, 'special');
@@ -784,6 +786,7 @@ export class SubCompilerState {
 export const pushSubCompilerState = (ctx: TaskContext, obj: { debugName: string, vm?: Vm, func?: FunctionDefinition, scope: Scope, lexicalParent: SubCompilerState | undefined }) => {
   const state = new SubCompilerState(obj.debugName)
   state.prevCompilerState = ctx.subCompilerState;
+  state.nextLabelBlockDepth = ctx.subCompilerState?.nextLabelBlockDepth ?? 0
   state.lexicalParent = obj.lexicalParent
   state.scope = obj.scope
   state.functionCompiler = state.lexicalParent?.functionCompiler
