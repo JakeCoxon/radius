@@ -396,9 +396,11 @@ export const makeParser = (input: string, debugName: string) => {
     return createAnonymousFunc(state, previous, parseArgList("|"), 
       parseKeywords(), parseOptionalReturnType(), parseSingleOrMultilineBody())
   };
+  const parseOptionalMetaClass = () => match("<") ? parseIdentifier() :  null;
   const parseClassDef = (): ParseNode => {
-    return createClassDef(state, previous, parseOptionalMetaName(), 
+    return createClassDef(state, previous,  
       parseIdentifier(), match("!") ? parseFunctionTypeParameters() : [], 
+      parseOptionalMetaClass(),
       parseKeywords(), parseColonBlock("class definition header"))
   };
 
@@ -469,7 +471,7 @@ export const makeParser = (input: string, debugName: string) => {
 
   const parseStatement = (): ParseNode => {
     if (match("fn"))            return parseFunctionDef();
-    else if (match("type"))   return parseClassDef();
+    else if (match("type"))     return parseClassDef();
     else if (match("if"))       return parseIf(previous);
     else if (match("while"))    return parseWhile();
     else if (match("comptime")) return new ParseCompTime(previous, parseColonBlock("comptime"));
@@ -520,7 +522,7 @@ const createAnonymousFunc = (state: any, token: Token, args: ArgumentTypePair[],
   return new ParseFunction(token, decl)
 }
 
-const createClassDef = (state: any, token: Token, metaType: ParseIdentifier | null, name: ParseIdentifier, typeArgs: ParseNode[], keywords: ParseNode[], body: ParseNode | null) => {
+const createClassDef = (state: any, token: Token, name: ParseIdentifier, typeArgs: ParseNode[], metaType: ParseIdentifier | null, keywords: ParseNode[], body: ParseNode | null) => {
   const decl: ParserClassDecl = {
     id: undefined, token,
     debugName: `${name.token.value}`,

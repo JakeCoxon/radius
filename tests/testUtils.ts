@@ -1,5 +1,5 @@
 import { existsSync, unlinkSync, readFileSync } from "node:fs";
-import { runTopLevelTask } from "../src/compiler";
+import { VecTypeMetaClass, runTopLevelTask } from "../src/compiler";
 import { BoolType, Closure, CompilerError, DoubleType, ExternalFunction, FloatType, GlobalCompilerState, IntType, Scope, StringType, SubCompilerState, TaskContext, VoidType, compilerAssert, createDefaultGlobalCompiler, createScope, expectMap, BuiltinTypes, ModuleLoader, SourceLocation, textColors, outputSourceLocation, TokenRoot } from "../src/defs";
 import { makeParser } from "../src/parser"
 import { Queue, TaskDef, stepQueue, withContext } from "../src//tasks";
@@ -95,6 +95,8 @@ export const runCompilerTest = (input: string, { moduleLoader, filename, expectE
       prints.push(...args)
       return args[0];
     }),
+
+    VecType: VecTypeMetaClass
   }, undefined);
 
   const queue = new Queue();

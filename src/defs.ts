@@ -335,6 +335,8 @@ export class ClassDefinition {
   compiledClasses: CompiledClass[] = []
   concreteType: ConcreteClassType | undefined
 
+  metaClass: ParseIdentifier | null
+
   isTypeConstructor: boolean = false
 
   constructor(

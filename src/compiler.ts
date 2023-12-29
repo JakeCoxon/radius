@@ -499,29 +499,34 @@ const popStack = (vm: Vm) => {
 
 
 const operators: {[key:string]: { op: string, typeCheck: unknown, comptime: (a, b) => unknown, func: (location: SourceLocation, a: Ast, b: Ast) => Ast }} = {};
-const createOperator = (op: string, typeCheck: (a: Type, b: Type) => Type, comptime: (a, b) => unknown) => {
+const createOperator = (op: string, operatorName: string, typeCheck: (a: Type, b: Type) => Type, comptime: (a, b) => unknown) => {
   operators[op] = { 
     op, typeCheck, comptime,
     func: (location: SourceLocation, a: Ast, b: Ast) => {
       compilerAssert(a.type === b.type, "Can't use operator $op on types $aType and $bType. Both types must be the same", { op, a, b, aType: a.type, bType: b.type  })
+      const metafunc = a.type.typeInfo.metaobject[operatorName]
+      if (metafunc) {
+        compilerAssert(metafunc instanceof ExternalFunction, "Not implemented yet", { metafunc })
+        return metafunc.func(location, a, b)
+      }
       const returnType = typeCheck(a.type, b.type)
       return new OperatorAst(returnType, location, op, [a, b])
     }
   }
 }
-const typecheckNumberOperator = (a: Type, b: Type) => { compilerAssert(a === IntType || a === FloatType || b === DoubleType); return a }
-const typecheckNumberComparison = (a: Type, b: Type) => { compilerAssert(a === IntType || a === FloatType || b === DoubleType); return BoolType }
-const typecheckEquality = (a: Type, b: Type) => { compilerAssert(a === IntType || a === FloatType || b === DoubleType); return BoolType }
-createOperator("-",  typecheckNumberOperator,   (a, b) => a - b)
-createOperator("*",  typecheckNumberOperator,   (a, b) => a * b)
-createOperator("+",  typecheckNumberOperator,   (a, b) => a + b)
-createOperator("/",  typecheckNumberOperator,   (a, b) => a / b)
-createOperator(">",  typecheckNumberComparison, (a, b) => a > b)
-createOperator("<",  typecheckNumberComparison, (a, b) => a < b)
-createOperator(">=", typecheckNumberComparison, (a, b) => a >= b)
-createOperator("<=", typecheckNumberComparison, (a, b) => a <= b)
-createOperator("==", typecheckEquality,         (a, b) => a == b)
-createOperator("!=", typecheckEquality,         (a, b) => a != b)
+const typecheckNumberOperator = (a: Type, b: Type) => { compilerAssert(a === IntType || a === FloatType || a === DoubleType, "Expected int, float or double type got $a", { a }); return a }
+const typecheckNumberComparison = (a: Type, b: Type) => { compilerAssert(a === IntType || a === FloatType || a === DoubleType); return BoolType }
+const typecheckEquality = (a: Type, b: Type) => { compilerAssert(a === IntType || a === FloatType || a === DoubleType); return BoolType }
+createOperator("-",  "sub", typecheckNumberOperator,   (a, b) => a - b)
+createOperator("*",  "mul", typecheckNumberOperator,   (a, b) => a * b)
+createOperator("+",  "add", typecheckNumberOperator,   (a, b) => a + b)
+createOperator("/",  "div", typecheckNumberOperator,   (a, b) => a / b)
+createOperator(">",  "gt",  typecheckNumberComparison, (a, b) => a > b)
+createOperator("<",  "lt",  typecheckNumberComparison, (a, b) => a < b)
+createOperator(">=", "gte", typecheckNumberComparison, (a, b) => a >= b)
+createOperator("<=", "lte", typecheckNumberComparison, (a, b) => a <= b)
+createOperator("==", "eq",  typecheckEquality,         (a, b) => a == b)
+createOperator("!=", "neq", typecheckEquality,         (a, b) => a != b)
 
 
 const letLocal = (vm: Vm, name: string, type: Type | null, value: Ast | null) => {
@@ -532,8 +537,6 @@ const letLocal = (vm: Vm, name: string, type: Type | null, value: Ast | null) =>
   binding.definitionCompiler = vm.context.subCompilerState
   return new LetAst(VoidType, vm.location, binding, value);
 }
-
-type CallArgs = { vm: Vm, name: string, count: number, tcount: number }
 
 function resolveScope(ctx: TaskContext, scope: Scope, name: string): Task<unknown, CompilerError> {
   let checkScope: Scope | undefined = scope;
@@ -991,28 +994,65 @@ export function compileClassTask(ctx: TaskContext, { classDef, typeArgs }: { cla
 
       classDef.compiledClasses.push(compiledClass)
 
-      const iterate = templateScope['__iterate']
-      compilerAssert(!iterate || iterate instanceof Closure)
+      const defaultMeta = () => {
+        const iterate = templateScope['__iterate']
+        compilerAssert(!iterate || iterate instanceof Closure)
 
-      const fnArgs: ArgumentTypePair[] = compiledClass.fields.map(x => 
-        [new ParseIdentifier(createAnonymousToken(x.name)), 
-        new ParseValue(createAnonymousToken(''), x.fieldType)] as ArgumentTypePair)
-      const constructorBody = new ParseConstructor(
-        createAnonymousToken(''), 
-        new ParseValue(createAnonymousToken(''), type), 
-        compiledClass.fields.map(x => new ParseIdentifier(createAnonymousToken(x.name))))
-      const decl = createAnonymousParserFunctionDecl("constructor", createAnonymousToken(''), fnArgs, constructorBody)
-      const funcDef = insertFunctionDefinition(ctx.globalCompiler, decl)
-      const constructor = new Closure(funcDef, classDef.parentScope, subCompilerState.lexicalParent!)
+        const fnArgs: ArgumentTypePair[] = compiledClass.fields.map(x => 
+          [new ParseIdentifier(createAnonymousToken(x.name)), 
+          new ParseValue(createAnonymousToken(''), x.fieldType)] as ArgumentTypePair)
+        const constructorBody = new ParseConstructor(
+          createAnonymousToken(''), 
+          new ParseValue(createAnonymousToken(''), type), 
+          compiledClass.fields.map(x => new ParseIdentifier(createAnonymousToken(x.name))))
+        const decl = createAnonymousParserFunctionDecl("constructor", createAnonymousToken(''), fnArgs, constructorBody)
+        const funcDef = insertFunctionDefinition(ctx.globalCompiler, decl)
+        const constructor = new Closure(funcDef, classDef.parentScope, subCompilerState.lexicalParent!)
 
-      Object.assign(compiledClass.metaobject, { iterate, constructor })
+        Object.assign(compiledClass.metaobject, { iterate, constructor })
+      }
 
-      return Task.of(type)
+      const returnType = type;
+      
+      if (classDef.metaClass) {
+        return (
+          TaskDef(resolveScope, classDef.parentScope, classDef.metaClass.token.value)
+          .chainFn((task, func) => {
+            if (func instanceof ExternalFunction) {
+              func.func(compiledClass);
+            } else compilerAssert(false, "Not implemented yet", { func })
+            defaultMeta()
+            return Task.of(returnType)
+          })
+        )
+      }
+      
+      defaultMeta()
+
+      return Task.of(returnType)
 
     })
   )
   
 }
+
+const insertMetaObjectPairwiseOperator = (compiledClass: CompiledClass, operatorName: string, operatorSymbol: string) => {
+  compiledClass.metaobject[operatorName] = new ExternalFunction(operatorName, VoidType, (location: SourceLocation, a: Ast, b: Ast) => {
+    const constructorArgs = compiledClass.fields.map(field => 
+      operators[operatorSymbol].func(location, 
+        new FieldAst(field.fieldType, location, a, field),
+        new FieldAst(field.fieldType, location, b, field))
+    )
+    return new ConstructorAst(compiledClass.type, location, constructorArgs)
+  })
+}
+
+export const VecTypeMetaClass = new ExternalFunction('VecType', VoidType, (compiledClass: CompiledClass) => {
+  insertMetaObjectPairwiseOperator(compiledClass, "add", "+")
+  insertMetaObjectPairwiseOperator(compiledClass, "sub", "-")
+  insertMetaObjectPairwiseOperator(compiledClass, "mul", "*")
+  insertMetaObjectPairwiseOperator(compiledClass, "div", "/")
+})
 
 const getCommonType = (types: Type[]): Type => {
   compilerAssert(types.every(x => x === types[0]), "Expected types to be the same")
@@ -1067,6 +1107,7 @@ function topLevelClassDefinitionTask(ctx: TaskContext, decl: ParserClassDecl, sc
   const classDef = new ClassDefinition(
     decl.id, decl.token.location, scope, decl.debugName,
     decl.name, decl.typeArgs, decl.body)
+  classDef.metaClass = decl.metaType
 
   g.classDefinitions.push(classDef);
 
