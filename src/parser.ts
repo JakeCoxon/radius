@@ -222,7 +222,7 @@ export const makeParser = (input: string, debugName: string) => {
     else if (match("'"))     return new ParseSymbol(parseIdentifier().token);
     else if (match("@"))     return new ParseNote(previous, parseExpr());
     else if (match("{"))     return match("|") ? parseLambda() : parseDict(previous)
-    else if (match("block")) return new ParseBlock(previous, parseColonBlockExpr('block'), null, null)
+    else if (match("block")) return new ParseBlock(previous, null, token?.value != ':' ? parseIdentifier() : null, parseColonBlockExpr('block'))
     else if (matchType("STRING")) return new ParseString(previous)
     else if (matchType("NUMBER")) return parseNumberLiteral();
     else if (matchType("SPECIALNUMBER")) return parseNumberLiteral();
@@ -451,7 +451,7 @@ export const makeParser = (input: string, debugName: string) => {
     if (match("while")) return new ParseMetaWhile(metaToken, parseWhile());
     return new ParseMeta(previous, parseStatement());
   }
-  const parseOptionalExpr = () =>  matchType("NEWLINE") ? null : trailingNewline(parseExpr())
+  const parseOptionalExpr = () => matchType("NEWLINE") ? null : trailingNewline(parseExpr())
 
   const parseImport = (importToken: Token) => {
     const module = parseIdentifier()
@@ -468,6 +468,12 @@ export const makeParser = (input: string, debugName: string) => {
     }
     return trailingNewline(new ParseImport(importToken, module, rename, idents))
   }
+  const parseBreak = (breakToken: Token) => {
+    if (matchType("NEWLINE")) return new ParseBreak(breakToken, null, null)
+    const iden = parseIdentifier()
+    if (!match("with")) return trailingNewline(new ParseBreak(breakToken, iden, null))
+    return trailingNewline(new ParseBreak(breakToken, iden, parseExpr()))
+  }
 
   const parseStatement = (): ParseNode => {
     if (match("fn"))            return parseFunctionDef();
@@ -476,7 +482,7 @@ export const makeParser = (input: string, debugName: string) => {
     else if (match("while"))    return parseWhile();
     else if (match("comptime")) return new ParseCompTime(previous, parseColonBlock("comptime"));
     else if (match("return"))   return new ParseReturn(previous, parseOptionalExpr());
-    else if (match("break"))    return new ParseBreak(previous, parseOptionalExpr());
+    else if (match("break"))    return parseBreak(previous);
     else if (match("continue")) return new ParseContinue(previous, parseOptionalExpr());
     else if (match("for"))      return parseForStatement();
     else if (match("meta"))     return parseMetaStatement(previous)

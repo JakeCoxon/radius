@@ -135,7 +135,7 @@ export class ParseLetConst extends ParseNodeType {   key = 'letconst' as const; 
 export class ParseFunction extends ParseNodeType {   key = 'function' as const;   constructor(public token: Token, public functionDecl: ParserFunctionDecl) { super();} }
 export class ParseClass extends ParseNodeType {      key = 'class' as const;      constructor(public token: Token, public classDecl: ParserClassDecl) { super();} }
 export class ParseReturn extends ParseNodeType {     key = 'return' as const;     constructor(public token: Token, public expr: ParseNode | null) { super();} }
-export class ParseBreak extends ParseNodeType {      key = 'break' as const;      constructor(public token: Token, public expr: ParseNode | null) { super();} }
+export class ParseBreak extends ParseNodeType {      key = 'break' as const;      constructor(public token: Token, public name: ParseIdentifier | null, public expr: ParseNode | null) { super();} }
 export class ParseContinue extends ParseNodeType {   key = 'continue' as const;   constructor(public token: Token, public expr: ParseNode | null) { super();} }
 export class ParseFor extends ParseNodeType {        key = 'for' as const;        constructor(public token: Token, public identifier: ParseIdentifier, public expr: ParseNode, public body: ParseNode) { super();} }
 export class ParseCast extends ParseNodeType {       key = 'cast' as const;       constructor(public token: Token, public expr: ParseNode, public as: ParseNode) { super();} }
@@ -151,7 +151,7 @@ export class ParsePostCall extends ParseNodeType {   key = 'postcall' as const; 
 export class ParseSlice extends ParseNodeType {      key = 'slice' as const;      constructor(public token: Token, public expr: ParseNode, public a: ParseNode | null, public b: ParseNode | null, public c: ParseNode | null, public isStatic: boolean) { super();} }
 export class ParseSubscript extends ParseNodeType {  key = 'subscript' as const;  constructor(public token: Token, public expr: ParseNode, public subscript: ParseNode, public isStatic: boolean) { super();} }
 export class ParseTuple extends ParseNodeType {      key = 'tuple' as const;      constructor(public token: Token, public exprs: ParseNode[]) { super();} }
-export class ParseBlock extends ParseNodeType {      key = 'block' as const;      constructor(public token: Token, public statements: ParseStatements, public breakType: BreakType | null, public name: ParseIdentifier | null) { super();} }
+export class ParseBlock extends ParseNodeType {      key = 'block' as const;      constructor(public token: Token, public breakType: BreakType | null, public name: ParseIdentifier | null, public statements: ParseStatements) { super();} }
 export class ParseImportName extends ParseNodeType { key = 'importname' as const; constructor(public token: Token, public identifier: ParseIdentifier, public rename: ParseIdentifier | null) { super();} }
 export class ParseImport extends ParseNodeType {     key = 'import' as const;     constructor(public token: Token, public module: ParseIdentifier, public rename: ParseIdentifier | null, public imports: ParseImportName[]) { super();} }
 export class ParseValue extends ParseNodeType {      key = 'value' as const;      constructor(public token: Token, public value: unknown) { super();} }
@@ -191,7 +191,7 @@ export type BytecodeInstr =
   { type: 'not' } |
   { type: 'pop' } |
   { type: 'nil' } |
-  { type: 'beginblockast', breakType: BreakType | null } |
+  { type: 'beginblockast', breakType: BreakType | null, name: string | null } |
   { type: 'endblockast' } |
   { type: 'bindingast', name: string } |
   { type: 'totype' } |
@@ -208,7 +208,7 @@ export type BytecodeInstr =
   { type: 'toast' } |
   { type: 'whileast' } |
   { type: 'returnast', r: boolean } |
-  { type: 'breakast', v: boolean } |
+  { type: 'breakast', n: boolean, v: boolean } |
   { type: 'continueast', v: boolean } |
   { type: 'listast', count: number } |
   { type: 'andast', count: number } |
@@ -689,20 +689,30 @@ export type Vm = {
 // Isn't it weird that these are similar but not the same?
 export class LabelBlock {
   public completion: ((value: unknown) => void)[] = []
+  public type: Type | null = null;
   constructor(
     public parent: LabelBlock | null,
     public name: string | null,
-    public type: BreakType | null,
+    public breakType: BreakType | null,
     public binding: Binding | null) {}
 }
 
-export const findLabelBlockByType = (labelBlock: LabelBlock | null, type: BreakType | null) => {
+export const findLabelBlockByType = (labelBlock: LabelBlock | null, breakType: BreakType | null) => {
   let block = labelBlock
   while (block) {
-    if (block.type === type) return block
+    if (block.breakType === breakType) return block
     block = block.parent;
   }
-  compilerAssert(false, type === 'continue' ? `Invalid continue outside a loop` : `Invalid ${type} outside a block`, { labelBlock })
+  compilerAssert(false, breakType === 'continue' ? `Invalid continue outside a loop` : `Invalid ${breakType} outside a block`, { labelBlock })
+}
+
+export const findLabelByBinding = (labelBlock: LabelBlock | null, binding: Binding) => {
+  let block = labelBlock
+  while (block) {
+    if (block.binding === binding) return block
+    block = block.parent;
+  }
+  compilerAssert(false, `No block with the give name found`, { labelBlock })
 }
 
 export type Logger = { log: (...args: any[]) => void }

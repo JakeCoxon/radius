@@ -285,3 +285,10 @@ test("vec", async () => {
   const test = runCompilerTest(input, { filename: 'vec' })
 
 });
+
+test("named_break", async () => {
+
+  const input = await Bun.file(`${import.meta.dir}/fixtures/named_break.rad`).text()
+  const test = runCompilerTest(input, { filename: 'named_break' })
+
+});

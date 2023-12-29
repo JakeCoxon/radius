@@ -1,4 +1,4 @@
-import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, ArgumentTypePair, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol, ScopeParentSymbol, isPlainObject, ParseLet, ParseList, ParseExpand, ParseBlock } from "./defs";
+import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, ArgumentTypePair, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol, ScopeParentSymbol, isPlainObject, ParseLet, ParseList, ParseExpand, ParseBlock, findLabelByBinding } from "./defs";
 import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, functionCompileTimeCompileTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall } from "./compiler_functions";
 import { Event, Task, TaskDef, Unit, isTask, isTaskResult, withContext } from "./tasks";
 
@@ -115,6 +115,7 @@ export const BytecodeDefault: ParseTreeTable = {
     pushBytecode(out, node.token, { type: 'return', r: !!node.expr })
   },
   break: (out, node) => {
+    compilerAssert(!node.name, "Not implemented", { node })
     if (node.expr) visitParseNode(out, node.expr);
     const instr = pushBytecode(out, node.token, { type: 'jump', address: 0 })
     findLabelBlockByType(out.state.labelBlock, "break").completion.push((address: number) => { instr.address = address })
@@ -252,8 +253,8 @@ export const BytecodeSecondOrder: ParseTreeTable = {
   },
 
   while: (out, node) => {
-    pushBytecode(out, node.token, { type: 'beginblockast', breakType: 'break' })
-    pushBytecode(out, node.token, { type: 'beginblockast', breakType: 'continue' })
+    pushBytecode(out, node.token, { type: 'beginblockast', breakType: 'break', name: null })
+    pushBytecode(out, node.token, { type: 'beginblockast', breakType: 'continue', name: null })
     visitParseNode(out, node.body);
     pushBytecode(out, node.token, { type: 'endblockast' })
     visitParseNode(out, node.condition)
@@ -262,12 +263,12 @@ export const BytecodeSecondOrder: ParseTreeTable = {
   },
   for: (out, node) => {
     const fnArgs: ArgumentTypePair[] = [[node.identifier, null]]
-    const continueBlock = new ParseBlock(node.token, new ParseStatements(node.token, [node.body]), 'continue', null)
+    const continueBlock = new ParseBlock(node.token, 'continue', null, new ParseStatements(node.token, [node.body]))
     const decl = createAnonymousParserFunctionDecl("for", node.token, fnArgs, continueBlock)
     const fn = new ParseFunction(node.token, decl)
     const iterateFn = new ParseCompilerIden(createAnonymousToken(''), 'iteratefn');
     const call = new ParseCall(node.token, iterateFn, [node.expr], [fn])
-    const breakBlock = new ParseBlock(node.token, new ParseStatements(node.token, [call]), 'break', null)
+    const breakBlock = new ParseBlock(node.token, 'break', null, new ParseStatements(node.token, [call]))
     visitParseNode(out, breakBlock)
   },
 
@@ -279,8 +280,9 @@ export const BytecodeSecondOrder: ParseTreeTable = {
     pushBytecode(out, node.token, { type: 'returnast', r: !!node.expr })
   },
   break: (out, node) => {
+    if (node.name) writeMeta(out, node.name);
     if (node.expr) visitParseNode(out, node.expr);
-    pushBytecode(out, node.token, { type: 'breakast', v: !!node.expr })
+    pushBytecode(out, node.token, { type: 'breakast', n: !!node.name, v: !!node.expr })
   },
   continue: (out, node) => {
     if (node.expr) visitParseNode(out, node.expr);
@@ -382,9 +384,9 @@ export const BytecodeSecondOrder: ParseTreeTable = {
     pushBytecode(out, node.token, { type: "popqs" });
   },
   block: (out, node) => {
-    if (node.breakType !== null) pushBytecode(out, node.token, { type: 'beginblockast', breakType: node.breakType })
+    pushBytecode(out, node.token, { type: 'beginblockast', breakType: node.breakType, name: node.name?.token.value ?? null })
     visitParseNode(out, node.statements)
-    if (node.breakType !== null) pushBytecode(out, node.token, { type: 'endblockast' })
+    pushBytecode(out, node.token, { type: 'endblockast' })
   },
 
   else: (out, node) => visitParseNode(out, node.body),
@@ -533,6 +535,7 @@ const letLocal = (vm: Vm, name: string, type: Type | null, value: Ast | null) =>
   compilerAssert(type || value);
   compilerAssert(!Object.hasOwn(vm.scope, name), `Already defined $name`, { name });
   const inferType = type || value!.type
+  compilerAssert(inferType !== VoidType, "Expected type for local $name but got $inferType", { name, inferType })
   const binding = (vm.scope[name] = new Binding(name, inferType));
   binding.definitionCompiler = vm.context.subCompilerState
   return new LetAst(VoidType, vm.location, binding, value);
@@ -610,12 +613,19 @@ const instructions: InstructionMapping = {
   numberast: (vm, { value }) => vm.stack.push(new NumberAst(IntType, vm.location, value)),
   stringast: (vm, { value }) => vm.stack.push(new StringAst(StringType, vm.location, value)),
   boolast: (vm, { value }) =>   vm.stack.push(new BoolAst(BoolType, vm.location, value)),
-  orast: (vm, { count }) =>     vm.stack.push(new OrAst(IntType, vm.location, expectAsts(popValues(vm, count)))),
-  andast: (vm, { count }) =>    vm.stack.push(new AndAst(IntType, vm.location, expectAsts(popValues(vm, count)))),
-  ifast: (vm, { f }) =>         vm.stack.push(new IfAst(IntType, vm.location, expectAst(popStack(vm)), expectAst(popStack(vm)), f ? expectAst(popStack(vm)) : null)),
+  orast: (vm, { count }) =>     vm.stack.push(new OrAst(BoolType, vm.location, expectAsts(popValues(vm, count)))),
+  andast: (vm, { count }) =>    vm.stack.push(new AndAst(BoolType, vm.location, expectAsts(popValues(vm, count)))),
   whileast: (vm) =>             vm.stack.push(new WhileAst(VoidType, vm.location, expectAst(popStack(vm)), expectAst(popStack(vm)))),
   returnast: (vm, { r }) =>     vm.stack.push(new ReturnAst(VoidType, vm.location, r ? expectAst(popStack(vm)) : null)),
   letast: (vm, { name, t, v }) => vm.stack.push(letLocal(vm, name, t ? expectType(popStack(vm)) : null, v ? expectAst(popStack(vm)) : null)),
+  ifast: (vm, { f }) => {
+    const cond = expectAst(popStack(vm))
+    const trueBody = expectAst(popStack(vm))
+    const falseBody = f ? expectAst(popStack(vm)) : null
+    const resultType = falseBody ? falseBody.type : VoidType
+    if (falseBody) compilerAssert(falseBody.type === trueBody.type, "If expression inferred to be of type $trueType but got $falseType", { trueType: trueBody.type, falseType: falseBody.type })
+    vm.stack.push(new IfAst(resultType, vm.location, cond, trueBody, falseBody))
+  },
   listast: (vm, { count }) => {
     const values = expectAsts(popValues(vm, count));
     const elementType = getCommonType(values.map(x => x.type))
@@ -693,10 +703,7 @@ const instructions: InstructionMapping = {
   fieldast: (vm, { name }) => {
     const value = expectAst(popStack(vm));
     const field = value.type.typeInfo.fields.find(x => x.name === name)
-    if (field) {
-      vm.stack.push(new FieldAst(field.fieldType, vm.location, value, field))
-      return
-    }
+    if (field) { vm.stack.push(new FieldAst(field.fieldType, vm.location, value, field)); return }
     return createMethodCall(vm, value, name, [], [])
   },
   setfieldast: (vm, { name }) => {
@@ -719,9 +726,19 @@ const instructions: InstructionMapping = {
   },
   list: (vm, { count }) => vm.stack.push(popValues(vm, count)),
   
-  breakast: (vm, { v }) => {
-    const block = findLabelBlockByType(vm.context.subCompilerState.labelBlock, 'break');
-    vm.stack.push(new BreakAst(VoidType, vm.location, block.binding!, v ? expectAst(popStack(vm)) : null))
+  breakast: (vm, { v, n }) => {
+    const expr = v ? expectAst(popStack(vm)) : null
+    const name = n ? popStack(vm) : null
+    compilerAssert(!name || name instanceof Binding, "Expected binding", { name })
+    let block: LabelBlock
+    if (name) {
+      block = findLabelByBinding(vm.context.subCompilerState.labelBlock, name as Binding)
+      if (expr) {
+        if (block.type) compilerAssert(block.type === expr.type, "Block type is already inferred to be $blockType but got an expression of type $exprType", { blockType: block.type, exprType: expr.type })
+        block.type = expr.type
+      }
+    } else block = findLabelBlockByType(vm.context.subCompilerState.labelBlock, 'break');
+    vm.stack.push(new BreakAst(VoidType, vm.location, block.binding!, expr))
   },
   continueast: (vm, { v }) => {
     const block = findLabelBlockByType(vm.context.subCompilerState.labelBlock, 'continue');
@@ -746,20 +763,23 @@ const instructions: InstructionMapping = {
     vm.stack.push(ret);
     vm.ip = vm.bytecode.code.length - 1;
   },
-  beginblockast: (vm, { breakType }) => {
+  beginblockast: (vm, { breakType, name }) => {
     const index = vm.context.subCompilerState.nextLabelBlockDepth ++
-    const binding = new Binding(`labelbreak${index}`, VoidType);
+    const binding = new Binding(`${name ?? ''}_labelbreak${index}`, VoidType);
+    if (name) vm.scope[name] = binding
     vm.context.subCompilerState.labelBlock = new LabelBlock(vm.context.subCompilerState.labelBlock, null, breakType, binding)
   },
   endblockast: (vm, {}) => {
+    const labelBlock = vm.context.subCompilerState.labelBlock;
     vm.context.subCompilerState.nextLabelBlockDepth --
-    compilerAssert(vm.context.subCompilerState.labelBlock, "Invalid endblockast")
-    const binding = vm.context.subCompilerState.labelBlock.binding
-    compilerAssert(binding, "Expected binding", { labelBlock: vm.context.subCompilerState.labelBlock })
+    compilerAssert(labelBlock, "Invalid endblockast")
+    const binding = labelBlock.binding
+    compilerAssert(binding, "Expected binding", { labelBlock: labelBlock })
     const body = expectAst(vm.stack.pop())
-    vm.stack.push(new BlockAst(body.type, vm.location, binding, body))
-    ;(vm.stack[vm.stack.length - 1] as any).breakType = vm.context.subCompilerState.labelBlock.type
-    vm.context.subCompilerState.labelBlock = vm.context.subCompilerState.labelBlock.parent
+    const blockType = labelBlock.type ?? body.type
+    if (labelBlock.type) compilerAssert(labelBlock.type === VoidType || labelBlock.type === body.type, "Block type inferred to be of type $blockType but the result expression was type $bodyType", { blockType: labelBlock.type, bodyType: body.type })
+    vm.stack.push(new BlockAst(blockType, vm.location, binding, body))
+    vm.context.subCompilerState.labelBlock = labelBlock.parent
   },
 
   binding: (vm, { name }) => {
@@ -934,8 +954,6 @@ const setScopeValueAndResolveEvents = (scope: Scope, name: string, value: unknow
 }
 
 export function compileClassTask(ctx: TaskContext, { classDef, typeArgs }: { classDef: ClassDefinition, typeArgs: unknown[] }): Task<ConcreteClassType | ParameterizedType, CompilerError> {
-  // console.log("Compiling class", classDef)
-
   const binding = new Binding(classDef.debugName, VoidType);
   const body = null as any
   compilerAssert(typeArgs.length === classDef.typeArgs.length, "Expected $x type parameters for class $classDef, got $y", { x: classDef.typeArgs.length, y: typeArgs.length, classDef })
@@ -1041,7 +1059,7 @@ const insertMetaObjectPairwiseOperator = (compiledClass: CompiledClass, operator
       compilerAssert(b.type.args.length === compiledClass.fields.length, `Expected tuple of size ${compiledClass.fields.length}, got ${b.type.args.length}`, { type: b.type })
       const constructorArgs = compiledClass.fields.map((field, i) => {
         const otherField = b.type.typeInfo.fields.find(x => x.name === `_${i+1}`)
-        compilerAssert(otherField?.fieldType === field.fieldType, `Expected type of tuple field ${i+1} to be $fieldType got $otherFieldType`, { fieldType: field.fieldType, otherFieldType: otherField.fieldType })
+        compilerAssert(otherField?.fieldType === field.fieldType, `Expected type of tuple field ${i+1} to be $fieldType got $otherFieldType`, { fieldType: field.fieldType, otherFieldType: otherField?.fieldType })
         return operators[operatorSymbol].func(location, 
           new FieldAst(field.fieldType, location, a, field),
           new FieldAst(otherField.fieldType, location, b, otherField))
