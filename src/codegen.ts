@@ -1,8 +1,4 @@
-import { Ast, AstWriterTable, Binding, BoolType, CodegenFunctionWriter, CodegenWriter, CompiledFunction, DoubleType, FileWriter, FloatType, GlobalCompilerState, IntType, Type, VoidType, compilerAssert } from "./defs";
-
-const bytecodeWriter = {
-  functions: [],
-};
+import { Ast, AstWriterTable, Binding, BoolType, CodegenFunctionWriter, CodegenWriter, CompiledFunction, DoubleType, ExternalTypeConstructor, FileWriter, FloatType, GlobalCompilerState, IntType, ParameterizedType, Type, VoidType, compilerAssert } from "./defs";
 
 const OpCodes = {
   Nil: 0,
@@ -110,13 +106,13 @@ function writeDoubleLittleEndian(arr, offset, number) {
   dataView.setFloat64(0, number, true);
   arr[offset + 0] = arrayBuffer[0];
   arr[offset + 1] = arrayBuffer[1];
-  console.log(dataView, arrayBuffer);
+  // console.log(dataView, arrayBuffer);
 }
 function writeUint32LittleEndian(arr, offset, number) {
   let dataView = new DataView(arrayBuffer.buffer, arrayBuffer.byteOffset, arrayBuffer.byteLength); // prettier-ignore
   dataView.setUint32(0, number, true);
   arr[offset] = arrayBuffer[0];
-  console.log(dataView, arrayBuffer);
+  // console.log(dataView, arrayBuffer);
 }
 const writeTypeAt = (arr, offset, type, value) => {
   compilerAssert(type === IntType);
@@ -150,42 +146,57 @@ const writeOperator = (writer: CodegenFunctionWriter, op: string, type: Type) =>
   compilerAssert(bytecode !== undefined, "No op found", { op, s });
   writeBytes(writer, bytecode);
 };
-const slotSize = (type) => {
+const slotSize = (writer: CodegenFunctionWriter, type: Type): number => {
   if (type === VoidType) return 0
   if (type === IntType) return 1
+  if (type instanceof ParameterizedType) {
+    if (writer.writer.typeSizes.get(type)) return writer.writer.typeSizes.get(type)!;
+    const s = calculateTypeSize(writer, type);
+    writer.writer.typeSizes.set(type, s)
+    return s
+  }
   compilerAssert(false, "Unexpected type $type", { type });
 };
+const calculateTypeSize = (writer: CodegenFunctionWriter, type: ParameterizedType) => {
+  if (type.typeConstructor instanceof ExternalTypeConstructor) {
+    return 1
+  }
+  return type.typeInfo.fields.reduce((acc, x) => acc + slotSize(writer, x.fieldType), 0)
+  // compilerAssert(false, "Not implemented", { t: type.typeConstructor, f: type.typeInfo.fields, x })
+}
 const writeExpr = (writer: CodegenFunctionWriter, ast: Ast) => {
   compilerAssert(astWriter[ast.key], `Not implemented ast writer '${ast.key}'`)
   astWriter[ast.key](writer, ast as any);
 };
 
 const astWriter: AstWriterTable = {
-  statements: (writer, ast) =>
+  statements: (writer, ast) => {
+    // TODO: Filter voids?
     ast.statements.forEach((expr, i) => {
       writeExpr(writer, expr);
       if (i !== ast.statements.length - 1 && expr.type !== VoidType)
-        writeBytes(writer, OpCodes.Pop, slotSize(expr.type));
-    }),
+        writeBytes(writer, OpCodes.Pop, slotSize(writer, expr.type));
+    })
+  },
   string: (writer, ast) => {
     // compilerAssert(false, "Not implemented string")
   },
   binding: (writer, ast) => {
     let index = writer.locals.get(ast.binding);
     compilerAssert(index !== undefined, "Expected binding", { ast, locals: Array.from(writer.locals.values()) });
-    compilerAssert(ast.binding.type === IntType);
+    compilerAssert(ast.binding.type !== VoidType);
     // if (index === undefined) index = 69; // closure variables
     // compilerAssert(index !== undefined, `Expected local ${ast.values[0].name}`);
     writeBytes(writer, OpCodes.GetLocalI, index);
-    console.log(ast);
+    // console.log(ast);
   },
   let: (writer, ast) => {
-    console.log('writing binding local')
+    // console.log('writing binding local')
     // const [binding, type, value] = ast.values;
     writer.locals.set(ast.binding, writer.nextLocalSlot);
-    writer.nextLocalSlot += slotSize(ast.binding.type);
-    compilerAssert(ast.value, "Not implemented with no value")
-    writeExpr(writer, ast.value);
+    writer.nextLocalSlot += slotSize(writer, ast.binding.type);
+    // TODO: No value should zero initialize?
+    if (ast.value) writeExpr(writer, ast.value);
   },
   set: (writer, ast) => {
     compilerAssert(ast.binding.type === IntType, `Not implemented type $type`, { type: ast.binding.type });
@@ -198,7 +209,7 @@ const astWriter: AstWriterTable = {
     let index = writer.constants.get(ast.value);
     if (index === undefined) {
       index = writer.nextConstantSlot;
-      writer.nextConstantSlot += slotSize(ast.type);
+      writer.nextConstantSlot += slotSize(writer, ast.type);
       writer.constants.set(ast.value, index);
       writeTypeAt(writer.constantSlots, writer.constantSlots.length, ast.type, ast.value);
     }
@@ -215,11 +226,20 @@ const astWriter: AstWriterTable = {
       patch2();
     } else patch1()
   },
+  while: (writer, ast) => {
+    const loop = writer.bytecode.length
+    writeExpr(writer, ast.condition)
+    const patch1 = writeJump(writer, OpCodes.JumpIfFalse)
+    writeExpr(writer, ast.body)
+    writeBytes(writer, OpCodes.Jump)
+    writeLittleEndian16At(writer.bytecode, loop, loop - writer.bytecode.length)
+    patch1()
+  },
   and: (writer, ast) => {
     const [a, b] = ast.args;
     writeExpr(writer, a);
     const patch = writeJump(writer, OpCodes.JumpIfFalse);
-    writeBytes(writer, OpCodes.Pop, slotSize(a.type));
+    writeBytes(writer, OpCodes.Pop, slotSize(writer, a.type));
     writeExpr(writer, b);
     patch();
   },
@@ -229,12 +249,11 @@ const astWriter: AstWriterTable = {
     const patch1 = writeJump(writer, OpCodes.JumpIfFalse);
     const patch2 = writeJump(writer, OpCodes.Jump);
     patch1();
-    writeBytes(writer, OpCodes.Pop, slotSize(a.type));
+    writeBytes(writer, OpCodes.Pop, slotSize(writer, a.type));
     writeExpr(writer, b);
     patch2();
   },
   call: (writer, ast) => {
-    console.log(ast);
     if (ast.func.name === "print") {
       compilerAssert(ast.args.length === 1);
       // compilerAssert(false, "Not implemented 'print'", { ast })
@@ -249,11 +268,14 @@ const astWriter: AstWriterTable = {
     // params.forEach(writeExpr);
     // writeBytes(OpCodes.Call, params.length);
   },
+  list: (writer, ast) => {
+    ast.args.forEach(x => writeExpr(writer, x))
+    // writeBytes(writer, OpCodes.List);
+  },
 
   usercall: (writer, ast) => {
     const index = writer.writer.functionToIndex.get(ast.binding)
     compilerAssert(index !== undefined, "Expected function");
-    console.log(ast);
     // TODO: func name
     ast.args.forEach(x => writeExpr(writer, x));
     writeBytes(writer, OpCodes.Call, index, ast.args.length);
@@ -261,21 +283,22 @@ const astWriter: AstWriterTable = {
   operator: (writer, ast) => {
     writeExpr(writer, ast.args[0]);
     writeExpr(writer, ast.args[1]);
-    console.log({ operator: ast });
     // writeBytes(operatorToBytecode(ast.values[0], ast.values[1].type));
     writeOperator(writer, ast.operator, ast.type);
   },
   not: (writer, ast) => {
     writeExpr(writer, ast.expr);
     writeBytes(writer, OpCodes.NotI);
-  }
+  },
+  void: (writer, ast) => {}
 };
 
 export const writeFinalBytecode = (globalCompilerState: GlobalCompilerState, outputWriter: FileWriter) => {
   const bytecodeWriter: CodegenWriter = {
     functions: [],
     globalCompilerState,
-    functionToIndex: new Map()
+    functionToIndex: new Map(),
+    typeSizes: new Map()
   }
   let index = 0;
   globalCompilerState.compiledFunctions.forEach(func => {
@@ -321,12 +344,11 @@ function writeLittleEndian16(arr, offset, number) {
 
 const writeFinalBytecodeFunction = (bytecodeWriter: CodegenWriter, func: CompiledFunction) => {
 
-  const argSlots = Object.values(func.concreteTypes).reduce((acc, x) => acc + slotSize(x), 0); // prettier-ignore
-  const returnSlots = slotSize(func.returnType);
+  const argSlots = Object.values(func.concreteTypes).reduce((acc, x) => acc + slotSize(writer, x), 0); // prettier-ignore
   const funcWriter: CodegenFunctionWriter = {
     writer: bytecodeWriter,
     argSlots,
-    returnSlots,
+    returnSlots: 0,
     bytecode: [],
     constants: new Map(),
     constantSlots: [],
@@ -334,13 +356,16 @@ const writeFinalBytecodeFunction = (bytecodeWriter: CodegenWriter, func: Compile
     locals: new Map(),
     nextLocalSlot: 0
   }
+  funcWriter.returnSlots = slotSize(funcWriter, func.returnType);
 
   func.argBindings.forEach((binding, i) => {
     funcWriter.locals.set(binding, funcWriter.locals.size);
   });
-  
+
   writeExpr(funcWriter, func.body);
   writeBytes(funcWriter, OpCodes.Return);
+
+  console.log(funcWriter.writer.typeSizes)
 
   bytecodeWriter.functions.push(funcWriter);
   return funcWriter

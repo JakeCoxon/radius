@@ -858,4 +858,5 @@ export type CodegenWriter = {
   functions: CodegenFunctionWriter[]
   globalCompilerState: GlobalCompilerState
   functionToIndex: Map<Binding, number>
+  typeSizes: Map<Type, number>
 }
