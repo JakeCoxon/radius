@@ -248,7 +248,7 @@ export const makeParser = (input: string, debugName: string) => {
     }
     expect(match("]"), "Expected ']' after subscript");
 
-    return new ParseSlice(sliceToken, left, l[0], l[1], l[2], isStatic)
+    return new ParseSlice(sliceToken, left, l[0], l[1], l[2] ?? null, isStatic)
   };
   const parseFunctionTypeArguments = (callToken: Token, left: ParseNode): ParseNode => {
 

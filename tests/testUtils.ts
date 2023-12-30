@@ -1,10 +1,11 @@
 import { existsSync, unlinkSync, readFileSync } from "node:fs";
-import { VecTypeMetaClass, runTopLevelTask } from "../src/compiler";
+import { runTopLevelTask } from "../src/compiler";
 import { BoolType, Closure, CompilerError, DoubleType, ExternalFunction, FloatType, GlobalCompilerState, IntType, Scope, StringType, SubCompilerState, TaskContext, VoidType, compilerAssert, createDefaultGlobalCompiler, createScope, expectMap, BuiltinTypes, ModuleLoader, SourceLocation, textColors, outputSourceLocation, TokenRoot } from "../src/defs";
 import { makeParser } from "../src/parser"
 import { Queue, TaskDef, stepQueue, withContext } from "../src//tasks";
 import { expect } from "bun:test";
 import { createCallAstFromValue, functionTemplateTypeCheckAndCompileTask } from "../src/compiler_functions";
+import { VecTypeMetaClass } from "../src/compiler_sugar";
 
 const runTestInner = (queue: Queue, input: string, filepath: string, globalCompiler: GlobalCompilerState, rootScope: Scope) => {
   const parser = makeParser(input, filepath)
@@ -12,6 +13,7 @@ const runTestInner = (queue: Queue, input: string, filepath: string, globalCompi
   const subCompilerState = new SubCompilerState('testmodule');
   const moduleScope = createScope({ ...rootScope }, undefined)
   subCompilerState.scope = moduleScope
+  subCompilerState.globalCompiler = globalCompiler
 
   const root = (
     TaskDef(runTopLevelTask, parser.rootNode, rootScope, moduleScope)

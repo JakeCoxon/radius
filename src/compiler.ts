@@ -1,6 +1,7 @@
-import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, ArgumentTypePair, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol, ScopeParentSymbol, isPlainObject, ParseLet, ParseList, ParseExpand, ParseBlock, findLabelByBinding, ParseSubscript, ParseNumber } from "./defs";
+import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, ArgumentTypePair, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol, ScopeParentSymbol, isPlainObject, ParseLet, ParseList, ParseExpand, ParseBlock, findLabelByBinding, ParseSubscript, ParseNumber, ParseQuote, ParseWhile, ParseOperator, ParseBytecode, ParseOpEq, ParseSet } from "./defs";
 import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, functionCompileTimeCompileTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall } from "./compiler_functions";
 import { Event, Task, TaskDef, Unit, isTask, isTaskResult, withContext } from "./tasks";
+import { defaultMetaFunction, expandLoopSugar, forLoopSugar, listComprehensionSugar, sliceSugar } from "./compiler_sugar";
 
 export const pushBytecode = <T extends BytecodeInstr>(out: BytecodeWriter, token: Token, instr: T) => {
   out.bytecode.locations.push(token.location);
@@ -39,8 +40,9 @@ export const BytecodeDefault: ParseTreeTable = {
   for:       (out, node) => compilerAssert(false, "Not implemented 'for' in BytecodeDefault"),
   opeq:      (out, node) => compilerAssert(false, "Not implemented 'opeq' in BytecodeDefault"),
   import:    (out, node) => compilerAssert(false, "Not implemented 'import' in BytecodeDefault"),
-  compileriden: (out, node) => compilerAssert(false, "Not implemented 'compileriden' in BytecodeDefault"),
+  bytecode:  (out, node) => compilerAssert(false, "Not implemented 'bytecode' in BytecodeDefault"),
   constructor: (out, node) => compilerAssert(false, "Not implemented 'constructor' in BytecodeDefault"),
+  compileriden: (out, node) => compilerAssert(false, "Not implemented 'compileriden' in BytecodeDefault"),
 
   value:   (out, node) => pushBytecode(out, node.token, { type: "push", value: node.value }), 
   number:  (out, node) => pushBytecode(out, node.token, { type: "push", value: Number(node.token.value) }), 
@@ -75,6 +77,10 @@ export const BytecodeDefault: ParseTreeTable = {
     visitParseNode(out, node.expr)
     visitParseNode(out, node.subscript)
     pushBytecode(out, node.token, { type: 'subscript' })
+  },
+
+  quote: (out, node) => {
+    visitParseNode({ bytecode: out.bytecode, instructionTable: BytecodeSecondOrder, globalCompilerState: out.globalCompilerState, state: out.state }, node.expr)
   },
   
   let: (out, node) => {
@@ -207,11 +213,11 @@ export const BytecodeDefault: ParseTreeTable = {
     visitParseNode(out, node.condition);
     const jump1 = pushBytecode(out, node.condition.token, { type: "jumpf", address: 0 });
     visitParseNode(out, node.body);
-    continueBlock.completion.forEach(f => f(out.bytecode.code.length))
+    continueBlock.completion.forEach(f => f(out.bytecode.code.length)) // TODO: How to do this without callbacks?
     continueBlock.completion.length = 0
     pushBytecode(out, node.condition.token, { type: "jump", address: loopTarget });
     jump1.address = out.bytecode.code.length
-    breakBlock.completion.forEach(f => f(out.bytecode.code.length))
+    breakBlock.completion.forEach(f => f(out.bytecode.code.length)) // TODO: How to do this without callbacks?
     breakBlock.completion.length = 0
     out.state.labelBlock = breakBlock.parent;
     pushBytecode(out, node.condition.token, { type: "comment", comment: "while end" });
@@ -229,6 +235,7 @@ export const BytecodeSecondOrder: ParseTreeTable = {
   nil:       (out, node) => compilerAssert(false, "Not implemented 'nil'"),
   metafor:   (out, node) => compilerAssert(false, "Not implemented 'metafor'"),
   import:    (out, node) => compilerAssert(false, "Not implemented 'import'"),
+  quote:     (out, node) => compilerAssert(false, "Not implemented 'quote'"),
   compileriden: (out, node) => compilerAssert(false, "Not implemented 'compileriden'"),
 
   constructor:  (out, node) => (visitParseNode(out, node.type), visitAll(out, node.args), pushBytecode(out, node.token, { type: 'constructorast', count: node.args.length })),
@@ -245,6 +252,11 @@ export const BytecodeSecondOrder: ParseTreeTable = {
   letconst: (out, node) => (writeMeta(out, node.value), pushBytecode(out, node.token, { type: 'letlocal', name: node.name.token.value, t: false, v: true })),
   tuple:    (out, node) => (visitAll(out, node.exprs), pushBytecode(out, node.token, { type: 'tupleast', count: node.exprs.length })),
   not:      (out, node) => (visitParseNode(out, node.expr), pushBytecode(out, node.token, { type: 'notast' })),
+
+  for:      (out, node) => forLoopSugar(out, node),
+  expand:   (out, node) => expandLoopSugar(out, node),
+  listcomp: (out, node) => listComprehensionSugar(out, node),
+  slice:    (out, node) => sliceSugar(out, node),
 
   dict: (out, node) => {
     node.pairs.forEach(([key, value]) => {
@@ -263,41 +275,10 @@ export const BytecodeSecondOrder: ParseTreeTable = {
     pushBytecode(out, node.token, { type: 'whileast' })
     pushBytecode(out, node.token, { type: 'endblockast' })
   },
-  for: (out, node) => {
-    const fnArgs: ArgumentTypePair[] = [[node.identifier, null]]
-    const continueBlock = new ParseBlock(node.token, 'continue', null, new ParseStatements(node.token, [node.body]))
-    const decl = createAnonymousParserFunctionDecl("for", node.token, fnArgs, continueBlock)
-    const fn = new ParseFunction(node.token, decl)
-    const iterateFn = new ParseCompilerIden(createAnonymousToken(''), 'iteratefn');
-    const call = new ParseCall(node.token, iterateFn, [node.expr], [fn])
-    const breakBlock = new ParseBlock(node.token, 'break', null, new ParseStatements(node.token, [call]))
-    visitParseNode(out, breakBlock)
-  },
-  expand: (out, node) => {
-    // const list = pushBytecode(out, node.token, { type: 'push', value: [] })
-    // pushBytecode(out, node.token, { type: 'letlocal', name: 'foo', t: false, v: true })
 
-    const bytecode = { code: [], locations: [] }
-    out.state.expansion = { selectors: [] }
-    visitParseNode({ bytecode, instructionTable: BytecodeSecondOrder, globalCompilerState: out.globalCompilerState, state: out.state }, node.expr)
-    // console.log(bytecode)
-    out.state.expansion.selectors.forEach(s => {
-      visitParseNode(out, s.node)
-    })
-    pushBytecode(out, node.token, { type: 'list', count: out.state.expansion.selectors.length })
-    pushBytecode(out, node.token, { type: 'letlocal', name: 'foo', t: false, v: true })
-    pushBytecode(out, node.token, { type: 'pop' })
-
-    out.bytecode.code.push(...bytecode.code)
-    out.bytecode.locations.push(...bytecode.locations)
-
-    out.state.expansion = null
-  },
-  slice: (out, node) => {
-    compilerAssert(out.state.expansion, "Expected expansion locus for slice operator")
-    const index = out.state.expansion.selectors.length
-    out.state.expansion.selectors.push({ name: "foo", node: node.expr })
-    writeMeta(out, new ParseSubscript(node.token, new ParseIdentifier(createAnonymousToken("foo")), new ParseNumber(createAnonymousToken(index)), false))
+  bytecode: (out, node) => {
+    out.bytecode.code.push(...node.bytecode.code)
+    out.bytecode.locations.push(...node.bytecode.locations)
   },
 
   function: (out, node) => {
@@ -351,18 +332,8 @@ export const BytecodeSecondOrder: ParseTreeTable = {
     compilerAssert(false, "Not implemented yet", { node })
   },
 
-  listcomp: (out, node) => {
-    let list: ParseNode = new ParseList(node.token, node.exprs)
-    if (node.exprs.length === 1 && node.exprs[0] instanceof ParseExpand) {
-      list = node.exprs[0].expr
-    }
-    const trx = node.mapping[0]
-    const reducer = node.reduce!
-    const call = new ParseCall(node.token, new ParseIdentifier(createAnonymousToken('transduce')), [list], [trx, reducer])
-    visitParseNode(out, call)
-  },
   postcall: (out, node) => {
-    compilerAssert(false, "Not implemented 'postcall' asd ", { node })
+    compilerAssert(false, "Not implemented 'postcall'", { node })
   },
 
   list: (out, node) => (visitAll(out, node.exprs), pushBytecode(out, node.token, { type: 'listast', count: node.exprs.length })),
@@ -530,6 +501,9 @@ const popStack = (vm: Vm) => {
 
 
 const operators: {[key:string]: { op: string, typeCheck: unknown, comptime: (a, b) => unknown, func: (location: SourceLocation, a: Ast, b: Ast) => Ast }} = {};
+
+export const getOperatorTable = () => operators
+
 const createOperator = (op: string, operatorName: string, typeCheck: (a: Type, b: Type) => Type, comptime: (a, b) => unknown) => {
   operators[op] = { 
     op, typeCheck, comptime,
@@ -886,8 +860,14 @@ const instructions: InstructionMapping = {
       if (metaObject['iterate']) return createCallAstFromValueAndPushValue(vm, metaObject['iterate'], [typeArgs[0]], [iterator])
       return createMethodCall(vm, iterator, 'iterate', [typeArgs[0]], [])
     }
+    if (name === 'lenfn') {
+      const expr = expectAst(values[0])
+      const metaObject = expr.type.typeInfo.metaobject;
+      if (metaObject['length']) return createCallAstFromValueAndPushValue(vm, metaObject['length'], [], [expr])
+      return createMethodCall(vm, expr, 'length', [], [])
+    }
 
-    compilerAssert(false, "No nuch compiler function $name", { name, values, typeArgs })
+    compilerAssert(false, "No such compiler function $name", { name, values, typeArgs })
   },
   operator: (vm, { name, count }) => {
     const values = popValues(vm, count);
@@ -1055,25 +1035,8 @@ export function compileClassTask(ctx: TaskContext, { classDef, typeArgs }: { cla
 
       classDef.compiledClasses.push(compiledClass)
 
-      const defaultMeta = () => {
-        const iterate = templateScope['__iterate']
-        compilerAssert(!iterate || iterate instanceof Closure)
-
-        const fnArgs: ArgumentTypePair[] = compiledClass.fields.map(x => 
-          [new ParseIdentifier(createAnonymousToken(x.name)), 
-          new ParseValue(createAnonymousToken(''), x.fieldType)] as ArgumentTypePair)
-        const constructorBody = new ParseConstructor(
-          createAnonymousToken(''), 
-          new ParseValue(createAnonymousToken(''), type), 
-          compiledClass.fields.map(x => new ParseIdentifier(createAnonymousToken(x.name))))
-        const decl = createAnonymousParserFunctionDecl("constructor", createAnonymousToken(''), fnArgs, constructorBody)
-        const funcDef = insertFunctionDefinition(ctx.globalCompiler, decl)
-        const constructor = new Closure(funcDef, classDef.parentScope, subCompilerState.lexicalParent!)
-
-        Object.assign(compiledClass.metaobject, { iterate, constructor })
-      }
-
       const returnType = type;
+      const definitionScope = classDef.parentScope
       
       if (classDef.metaClass) {
         return (
@@ -1082,13 +1045,13 @@ export function compileClassTask(ctx: TaskContext, { classDef, typeArgs }: { cla
             if (func instanceof ExternalFunction) {
               func.func(compiledClass);
             } else compilerAssert(false, "Not implemented yet", { func })
-            defaultMeta()
+            defaultMetaFunction(subCompilerState, compiledClass, definitionScope, templateScope)
             return Task.of(returnType)
           })
         )
       }
       
-      defaultMeta()
+      defaultMetaFunction(subCompilerState, compiledClass, definitionScope, templateScope)
 
       return Task.of(returnType)
 
@@ -1096,36 +1059,6 @@ export function compileClassTask(ctx: TaskContext, { classDef, typeArgs }: { cla
   )
   
 }
-
-const insertMetaObjectPairwiseOperator = (compiledClass: CompiledClass, operatorName: string, operatorSymbol: string) => {
-  compiledClass.metaobject[operatorName] = new ExternalFunction(operatorName, VoidType, (location: SourceLocation, a: Ast, b: Ast) => {
-    if (b.type instanceof ParameterizedType && b.type.typeConstructor === TupleTypeConstructor) {
-      compilerAssert(b.type.args.length === compiledClass.fields.length, `Expected tuple of size ${compiledClass.fields.length}, got ${b.type.args.length}`, { type: b.type })
-      const constructorArgs = compiledClass.fields.map((field, i) => {
-        const otherField = b.type.typeInfo.fields.find(x => x.name === `_${i+1}`)
-        compilerAssert(otherField?.fieldType === field.fieldType, `Expected type of tuple field ${i+1} to be $fieldType got $otherFieldType`, { fieldType: field.fieldType, otherFieldType: otherField?.fieldType })
-        return operators[operatorSymbol].func(location, 
-          new FieldAst(field.fieldType, location, a, field),
-          new FieldAst(otherField.fieldType, location, b, otherField))
-      })
-      return new ConstructorAst(compiledClass.type, location, constructorArgs)
-    }
-    compilerAssert(b.type === a.type, "Expected vec or tuple. got $type", { type: b.type })
-    const constructorArgs = compiledClass.fields.map(field => 
-      operators[operatorSymbol].func(location, 
-        new FieldAst(field.fieldType, location, a, field),
-        new FieldAst(field.fieldType, location, b, field))
-    )
-    return new ConstructorAst(compiledClass.type, location, constructorArgs)
-  })
-}
-
-export const VecTypeMetaClass = new ExternalFunction('VecType', VoidType, (compiledClass: CompiledClass) => {
-  insertMetaObjectPairwiseOperator(compiledClass, "add", "+")
-  insertMetaObjectPairwiseOperator(compiledClass, "sub", "-")
-  insertMetaObjectPairwiseOperator(compiledClass, "mul", "*")
-  insertMetaObjectPairwiseOperator(compiledClass, "div", "/")
-})
 
 const getCommonType = (types: Type[]): Type => {
   compilerAssert(types.every(x => x === types[0]), "Expected types to be the same")

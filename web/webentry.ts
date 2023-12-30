@@ -32,6 +32,7 @@ const runTestInner = (input: string) => {
 
   
   const subCompilerState = new SubCompilerState('moduleScope');
+  subCompilerState.globalCompiler = globalCompiler
   subCompilerState.scope = moduleScope
   const root = (
     TaskDef(runTopLevelTask, parser.rootNode, rootScope, moduleScope)
