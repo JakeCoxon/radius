@@ -203,6 +203,7 @@ export type BytecodeInstr =
   { type: 'fieldast', name: string } |
   { type: 'field', name: string } |
   { type: 'subscriptast' } |
+  { type: 'subscript' } |
   { type: 'operatorast', name: string, count: number } |
   { type: 'constructorast', count: number } |
   { type: 'toast' } |
@@ -239,7 +240,10 @@ export interface BytecodeWriter {
     locations: SourceLocation[],
   },
   state: {
-    labelBlock: LabelBlock | null
+    labelBlock: LabelBlock | null,
+    expansion: {
+      selectors: { name: string, node: ParseNode }[]
+    } | null
   }
   instructionTable: ParseTreeTable
   globalCompilerState: GlobalCompilerState // Not nice

@@ -43,7 +43,7 @@ function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, args, typ
       bytecode: func.headerPrototype.bytecode,
       instructionTable: func.headerPrototype.initialInstructionTable,
       globalCompilerState: ctx.globalCompiler,
-      state: { labelBlock: null }
+      state: { labelBlock: null, expansion: null }
     }
     // visitParseNode(out, func.headerPrototype.body);
     func.args.forEach(([name, type], i) => {

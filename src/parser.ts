@@ -281,13 +281,13 @@ export const makeParser = (input: string, debugName: string) => {
       else return left;
     }
   };
-
-  const matchEquality = () =>
-    match("<") || match("<=") || match(">") || match(">=") || match("==") || match("!=");
   
   const parseAs = () => {        let left = parseCall();     while (match("as!") || match("as"))   left = new ParseCast(previous, left, parseCall());          return left; };
   const parseFactor = () => {    let left = parseAs();       while (match("*") || match("/"))      left = new ParseOperator(previous, [left, parseAs()]);      return left; };
   const parseSum = () => {       let left = parseFactor();   while (match("+") || match("-"))      left = new ParseOperator(previous, [left, parseFactor()]);  return left; };
+
+  const matchEquality = () =>
+    match("<") || match("<=") || match(">") || match(">=") || match("==") || match("!=");
   const parseEquality = () => {  let left = parseSum();      while (matchEquality())               left = new ParseOperator(previous, [left, parseSum()]);     return left; };
 
   const parseAnd = () => {     let left = parseEquality();   while (match("and"))    left = new ParseAnd(previous, [left, parseEquality()]);  return left; };

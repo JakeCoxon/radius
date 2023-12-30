@@ -299,3 +299,10 @@ test("ifs", async () => {
   const test = runCompilerTest(input, { filename: 'ifs' })
 
 });
+
+test("expansion", async () => {
+
+  const input = await Bun.file(`${import.meta.dir}/fixtures/expansion.rad`).text()
+  const test = runCompilerTest(input, { filename: 'expansion' })
+
+});
