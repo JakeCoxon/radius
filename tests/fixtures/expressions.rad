@@ -1,9 +1,6 @@
 fn foo():
   
-  thing := 23 ifx 2 == 2 else 32
-  thing2 := (23 ifx 2 == 2 else 32)
-
-  thing = 2 if true
+  thing := 2 if true
   print(23) if true
 
   thing3 := block:
@@ -20,6 +17,28 @@ fn foo():
     else:
       32
 
+  thing123 := ifx 2 == 2: 123 else: 32
+
+  if 2 == 2: 
+    123
+  else:
+    "asdasd"
+
+  thing4 := (block: 2 + 2)
+
+  #thing4 := (block;
+  #  2 + 2;
+  #        3 + 4;
+  #              2 + 4)
+  #thing4 := block {
+  #    2 + 2
+  #    3 + 4
+  #    2 + 4
+  #  } + 2
+  
+  2
+
     
 fn main():
   meta foo()
+  foo()

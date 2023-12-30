@@ -410,10 +410,11 @@ export const BytecodeSecondOrder: ParseTreeTable = {
   },
 
   if: (out, node) => {
+    if (node.isExpr) compilerAssert(node.falseBody, "If-expression needs false branch")
     if (node.falseBody) visitParseNode(out, node.falseBody)
     visitParseNode(out, node.trueBody)
     visitParseNode(out, node.condition)
-    pushBytecode(out, node.token, { type: "ifast", f: !!node.falseBody });
+    pushBytecode(out, node.token, { type: "ifast", f: !!node.falseBody, e: node.isExpr });
   },
 
   metawhile: (out, node) => {
@@ -618,12 +619,12 @@ const instructions: InstructionMapping = {
   whileast: (vm) =>             vm.stack.push(new WhileAst(VoidType, vm.location, expectAst(popStack(vm)), expectAst(popStack(vm)))),
   returnast: (vm, { r }) =>     vm.stack.push(new ReturnAst(VoidType, vm.location, r ? expectAst(popStack(vm)) : null)),
   letast: (vm, { name, t, v }) => vm.stack.push(letLocal(vm, name, t ? expectType(popStack(vm)) : null, v ? expectAst(popStack(vm)) : null)),
-  ifast: (vm, { f }) => {
+  ifast: (vm, { f, e }) => {
     const cond = expectAst(popStack(vm))
     const trueBody = expectAst(popStack(vm))
     const falseBody = f ? expectAst(popStack(vm)) : null
     const resultType = falseBody ? falseBody.type : VoidType
-    if (falseBody) compilerAssert(falseBody.type === trueBody.type, "If expression inferred to be of type $trueType but got $falseType", { trueType: trueBody.type, falseType: falseBody.type })
+    if (e) compilerAssert(falseBody && falseBody.type === trueBody.type, "If expression inferred to be of type $trueType but got $falseType", { trueType: trueBody.type, falseType: falseBody?.type })
     vm.stack.push(new IfAst(resultType, vm.location, cond, trueBody, falseBody))
   },
   listast: (vm, { count }) => {

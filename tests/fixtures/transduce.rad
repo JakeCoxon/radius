@@ -33,7 +33,7 @@ fn filter(predicate) any:
   {|next| {
     a = next.a,
     b = next.b,
-    c = {|acc, x| next.c(acc, x) ifx predicate(x) else acc}
+    c = {|acc, x| ifx predicate(x): next.c(acc, x) else: acc}
   } }
 
 fn sum() any: 

@@ -33,7 +33,7 @@ fn foop(a: int, b: int):
 
   zzz := 3
   z : int = 2
-  x : int = z ifx 2 else 2
+  x : int = ifx 2: z else: 2
 
   print(21) if not 2 == 2
 

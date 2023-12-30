@@ -94,14 +94,14 @@ test("comptime", async () => {
   
 });
 
-test("Expressions", async () => {
+test("expressions", async () => {
 
   const input = await Bun.file(`${import.meta.dir}/fixtures/expressions.rad`).text()
   const test = runCompilerTest(input, { filename: 'expressions' })
 
 });
 
-test("Identifier error", async () => {
+test("identifier_error", async () => {
 
   const input = await Bun.file(`${import.meta.dir}/fixtures/identifier_error.rad`).text()
   const test = runCompilerTest(input, { filename: 'identifier_error', expectError: true })
@@ -109,7 +109,7 @@ test("Identifier error", async () => {
 });
 
 
-test("Identifier error2", async () => {
+test("identifier_error2", async () => {
 
   const input = await Bun.file(`${import.meta.dir}/fixtures/identifier_error2.rad`).text()
   const test = runCompilerTest(input, { filename: 'identifier_error2', expectError: true })
@@ -290,5 +290,12 @@ test("named_break", async () => {
 
   const input = await Bun.file(`${import.meta.dir}/fixtures/named_break.rad`).text()
   const test = runCompilerTest(input, { filename: 'named_break' })
+
+});
+
+test("ifs", async () => {
+
+  const input = await Bun.file(`${import.meta.dir}/fixtures/ifs.rad`).text()
+  const test = runCompilerTest(input, { filename: 'ifs' })
 
 });

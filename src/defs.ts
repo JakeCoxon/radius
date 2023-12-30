@@ -130,7 +130,7 @@ export class ParseListComp extends ParseNodeType {   key = 'listcomp' as const; 
 export class ParseOr extends ParseNodeType {         key = 'or' as const;         constructor(public token: Token, public exprs: ParseNode[]) { super();} }
 export class ParseAnd extends ParseNodeType {        key = 'and' as const;        constructor(public token: Token, public exprs: ParseNode[]) { super();} }
 export class ParseElse extends ParseNodeType {       key = 'else' as const;       constructor(public token: Token, public body: ParseNode) { super();} }
-export class ParseIf extends ParseNodeType {         key = 'if' as const;         constructor(public token: Token, public condition: ParseNode, public trueBody: ParseNode, public falseBody: ParseIf | ParseElse | null) { super();} }
+export class ParseIf extends ParseNodeType {         key = 'if' as const;         constructor(public token: Token, public isExpr: boolean, public condition: ParseNode, public trueBody: ParseNode, public falseBody: ParseIf | ParseElse | null) { super();} }
 export class ParseLetConst extends ParseNodeType {   key = 'letconst' as const;   constructor(public token: Token, public name: ParseIdentifier, public value: ParseNode) { super();} }
 export class ParseFunction extends ParseNodeType {   key = 'function' as const;   constructor(public token: Token, public functionDecl: ParserFunctionDecl) { super();} }
 export class ParseClass extends ParseNodeType {      key = 'class' as const;      constructor(public token: Token, public classDecl: ParserClassDecl) { super();} }
@@ -213,7 +213,7 @@ export type BytecodeInstr =
   { type: 'listast', count: number } |
   { type: 'andast', count: number } |
   { type: 'orast', count: number } |
-  { type: 'ifast', f: boolean } |
+  { type: 'ifast', f: boolean, e: boolean } |
   { type: 'notast' } |
   { type: 'letast', name: string, t: boolean, v: boolean } |
   { type: 'callast', name: string, count: number, tcount: number, method?: boolean } |

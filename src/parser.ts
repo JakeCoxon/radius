@@ -223,6 +223,7 @@ export const makeParser = (input: string, debugName: string) => {
     else if (match("@"))     return new ParseNote(previous, parseExpr());
     else if (match("{"))     return match("|") ? parseLambda() : parseDict(previous)
     else if (match("block")) return new ParseBlock(previous, null, token?.value != ':' ? parseIdentifier() : null, parseColonBlockExpr('block'))
+    else if (match("ifx"))   return parseIf(previous, true, "if condition")
     else if (matchType("STRING")) return new ParseString(previous)
     else if (matchType("NUMBER")) return parseNumberLiteral();
     else if (matchType("SPECIALNUMBER")) return parseNumberLiteral();
@@ -289,16 +290,7 @@ export const makeParser = (input: string, debugName: string) => {
   const parseSum = () => {       let left = parseFactor();   while (match("+") || match("-"))      left = new ParseOperator(previous, [left, parseFactor()]);  return left; };
   const parseEquality = () => {  let left = parseSum();      while (matchEquality())               left = new ParseOperator(previous, [left, parseSum()]);     return left; };
 
-  const parseIfxInner = (left) => {
-    const ifToken = previous;
-    const cond = parseEquality();
-    expect("else", `Expected 'else' after ifx condition`);
-    const right = parseEquality();
-    return new ParseIf(ifToken, cond, left, new ParseElse(previous, right))
-  }
-
-  const parseIfx = () => {     let left = parseEquality();   while (match("ifx"))    left = parseIfxInner(left);                              return left; };
-  const parseAnd = () => {     let left = parseIfx();        while (match("and"))    left = new ParseAnd(previous, [left, parseIfx()]);       return left; };
+  const parseAnd = () => {     let left = parseEquality();   while (match("and"))    left = new ParseAnd(previous, [left, parseEquality()]);  return left; };
   const parseOr = () => {      let left = parseAnd();        while (match("or"))     left = new ParseOr(previous, [left, parseAnd()]);        return left; };
 
   const parseNot = () =>   match("!") || match("not") ?   new ParseNot(previous, parseExpr()) :   parseOr();
@@ -404,13 +396,13 @@ export const makeParser = (input: string, debugName: string) => {
       parseKeywords(), parseColonBlock("class definition header"))
   };
 
-  const parseElse = () => {
-    if (match("elif")) return parseIf(previous, "elif condition")
+  const parseElse = (isExpr: boolean) => {
+    if (match("elif")) return parseIf(previous, isExpr, "elif condition")
     else if (match("else")) return new ParseElse(previous, parseColonBlock("else"))
     return null
   }
-  const parseIf = (ifToken: Token, message: string = "if condition") =>
-    new ParseIf(ifToken, parseExpr(), parseColonBlock(message), parseElse());
+  const parseIf = (ifToken: Token, isExpr: boolean, message: string = "if condition") =>
+    new ParseIf(ifToken, isExpr, parseExpr(), parseColonBlock(message), parseElse(isExpr));
 
   const parseWhile = () => new ParseWhile(previous, parseExpr(), parseColonBlock('while condition')); // prettier-ignore
 
@@ -435,7 +427,7 @@ export const makeParser = (input: string, debugName: string) => {
     if (match("..."))        expr = new ParseExpand(previous, expr);
     else if (match("while")) expr = new ParseWhileExpr(previous, parseExpr(), expr);
     else if (match("for"))   expr = new ParseForExpr(previous, parseIdentifier(), expectInExpr(), expr);
-    else if (match("if"))    expr = new ParseIf(previous, parseExpr(), expr, null);
+    else if (match("if"))    expr = new ParseIf(previous, false, parseExpr(), expr, null);
     return trailingNewline(expr);
   };
   const trailingNewline = <T>(x: T) => (expect(matchType("NEWLINE"), "Expected newline"), x);
@@ -446,7 +438,7 @@ export const makeParser = (input: string, debugName: string) => {
     new ParseFor(previous, parseIdentifier(), expectInExpr(), parseColonBlock("for list-expression"))
 
   const parseMetaStatement = (metaToken: Token) => {
-    if (match("if"))    return new ParseMetaIf(metaToken, parseIf(previous));
+    if (match("if"))    return new ParseMetaIf(metaToken, parseIf(previous, false));
     if (match("for"))   return new ParseMetaFor(metaToken, parseForStatement());
     if (match("while")) return new ParseMetaWhile(metaToken, parseWhile());
     return new ParseMeta(previous, parseStatement());
@@ -478,7 +470,7 @@ export const makeParser = (input: string, debugName: string) => {
   const parseStatement = (): ParseNode => {
     if (match("fn"))            return parseFunctionDef();
     else if (match("type"))     return parseClassDef();
-    else if (match("if"))       return parseIf(previous);
+    else if (match("if"))       return parseIf(previous, false);
     else if (match("while"))    return parseWhile();
     else if (match("comptime")) return new ParseCompTime(previous, parseColonBlock("comptime"));
     else if (match("return"))   return new ParseReturn(previous, parseOptionalExpr());
