@@ -1,7 +1,9 @@
 import { Event } from "./tasks";
 
+export type UnknownObject = {[key:string]:unknown}
+
 export const Inspect = globalThis.Bun ? Bun.inspect : (() => {
-  const Inspect = (x) => x
+  const Inspect = (x: unknown) => String(x)
   Inspect.custom = Symbol('input')
   return Inspect
 })()
@@ -12,7 +14,7 @@ export class CompilerError extends Error {
 export const createCompilerError = (message: string, info: object) => {
   const userinfo: string[] = []
   let out = message.replace(/\$([a-zA-Z]+)/g, (match, capture) => { 
-    const obj = info[capture]
+    const obj = (info as any)[capture]
     userinfo.push(capture)
     if (obj === undefined || obj === null) return makeColor(`null`)
     if (obj[Inspect.custom]) return Inspect(obj, { depth: 0, colors: true });
@@ -30,7 +32,7 @@ export function compilerAssert(expected: unknown, message: string="", info: obje
 
 const makeColor = (x) => {
   return Inspect({
-    [Inspect.custom](depth, options, inspect) {
+    [Inspect.custom](depth: any, options: any, inspect: any) {
       return options.stylize(x, 'special');
     }
   }, { colors: true })
@@ -44,7 +46,7 @@ export class Source {
 export class SourceLocation {
   static anon = new SourceLocation(-1, -1, null!)
   constructor(public line: number, public column: number, public source: Source) {}
-  [Inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth: any, options: any, inspect: any) {
     if (!this.source) return options.stylize(`[SourceLocation generated]`, 'special');
     return options.stylize(`[SourceLocation ${this.source.debugName}:${this.line}:${this.column}]`, 'special');
   }
@@ -53,7 +55,7 @@ export class SourceLocation {
 export type Token = { value: string, type: string, location: SourceLocation }
 
 export const TokenRoot = {
-  [Inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth: any, options: any, inspect: any) {
     return options.stylize(`[Token ${this.value}]`, 'string');
   }
 }
@@ -94,7 +96,7 @@ export type ParserClassDecl = {
 
 class ParseNodeType {
   key: unknown;
-  [Inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth: any, options: any, inspect: any) {
     if (depth <= 1) return options.stylize(`[${this.constructor.name}]`, 'special');
     const newOptions = Object.assign({}, options, {
       ast: true,
@@ -115,7 +117,7 @@ export class ParseString extends ParseNodeType {     key = 'string' as const;   
 export class ParseBoolean extends ParseNodeType {    key = 'boolean' as const;    constructor(public token: Token) { super();} }
 
 export class ParseStatements extends ParseNodeType { key = 'statements' as const; constructor(public token: Token, public exprs: ParseNode[]) { super();} }
-export class ParseLet extends ParseNodeType {        key = 'let' as const;        constructor(public token: Token, public name: ParseIdentifier, public type: ParseNode | null, public value: ParseNode | null) { super();} }
+export class ParseLet extends ParseNodeType {        key = 'let' as const;        constructor(public token: Token, public name: ParseIdentifier | ParseFreshIden, public type: ParseNode | null, public value: ParseNode | null) { super();} }
 export class ParseSet extends ParseNodeType {        key = 'set' as const;        constructor(public token: Token, public left: ParseNode, public value: ParseNode) { super();} }
 export class ParseOperator extends ParseNodeType {   key = 'operator' as const;   constructor(public token: Token, public exprs: ParseNode[]) { super();} }
 export class ParseNote extends ParseNodeType {       key = 'note' as const;       constructor(public token: Token, public expr: ParseNode) { super();} }
@@ -157,6 +159,7 @@ export class ParseImport extends ParseNodeType {     key = 'import' as const;   
 export class ParseValue extends ParseNodeType {      key = 'value' as const;      constructor(public token: Token, public value: unknown) { super();} }
 export class ParseQuote extends ParseNodeType {      key = 'quote' as const;      constructor(public token: Token, public expr: ParseNode) { super();} }
 export class ParseBytecode extends ParseNodeType {   key = 'bytecode' as const;   constructor(public token: Token, public bytecode: { code: BytecodeInstr[]; locations: SourceLocation[]; }) { super();} }
+export class ParseFreshIden extends ParseNodeType {  key = 'freshiden' as const; constructor(public token: Token, public freshBindingToken: FreshBindingToken) { super();} }
 export class ParseConstructor extends ParseNodeType { key = 'constructor' as const; constructor(public token: Token, public type: ParseNode, public args: ParseNode[]) { super();} }
 export class ParseCompilerIden extends ParseNodeType { key = 'compileriden' as const; constructor(public token: Token, public value: string) { super();} }
 
@@ -166,7 +169,7 @@ export type ParseNode = ParseStatements | ParseLet | ParseSet | ParseOperator | 
   ParseOpEq | ParseWhile | ParseWhileExpr | ParseForExpr | ParseNot | ParseField | ParseExpand | ParseListComp |
   ParseDict | ParsePostCall | ParseSymbol | ParseNote | ParseSlice | ParseSubscript | ParseTuple | ParseClass |
   ParseNil | ParseBoolean | ParseElse | ParseMetaIf | ParseMetaFor | ParseMetaWhile | ParseBlock | ParseImport | 
-  ParseCompilerIden | ParseValue | ParseConstructor | ParseQuote | ParseBytecode
+  ParseCompilerIden | ParseValue | ParseConstructor | ParseQuote | ParseBytecode | ParseFreshIden
 
 // Void types mean that in secondOrder compilation, the AST doesn't return an AST
 export const isParseVoid = (ast: ParseNode) => ast.key == 'letconst' || ast.key === 'function' || ast.key === 'class' || ast.key === 'comptime' || ast.key === 'metawhile';
@@ -244,8 +247,9 @@ export interface BytecodeWriter {
   state: {
     labelBlock: LabelBlock | null,
     expansion: {
-      indexIdentifier: ParseIdentifier,
-      selectors: { name: string, node: ParseNode }[]
+      indexIdentifier: ParseFreshIden,
+      iteratorListIdentifier: ParseFreshIden,
+      selectors: { node: ParseNode }[]
     } | null
   }
   instructionTable: ParseTreeTable
@@ -292,7 +296,7 @@ export class FunctionDefinition {
     public body: ParseNode | null,
     public inline: boolean) {}
 
-  [Inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth: any, options: any, inspect: any) {
     if (depth <= 1) return options.stylize(`[FunctionDefinition ${this.debugName}]`, 'special');
     const mini = depth < options.depth;
     const newOptions = Object.assign({}, options, {
@@ -311,12 +315,12 @@ export class TypeField {
     public index: number,
     public fieldType: Type,
     ) {}
-  [Inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth: any, options: any, inspect: any) {
     return options.stylize(`[TypeField ${this.index} ${inspect(this.sourceType)} ${this.name}]`, 'special');
   }
 }
 export class CompiledClass {
-  metaobject: {} = Object.create(null)
+  metaobject: UnknownObject = Object.create(null)
 
   constructor(
     public location: SourceLocation,
@@ -329,7 +333,7 @@ export class CompiledClass {
     public typeArguments: unknown[],
     public typeArgHash: unknown) {}
 
-  [Inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth: any, options: any, inspect: any) {
     if (depth <= 1 || depth <= options.depth || options.ast) return options.stylize(`[CompiledClass ${this.debugName}]`, 'special');
     return {...this}
   }
@@ -357,14 +361,14 @@ export class ClassDefinition {
       this.isTypeConstructor = typeArgs.length > 0
     }
 
-  [Inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth: any, options: any, inspect: any) {
     if (depth <= 1 || depth <= options.depth || options.ast) return options.stylize(`[ClassDefinition ${this.debugName}]`, 'special');
     return {...this}
   }
 }
 
 export class AstRoot {
-  [Inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth: any, options: any, inspect: any) {
     if (depth <= 1) return options.stylize(`[${this.constructor.name}]`, 'special');
     const newOptions = Object.assign({}, options, {
       ast: true,
@@ -404,27 +408,32 @@ export const isAst = (value: unknown): value is Ast => value instanceof AstRoot;
 
 export class Tuple {
   constructor(public values: unknown[]) {}
-  [Inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth: any, options: any, inspect: any) {
     return options.stylize(`[Tuple ...]`, 'special');
   }
 }
 
-export const isPlainObject = (obj: unknown): obj is { _object: true } => {
+export const isPlainObject = (obj: unknown): obj is UnknownObject & { _object: true } => {
   return !!obj && typeof obj === 'object' && Object.getPrototypeOf(obj) === Object.prototype
 }
 
 export class Binding {
   definitionCompiler: SubCompilerState | undefined
   constructor(public name: string, public type: Type) {}
-  [Inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth: any, options: any, inspect: any) {
     return options.stylize(`[Binding ${this.name} ${inspect(this.type)}]`, 'special');
   }
+}
+export class FreshBindingToken {
+  uniqueId = getUniqueId(this)
+  constructor(public debugName: string) {}
+  get identifier() { return `tmp_${this.debugName}_${this.uniqueId}` }
 }
 
 let uniqueId = 1000
 // const uniqueMap = new WeakMap<object, number>()
 const UNIQUE_ID = Symbol('UNIQUE_ID')
-const getUniqueId = (obj: object) => {
+const getUniqueId = (obj: any) => {
   if (obj[UNIQUE_ID] !== undefined) return obj[UNIQUE_ID]
   obj[UNIQUE_ID] = uniqueId++
   return obj[UNIQUE_ID];
@@ -441,12 +450,12 @@ export const hashValues = (values: unknown[]) => {
 
 export interface TypeInfo {
   fields: TypeField[]
-  metaobject: {}
+  metaobject: UnknownObject
 }
 export class TypeRoot {}
 export class PrimitiveType extends TypeRoot {
   constructor(public typeName: string, public typeInfo: TypeInfo) { super() }
-  [Inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth: any, options: any, inspect: any) {
     return options.stylize(`[PrimitiveType ${this.typeName}]`, 'special');
   }
 }
@@ -455,7 +464,7 @@ export class ConcreteClassType extends TypeRoot {
   constructor(public compiledClass: CompiledClass, public typeInfo: TypeInfo) { 
     super()
   }
-  [Inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth: any, options: any, inspect: any) {
     return options.stylize(`[ConcreteClassType ${this.compiledClass.debugName}]`, 'special');
   }
 }
@@ -463,7 +472,7 @@ export class ParameterizedType extends TypeRoot {
   constructor(public typeConstructor: TypeConstructor, public args: unknown[], public typeInfo: TypeInfo) {
     super()
   }
-  [Inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth: any, options: any, inspect: any) {
     if (depth <= 1 || depth < options.depth) return options.stylize(`[ParameterizedType ...]`, 'special');
     return options.stylize(`[ParameterizedType ${inspect(this.typeConstructor, { depth: 0})}, ${this.args.map(x => inspect(x)).join(', ')}]`, 'special')
   }
@@ -471,21 +480,21 @@ export class ParameterizedType extends TypeRoot {
 
 export class TypeVariable {
   constructor(public name: string) {}
-  [Inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth: any, options: any, inspect: any) {
     return options.stylize(`[TypeVariable ${this.name}]`, 'special');
   }
 }
 
 export class TypeMatcher {
   constructor(public typeConstructor: ExternalTypeConstructor | ClassDefinition, public args: unknown[], public typeVariables: TypeVariable[]) {}
-  [Inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth: any, options: any, inspect: any) {
     return options.stylize(`[TypeMatcher]`, 'special');
   }
 }
 export class ExternalTypeConstructor {
   metaobject: {} = Object.create(null)
   constructor(public typeName: string, public createType: (argTypes: Type[]) => ParameterizedType) { }
-  [Inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth: any, options: any, inspect: any) {
     return options.stylize(`[ExternalTypeConstructor ${this.typeName}]`, 'special');
   }
 }
@@ -497,7 +506,7 @@ export const isType = (type: unknown): type is Type => type instanceof TypeRoot
 export class Closure {
   constructor(public func: FunctionDefinition, public scope: Scope, public lexicalParent: SubCompilerState) {}
 
-  [Inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth: any, options: any, inspect: any) {
     if (depth <= 1) return options.stylize(`[${this.constructor.name}]`, 'special');
     const newOptions = Object.assign({}, options, {
       ast: true,
@@ -511,12 +520,12 @@ export class Closure {
 
 export const ScopeEventsSymbol = Symbol('ScopeEventsSymbol')
 export const ScopeParentSymbol = Symbol('ScopeParentSymbol')
-export type Scope = object & {
+export type Scope = UnknownObject & {
   _scope: true,
   [ScopeEventsSymbol]: {[key:string]:Event<unknown, CompilerError>}
 }
 const ScopePrototype = Object.assign(Object.create(null), {
-  [Inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth: any, options: any, inspect: any) {
     if (depth <= 1 || depth <= options.depth) return options.stylize(`[Scope]`, 'special');
     return inspect({...this})
   }
@@ -529,7 +538,7 @@ export const createScope = (obj: object, parentScope: Scope | undefined) =>
 
 export class ExternalFunction {
   constructor(public name: string, public returnType: Type, public func: Function) {}
-  [Inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth: any, options: any, inspect: any) {
     return options.stylize(`[ExternalFunction ${this.name}]`, 'special');
   }
 }
@@ -589,7 +598,7 @@ class TypeTable {
 }
 
 // Don't use directly, use type table to see if types are equal
-const typesEqual = (t1: unknown, t2: any) => {
+const typesEqual = (t1: unknown, t2: any): boolean => {
   if (t1 instanceof ExternalTypeConstructor) return t1 === t2;
   if (!isType(t1)) {
     return hashValues([t1]) === hashValues([t2])
@@ -603,9 +612,10 @@ const typesEqual = (t1: unknown, t2: any) => {
     if (t1.args.length !== t2.args.length) return false;
     return t1.args.every((x, i) => typesEqual(x, t2.args[i]))
   }
+  return false;
 }
 
-export const typeMatcherEquals = (matcher: TypeMatcher, expected: Type, output: {}) => {
+export const typeMatcherEquals = (matcher: TypeMatcher, expected: Type, output: UnknownObject) => {
   const testTypeConstructor = (matcher: ExternalTypeConstructor | ClassDefinition, expected: TypeConstructor) => {
     if (matcher instanceof ExternalTypeConstructor) {
       if (matcher === expected) return true
@@ -654,13 +664,9 @@ export const isParameterizedTypeOf = (a: Type, expected: TypeConstructor) => {
 }
 
 
-export const expectMap = (object: object, key: string, message: string, info: object = {}) => {
+export const expectMap = (object: UnknownObject, key: string, message: string, info: object = {}) => {
   compilerAssert(object[key] !== undefined, message, { object, key, ...info }); 
   return object[key];
-};
-export const expect = (expected: unknown, message: string, info: object = {}) => {
-  compilerAssert(expected !== undefined, message, info); 
-  return expected;
 };
 export const expectAll = <T>(fn: (x: unknown) => x is T, expected: unknown[], info: object = {}) => {
   compilerAssert(expected.every(fn), "Expected something got $expected", { expected, ...info }); 
@@ -729,8 +735,7 @@ export type GlobalCompilerState = {
   functionDefinitions: FunctionDefinition[],
   classDefinitions: ClassDefinition[],
   moduleLoader: ModuleLoader
-  methods: WeakMap<Scope, [TypeConstructor, Closure][]>;
-
+  methods: WeakMap<Scope, [TypeConstructor, Closure][]>,
   allWaitingEvents: Event<unknown, unknown>[],
   logger: Logger,
   typeTable: TypeTable
@@ -744,7 +749,7 @@ export interface ParsedModule {
 export class Module {
   constructor(public debugName: string, public compilerState: SubCompilerState, public parsedModule: ParsedModule) {}
 
-  [Inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth: any, options: any, inspect: any) {
     return options.stylize(`[Module ${this.debugName}]`, 'special');
   }
 }
@@ -793,7 +798,7 @@ export class SubCompilerState {
   nextLabelBlockDepth: number = 0; // Just used for debug labelling
   globalCompiler: GlobalCompilerState
 
-  [Inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth: any, options: any, inspect: any) {
     if (depth <= 1) return options.stylize(`[CompilerState ${this.debugName}]`, 'special');
     const mini = depth < options.depth;
     const newOptions = Object.assign({}, options, {
@@ -818,12 +823,12 @@ export const pushSubCompilerState = (ctx: TaskContext, obj: { debugName: string,
 
 export function bytecodeToString(bytecodeProgram: BytecodeProgram) {
   const { locations, code } = bytecodeProgram
-  const instr = (instr) => {
+  const instr = (instr: BytecodeInstr) => {
     const { type, ...args } = instr;
     const values = Object.entries(args)
       .map(([k, v]) => `${k}: ${v}`)
       .join(", ");
-    return `${type.padStart("operatorast".length, " ")}  ${values}`;
+    return `${type.padStart("beginblockast".length, " ")}  ${values}`;
   };
   return code
     .map((x, i) => `${String(`${locations[i].line}:`).padStart(5, " ")}${String(`${locations[i].column}`).padEnd(3, " ")} ${String(i).padStart(3, " ")}  ${instr(x)}`)

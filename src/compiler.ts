@@ -1,4 +1,4 @@
-import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, expect, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, ArgumentTypePair, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol, ScopeParentSymbol, isPlainObject, ParseLet, ParseList, ParseExpand, ParseBlock, findLabelByBinding, ParseSubscript, ParseNumber, ParseQuote, ParseWhile, ParseOperator, ParseBytecode, ParseOpEq, ParseSet } from "./defs";
+import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, ArgumentTypePair, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol, ScopeParentSymbol, isPlainObject, ParseLet, ParseList, ParseExpand, ParseBlock, findLabelByBinding, ParseSubscript, ParseNumber, ParseQuote, ParseWhile, ParseOperator, ParseBytecode, ParseOpEq, ParseSet, ParseFreshIden, UnknownObject } from "./defs";
 import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, functionCompileTimeCompileTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall } from "./compiler_functions";
 import { Event, Task, TaskDef, Unit, isTask, isTaskResult, withContext } from "./tasks";
 import { defaultMetaFunction, expandLoopSugar, forLoopSugar, listComprehensionSugar, sliceSugar } from "./compiler_sugar";
@@ -53,6 +53,7 @@ export const BytecodeDefault: ParseTreeTable = {
   tuple:   (out, node) => (visitAll(out, node.exprs), pushBytecode(out, node.token, { type: 'tuple', count: node.exprs.length })),
   symbol:  (out, node) => pushBytecode(out, node.token, { type: "push", value: node.token.value }),
 
+  freshiden:  (out, node) => pushBytecode(out, node.token, { type: "binding", name: node.freshBindingToken.identifier }),
   identifier: (out, node) => pushBytecode(out, node.token, { type: "binding", name: node.token.value }), 
   operator:   (out, node) => (visitAll(out, node.exprs), pushBytecode(out, node.token, { type: 'operator', name: node.token.value, count: node.exprs.length })), 
   set:        (out, node) => (visitParseNode(out, node.value), pushBytecode(out, node.token, { type: 'setlocal', name: node.left.token.value })), 
@@ -89,7 +90,8 @@ export const BytecodeDefault: ParseTreeTable = {
       writeMeta(out, node.type);
       pushBytecode(out, node.type.token, { type: 'totype' });
     }
-    pushBytecode(out, node.token, { type: 'letlocal', name: node.name.token.value, t: !!node.type, v: !!node.value }) 
+    const name = node.name instanceof ParseFreshIden ? node.name.freshBindingToken.identifier : node.name.token.value
+    pushBytecode(out, node.token, { type: 'letlocal', name, t: !!node.type, v: !!node.value }) 
   },
 
   function: (out, node) => {
@@ -266,6 +268,10 @@ export const BytecodeSecondOrder: ParseTreeTable = {
     pushBytecode(out, node.token, { type: 'dictast', count: node.pairs.length })
   },
 
+  freshiden: (out, node) => {
+    visitParseNode(out, new ParseIdentifier(createAnonymousToken(node.freshBindingToken.identifier)))
+  },
+
   while: (out, node) => {
     pushBytecode(out, node.token, { type: 'beginblockast', breakType: 'break', name: null })
     pushBytecode(out, node.token, { type: 'beginblockast', breakType: 'continue', name: null })
@@ -307,6 +313,10 @@ export const BytecodeSecondOrder: ParseTreeTable = {
       visitParseNode(out, node.value);
       pushBytecode(out, node.token, { type: 'setlocalast', name: node.left.token.value })
       return
+    } else if (node.left instanceof ParseFreshIden) {
+      visitParseNode(out, node.value);
+      pushBytecode(out, node.token, { type: 'setlocalast', name: node.left.freshBindingToken.identifier })
+      return
     } else if (node.left instanceof ParseField) {
       visitParseNode(out, node.left.expr);
       visitParseNode(out, node.value);
@@ -321,12 +331,12 @@ export const BytecodeSecondOrder: ParseTreeTable = {
     pushBytecode(out, node.token, { type: 'subscriptast' })
   },
   opeq: (out, node) => {
-    if (node.left instanceof ParseIdentifier) {
+    if (node.left instanceof ParseIdentifier || node.left instanceof ParseFreshIden) {
       visitParseNode(out, node.left)
       visitParseNode(out, node.right)
       const op = node.token.value.endsWith('=') ? node.token.value.substring(0, node.token.value.length - 1) : node.token.value
       pushBytecode(out, node.token, { type: 'operatorast', name: op, count: 2 })
-      pushBytecode(out, node.token, { type: 'setlocalast', name: node.left.token.value })
+      pushBytecode(out, node.token, { type: 'setlocalast', name: node.left instanceof ParseFreshIden ? node.left.freshBindingToken.identifier : node.left.token.value })
       return
     }
     compilerAssert(false, "Not implemented yet", { node })
@@ -347,7 +357,8 @@ export const BytecodeSecondOrder: ParseTreeTable = {
       writeMeta(out, node.type);
       pushBytecode(out, node.type.token, { type: 'totype' });
     }
-    pushBytecode(out, node.token, { type: 'letast', name: node.name.token.value, t: !!node.type, v: !!node.value })
+    const name = node.name instanceof ParseFreshIden ? node.name.freshBindingToken.identifier : node.name.token.value
+    pushBytecode(out, node.token, { type: 'letast', name, t: !!node.type, v: !!node.value })
   },
 
   call: (out, node) => {
@@ -500,11 +511,11 @@ const popStack = (vm: Vm) => {
 };
 
 
-const operators: {[key:string]: { op: string, typeCheck: unknown, comptime: (a, b) => unknown, func: (location: SourceLocation, a: Ast, b: Ast) => Ast }} = {};
+const operators: {[key:string]: { op: string, typeCheck: unknown, comptime: (a: number, b: number) => unknown, func: (location: SourceLocation, a: Ast, b: Ast) => Ast }} = {};
 
 export const getOperatorTable = () => operators
 
-const createOperator = (op: string, operatorName: string, typeCheck: (a: Type, b: Type) => Type, comptime: (a, b) => unknown) => {
+const createOperator = (op: string, operatorName: string, typeCheck: (a: Type, b: Type) => Type, comptime: (a: number, b: number) => unknown) => {
   operators[op] = { 
     op, typeCheck, comptime,
     func: (location: SourceLocation, a: Ast, b: Ast) => {
@@ -534,7 +545,7 @@ createOperator("==", "eq",  typecheckEquality,         (a, b) => a == b)
 createOperator("!=", "neq", typecheckEquality,         (a, b) => a != b)
 
 
-const letLocal = (vm: Vm, name: string, type: Type | null, value: Ast | null) => {
+const letLocalAst = (vm: Vm, name: string, type: Type | null, value: Ast | null) => {
   compilerAssert(type || value);
   compilerAssert(!Object.hasOwn(vm.scope, name), `Already defined $name`, { name });
   const inferType = type || value!.type
@@ -548,7 +559,7 @@ function resolveScope(ctx: TaskContext, scope: Scope, name: string): Task<unknow
   let checkScope: Scope | undefined = scope;
   while (checkScope) {
     if (checkScope[name] !== undefined) return Task.of(checkScope[name])
-    checkScope = checkScope[ScopeParentSymbol]
+    checkScope = (checkScope as any)[ScopeParentSymbol]
   }
 
   // TODO: This should attach events to every ancestor in the scope chain
@@ -620,7 +631,7 @@ const instructions: InstructionMapping = {
   andast: (vm, { count }) =>    vm.stack.push(new AndAst(BoolType, vm.location, expectAsts(popValues(vm, count)))),
   whileast: (vm) =>             vm.stack.push(new WhileAst(VoidType, vm.location, expectAst(popStack(vm)), expectAst(popStack(vm)))),
   returnast: (vm, { r }) =>     vm.stack.push(new ReturnAst(VoidType, vm.location, r ? expectAst(popStack(vm)) : null)),
-  letast: (vm, { name, t, v }) => vm.stack.push(letLocal(vm, name, t ? expectType(popStack(vm)) : null, v ? expectAst(popStack(vm)) : null)),
+  letast: (vm, { name, t, v }) => vm.stack.push(letLocalAst(vm, name, t ? expectType(popStack(vm)) : null, v ? expectAst(popStack(vm)) : null)),
   ifast: (vm, { f, e }) => {
     const cond = expectAst(popStack(vm))
     const trueBody = expectAst(popStack(vm))
@@ -829,12 +840,12 @@ const instructions: InstructionMapping = {
     if (!vm.stack.pop()) vm.ip = address;
   },
   letlocal: (vm, { name }) => {
-    expect(!Object.hasOwn(vm.scope, name), `$name is already in scope`, { name });
+    compilerAssert(!Object.hasOwn(vm.scope, name), `$name is already in scope`, { name });
     setScopeValueAndResolveEvents(vm.scope, name, popStack(vm))
     vm.stack.push(null) // statement expression
   },
   setlocal: (vm, { name }) => {
-    expect(Object.hasOwn(vm.scope, name), `$name not existing in scope`, { name });
+    compilerAssert(Object.hasOwn(vm.scope, name), `$name not existing in scope`, { name });
     vm.scope[name] = popStack(vm);
     vm.stack.push(null) // statement expression
   },
@@ -871,6 +882,8 @@ const instructions: InstructionMapping = {
   },
   operator: (vm, { name, count }) => {
     const values = popValues(vm, count);
+    compilerAssert(typeof values[0] === 'number', "Expected number got $v", { v: values[0] })
+    compilerAssert(typeof values[1] === 'number', "Expected number got $v", { v: values[1] })
     compilerAssert(operators[name], `Invalid operator $name`, { name });
     const operatorResult = operators[name].comptime(values[0], values[1]);
     vm.stack.push(operatorResult);
@@ -890,7 +903,7 @@ const instructions: InstructionMapping = {
   },
   tuple: (vm, { count }) => vm.stack.push(new Tuple(popValues(vm, count))),
   dict: (vm, { count }) => {
-    const dict = {}
+    const dict: UnknownObject = {}
     for (let i = 0; i < count; i++) {
       const value = popStack(vm)
       const key = popStack(vm)
@@ -1161,7 +1174,7 @@ export const importModule = (ctx: TaskContext, importNode: ParseImport, rootScop
     const tasks = importNode.imports.map((importName) => {
       const originalName = importName.token.value
       const newName = importName.rename ? importName.rename.token.value : originalName
-      const insertIntoScope = (task, result) => {
+      const insertIntoScope = (task: unknown, result: unknown) => {
         setScopeValueAndResolveEvents(existingScope, newName, result)
         return Task.success()
       }

@@ -1,6 +1,6 @@
 import { BytecodeSecondOrder, getOperatorTable, visitParseNode } from "./compiler"
 import { insertFunctionDefinition } from "./compiler_functions"
-import { ArgumentTypePair, Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken } from "./defs"
+import { ArgumentTypePair, Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden } from "./defs"
 
 export const forLoopSugar = (out: BytecodeWriter, node: ParseFor) => {
   const fnArgs: ArgumentTypePair[] = [[node.identifier, null]]
@@ -13,7 +13,7 @@ export const forLoopSugar = (out: BytecodeWriter, node: ParseFor) => {
   visitParseNode(out, breakBlock)
 }
 
-const rangeLoop = (token: Token, iden: ParseIdentifier, max: ParseNode, body: ParseNode) => {
+const rangeLoop = (token: Token, iden: ParseIdentifier | ParseFreshIden, max: ParseNode, body: ParseNode) => {
   const letNode = new ParseLet(token, iden, null, new ParseNumber(createAnonymousToken('0')))
   const loopBody = new ParseStatements(token, [body, new ParseOpEq(createAnonymousToken("+="), iden, new ParseNumber(createAnonymousToken('1')))])
   const loop = new ParseWhile(token, new ParseOperator(createAnonymousToken('<'), [iden, max]), loopBody)
@@ -21,11 +21,11 @@ const rangeLoop = (token: Token, iden: ParseIdentifier, max: ParseNode, body: Pa
 }
 const getLength = (token: Token, expr: ParseNode) => new ParseCall(token, new ParseCompilerIden(createAnonymousToken(''), 'lenfn'), [expr], [])
 
-const minAll = (token: Token, letIden: ParseIdentifier, exprs: ParseNode[]) => {
+const minAll = (token: Token, letIden: ParseIdentifier | ParseFreshIden, exprs: ParseNode[]) => {
   // Iteratively compute the minimum of a list of expressions
   const letMin = new ParseLet(token, letIden, null, exprs[0])
   const mins = exprs.flatMap((expr, i) => {
-    const tmpIden = new ParseIdentifier(createAnonymousToken('tmp' + i))
+    const tmpIden = new ParseFreshIden(token, new FreshBindingToken("min"))
     const letExpr = new ParseLet(token, tmpIden, null, expr)
     const less = new ParseOperator(createAnonymousToken('<'), [letIden, tmpIden])
     const min = new ParseIf(token, true, less, letIden, new ParseElse(token, tmpIden))
@@ -45,19 +45,21 @@ export const expandLoopSugar = (out: BytecodeWriter, node: ParseExpand) => {
   // TODO: use fresh variables
 
   const bytecode = { code: [], locations: [] }
-  const indexIdentifier = new ParseIdentifier(createAnonymousToken('i'))
-  
-  out.state.expansion = { selectors: [], indexIdentifier }
+  const indexIdentifier = new ParseFreshIden(node.token, new FreshBindingToken('i'))
+  const iteratorListIdentifier = new ParseFreshIden(node.token, new FreshBindingToken('iterator_list'))
+
+  out.state.expansion = { selectors: [], indexIdentifier, iteratorListIdentifier }
   visitParseNode({ bytecode, instructionTable: BytecodeSecondOrder, globalCompilerState: out.globalCompilerState, state: out.state }, node.expr)
 
   const getIterator = (i: number) => new ParseMeta(node.token, new ParseSubscript(node.token, 
-    new ParseIdentifier(createAnonymousToken("iterator_list")), new ParseNumber(createAnonymousToken(i)), false))
+    iteratorListIdentifier, new ParseNumber(createAnonymousToken(i)), false))
   const lengths = out.state.expansion.selectors.map((s, i) => getLength(node.token, getIterator(i)))
 
   const list = new ParseList(node.token, out.state.expansion.selectors.map(x => new ParseQuote(node.token, x.node)))
-  const letIteratorList = new ParseLet(node.token, new ParseIdentifier(createAnonymousToken('iterator_list')), null, list)
-  const letMax2 = minAll(node.token, new ParseIdentifier(createAnonymousToken('max')), lengths)
-  const loop = rangeLoop(node.token, indexIdentifier, new ParseIdentifier(createAnonymousToken('max')), new ParseBytecode(node.token, bytecode))
+  const letIteratorList = new ParseLet(node.token, iteratorListIdentifier, null, list)
+  const maxIden = new ParseFreshIden(node.token, new FreshBindingToken('max'))
+  const letMax2 = minAll(node.token, maxIden, lengths)
+  const loop = rangeLoop(node.token, indexIdentifier, maxIden, new ParseBytecode(node.token, bytecode))
 
   visitParseNode(out, new ParseStatements(node.token, [new ParseMeta(node.token, letIteratorList), ...letMax2, ...loop]))
 
@@ -70,10 +72,9 @@ export const sliceSugar = (out: BytecodeWriter, node: ParseSlice) => {
   compilerAssert(node.c === null, "Not implemented", { node })
   compilerAssert(out.state.expansion, "Expected expansion locus for slice operator")
   const index = out.state.expansion.selectors.length
-  out.state.expansion.selectors.push({ name: "iterator_list", node: node.expr })
-  const iteratorListIden = new ParseIdentifier(createAnonymousToken("iterator_list"))
+  out.state.expansion.selectors.push({ node: node.expr })
   const indexNode = new ParseNumber(createAnonymousToken(index))
-  const iteratorList = new ParseMeta(node.token, new ParseSubscript(node.token, iteratorListIden, indexNode, false))
+  const iteratorList = new ParseMeta(node.token, new ParseSubscript(node.token, out.state.expansion.iteratorListIdentifier, indexNode, false))
   const subscriptIterator = new ParseSubscript(node.token, iteratorList, out.state.expansion.indexIdentifier, false);
   visitParseNode(out, subscriptIterator)
 }

@@ -151,7 +151,7 @@ export function functionTemplateTypeCheckAndCompileTask(ctx: TaskContext, { func
     TaskDef(createBytecodeVmAndExecuteTask, subCompilerState, func.templatePrototype.bytecode!, templateScope)
     .chainFn((task, ast) => {
 
-      const concreteTypes = []
+      const concreteTypes: Type[] = []
 
       ctx.globalCompiler.logger.log(textColors.cyan(`Compiled template ${func.debugName}`))
       
@@ -329,7 +329,7 @@ export const createMethodCall = (vm: Vm, receiver: Ast, name: string, typeArgs: 
         if (found) return found[1]
       }
       if (checkScope[name] !== undefined) return checkScope[name]
-      checkScope = checkScope[ScopeParentSymbol]
+      checkScope = (checkScope as any)[ScopeParentSymbol]
     }
   })()
 
