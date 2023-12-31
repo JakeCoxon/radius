@@ -13,7 +13,7 @@ export const visitParseNode = (out: BytecodeWriter, expr: ParseNode) => {
   compilerAssert(expr.key, "$expr not found", { expr })
   const table = out.instructionTable
   const instrWriter = expectMap(table, expr.key, `Not implemented parser node $key in ${table === BytecodeDefault ? 'default' : 'second order'} table`)
-  instrWriter(out, expr)
+  instrWriter(out, expr as any)
 }
 export const visitAll = (out: BytecodeWriter, exprs: ParseNode[]) => {
   exprs.forEach(expr => visitParseNode(out, expr))

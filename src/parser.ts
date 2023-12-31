@@ -134,7 +134,7 @@ export const tokenString = (token: Token) => token.value;
 export const makeParser = (input: string, debugName: string) => {
   let token: Token | undefined;
   let previous: Token = undefined!;
-  let prevSignificantNewlines;
+  let prevSignificantNewlines = false;
 
   const source = new Source(debugName, input)
 

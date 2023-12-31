@@ -150,7 +150,7 @@ export class ParseField extends ParseNodeType {      key = 'field' as const;    
 export class ParseExpand extends ParseNodeType {     key = 'expand' as const;     constructor(public token: Token, public expr: ParseNode) { super();} }
 export class ParseDict extends ParseNodeType {       key = 'dict' as const;       constructor(public token: Token, public pairs: [ParseNode, ParseNode][]) { super();} }
 export class ParsePostCall extends ParseNodeType {   key = 'postcall' as const;   constructor(public token: Token, public expr: ParseNode, public arg: ParseNode) { super();} }
-export class ParseSlice extends ParseNodeType {      key = 'slice' as const;      constructor(public token: Token, public expr: ParseNode, public a: ParseNode | null, public b: ParseNode | null, public c: ParseNode | null, public isStatic: boolean) { super();} }
+export class ParseSlice extends ParseNodeType {      key = 'slice' as const;      constructor(public token: Token, public expr: ParseNode, public start: ParseNode | null, public end: ParseNode | null, public step: ParseNode | null, public isStatic: boolean) { super();} }
 export class ParseSubscript extends ParseNodeType {  key = 'subscript' as const;  constructor(public token: Token, public expr: ParseNode, public subscript: ParseNode, public isStatic: boolean) { super();} }
 export class ParseTuple extends ParseNodeType {      key = 'tuple' as const;      constructor(public token: Token, public exprs: ParseNode[]) { super();} }
 export class ParseBlock extends ParseNodeType {      key = 'block' as const;      constructor(public token: Token, public breakType: BreakType | null, public name: ParseIdentifier | null, public statements: ParseStatements) { super();} }
@@ -247,9 +247,8 @@ export interface BytecodeWriter {
   state: {
     labelBlock: LabelBlock | null,
     expansion: {
-      indexIdentifier: ParseFreshIden,
       iteratorListIdentifier: ParseFreshIden,
-      selectors: { node: ParseNode }[]
+      selectors: { node: ParseNode, start: ParseNode | null, end: ParseNode | null, step: ParseNode | null, indexIdentifier: ParseFreshIden }[]
     } | null
   }
   instructionTable: ParseTreeTable
@@ -664,7 +663,7 @@ export const isParameterizedTypeOf = (a: Type, expected: TypeConstructor) => {
 }
 
 
-export const expectMap = (object: UnknownObject, key: string, message: string, info: object = {}) => {
+export const expectMap = <T extends UnknownObject, K extends keyof T>(object: T, key: K, message: string, info: object = {}) => {
   compilerAssert(object[key] !== undefined, message, { object, key, ...info }); 
   return object[key];
 };
