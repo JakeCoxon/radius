@@ -396,12 +396,12 @@ export const makeParser = (input: string, debugName: string) => {
       parseKeywords(), parseColonBlock("class definition header"))
   };
 
-  const parseElse = (isExpr: boolean) => {
+  const parseElse = (isExpr: boolean): ParseIf | ParseElse | null => {
     if (match("elif")) return parseIf(previous, isExpr, "elif condition")
     else if (match("else")) return new ParseElse(previous, parseColonBlock("else"))
     return null
   }
-  const parseIf = (ifToken: Token, isExpr: boolean, message: string = "if condition") =>
+  const parseIf = (ifToken: Token, isExpr: boolean, message: string = "if condition"): ParseIf =>
     new ParseIf(ifToken, isExpr, parseExpr(), parseColonBlock(message), parseElse(isExpr));
 
   const parseWhile = () => new ParseWhile(previous, parseExpr(), parseColonBlock('while condition')); // prettier-ignore
