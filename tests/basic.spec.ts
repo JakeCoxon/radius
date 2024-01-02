@@ -304,6 +304,8 @@ test("expansion", async () => {
 
   const input = await Bun.file(`${import.meta.dir}/fixtures/expansion.rad`).text()
   const test = runCompilerTest(input, { filename: 'expansion' })
+});
+
 test("meta", async () => {
 
   const input = await Bun.file(`${import.meta.dir}/fixtures/meta.rad`).text()

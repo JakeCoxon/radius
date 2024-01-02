@@ -89,32 +89,32 @@ const writeJump = (writer: CodegenFunctionWriter, type: number) => {
   const jump = writer.bytecode.length;
   return () => writeLittleEndian16At(writer.bytecode, jump - 2, writer.bytecode.length - jump); // prettier-ignore
 };
-function writeLittleEndian16At(arr, offset, number) {
+function writeLittleEndian16At(arr: number[], offset: number, number: number) {
   compilerAssert(number < 2 ** 16);
   arr[offset] = number & 0xff; // Write the least significant byte
   arr[offset + 1] = (number >> 8) & 0xff; // Write the most significant byte
 }
-function writeLittleEndian32At(arr, offset, number) {
+function writeLittleEndian32At(arr: number[], offset: number, number: number) {
   arr[offset] = number & 0xff; // Least significant byte
   arr[offset + 1] = (number >> 8) & 0xff;
   arr[offset + 2] = (number >> 16) & 0xff;
   arr[offset + 3] = (number >> 24) & 0xff; // Most significant byte
 }
 const arrayBuffer = new Uint32Array(2);
-function writeDoubleLittleEndian(arr, offset, number) {
+function writeDoubleLittleEndian(arr: number[], offset: number, number: number) {
   let dataView = new DataView(arrayBuffer.buffer, arrayBuffer.byteOffset, arrayBuffer.byteLength); // prettier-ignore
   dataView.setFloat64(0, number, true);
   arr[offset + 0] = arrayBuffer[0];
   arr[offset + 1] = arrayBuffer[1];
   // console.log(dataView, arrayBuffer);
 }
-function writeUint32LittleEndian(arr, offset, number) {
+function writeUint32LittleEndian(arr: number[], offset: number, number: number) {
   let dataView = new DataView(arrayBuffer.buffer, arrayBuffer.byteOffset, arrayBuffer.byteLength); // prettier-ignore
   dataView.setUint32(0, number, true);
   arr[offset] = arrayBuffer[0];
   // console.log(dataView, arrayBuffer);
 }
-const writeTypeAt = (arr, offset, type, value) => {
+const writeTypeAt = (arr: number[], offset: number, type: Type, value: number) => {
   compilerAssert(type === IntType);
   writeUint32LittleEndian(arr, offset, value);
 };
@@ -141,8 +141,8 @@ const writeOperator = (writer: CodegenFunctionWriter, op: string, type: Type) =>
   else if (type === FloatType) s = 'F' 
   else if (type === DoubleType) s = 'D'
   else compilerAssert(false, "Unsupported type $type", { type })
-  compilerAssert(operatorMap[op] !== undefined);
-  const bytecode: number | undefined = OpCodes[`${operatorMap[op]}${s}`];
+  compilerAssert((operatorMap as any)[op] !== undefined);
+  const bytecode: number | undefined = (OpCodes as any)[`${(operatorMap as any)[op]}${s}`];
   compilerAssert(bytecode !== undefined, "No op found", { op, s });
   writeBytes(writer, bytecode);
 };
@@ -320,7 +320,7 @@ export const writeFinalBytecode = (globalCompilerState: GlobalCompilerState, out
   outputWriter.write(new Uint8Array(bytes))
 
   for (const f of funcWriters) {
-    const output = []
+    const output: number[] = []
     f.constants.forEach(c => {
       writeLittleEndian32(output, output.length, c)
     });
@@ -331,14 +331,14 @@ export const writeFinalBytecode = (globalCompilerState: GlobalCompilerState, out
   return bytecodeWriter
 }
 
-function writeLittleEndian32(arr, offset, number) {
+function writeLittleEndian32(arr: number[], offset: number, number: number) {
   arr[offset] = number & 0xFF;                   // Least significant byte
   arr[offset + 1] = (number >> 8) & 0xFF;
   arr[offset + 2] = (number >> 16) & 0xFF;
   arr[offset + 3] = (number >> 24) & 0xFF;       // Most significant byte
 }
-function writeLittleEndian16(arr, offset, number) {
-  arr[offset] = number & 0xFF;         // Write the least significant byte
+function writeLittleEndian16(arr: number[], offset: numnber, number: number) {
+  arr[offset] = number & 0xFF;            // Write the least significant byte
   arr[offset + 1] = (number >> 8) & 0xFF; // Write the most significant byte
 }
 
