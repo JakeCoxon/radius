@@ -1,5 +1,5 @@
 import { BytecodeDefault, BytecodeSecondOrder, compileClassTask, compileFunctionPrototype, createBytecodeVmAndExecuteTask, pushBytecode, pushGeneratedBytecode, visitParseNode } from "./compiler";
-import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, ExternalFunction, CallAst, IntType, Closure, UserCallAst, ExternalType, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition, ParseTypeCheck, ParseCall, TypeVariable, TypeMatcher, typeMatcherEquals, SourceLocation, OverloadSet, ExternalTypeConstructor, ScopeParentSymbol } from "./defs";
+import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, ExternalFunction, CallAst, IntType, Closure, UserCallAst, ExternalType, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition, ParseTypeCheck, ParseCall, TypeVariable, TypeMatcher, typeMatcherEquals, SourceLocation, OverloadSet, ExternalTypeConstructor, ScopeParentSymbol, SubCompilerState } from "./defs";
 import { Task, TaskDef, Unit } from "./tasks";
 
 
@@ -43,7 +43,7 @@ function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, args, typ
       bytecode: func.headerPrototype.bytecode,
       instructionTable: func.headerPrototype.initialInstructionTable,
       globalCompilerState: ctx.globalCompiler,
-      state: { labelBlock: null }
+      state: { labelBlock: null, expansion: null }
     }
     // visitParseNode(out, func.headerPrototype.body);
     func.args.forEach(([name, type], i) => {
@@ -151,7 +151,7 @@ export function functionTemplateTypeCheckAndCompileTask(ctx: TaskContext, { func
     TaskDef(createBytecodeVmAndExecuteTask, subCompilerState, func.templatePrototype.bytecode!, templateScope)
     .chainFn((task, ast) => {
 
-      const concreteTypes = []
+      const concreteTypes: Type[] = []
 
       ctx.globalCompiler.logger.log(textColors.cyan(`Compiled template ${func.debugName}`))
       
@@ -177,10 +177,11 @@ export type FunctionCallArg = {
   typeArgs: unknown[],
   args: Ast[],
   parentScope: Scope
+  lexicalParent: SubCompilerState
   concreteTypes: Type[]
 }
 
-function functionInlineTask(ctx: TaskContext, { location, func, typeArgs, args, parentScope, concreteTypes }: FunctionCallArg): Task<Ast, CompilerError> {
+function functionInlineTask(ctx: TaskContext, { location, func, typeArgs, args, parentScope, lexicalParent, concreteTypes }: FunctionCallArg): Task<Ast, CompilerError> {
 
   const argBindings: Binding[] = [];
   const statements: Ast[] = []
@@ -195,8 +196,10 @@ function functionInlineTask(ctx: TaskContext, { location, func, typeArgs, args, 
   
   const inlineInto = ctx.subCompilerState
   const templateScope = createScope({}, parentScope)
-  const subCompilerState = pushSubCompilerState(ctx, { debugName: `${func.debugName} inline`, lexicalParent: ctx.subCompilerState, scope: templateScope })
+  const subCompilerState = pushSubCompilerState(ctx, { debugName: `${func.debugName} inline`, lexicalParent, scope: templateScope })
   subCompilerState.inlineIntoCompiler = inlineInto
+  subCompilerState.labelBlock = lexicalParent.labelBlock
+  subCompilerState.nextLabelBlockDepth = inlineInto.nextLabelBlockDepth
   
   func.args.forEach(([iden, type], i) => {
     compilerAssert(concreteTypes[i], `Expected type`, { args, concreteTypes })
@@ -289,8 +292,8 @@ export function createCallAstFromValue(location: SourceLocation, value: unknown,
 
   if (value instanceof Closure) {
 
-    const { func, scope: parentScope } = value
-    const call: FunctionCallArg = { location, func, typeArgs, args, parentScope, concreteTypes: [] }
+    const { func, scope: parentScope, lexicalParent } = value
+    const call: FunctionCallArg = { location, func, typeArgs, args, parentScope, lexicalParent, concreteTypes: [] }
     
     if (func.inline) return (
       TaskDef(compileAndExecuteFunctionHeaderTask, call)
@@ -326,7 +329,7 @@ export const createMethodCall = (vm: Vm, receiver: Ast, name: string, typeArgs: 
         if (found) return found[1]
       }
       if (checkScope[name] !== undefined) return checkScope[name]
-      checkScope = checkScope[ScopeParentSymbol]
+      checkScope = (checkScope as any)[ScopeParentSymbol]
     }
   })()
 

@@ -1,0 +1,11 @@
+fn length!(T)(lst: List!T) @inline:
+  lst.length
+
+fn main():
+
+  lst1 := [1, 2, 3, 4, 5]
+  lst2 := [6, 7, 8, 9]
+
+  print(lst1[:] + lst1[1:]) ...
+
+  print(lst1[1:-2] + lst2[:100:2]) ...

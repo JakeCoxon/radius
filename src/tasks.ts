@@ -6,15 +6,6 @@ export function resetTaskIds() {
 
 export type Cancel = () => void;
 
-// export type Queue = {
-//   tick: number,
-//   currentTask: Task<unknown, unknown>,
-//   final: Task<unknown, unknown>,
-//   list: Task<unknown, unknown>[],
-//   completed: Task<unknown, unknown>[],
-//   enqueue: (task: Task<unknown, unknown>) => void;
-// };
-
 export interface Chainable<S, S1, F> {
   chainFrom: <F1>(task: Task<S, F>) => Task<S1, F | F1>;
 };

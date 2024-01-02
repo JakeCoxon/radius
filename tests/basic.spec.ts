@@ -94,14 +94,14 @@ test("comptime", async () => {
   
 });
 
-test("Expressions", async () => {
+test("expressions", async () => {
 
   const input = await Bun.file(`${import.meta.dir}/fixtures/expressions.rad`).text()
   const test = runCompilerTest(input, { filename: 'expressions' })
 
 });
 
-test("Identifier error", async () => {
+test("identifier_error", async () => {
 
   const input = await Bun.file(`${import.meta.dir}/fixtures/identifier_error.rad`).text()
   const test = runCompilerTest(input, { filename: 'identifier_error', expectError: true })
@@ -109,7 +109,7 @@ test("Identifier error", async () => {
 });
 
 
-test("Identifier error2", async () => {
+test("identifier_error2", async () => {
 
   const input = await Bun.file(`${import.meta.dir}/fixtures/identifier_error2.rad`).text()
   const test = runCompilerTest(input, { filename: 'identifier_error2', expectError: true })
@@ -272,6 +272,38 @@ test("list", async () => {
 
 });
 
+test("range2d", async () => {
+
+  const input = await Bun.file(`${import.meta.dir}/fixtures/range2d.rad`).text()
+  const test = runCompilerTest(input, { filename: 'range2d' })
+
+});
+
+test("vec", async () => {
+
+  const input = await Bun.file(`${import.meta.dir}/fixtures/vec.rad`).text()
+  const test = runCompilerTest(input, { filename: 'vec' })
+
+});
+
+test("named_break", async () => {
+
+  const input = await Bun.file(`${import.meta.dir}/fixtures/named_break.rad`).text()
+  const test = runCompilerTest(input, { filename: 'named_break' })
+
+});
+
+test("ifs", async () => {
+
+  const input = await Bun.file(`${import.meta.dir}/fixtures/ifs.rad`).text()
+  const test = runCompilerTest(input, { filename: 'ifs' })
+
+});
+
+test("expansion", async () => {
+
+  const input = await Bun.file(`${import.meta.dir}/fixtures/expansion.rad`).text()
+  const test = runCompilerTest(input, { filename: 'expansion' })
 test("meta", async () => {
 
   const input = await Bun.file(`${import.meta.dir}/fixtures/meta.rad`).text()

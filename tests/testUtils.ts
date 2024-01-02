@@ -5,6 +5,7 @@ import { makeParser } from "../src/parser"
 import { Queue, TaskDef, stepQueue, withContext } from "../src//tasks";
 import { expect } from "bun:test";
 import { createCallAstFromValue, functionTemplateTypeCheckAndCompileTask } from "../src/compiler_functions";
+import { VecTypeMetaClass } from "../src/compiler_sugar";
 import { writeFinalBytecode } from "../src/codegen";
 
 const runTestInner = (queue: Queue, input: string, filepath: string, globalCompiler: GlobalCompilerState, rootScope: Scope) => {
@@ -13,6 +14,7 @@ const runTestInner = (queue: Queue, input: string, filepath: string, globalCompi
   const subCompilerState = new SubCompilerState('testmodule');
   const moduleScope = createScope({ ...rootScope }, undefined)
   subCompilerState.scope = moduleScope
+  subCompilerState.globalCompiler = globalCompiler
 
   const root = (
     TaskDef(runTopLevelTask, parser.rootNode, rootScope, moduleScope)
@@ -96,6 +98,8 @@ export const runCompilerTest = (input: string, { moduleLoader, filename, expectE
       prints.push(...args)
       return args[0];
     }),
+
+    VecType: VecTypeMetaClass
   }, undefined);
 
   const queue = new Queue();

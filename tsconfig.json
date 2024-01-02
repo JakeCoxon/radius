@@ -3,6 +3,7 @@
     "lib": ["es2022"],
     "types": ["bun-types"],
     "strictNullChecks": true,
+    "noImplicitAny": true,
     "module": "ES2020"
   }
 }

@@ -1,7 +1,9 @@
 import { Event } from "./tasks";
 
+export type UnknownObject = {[key:string]:unknown}
+
 export const Inspect = globalThis.Bun ? Bun.inspect : (() => {
-  const Inspect = (x) => x
+  const Inspect = (x: unknown) => String(x)
   Inspect.custom = Symbol('input')
   return Inspect
 })()
@@ -12,7 +14,7 @@ export class CompilerError extends Error {
 export const createCompilerError = (message: string, info: object) => {
   const userinfo: string[] = []
   let out = message.replace(/\$([a-zA-Z]+)/g, (match, capture) => { 
-    const obj = info[capture]
+    const obj = (info as any)[capture]
     userinfo.push(capture)
     if (obj === undefined || obj === null) return makeColor(`null`)
     if (obj[Inspect.custom]) return Inspect(obj, { depth: 0, colors: true });
@@ -30,7 +32,7 @@ export function compilerAssert(expected: unknown, message: string="", info: obje
 
 const makeColor = (x) => {
   return Inspect({
-    [Inspect.custom](depth, options, inspect) {
+    [Inspect.custom](depth: any, options: any, inspect: any) {
       return options.stylize(x, 'special');
     }
   }, { colors: true })
@@ -44,7 +46,7 @@ export class Source {
 export class SourceLocation {
   static anon = new SourceLocation(-1, -1, null!)
   constructor(public line: number, public column: number, public source: Source) {}
-  [Inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth: any, options: any, inspect: any) {
     if (!this.source) return options.stylize(`[SourceLocation generated]`, 'special');
     return options.stylize(`[SourceLocation ${this.source.debugName}:${this.line}:${this.column}]`, 'special');
   }
@@ -53,7 +55,7 @@ export class SourceLocation {
 export type Token = { value: string, type: string, location: SourceLocation }
 
 export const TokenRoot = {
-  [Inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth: any, options: any, inspect: any) {
     return options.stylize(`[Token ${this.value}]`, 'string');
   }
 }
@@ -94,7 +96,7 @@ export type ParserClassDecl = {
 
 class ParseNodeType {
   key: unknown;
-  [Inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth: any, options: any, inspect: any) {
     if (depth <= 1) return options.stylize(`[${this.constructor.name}]`, 'special');
     const newOptions = Object.assign({}, options, {
       ast: true,
@@ -115,7 +117,7 @@ export class ParseString extends ParseNodeType {     key = 'string' as const;   
 export class ParseBoolean extends ParseNodeType {    key = 'boolean' as const;    constructor(public token: Token) { super();} }
 
 export class ParseStatements extends ParseNodeType { key = 'statements' as const; constructor(public token: Token, public exprs: ParseNode[]) { super();} }
-export class ParseLet extends ParseNodeType {        key = 'let' as const;        constructor(public token: Token, public name: ParseIdentifier, public type: ParseNode | null, public value: ParseNode | null) { super();} }
+export class ParseLet extends ParseNodeType {        key = 'let' as const;        constructor(public token: Token, public name: ParseIdentifier | ParseFreshIden, public type: ParseNode | null, public value: ParseNode | null) { super();} }
 export class ParseSet extends ParseNodeType {        key = 'set' as const;        constructor(public token: Token, public left: ParseNode, public value: ParseNode) { super();} }
 export class ParseOperator extends ParseNodeType {   key = 'operator' as const;   constructor(public token: Token, public exprs: ParseNode[]) { super();} }
 export class ParseNote extends ParseNodeType {       key = 'note' as const;       constructor(public token: Token, public expr: ParseNode) { super();} }
@@ -130,12 +132,12 @@ export class ParseListComp extends ParseNodeType {   key = 'listcomp' as const; 
 export class ParseOr extends ParseNodeType {         key = 'or' as const;         constructor(public token: Token, public exprs: ParseNode[]) { super();} }
 export class ParseAnd extends ParseNodeType {        key = 'and' as const;        constructor(public token: Token, public exprs: ParseNode[]) { super();} }
 export class ParseElse extends ParseNodeType {       key = 'else' as const;       constructor(public token: Token, public body: ParseNode) { super();} }
-export class ParseIf extends ParseNodeType {         key = 'if' as const;         constructor(public token: Token, public condition: ParseNode, public trueBody: ParseNode, public falseBody: ParseIf | ParseElse | null) { super();} }
+export class ParseIf extends ParseNodeType {         key = 'if' as const;         constructor(public token: Token, public isExpr: boolean, public condition: ParseNode, public trueBody: ParseNode, public falseBody: ParseIf | ParseElse | null) { super();} }
 export class ParseLetConst extends ParseNodeType {   key = 'letconst' as const;   constructor(public token: Token, public name: ParseIdentifier, public value: ParseNode) { super();} }
 export class ParseFunction extends ParseNodeType {   key = 'function' as const;   constructor(public token: Token, public functionDecl: ParserFunctionDecl) { super();} }
 export class ParseClass extends ParseNodeType {      key = 'class' as const;      constructor(public token: Token, public classDecl: ParserClassDecl) { super();} }
 export class ParseReturn extends ParseNodeType {     key = 'return' as const;     constructor(public token: Token, public expr: ParseNode | null) { super();} }
-export class ParseBreak extends ParseNodeType {      key = 'break' as const;      constructor(public token: Token, public expr: ParseNode | null) { super();} }
+export class ParseBreak extends ParseNodeType {      key = 'break' as const;      constructor(public token: Token, public name: ParseIdentifier | null, public expr: ParseNode | null) { super();} }
 export class ParseContinue extends ParseNodeType {   key = 'continue' as const;   constructor(public token: Token, public expr: ParseNode | null) { super();} }
 export class ParseFor extends ParseNodeType {        key = 'for' as const;        constructor(public token: Token, public identifier: ParseIdentifier, public expr: ParseNode, public body: ParseNode) { super();} }
 export class ParseCast extends ParseNodeType {       key = 'cast' as const;       constructor(public token: Token, public expr: ParseNode, public as: ParseNode) { super();} }
@@ -148,13 +150,16 @@ export class ParseField extends ParseNodeType {      key = 'field' as const;    
 export class ParseExpand extends ParseNodeType {     key = 'expand' as const;     constructor(public token: Token, public expr: ParseNode) { super();} }
 export class ParseDict extends ParseNodeType {       key = 'dict' as const;       constructor(public token: Token, public pairs: [ParseNode, ParseNode][]) { super();} }
 export class ParsePostCall extends ParseNodeType {   key = 'postcall' as const;   constructor(public token: Token, public expr: ParseNode, public arg: ParseNode) { super();} }
-export class ParseSlice extends ParseNodeType {      key = 'slice' as const;      constructor(public token: Token, public expr: ParseNode, public a: ParseNode | null, public b: ParseNode | null, public c: ParseNode | null, public isStatic: boolean) { super();} }
+export class ParseSlice extends ParseNodeType {      key = 'slice' as const;      constructor(public token: Token, public expr: ParseNode, public start: ParseNode | null, public end: ParseNode | null, public step: ParseNode | null, public isStatic: boolean) { super();} }
 export class ParseSubscript extends ParseNodeType {  key = 'subscript' as const;  constructor(public token: Token, public expr: ParseNode, public subscript: ParseNode, public isStatic: boolean) { super();} }
 export class ParseTuple extends ParseNodeType {      key = 'tuple' as const;      constructor(public token: Token, public exprs: ParseNode[]) { super();} }
-export class ParseBlock extends ParseNodeType {      key = 'block' as const;      constructor(public token: Token, public statements: ParseStatements) { super();} }
+export class ParseBlock extends ParseNodeType {      key = 'block' as const;      constructor(public token: Token, public breakType: BreakType | null, public name: ParseIdentifier | null, public statements: ParseStatements) { super();} }
 export class ParseImportName extends ParseNodeType { key = 'importname' as const; constructor(public token: Token, public identifier: ParseIdentifier, public rename: ParseIdentifier | null) { super();} }
 export class ParseImport extends ParseNodeType {     key = 'import' as const;     constructor(public token: Token, public module: ParseIdentifier, public rename: ParseIdentifier | null, public imports: ParseImportName[]) { super();} }
 export class ParseValue extends ParseNodeType {      key = 'value' as const;      constructor(public token: Token, public value: unknown) { super();} }
+export class ParseQuote extends ParseNodeType {      key = 'quote' as const;      constructor(public token: Token, public expr: ParseNode) { super();} }
+export class ParseBytecode extends ParseNodeType {   key = 'bytecode' as const;   constructor(public token: Token, public bytecode: { code: BytecodeInstr[]; locations: SourceLocation[]; }) { super();} }
+export class ParseFreshIden extends ParseNodeType {  key = 'freshiden' as const; constructor(public token: Token, public freshBindingToken: FreshBindingToken) { super();} }
 export class ParseConstructor extends ParseNodeType { key = 'constructor' as const; constructor(public token: Token, public type: ParseNode, public args: ParseNode[]) { super();} }
 export class ParseCompilerIden extends ParseNodeType { key = 'compileriden' as const; constructor(public token: Token, public value: string) { super();} }
 
@@ -164,11 +169,13 @@ export type ParseNode = ParseStatements | ParseLet | ParseSet | ParseOperator | 
   ParseOpEq | ParseWhile | ParseWhileExpr | ParseForExpr | ParseNot | ParseField | ParseExpand | ParseListComp |
   ParseDict | ParsePostCall | ParseSymbol | ParseNote | ParseSlice | ParseSubscript | ParseTuple | ParseClass |
   ParseNil | ParseBoolean | ParseElse | ParseMetaIf | ParseMetaFor | ParseMetaWhile | ParseBlock | ParseImport | 
-  ParseCompilerIden | ParseValue | ParseConstructor
+  ParseCompilerIden | ParseValue | ParseConstructor | ParseQuote | ParseBytecode | ParseFreshIden
 
 // Void types mean that in secondOrder compilation, the AST doesn't return an AST
 export const isParseVoid = (ast: ParseNode) => ast.key == 'letconst' || ast.key === 'function' || ast.key === 'class' || ast.key === 'comptime' || ast.key === 'metawhile';
 export const isParseNode = (ast: unknown): ast is ParseNode => ast instanceof ParseNodeType
+
+export type BreakType = 'break' | 'continue'
 
 export type BytecodeInstr = 
   { type: 'comment', comment: string } |
@@ -189,8 +196,8 @@ export type BytecodeInstr =
   { type: 'not' } |
   { type: 'pop' } |
   { type: 'nil' } |
-  { type: 'beginblockast', breakType: 'break' | 'continue' | null } |
-  { type: 'endblockast'  } |
+  { type: 'beginblockast', breakType: BreakType | null, name: string | null } |
+  { type: 'endblockast' } |
   { type: 'bindingast', name: string } |
   { type: 'totype' } |
   { type: 'numberast', value: number } |
@@ -201,17 +208,18 @@ export type BytecodeInstr =
   { type: 'fieldast', name: string } |
   { type: 'field', name: string } |
   { type: 'subscriptast' } |
+  { type: 'subscript' } |
   { type: 'operatorast', name: string, count: number } |
   { type: 'constructorast', count: number } |
   { type: 'toast' } |
   { type: 'whileast' } |
   { type: 'returnast', r: boolean } |
-  { type: 'breakast', v: boolean } |
+  { type: 'breakast', n: boolean, v: boolean } |
   { type: 'continueast', v: boolean } |
   { type: 'listast', count: number } |
   { type: 'andast', count: number } |
   { type: 'orast', count: number } |
-  { type: 'ifast', f: boolean } |
+  { type: 'ifast', f: boolean, e: boolean } |
   { type: 'notast' } |
   { type: 'letast', name: string, t: boolean, v: boolean } |
   { type: 'callast', name: string, count: number, tcount: number, method?: boolean } |
@@ -237,7 +245,11 @@ export interface BytecodeWriter {
     locations: SourceLocation[],
   },
   state: {
-    labelBlock: LabelBlock | null
+    labelBlock: LabelBlock | null,
+    expansion: {
+      iteratorListIdentifier: ParseFreshIden,
+      selectors: { node: ParseNode, start: ParseNode | null, end: ParseNode | null, step: ParseNode | null, indexIdentifier: ParseFreshIden }[]
+    } | null
   }
   instructionTable: ParseTreeTable
   globalCompilerState: GlobalCompilerState // Not nice
@@ -283,7 +295,7 @@ export class FunctionDefinition {
     public body: ParseNode | null,
     public inline: boolean) {}
 
-  [Inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth: any, options: any, inspect: any) {
     if (depth <= 1) return options.stylize(`[FunctionDefinition ${this.debugName}]`, 'special');
     const mini = depth < options.depth;
     const newOptions = Object.assign({}, options, {
@@ -302,12 +314,12 @@ export class TypeField {
     public index: number,
     public fieldType: Type,
     ) {}
-  [Inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth: any, options: any, inspect: any) {
     return options.stylize(`[TypeField ${this.index} ${inspect(this.sourceType)} ${this.name}]`, 'special');
   }
 }
 export class CompiledClass {
-  metaobject: {} = Object.create(null)
+  metaobject: UnknownObject = Object.create(null)
 
   constructor(
     public location: SourceLocation,
@@ -320,7 +332,7 @@ export class CompiledClass {
     public typeArguments: unknown[],
     public typeArgHash: unknown) {}
 
-  [Inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth: any, options: any, inspect: any) {
     if (depth <= 1 || depth <= options.depth || options.ast) return options.stylize(`[CompiledClass ${this.debugName}]`, 'special');
     return {...this}
   }
@@ -332,6 +344,8 @@ export class ClassDefinition {
 
   compiledClasses: CompiledClass[] = []
   concreteType: ConcreteClassType | undefined
+
+  metaClass: ParseIdentifier | null
 
   isTypeConstructor: boolean = false
 
@@ -346,14 +360,14 @@ export class ClassDefinition {
       this.isTypeConstructor = typeArgs.length > 0
     }
 
-  [Inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth: any, options: any, inspect: any) {
     if (depth <= 1 || depth <= options.depth || options.ast) return options.stylize(`[ClassDefinition ${this.debugName}]`, 'special');
     return {...this}
   }
 }
 
 export class AstRoot {
-  [Inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth: any, options: any, inspect: any) {
     if (depth <= 1) return options.stylize(`[${this.constructor.name}]`, 'special');
     const newOptions = Object.assign({}, options, {
       ast: true,
@@ -394,27 +408,32 @@ export const isAst = (value: unknown): value is Ast => value instanceof AstRoot;
 
 export class Tuple {
   constructor(public values: unknown[]) {}
-  [Inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth: any, options: any, inspect: any) {
     return options.stylize(`[Tuple ...]`, 'special');
   }
 }
 
-export const isPlainObject = (obj: unknown): obj is { _object: true } => {
+export const isPlainObject = (obj: unknown): obj is UnknownObject & { _object: true } => {
   return !!obj && typeof obj === 'object' && Object.getPrototypeOf(obj) === Object.prototype
 }
 
 export class Binding {
   definitionCompiler: SubCompilerState | undefined
   constructor(public name: string, public type: Type) {}
-  [Inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth: any, options: any, inspect: any) {
     return options.stylize(`[Binding ${this.name} ${inspect(this.type)}]`, 'special');
   }
+}
+export class FreshBindingToken {
+  uniqueId = getUniqueId(this)
+  constructor(public debugName: string) {}
+  get identifier() { return `tmp_${this.debugName}_${this.uniqueId}` }
 }
 
 let uniqueId = 1000
 // const uniqueMap = new WeakMap<object, number>()
 const UNIQUE_ID = Symbol('UNIQUE_ID')
-const getUniqueId = (obj: object) => {
+const getUniqueId = (obj: any) => {
   if (obj[UNIQUE_ID] !== undefined) return obj[UNIQUE_ID]
   obj[UNIQUE_ID] = uniqueId++
   return obj[UNIQUE_ID];
@@ -431,12 +450,12 @@ export const hashValues = (values: unknown[]) => {
 
 export interface TypeInfo {
   fields: TypeField[]
-  metaobject: {}
+  metaobject: UnknownObject
 }
 export class TypeRoot {}
 export class PrimitiveType extends TypeRoot {
   constructor(public typeName: string, public typeInfo: TypeInfo) { super() }
-  [Inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth: any, options: any, inspect: any) {
     return options.stylize(`[PrimitiveType ${this.typeName}]`, 'special');
   }
 }
@@ -445,7 +464,7 @@ export class ConcreteClassType extends TypeRoot {
   constructor(public compiledClass: CompiledClass, public typeInfo: TypeInfo) { 
     super()
   }
-  [Inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth: any, options: any, inspect: any) {
     return options.stylize(`[ConcreteClassType ${this.compiledClass.debugName}]`, 'special');
   }
 }
@@ -453,7 +472,7 @@ export class ParameterizedType extends TypeRoot {
   constructor(public typeConstructor: TypeConstructor, public args: unknown[], public typeInfo: TypeInfo) {
     super()
   }
-  [Inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth: any, options: any, inspect: any) {
     if (depth <= 1 || depth < options.depth) return options.stylize(`[ParameterizedType ...]`, 'special');
     return options.stylize(`[ParameterizedType ${inspect(this.typeConstructor, { depth: 0})}, ${this.args.map(x => inspect(x)).join(', ')}]`, 'special')
   }
@@ -461,21 +480,21 @@ export class ParameterizedType extends TypeRoot {
 
 export class TypeVariable {
   constructor(public name: string) {}
-  [Inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth: any, options: any, inspect: any) {
     return options.stylize(`[TypeVariable ${this.name}]`, 'special');
   }
 }
 
 export class TypeMatcher {
   constructor(public typeConstructor: ExternalTypeConstructor | ClassDefinition, public args: unknown[], public typeVariables: TypeVariable[]) {}
-  [Inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth: any, options: any, inspect: any) {
     return options.stylize(`[TypeMatcher]`, 'special');
   }
 }
 export class ExternalTypeConstructor {
   metaobject: {} = Object.create(null)
   constructor(public typeName: string, public createType: (argTypes: Type[]) => ParameterizedType) { }
-  [Inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth: any, options: any, inspect: any) {
     return options.stylize(`[ExternalTypeConstructor ${this.typeName}]`, 'special');
   }
 }
@@ -485,9 +504,9 @@ export type TypeConstructor = ExternalTypeConstructor | ClassDefinition // Type 
 export const isType = (type: unknown): type is Type => type instanceof TypeRoot
 
 export class Closure {
-  constructor(public func: FunctionDefinition, public scope: Scope) {}
+  constructor(public func: FunctionDefinition, public scope: Scope, public lexicalParent: SubCompilerState) {}
 
-  [Inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth: any, options: any, inspect: any) {
     if (depth <= 1) return options.stylize(`[${this.constructor.name}]`, 'special');
     const newOptions = Object.assign({}, options, {
       ast: true,
@@ -501,12 +520,12 @@ export class Closure {
 
 export const ScopeEventsSymbol = Symbol('ScopeEventsSymbol')
 export const ScopeParentSymbol = Symbol('ScopeParentSymbol')
-export type Scope = object & {
+export type Scope = UnknownObject & {
   _scope: true,
   [ScopeEventsSymbol]: {[key:string]:Event<unknown, CompilerError>}
 }
 const ScopePrototype = Object.assign(Object.create(null), {
-  [Inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth: any, options: any, inspect: any) {
     if (depth <= 1 || depth <= options.depth) return options.stylize(`[Scope]`, 'special');
     return inspect({...this})
   }
@@ -519,7 +538,7 @@ export const createScope = (obj: object, parentScope: Scope | undefined) =>
 
 export class ExternalFunction {
   constructor(public name: string, public returnType: Type, public func: Function) {}
-  [Inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth: any, options: any, inspect: any) {
     return options.stylize(`[ExternalFunction ${this.name}]`, 'special');
   }
 }
@@ -579,7 +598,7 @@ class TypeTable {
 }
 
 // Don't use directly, use type table to see if types are equal
-const typesEqual = (t1: unknown, t2: any) => {
+const typesEqual = (t1: unknown, t2: any): boolean => {
   if (t1 instanceof ExternalTypeConstructor) return t1 === t2;
   if (!isType(t1)) {
     return hashValues([t1]) === hashValues([t2])
@@ -593,9 +612,10 @@ const typesEqual = (t1: unknown, t2: any) => {
     if (t1.args.length !== t2.args.length) return false;
     return t1.args.every((x, i) => typesEqual(x, t2.args[i]))
   }
+  return false;
 }
 
-export const typeMatcherEquals = (matcher: TypeMatcher, expected: Type, output: {}) => {
+export const typeMatcherEquals = (matcher: TypeMatcher, expected: Type, output: UnknownObject) => {
   const testTypeConstructor = (matcher: ExternalTypeConstructor | ClassDefinition, expected: TypeConstructor) => {
     if (matcher instanceof ExternalTypeConstructor) {
       if (matcher === expected) return true
@@ -644,13 +664,9 @@ export const isParameterizedTypeOf = (a: Type, expected: TypeConstructor) => {
 }
 
 
-export const expectMap = (object: object, key: string, message: string, info: object = {}) => {
+export const expectMap = <T extends UnknownObject, K extends keyof T>(object: T, key: K, message: string, info: object = {}) => {
   compilerAssert(object[key] !== undefined, message, { object, key, ...info }); 
   return object[key];
-};
-export const expect = (expected: unknown, message: string, info: object = {}) => {
-  compilerAssert(expected !== undefined, message, info); 
-  return expected;
 };
 export const expectAll = <T>(fn: (x: unknown) => x is T, expected: unknown[], info: object = {}) => {
   compilerAssert(expected.every(fn), "Expected something got $expected", { expected, ...info }); 
@@ -682,25 +698,34 @@ export type Vm = {
   bytecode: BytecodeProgram,
   context: TaskContext
 }
-export type LabelBlockType = 'break' | 'continue' | null
 
 // Isn't it weird that these are similar but not the same?
 export class LabelBlock {
   public completion: ((value: unknown) => void)[] = []
+  public type: Type | null = null;
   constructor(
     public parent: LabelBlock | null,
     public name: string | null,
-    public type: LabelBlockType,
+    public breakType: BreakType | null,
     public binding: Binding | null) {}
 }
 
-export const findLabelBlockByType = (labelBlock: LabelBlock | null, type: LabelBlockType) => {
+export const findLabelBlockByType = (labelBlock: LabelBlock | null, breakType: BreakType | null) => {
   let block = labelBlock
   while (block) {
-    if (block.type === type) return block
+    if (block.breakType === breakType) return block
     block = block.parent;
   }
-  compilerAssert(false, `Invalid ${type} outside a block`, { labelBlock })
+  compilerAssert(false, breakType === 'continue' ? `Invalid continue outside a loop` : `Invalid ${breakType} outside a block`, { labelBlock })
+}
+
+export const findLabelByBinding = (labelBlock: LabelBlock | null, binding: Binding) => {
+  let block = labelBlock
+  while (block) {
+    if (block.binding === binding) return block
+    block = block.parent;
+  }
+  compilerAssert(false, `No block with the give name found`, { labelBlock })
 }
 
 export type Logger = { log: (...args: any[]) => void }
@@ -710,8 +735,7 @@ export type GlobalCompilerState = {
   functionDefinitions: FunctionDefinition[],
   classDefinitions: ClassDefinition[],
   moduleLoader: ModuleLoader
-  methods: WeakMap<Scope, [TypeConstructor, Closure][]>;
-
+  methods: WeakMap<Scope, [TypeConstructor, Closure][]>,
   allWaitingEvents: Event<unknown, unknown>[],
   logger: Logger,
   typeTable: TypeTable
@@ -725,7 +749,7 @@ export interface ParsedModule {
 export class Module {
   constructor(public debugName: string, public compilerState: SubCompilerState, public parsedModule: ParsedModule) {}
 
-  [Inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth: any, options: any, inspect: any) {
     return options.stylize(`[Module ${this.debugName}]`, 'special');
   }
 }
@@ -771,8 +795,10 @@ export class SubCompilerState {
   prevCompilerState: SubCompilerState | undefined
   inlineIntoCompiler: SubCompilerState | undefined
   labelBlock: LabelBlock | null
+  nextLabelBlockDepth: number = 0; // Just used for debug labelling
+  globalCompiler: GlobalCompilerState
 
-  [Inspect.custom](depth, options, inspect) {
+  [Inspect.custom](depth: any, options: any, inspect: any) {
     if (depth <= 1) return options.stylize(`[CompilerState ${this.debugName}]`, 'special');
     const mini = depth < options.depth;
     const newOptions = Object.assign({}, options, {
@@ -784,7 +810,9 @@ export class SubCompilerState {
 
 export const pushSubCompilerState = (ctx: TaskContext, obj: { debugName: string, vm?: Vm, func?: FunctionDefinition, scope: Scope, lexicalParent: SubCompilerState | undefined }) => {
   const state = new SubCompilerState(obj.debugName)
+  state.globalCompiler = ctx.globalCompiler
   state.prevCompilerState = ctx.subCompilerState;
+  state.nextLabelBlockDepth = ctx.subCompilerState?.nextLabelBlockDepth ?? 0
   state.lexicalParent = obj.lexicalParent
   state.scope = obj.scope
   state.functionCompiler = state.lexicalParent?.functionCompiler
@@ -795,12 +823,12 @@ export const pushSubCompilerState = (ctx: TaskContext, obj: { debugName: string,
 
 export function bytecodeToString(bytecodeProgram: BytecodeProgram) {
   const { locations, code } = bytecodeProgram
-  const instr = (instr) => {
+  const instr = (instr: BytecodeInstr) => {
     const { type, ...args } = instr;
     const values = Object.entries(args)
       .map(([k, v]) => `${k}: ${v}`)
       .join(", ");
-    return `${type.padStart("operatorast".length, " ")}  ${values}`;
+    return `${type.padStart("beginblockast".length, " ")}  ${values}`;
   };
   return code
     .map((x, i) => `${String(`${locations[i].line}:`).padStart(5, " ")}${String(`${locations[i].column}`).padEnd(3, " ")} ${String(i).padStart(3, " ")}  ${instr(x)}`)
