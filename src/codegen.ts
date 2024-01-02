@@ -344,10 +344,9 @@ function writeLittleEndian16(arr, offset, number) {
 
 const writeFinalBytecodeFunction = (bytecodeWriter: CodegenWriter, func: CompiledFunction) => {
 
-  const argSlots = Object.values(func.concreteTypes).reduce((acc, x) => acc + slotSize(writer, x), 0); // prettier-ignore
   const funcWriter: CodegenFunctionWriter = {
     writer: bytecodeWriter,
-    argSlots,
+    argSlots: 0,
     returnSlots: 0,
     bytecode: [],
     constants: new Map(),
@@ -356,6 +355,7 @@ const writeFinalBytecodeFunction = (bytecodeWriter: CodegenWriter, func: Compile
     locals: new Map(),
     nextLocalSlot: 0
   }
+  funcWriter.argSlots = Object.values(func.concreteTypes).reduce((acc, x) => acc + slotSize(funcWriter, x), 0); // prettier-ignore
   funcWriter.returnSlots = slotSize(funcWriter, func.returnType);
 
   func.argBindings.forEach((binding, i) => {
