@@ -1029,7 +1029,7 @@ export function compileClassTask(ctx: TaskContext, { classDef, typeArgs }: { cla
           classDef.location, debugName,
           binding, classDef, null!, body, [], typeArgs, typeParamHash)
 
-      const typeInfo: TypeInfo = { fields: compiledClass.fields, metaobject: compiledClass.metaobject }
+      const typeInfo: TypeInfo = { fields: compiledClass.fields, metaobject: compiledClass.metaobject, isReferenceType: true }
       let type: Type
       if (classDef.typeArgs.length === 0) { 
         type = new ConcreteClassType(compiledClass, typeInfo)
