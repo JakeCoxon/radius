@@ -372,7 +372,9 @@ export class AstRoot {
     const newOptions = Object.assign({}, options, {
       ast: true,
     });
-    return options.stylize(`${this.constructor.name} `, 'string') + inspect({ ...this}, newOptions)
+    const props = { ...this}
+    delete (props as any)['key']
+    return options.stylize(`${this.constructor.name} `, 'string') + inspect(props, newOptions)
   }
 }
 export class NumberAst extends AstRoot {      key = 'number' as const;      constructor(public type: Type, public location: SourceLocation, public value: number) { super() } }
@@ -403,7 +405,7 @@ export class ConstructorAst extends AstRoot { key = 'constructor' as const; cons
 
 export type Ast = NumberAst | LetAst | SetAst | OperatorAst | IfAst | ListAst | CallAst | AndAst | UserCallAst |
   OrAst | StatementsAst | WhileAst | ReturnAst | SetFieldAst | VoidAst | CastAst | SubscriptAst | ConstructorAst |
-  BindingAst | StringAst | NotAst
+  BindingAst | StringAst | NotAst | FieldAst | BlockAst
 export const isAst = (value: unknown): value is Ast => value instanceof AstRoot;
 
 export class Tuple {
@@ -451,6 +453,7 @@ export const hashValues = (values: unknown[]) => {
 export interface TypeInfo {
   fields: TypeField[]
   metaobject: UnknownObject
+  isReferenceType: boolean
 }
 export class TypeRoot {}
 export class PrimitiveType extends TypeRoot {
@@ -473,7 +476,10 @@ export class ParameterizedType extends TypeRoot {
     super()
   }
   [Inspect.custom](depth: any, options: any, inspect: any) {
-    if (depth <= 1 || depth < options.depth) return options.stylize(`[ParameterizedType ...]`, 'special');
+    if (depth <= 1 || depth < options.depth) {
+      const t = this.typeConstructor instanceof ExternalTypeConstructor ? this.typeConstructor.typeName : this.typeConstructor.debugName
+      return options.stylize(`[ParameterizedType ${t}, ...]`, 'special');
+    }
     return options.stylize(`[ParameterizedType ${inspect(this.typeConstructor, { depth: 0})}, ${this.args.map(x => inspect(x)).join(', ')}]`, 'special')
   }
 }
@@ -543,21 +549,25 @@ export class ExternalFunction {
   }
 }
 
-export const VoidType = new PrimitiveType("void", { fields: [], metaobject: Object.create(null) })
-export const IntType = new PrimitiveType("int", { fields: [], metaobject: Object.create(null) })
-export const BoolType = new PrimitiveType("bool", { fields: [], metaobject: Object.create(null) })
-export const FloatType = new PrimitiveType("float", { fields: [], metaobject: Object.create(null) })
-export const DoubleType = new PrimitiveType("double", { fields: [], metaobject: Object.create(null) })
-export const StringType = new PrimitiveType("string", { fields: [], metaobject: Object.create(null) })
-export const FunctionType = new PrimitiveType("function", { fields: [], metaobject: Object.create(null) })
+export const VoidType =       new PrimitiveType("void",     { fields: [], metaobject: Object.create(null), isReferenceType: false })
+export const IntType =        new PrimitiveType("int",      { fields: [], metaobject: Object.create(null), isReferenceType: false })
+export const BoolType =       new PrimitiveType("bool",     { fields: [], metaobject: Object.create(null), isReferenceType: false })
+export const FloatType =      new PrimitiveType("float",    { fields: [], metaobject: Object.create(null), isReferenceType: false })
+export const DoubleType =     new PrimitiveType("double",   { fields: [], metaobject: Object.create(null), isReferenceType: false })
+export const StringType =     new PrimitiveType("string",   { fields: [], metaobject: Object.create(null), isReferenceType: false })
+export const FunctionType =   new PrimitiveType("function", { fields: [], metaobject: Object.create(null), isReferenceType: false })
+export const RawPointerType = new PrimitiveType("rawptr",   { fields: [], metaobject: Object.create(null), isReferenceType: false })
+
 export const ListTypeConstructor: ExternalTypeConstructor = new ExternalTypeConstructor("List", (argTypes) => {
   compilerAssert(argTypes.length === 1, "Expected one type arg", { argTypes })
-  const type = new ParameterizedType(ListTypeConstructor, argTypes, { fields: [], metaobject: Object.create(null) });
+  const type = new ParameterizedType(ListTypeConstructor, argTypes, { fields: [], metaobject: Object.create(null), isReferenceType: false });
   type.typeInfo.fields.push(new TypeField(SourceLocation.anon, "length", type, 0, IntType))
+  type.typeInfo.fields.push(new TypeField(SourceLocation.anon, "capacity", type, 1, IntType))
+  type.typeInfo.fields.push(new TypeField(SourceLocation.anon, "data", type, 2, RawPointerType))
   return type;
 })
 export const TupleTypeConstructor: ExternalTypeConstructor = new ExternalTypeConstructor("Tuple", (argTypes) => {
-  const type = new ParameterizedType(TupleTypeConstructor, argTypes, { fields: [], metaobject: Object.create(null) });
+  const type = new ParameterizedType(TupleTypeConstructor, argTypes, { fields: [], metaobject: Object.create(null), isReferenceType: false });
   type.typeInfo.fields.push(new TypeField(SourceLocation.anon, "length", type, 0, IntType))
   argTypes.forEach((argType, i) => {
     type.typeInfo.fields.push(new TypeField(SourceLocation.anon, `_${i+1}`, type, i, argType))
@@ -879,7 +889,9 @@ export type CodegenFunctionWriter = {
   constants: Map<unknown, number>
   constantSlots: number[]
   nextConstantSlot: number
-  locals: Map<Binding, number>
+  // localsMap: Map<Binding, number>
+  locals: { binding: Binding, slot: number, scopeIndex: number }[]
+  currentScopeIndex: number
   nextLocalSlot: number
 }
 export type CodegenWriter = {
