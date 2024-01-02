@@ -1,0 +1,25 @@
+{
+  "name": "radius-vscode",
+  "displayName": "radius",
+  "description": "",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [{
+      "id": "radius",
+      "aliases": ["Radius", "radius"],
+      "extensions": ["rad"],
+      "configuration": "./language-configuration.json"
+    }],
+    "grammars": [{
+      "language": "radius",
+      "scopeName": "source.radius",
+      "path": "./syntaxes/radius.tmLanguage.json"
+    }]
+  }
+}

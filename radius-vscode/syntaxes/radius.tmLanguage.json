@@ -1,0 +1,84 @@
+{
+	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+	"name": "Radius",
+	"patterns": [
+		{
+			"include": "#keywords"
+		},
+		{
+			"include": "#strings"
+		},
+		{
+			"include": "#operators"
+		},
+		{
+			"begin": "(\\[)",
+			"beginCaptures": {
+				"1": {
+					"name": "punctuation.definition.list.begin.radius"
+				}
+			},
+			"end": "(\\])",
+			"endCaptures": {
+				"1": {
+					"name": "punctuation.definition.list.end.radius"
+				}
+			}
+		},
+		{
+			"captures": {
+				"1": {
+					"name": "storage.type.type.radius"
+				}
+			},
+			"match": "\\b(type)\\b"
+		},
+		{
+			"begin": "(^[ \\t]+)?(?=#)",
+			"beginCaptures": {
+				"1": {
+					"name": "punctuation.whitespace.comment.leading.radius"
+				}
+			},
+			"end": "(?!\\G)",
+			"patterns": [
+				{
+					"begin": "#",
+					"beginCaptures": {
+						"0": {
+							"name": "punctuation.definition.comment.radius"
+						}
+					},
+					"end": "\\n",
+					"name": "comment.line.number-sign.radius"
+				}
+			]
+		}
+	],
+	"repository": {
+		"keywords": {
+			"patterns": [{
+				"name": "keyword.control.radius",
+				"match": "\\b(and|as\\!|as|break|class|continue|comptime|def|defn|elif|else|fn|for|if|ifx|in|lambda|meta|null|not|or|pass|return|try|while|with|type|interface|import)\\b"
+			}]
+		},
+		"operators": {
+			"patterns": [{
+				"name": "keyword.operator.radius",
+				"match": "\\b(==|!=|:=|<=|>=|\\+=|\\-=|\\*=|\\/=|::|\\|\\>|\\.\\.\\.|[@!:,=<>\\-+\\.*\/'\\|])\\b"
+			}]
+		},
+		"strings": {
+			"name": "string.quoted.double.radius",
+			"begin": "\"",
+			"end": "\"",
+			"patterns": [
+				{
+					"name": "constant.character.escape.radius",
+					"match": "\\\\."
+				}
+			]
+		}
+	},
+	"scopeName": "source.radius"
+}
