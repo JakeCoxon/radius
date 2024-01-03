@@ -554,9 +554,15 @@ export const IntType =        new PrimitiveType("int",      { fields: [], metaob
 export const BoolType =       new PrimitiveType("bool",     { fields: [], metaobject: Object.create(null), isReferenceType: false })
 export const FloatType =      new PrimitiveType("float",    { fields: [], metaobject: Object.create(null), isReferenceType: false })
 export const DoubleType =     new PrimitiveType("double",   { fields: [], metaobject: Object.create(null), isReferenceType: false })
-export const StringType =     new PrimitiveType("string",   { fields: [], metaobject: Object.create(null), isReferenceType: false })
 export const FunctionType =   new PrimitiveType("function", { fields: [], metaobject: Object.create(null), isReferenceType: false })
 export const RawPointerType = new PrimitiveType("rawptr",   { fields: [], metaobject: Object.create(null), isReferenceType: false })
+
+export const StringType = (() => {
+  const type = new PrimitiveType("string", { fields: [], metaobject: Object.create(null), isReferenceType: false })
+  type.typeInfo.fields.push(new TypeField(SourceLocation.anon, "length", type, 0, IntType))
+  type.typeInfo.fields.push(new TypeField(SourceLocation.anon, "data", type, 1, RawPointerType))
+  return type;
+})()
 
 export const ListTypeConstructor: ExternalTypeConstructor = new ExternalTypeConstructor("List", (argTypes) => {
   compilerAssert(argTypes.length === 1, "Expected one type arg", { argTypes })

@@ -1,12 +1,13 @@
 fn main():
   
+  print("OK")
 
   if 3 > 0:
     print("OK")
   else:
     3 + 1
 
-  x := (ifx 2 == 0: 2 else: 1) or 1
+  x := (ifx 2 == 0: 200 else: 100)
   
   foo := (ifx 2 == 0:
             645645 - 
@@ -18,3 +19,5 @@ fn main():
                         3123124)
 
   thing123 := ifx 2 == 2: 123 else: 32
+
+  print(thing123)

@@ -636,7 +636,7 @@ const instructions: InstructionMapping = {
     const cond = expectAst(popStack(vm))
     const trueBody = expectAst(popStack(vm))
     const falseBody = f ? expectAst(popStack(vm)) : null
-    const resultType = falseBody ? falseBody.type : VoidType
+    const resultType = e && falseBody ? falseBody.type : VoidType
     if (e) compilerAssert(falseBody && falseBody.type === trueBody.type, "If expression inferred to be of type $trueType but got $falseType", { trueType: trueBody.type, falseType: falseBody?.type })
     vm.stack.push(new IfAst(resultType, vm.location, cond, trueBody, falseBody))
   },
