@@ -396,12 +396,11 @@ const astWriter: AstWriterTable = {
   },
   constructor: (writer, ast) => {
     ast.args.forEach(expr => writeExpr(writer, expr))
-    compilerAssert(ast.args.reduce((acc,x) => acc + slotSize(writer, x.type), 0) === slotSize(writer, ast.type), "Unexpected type mismatch")
-
-    const s = writer.nextLocalSlot
-    ast.args.forEach(expr => writer.nextLocalSlot -= slotSize(writer, expr.type))
-    writer.nextLocalSlot += slotSize(writer, ast.type)
-    writeBytes(writer, OpCodes.Alloc, slotSize(writer, ast.type))
+    if (ast.type.typeInfo.isReferenceType) {
+      ast.args.forEach(expr => writer.nextLocalSlot -= slotSize(writer, expr.type))
+      writer.nextLocalSlot += slotSize(writer, ast.type) // Pointer size
+      writeBytes(writer, OpCodes.Alloc, slotSize(writer, ast.type))
+    } else {} // Fields are kept on stack as value type
   },
   field: (writer, ast) => {
     if (!ast.left.type.typeInfo.isReferenceType) {
