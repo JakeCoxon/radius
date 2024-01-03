@@ -296,6 +296,7 @@ const astWriter: AstWriterTable = {
   number: (writer, ast) => {
     compilerAssert(ast.type === IntType, "Expected int type", { ast })
     emitConstant(writer, IntType, ast.value)
+    writer.nextLocalSlot += slotSize(writer, ast.type);
   },
   if: (writer, ast) => {
     writeExpr(writer, ast.expr);
