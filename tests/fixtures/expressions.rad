@@ -6,7 +6,7 @@ fn foo():
   thing3 := block:
     x := 32
 
-    if 2 == 2:
+    ifx 2 == 2:
       32
     elif 2 == 3:
       if true:
@@ -19,14 +19,14 @@ fn foo():
 
   thing123 := ifx 2 == 2: 123 else: 32
 
-  if 2 == 2: 
+  if 2 == 2:
     123
   else:
     "asdasd"
 
   thing4 := (block: 2 + 2)
 
-  #thing4 := (block;
+  # thing4 := (block;
   #  2 + 2;
   #        3 + 4;
   #              2 + 4)

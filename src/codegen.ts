@@ -106,6 +106,7 @@ const operatorMap = {
 const writeBytes = (writer: CodegenFunctionWriter, ...values: number[]) => {
   values.forEach((x) => compilerAssert(x < 2 ** 8, `Expected ${x} < 256`));
   const name = Object.entries(OpCodes).find(x => x[1] === values[0])?.[0]
+  console.log(writer.bytecode.length, name, ...values.slice(1))
   writer.bytecode.push(...values);
 };
 const writeJump = (writer: CodegenFunctionWriter, type: number) => {
@@ -227,12 +228,15 @@ const astWriter: AstWriterTable = {
     })
 
     let numLocalSlots = 0
+    console.log("num locals", writer.locals.length, writer.nextLocalSlot)
     while (writer.locals.length && writer.locals[writer.locals.length - 1].scopeIndex === writer.currentScopeIndex) {
       const sizeSlots = slotSize(writer, writer.locals[writer.locals.length - 1].binding.type)
       numLocalSlots += sizeSlots
       writer.nextLocalSlot -= sizeSlots
       writer.locals.pop()
     }
+    compilerAssert(writer.nextLocalSlot >= 0, "Slot mismatch error", { fatal: true, nextLocalSlot: writer.nextLocalSlot })
+    console.log("Popped now new slot is ", writer.nextLocalSlot)
     writeBytes(writer, OpCodes.PopResult, numLocalSlots, slotSize(writer, ast.type))
     
     writer.currentScopeIndex --
@@ -262,35 +266,26 @@ const astWriter: AstWriterTable = {
     const local = writer.locals.find(x => x.binding === ast.binding)
     compilerAssert(local !== undefined, "Expected binding", { ast, locals: writer.locals });
     compilerAssert(ast.binding.type !== VoidType);
-    // if (index === undefined) index = 69; // closure variables
-    // compilerAssert(index !== undefined, `Expected local ${ast.values[0].name}`);
     if (ast.binding.type === IntType) writeBytes(writer, OpCodes.GetLocalI32, local.slot);
     else if (ast.binding.type instanceof ParameterizedType || ast.binding.type instanceof ConcreteClassType) {
       writeBytes(writer, OpCodes.GetLocalS, local.slot, slotSize(writer, local.binding.type));
     } else compilerAssert(false, "Unexpected type", { type: ast.binding.type })
     writer.nextLocalSlot += slotSize(writer, ast.type)
-    // console.log(ast);
   },
   let: (writer, ast) => {
-    // console.log('writing binding local')
-    // const [binding, type, value] = ast.values;
-    
     // TODO: No value should zero initialize?
     compilerAssert(ast.value, "Not implemented")
     if (ast.value) writeExpr(writer, ast.value);
 
     writer.locals.push({ binding: ast.binding, slot: writer.nextLocalSlot - slotSize(writer, ast.binding.type), scopeIndex: writer.currentScopeIndex })
-    // writer.localsMap.set(ast.binding, writer.nextLocalSlot);
-    // writer.nextLocalSlot += slotSize(writer, ast.binding.type);
+    console.log("let", ast.binding.name, writer.nextLocalSlot)
   },
   set: (writer, ast) => {
     compilerAssert(ast.binding.type === IntType, `Not implemented type $type`, { type: ast.binding.type });
-    // const index = writer.localsMap.get(ast.binding);
     const local = writer.locals.find(x => x.binding === ast.binding)
     compilerAssert(local !== undefined);
     writeExpr(writer, ast.value);
     writer.nextLocalSlot -= slotSize(writer, ast.value.type)
-    writer.nextLocalSlot += slotSize(writer, ast.type)
     writeBytes(writer, OpCodes.SetLocalI32, local.slot);
   },
   number: (writer, ast) => {
@@ -324,15 +319,31 @@ const astWriter: AstWriterTable = {
     patch1()
     compilerAssert(ast.body.type === VoidType);
   },
+  break: (writer, ast) => {
+    const block = writer.blocks.findLast(x => x.binding === ast.binding)
+    compilerAssert(block, "Block expected", { ast, fatal: true })
+    compilerAssert(!ast.expr, "Not implemented yet", { ast })
+
+    const popCount = writer.nextLocalSlot - block.slotIndex
+    if (popCount > 0) writeBytes(writer, OpCodes.PopResult, popCount, 0)
+    writeBytes(writer, OpCodes.Jump, 0, 0)
+    block.patches.push({ location: writer.bytecode.length - 2 })
+  },
   and: (writer, ast) => {
     const [a, b] = ast.args;
+    compilerAssert(a.type === BoolType || a.type === IntType)
+    compilerAssert(b.type === BoolType || b.type === IntType)
     writeExpr(writer, a);
+    writer.nextLocalSlot -= slotSize(writer, a.type)
     const patch = writeJump(writer, OpCodes.JumpIfFalse);
     writeBytes(writer, OpCodes.Pop, slotSize(writer, a.type));
     writeExpr(writer, b);
+    writer.nextLocalSlot -= slotSize(writer, a.type)
+    writer.nextLocalSlot += slotSize(writer, ast.type)
     patch();
   },
   or: (writer, ast) => {
+    compilerAssert(false, "Not implemented")
     const [a, b] = ast.args;
     writeExpr(writer, a);
     const patch1 = writeJump(writer, OpCodes.JumpIfFalse);
@@ -344,7 +355,7 @@ const astWriter: AstWriterTable = {
   },
   call: (writer, ast) => {
     if (ast.func.name === "print") {
-      compilerAssert(ast.args.length === 1);
+      compilerAssert(ast.args.length === 1, "Print not implemented yet", { ast });
       // compilerAssert(false, "Not implemented 'print'", { ast })
       writeExpr(writer, ast.args[0])
       writer.nextLocalSlot -= slotSize(writer, ast.args[0].type)
@@ -428,7 +439,11 @@ const astWriter: AstWriterTable = {
     writeBytes(writer, OpCodes.SubscriptList, slotSize(writer, ast.type))
   },
   block: (writer, ast) => {
+    writer.blocks.push({ binding: ast.binding, slotIndex: writer.nextLocalSlot, patches: [] })
     writeExpr(writer, ast.body)
+    const block = writer.blocks.pop()!
+    block.patches.forEach(p => 
+      writeLittleEndian16(writer.bytecode, p.location, writer.bytecode.length))
   },
   not: (writer, ast) => {
     writeExpr(writer, ast.expr);
@@ -499,7 +514,7 @@ const writeFinalBytecodeFunction = (bytecodeWriter: CodegenWriter, func: Compile
     constants: new Map(),
     constantSlots: [],
     nextConstantSlot: 0,
-    // localsMap: new Map(),
+    blocks: [],
     locals: [],
     currentScopeIndex: 0,
     nextLocalSlot: 0
@@ -508,7 +523,6 @@ const writeFinalBytecodeFunction = (bytecodeWriter: CodegenWriter, func: Compile
   funcWriter.returnSlots = slotSize(funcWriter, func.returnType);
 
   func.argBindings.forEach((binding, i) => {
-    // funcWriter.localsMap.set(binding, funcWriter.localsMap.size);
     funcWriter.locals.push({ binding, slot: funcWriter.nextLocalSlot, scopeIndex: funcWriter.currentScopeIndex })
     funcWriter.nextLocalSlot += slotSize(funcWriter, binding.type);
   });
@@ -527,7 +541,7 @@ const writeFinalBytecodeFunction = (bytecodeWriter: CodegenWriter, func: Compile
 
   // Make sure locals/pops match up
   compilerAssert(funcWriter.locals.length === 0, "Compile error got $x expected 0", { x: funcWriter.locals.length, fatal: true })
-  compilerAssert(funcWriter.nextLocalSlot === 0, "Compile error got $x expected 0", { x: funcWriter.nextLocalSlot, fatal: true })
+  compilerAssert(funcWriter.nextLocalSlot === funcWriter.returnSlots, "Compile error got $x expected 0", { x: funcWriter.nextLocalSlot, fatal: true })
 
   console.log(funcWriter.writer.typeSizes)
 

@@ -405,7 +405,7 @@ export class ConstructorAst extends AstRoot { key = 'constructor' as const; cons
 
 export type Ast = NumberAst | LetAst | SetAst | OperatorAst | IfAst | ListAst | CallAst | AndAst | UserCallAst |
   OrAst | StatementsAst | WhileAst | ReturnAst | SetFieldAst | VoidAst | CastAst | SubscriptAst | ConstructorAst |
-  BindingAst | StringAst | NotAst | FieldAst | BlockAst
+  BindingAst | StringAst | NotAst | FieldAst | BlockAst | BreakAst
 export const isAst = (value: unknown): value is Ast => value instanceof AstRoot;
 
 export class Tuple {
@@ -895,8 +895,8 @@ export type CodegenFunctionWriter = {
   constants: Map<unknown, number>
   constantSlots: number[]
   nextConstantSlot: number
-  // localsMap: Map<Binding, number>
   locals: { binding: Binding, slot: number, scopeIndex: number }[]
+  blocks: { binding: Binding, slotIndex: number, patches: { location: number }[] }[],
   currentScopeIndex: number
   nextLocalSlot: number
 }

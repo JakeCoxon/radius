@@ -31,9 +31,9 @@ fn main():
   for vec in range:
     if vec.x * vec.y > 256:
       continue # continue does the right thing
-    print(vec.x, vec.y)
+    print(vec.x + vec.y)
 
   for vec in range:
     if vec.x * vec.y > 256:
       break # break does the right thing
-    print(vec.x, vec.y)
+    print(vec.x + vec.y)

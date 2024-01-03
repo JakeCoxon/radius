@@ -5,7 +5,7 @@ type LexerState = { significantNewlines: boolean; parenStack: string[] };
 function* tokenize(source: Source, state: LexerState): Generator<Token> {
   const regexes = {
     KEYWORD:
-      /^(?:and|as\!|as|break|class|continue|comptime|def|defn|elif|else|fn|for|if|ifx|in|lambda|meta|null|not|or|pass|return|try|while|with|type|interface|import)(?=\W)/, // note \b
+      /^(?:and|as\!|as|break|class|continue|comptime|def|defn|elif|else|fn|for|if|ifx|in|lambda|meta|null|not|or|pass|return|try|while|with|type|interface|import|block)(?=\W)/, // note \b
     IDENTIFIER: /^[a-zA-Z_][a-zA-Z_0-9-]*/,
     STRING: /^(?:"(?:[^"\\]|\\.)*")/,
     SPECIALNUMBER: /^0o[0-7]+|^0x[0-9a-fA-F_]+|^0b[01_]+/,
