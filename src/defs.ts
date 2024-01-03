@@ -405,7 +405,7 @@ export class ConstructorAst extends AstRoot { key = 'constructor' as const; cons
 
 export type Ast = NumberAst | LetAst | SetAst | OperatorAst | IfAst | ListAst | CallAst | AndAst | UserCallAst |
   OrAst | StatementsAst | WhileAst | ReturnAst | SetFieldAst | VoidAst | CastAst | SubscriptAst | ConstructorAst |
-  BindingAst | StringAst | NotAst | FieldAst | BlockAst | BreakAst
+  BindingAst | StringAst | NotAst | FieldAst | BlockAst | BreakAst | BoolAst
 export const isAst = (value: unknown): value is Ast => value instanceof AstRoot;
 
 export class Tuple {

@@ -142,7 +142,7 @@ function writeUint32LittleEndian(arr: number[], offset: number, number: number) 
   // console.log(dataView, arrayBuffer);
 }
 const writeTypeAt = (arr: number[], offset: number, type: Type, value: number) => {
-  compilerAssert(type === IntType);
+  compilerAssert(type === IntType || type === BoolType);
   writeUint32LittleEndian(arr, offset, value);
 };
 const writeOperator = (writer: CodegenFunctionWriter, op: string, type: Type) => {
@@ -153,14 +153,6 @@ const writeOperator = (writer: CodegenFunctionWriter, op: string, type: Type) =>
   } else if (op === "<=") {
     writeOperator(writer, ">", type);
     writeBytes(writer, OpCodes.NotI32);
-    return;
-  }
-  if (op === "or") {
-    compilerAssert(type === IntType);
-    writeBytes(writer, OpCodes.Or);
-  } else if (op === "and") {
-    compilerAssert(type === IntType);
-    writeBytes(writer, OpCodes.And);
     return;
   }
   let s: string = null!
@@ -178,13 +170,11 @@ const slotSize = (writer: CodegenFunctionWriter, type: Type): number => {
   if (type === IntType) return 1
   if (type === BoolType) return 1
   if (type === RawPointerType) return POINTER_SIZE
-  // if (type instanceof ParameterizedType || type instanceof ConcreteClassType) {
-    if (writer.writer.typeSizes.get(type)) return writer.writer.typeSizes.get(type)!;
-    const s = calculateTypeSize(writer, type);
-    writer.writer.typeSizes.set(type, s)
-    return s
-  // }
-  // compilerAssert(false, "Unexpected type $type", { type });
+  
+  if (writer.writer.typeSizes.get(type)) return writer.writer.typeSizes.get(type)!;
+  const s = calculateTypeSize(writer, type);
+  writer.writer.typeSizes.set(type, s)
+  return s
 }
 const calculateTypeSize = (writer: CodegenFunctionWriter, type: ParameterizedType | ConcreteClassType | PrimitiveType) => {
   if (type.typeInfo.isReferenceType) return POINTER_SIZE;
@@ -212,7 +202,7 @@ const emitConstant = (writer: CodegenFunctionWriter, type: Type, value: number) 
     writer.constants.set(value, index);
     writeTypeAt(writer.constantSlots, writer.constantSlots.length, type, value);
   }
-  const opcode = type === IntType ? OpCodes.ConstantI32 : null
+  const opcode = type === IntType || type === BoolType ? OpCodes.ConstantI32 : null
   compilerAssert(opcode, "Not implemented")
   writeBytes(writer, opcode, index);
 }
@@ -223,8 +213,10 @@ const astWriter: AstWriterTable = {
     // TODO: Filter voids?
     ast.statements.forEach((expr, i) => {
       writeExpr(writer, expr);
-      if (i !== ast.statements.length - 1 && expr.type !== VoidType)
-        writeBytes(writer, OpCodes.Pop, slotSize(writer, expr.type));
+      if (i !== ast.statements.length - 1 && expr.type !== VoidType) {
+        writer.nextLocalSlot -= slotSize(writer, expr.type)
+        writeBytes(writer, OpCodes.Pop, slotSize(writer, expr.type))
+      }
     })
 
     let numLocalSlots = 0
@@ -266,11 +258,12 @@ const astWriter: AstWriterTable = {
     const local = writer.locals.find(x => x.binding === ast.binding)
     compilerAssert(local !== undefined, "Expected binding", { ast, locals: writer.locals });
     compilerAssert(ast.binding.type !== VoidType);
+    writer.nextLocalSlot += slotSize(writer, ast.type)
     if (ast.binding.type === IntType) writeBytes(writer, OpCodes.GetLocalI32, local.slot);
+    else if (ast.binding.type === BoolType) writeBytes(writer, OpCodes.GetLocalI32, local.slot);
     else if (ast.binding.type instanceof ParameterizedType || ast.binding.type instanceof ConcreteClassType) {
       writeBytes(writer, OpCodes.GetLocalS, local.slot, slotSize(writer, local.binding.type));
     } else compilerAssert(false, "Unexpected type", { type: ast.binding.type })
-    writer.nextLocalSlot += slotSize(writer, ast.type)
   },
   let: (writer, ast) => {
     // TODO: No value should zero initialize?
@@ -290,8 +283,13 @@ const astWriter: AstWriterTable = {
   },
   number: (writer, ast) => {
     compilerAssert(ast.type === IntType, "Expected int type", { ast })
-    emitConstant(writer, IntType, ast.value)
     writer.nextLocalSlot += slotSize(writer, ast.type);
+    emitConstant(writer, IntType, ast.value)
+  },
+  bool: (writer, ast) => {
+    compilerAssert(ast.type === BoolType, "Expected bool type", { ast })
+    writer.nextLocalSlot += slotSize(writer, ast.type);
+    emitConstant(writer, BoolType, ast.value ? 1 : 0)
   },
   if: (writer, ast) => {
     writeExpr(writer, ast.expr);
@@ -383,7 +381,9 @@ const astWriter: AstWriterTable = {
     compilerAssert(index !== undefined, "Expected function");
     // TODO: func name
     ast.args.forEach(x => writeExpr(writer, x));
+    ast.args.forEach(expr => writer.nextLocalSlot -= slotSize(writer, expr.type));
     writeBytes(writer, OpCodes.Call, index, ast.args.length);
+    writer.nextLocalSlot += slotSize(writer, ast.type)
   },
   operator: (writer, ast) => {
     writeExpr(writer, ast.args[0]);
