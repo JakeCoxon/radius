@@ -229,7 +229,8 @@ const astWriter: AstWriterTable = {
     }
     compilerAssert(writer.nextLocalSlot >= 0, "Slot mismatch error", { fatal: true, nextLocalSlot: writer.nextLocalSlot })
     console.log("Popped now new slot is ", writer.nextLocalSlot)
-    writeBytes(writer, OpCodes.PopResult, numLocalSlots, slotSize(writer, ast.type))
+    if (numLocalSlots > 0 || slotSize(writer, ast.type) > 0) 
+      writeBytes(writer, OpCodes.PopResult, numLocalSlots, slotSize(writer, ast.type))
     
     writer.currentScopeIndex --
   },
@@ -320,10 +321,9 @@ const astWriter: AstWriterTable = {
   break: (writer, ast) => {
     const block = writer.blocks.findLast(x => x.binding === ast.binding)
     compilerAssert(block, "Block expected", { ast, fatal: true })
-    compilerAssert(!ast.expr, "Not implemented yet", { ast })
-
-    const popCount = writer.nextLocalSlot - block.slotIndex
-    if (popCount > 0) writeBytes(writer, OpCodes.PopResult, popCount, 0)
+    const returnSize = ast.expr ? slotSize(writer, ast.expr.type) : 0
+    const popSize = writer.nextLocalSlot - block.slotIndex
+    if (popSize > 0) writeBytes(writer, OpCodes.PopResult, popSize, returnSize)
     writeBytes(writer, OpCodes.Jump, 0, 0)
     block.patches.push({ location: writer.bytecode.length - 2 })
   },
