@@ -405,7 +405,7 @@ export class ConstructorAst extends AstRoot { key = 'constructor' as const; cons
 
 export type Ast = NumberAst | LetAst | SetAst | OperatorAst | IfAst | ListAst | CallAst | AndAst | UserCallAst |
   OrAst | StatementsAst | WhileAst | ReturnAst | SetFieldAst | VoidAst | CastAst | SubscriptAst | ConstructorAst |
-  BindingAst | StringAst | NotAst | FieldAst | BlockAst | BreakAst | BoolAst
+  BindingAst | StringAst | NotAst | FieldAst | BlockAst | BreakAst | BoolAst | CastAst
 export const isAst = (value: unknown): value is Ast => value instanceof AstRoot;
 
 export class Tuple {
@@ -574,7 +574,8 @@ export const ListTypeConstructor: ExternalTypeConstructor = new ExternalTypeCons
 })
 export const TupleTypeConstructor: ExternalTypeConstructor = new ExternalTypeConstructor("Tuple", (argTypes) => {
   const type = new ParameterizedType(TupleTypeConstructor, argTypes, { fields: [], metaobject: Object.create(null), isReferenceType: false });
-  type.typeInfo.fields.push(new TypeField(SourceLocation.anon, "length", type, 0, IntType))
+  // TODO: Add getter for length
+  // type.typeInfo.fields.push(new TypeField(SourceLocation.anon, "length", type, 0, IntType))
   argTypes.forEach((argType, i) => {
     type.typeInfo.fields.push(new TypeField(SourceLocation.anon, `_${i+1}`, type, i, argType))
   })
