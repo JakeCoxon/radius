@@ -1,0 +1,18 @@
+type Thing:
+  x : int
+  y : float
+
+fn foothing(a: Thing):
+  print(a.x)
+  print(a)
+  a.x = 64
+  a.y = float(100)
+
+fn main():
+
+  thing: Thing
+  thing = Thing(32, float(100))
+
+  print(thing.x)
+  print(thing.y)
+  foothing(thing)

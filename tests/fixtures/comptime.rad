@@ -3,7 +3,8 @@ foo :: thing4(5)
 
 
 fn thing(x: int):
-  print("thing", x)
+  print("thing")
+  print(x)
   print(x + 32)
   x + 32
 

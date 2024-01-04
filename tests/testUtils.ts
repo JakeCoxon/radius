@@ -84,6 +84,7 @@ export const runCompilerTest = (input: string, { moduleLoader, filename, expectE
     originalLog(...args)
     logger.log(...args)
   }
+  (globalThis as any).logger = logger;
 
   const rootScope: Scope = createScope({
     ...BuiltinTypes,

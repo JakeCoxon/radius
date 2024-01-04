@@ -402,10 +402,11 @@ export class CastAst extends AstRoot {        key = 'cast' as const;        cons
 export class SubscriptAst extends AstRoot {   key = 'subscript' as const;   constructor(public type: Type, public location: SourceLocation, public left: Ast, public right: Ast) { super() } }
 export class NotAst extends AstRoot {         key = 'not' as const;         constructor(public type: Type, public location: SourceLocation, public expr: Ast) { super() } }
 export class ConstructorAst extends AstRoot { key = 'constructor' as const; constructor(public type: Type, public location: SourceLocation, public args: Ast[]) { super() } }
+export class DefaultConsAst extends AstRoot { key = 'defaultcons' as const; constructor(public type: Type, public location: SourceLocation) { super() } }
 
 export type Ast = NumberAst | LetAst | SetAst | OperatorAst | IfAst | ListAst | CallAst | AndAst | UserCallAst |
   OrAst | StatementsAst | WhileAst | ReturnAst | SetFieldAst | VoidAst | CastAst | SubscriptAst | ConstructorAst |
-  BindingAst | StringAst | NotAst | FieldAst | BlockAst | BreakAst | BoolAst | CastAst
+  BindingAst | StringAst | NotAst | FieldAst | BlockAst | BreakAst | BoolAst | CastAst | DefaultConsAst
 export const isAst = (value: unknown): value is Ast => value instanceof AstRoot;
 
 export class Tuple {

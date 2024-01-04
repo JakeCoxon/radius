@@ -319,3 +319,10 @@ test("advanced", async () => {
   const test = runCompilerTest(input, { filename: 'advanced' })
 
 });
+
+test("reftype", async () => {
+
+  const input = await Bun.file(`${import.meta.dir}/fixtures/reftype.rad`).text()
+  const test = runCompilerTest(input, { filename: 'reftype' })
+
+});
