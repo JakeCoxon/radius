@@ -9,11 +9,18 @@ type MyVec @struct:
 fn foo(tup: (int, float, Person, MyVec)):
   print(tup._1 + int(tup._2) + tup._3.age + tup._4.x + tup._4.y)
 
+fn modify_tuple(tup: (int, float, Person, MyVec)):
+  tup._3.age = 31
+  tup._4.x = 12
+  tup._4.y = 10
+
 fn main():
   vec := MyVec(4, 3) # value type
   person := Person("Jake", 300) # reference type
 
   tup := (1, float(2), person, vec)
+
+  modify_tuple(tup)
 
   foo(tup)
 

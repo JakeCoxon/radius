@@ -1,4 +1,4 @@
-import { Ast, AstWriterTable, Binding, BindingAst, BoolType, CodegenFunctionWriter, CodegenWriter, CompiledFunction, ConcreteClassType, DoubleType, ExternalTypeConstructor, FileWriter, FloatType, GlobalCompilerState, IntType, ListTypeConstructor, ParameterizedType, PrimitiveType, RawPointerType, StringType, Type, TypeField, VoidType, compilerAssert, textColors } from "./defs";
+import { Ast, AstWriterTable, Binding, BindingAst, BoolType, CodegenFunctionWriter, CodegenWriter, CompiledFunction, ConcreteClassType, DoubleType, ExternalTypeConstructor, FieldAst, FileWriter, FloatType, GlobalCompilerState, IntType, ListTypeConstructor, ParameterizedType, PrimitiveType, RawPointerType, StringType, Type, TypeField, VoidType, compilerAssert, textColors } from "./defs";
 
 const OpCodes = {
   Nil: 0,
@@ -17,80 +17,81 @@ const OpCodes = {
   Call: 13,
   Return: 14,
   GetField: 15,
-  SubscriptList: 16,
-  List: 17,
-  Alloc: 18,
-  ConstantS: 19,
-  GetLocalS: 20,
-  SetLocalS: 21,
-  F32_TO_I32: 22,
-  I32_TO_F32: 23,
-  CheckStack: 24,
-  ConstantV: 25,
-  ConstantF32: 26,
-  ConstantF64: 27,
-  ConstantI32: 28,
-  ConstantI64: 29,
-  GetLocalV: 30,
-  GetLocalF32: 31,
-  GetLocalF64: 32,
-  GetLocalI32: 33,
-  GetLocalI64: 34,
-  SetLocalV: 35,
-  SetLocalF32: 36,
-  SetLocalF64: 37,
-  SetLocalI32: 38,
-  SetLocalI64: 39,
-  EqualV: 40,
-  EqualF32: 41,
-  EqualF64: 42,
-  EqualI32: 43,
-  EqualI64: 44,
-  GreaterV: 45,
-  GreaterF32: 46,
-  GreaterF64: 47,
-  GreaterI32: 48,
-  GreaterI64: 49,
-  LessV: 50,
-  LessF32: 51,
-  LessF64: 52,
-  LessI32: 53,
-  LessI64: 54,
-  AddV: 55,
-  AddF32: 56,
-  AddF64: 57,
-  AddI32: 58,
-  AddI64: 59,
-  SubtractV: 60,
-  SubtractF32: 61,
-  SubtractF64: 62,
-  SubtractI32: 63,
-  SubtractI64: 64,
-  MultiplyV: 65,
-  MultiplyF32: 66,
-  MultiplyF64: 67,
-  MultiplyI32: 68,
-  MultiplyI64: 69,
-  DivideV: 70,
-  DivideF32: 71,
-  DivideF64: 72,
-  DivideI32: 73,
-  DivideI64: 74,
-  NotV: 75,
-  NotF32: 76,
-  NotF64: 77,
-  NotI32: 78,
-  NotI64: 79,
-  NegateV: 80,
-  NegateF32: 81,
-  NegateF64: 82,
-  NegateI32: 83,
-  NegateI64: 84,
-  ToStringV: 85,
-  ToStringF32: 86,
-  ToStringF64: 87,
-  ToStringI32: 88,
-  ToStringI64: 89,
+  SetField: 16,
+  SubscriptList: 17,
+  List: 18,
+  Alloc: 19,
+  ConstantS: 20,
+  GetLocalS: 21,
+  SetLocalS: 22,
+  F32_TO_I32: 23,
+  I32_TO_F32: 24,
+  CheckStack: 25,
+  ConstantV: 26,
+  ConstantF32: 27,
+  ConstantF64: 28,
+  ConstantI32: 29,
+  ConstantI64: 30,
+  GetLocalV: 31,
+  GetLocalF32: 32,
+  GetLocalF64: 33,
+  GetLocalI32: 34,
+  GetLocalI64: 35,
+  SetLocalV: 36,
+  SetLocalF32: 37,
+  SetLocalF64: 38,
+  SetLocalI32: 39,
+  SetLocalI64: 40,
+  EqualV: 41,
+  EqualF32: 42,
+  EqualF64: 43,
+  EqualI32: 44,
+  EqualI64: 45,
+  GreaterV: 46,
+  GreaterF32: 47,
+  GreaterF64: 48,
+  GreaterI32: 49,
+  GreaterI64: 50,
+  LessV: 51,
+  LessF32: 52,
+  LessF64: 53,
+  LessI32: 54,
+  LessI64: 55,
+  AddV: 56,
+  AddF32: 57,
+  AddF64: 58,
+  AddI32: 59,
+  AddI64: 60,
+  SubtractV: 61,
+  SubtractF32: 62,
+  SubtractF64: 63,
+  SubtractI32: 64,
+  SubtractI64: 65,
+  MultiplyV: 66,
+  MultiplyF32: 67,
+  MultiplyF64: 68,
+  MultiplyI32: 69,
+  MultiplyI64: 70,
+  DivideV: 71,
+  DivideF32: 72,
+  DivideF64: 73,
+  DivideI32: 74,
+  DivideI64: 75,
+  NotV: 76,
+  NotF32: 77,
+  NotF64: 78,
+  NotI32: 79,
+  NotI64: 80,
+  NegateV: 81,
+  NegateF32: 82,
+  NegateF64: 83,
+  NegateI32: 84,
+  NegateI64: 85,
+  ToStringV: 86,
+  ToStringF32: 87,
+  ToStringF64: 88,
+  ToStringI32: 89,
+  ToStringI64: 90,
 };
 
 const POINTER_SIZE = 2; // 64 bit
@@ -309,13 +310,13 @@ const astWriter: AstWriterTable = {
     if (ast.value) writeExpr(writer, ast.value);
 
     writer.locals.push({ binding: ast.binding, slot: writer.nextLocalSlot - slotSize(writer, ast.binding.type), scopeIndex: writer.currentScopeIndex })
-    console.log("let", ast.binding.name, "at", writer.nextLocalSlot - slotSize(writer, ast.binding.type), "size", slotSize(writer, ast.binding.type))
+    // console.log("let", ast.binding.name, "at", writer.nextLocalSlot - slotSize(writer, ast.binding.type), "size", slotSize(writer, ast.binding.type))
   },
   set: (writer, ast) => {
     const local = writer.locals.find(x => x.binding === ast.binding)
     compilerAssert(local !== undefined);
     writeExpr(writer, ast.value);
-    console.log("set", ast.binding.name)
+    // console.log("set", ast.binding.name)
     const op = getOpByType(writer, ast.binding.type)
     SetLocalByType[op].write(writer, local.slot, slotSize(writer, ast.value.type))
     writer.nextLocalSlot -= slotSize(writer, ast.value.type)
@@ -430,7 +431,6 @@ const astWriter: AstWriterTable = {
     writer.nextLocalSlot -= slotSize(writer, ast.args[0].type)
     writer.nextLocalSlot -= slotSize(writer, ast.args[1].type)
     writer.nextLocalSlot += slotSize(writer, ast.type)
-    // writeBytes(operatorToBytecode(ast.values[0], ast.values[1].type));
   },
   constructor: (writer, ast) => {
     ast.args.forEach(expr => writeExpr(writer, expr))
@@ -443,36 +443,71 @@ const astWriter: AstWriterTable = {
     } else {} // Fields are kept on stack as value type
   },
   field: (writer, ast) => {
-    if (!ast.left.type.typeInfo.isReferenceType) {
-      // compilerAssert(false, "Field of value type not implemented yet", { type: ast.left.type, field: ast.field, left: ast.left })
-      if (ast.left instanceof BindingAst) {
-        const binding = ast.left.binding
-        const local = writer.locals.find(x => x.binding === binding)
-        compilerAssert(local !== undefined, "Expected binding", { ast, locals: writer.locals });
-        console.log("get", local.binding.name, local.slot)
-        const op = getOpByType(writer, ast.type)
-        const slot = local.slot + getSlotOffset(writer, ast.field)
-        GetLocalByType[op].write(writer, slot, slotSize(writer, ast.type))
-        writer.nextLocalSlot += slotSize(writer, ast.type)
-        writeBytes(writer, OpCodes.CheckStack, writer.nextLocalSlot)
-        return
-      } else {
-        writeExpr(writer, ast.left)
-        const fieldSlots = slotSize(writer, ast.type)
-        const prevFieldsSize = ast.field.sourceType.typeInfo.fields.slice(0, ast.field.index).reduce((acc, x) => acc + slotSize(writer, x.fieldType), 0)
-        const nextFieldsSize = ast.field.sourceType.typeInfo.fields.slice(ast.field.index + 1).reduce((acc, x) => acc + slotSize(writer, x.fieldType), 0)
-        if (nextFieldsSize > 0) writeBytes(writer, OpCodes.PopResult, nextFieldsSize, 0) // pop slots after
-        writeBytes(writer, OpCodes.PopResult, prevFieldsSize, fieldSlots) // pop slots before and return selected field
-        writer.nextLocalSlot -= slotSize(writer, ast.left.type)
-        writer.nextLocalSlot += fieldSlots
-        writeBytes(writer, OpCodes.CheckStack, writer.nextLocalSlot)
-        return
-      }
+    if (ast.left.type.typeInfo.isReferenceType) {
+      writeExpr(writer, ast.left)
+      writeBytes(writer, OpCodes.GetField, getSlotOffset(writer, ast.field), slotSize(writer, ast.field.fieldType))
+      writer.nextLocalSlot -= slotSize(writer, ast.left.type)
+      writer.nextLocalSlot += slotSize(writer, ast.type)
+      return
     }
+    if (ast.left instanceof BindingAst) {
+      const binding = ast.left.binding
+      const local = writer.locals.find(x => x.binding === binding)
+      compilerAssert(local !== undefined, "Expected binding", { ast, locals: writer.locals });
+      console.log("get", local.binding.name, local.slot)
+      const slot = local.slot + getSlotOffset(writer, ast.field)
+      const op = getOpByType(writer, ast.type)
+      GetLocalByType[op].write(writer, slot, slotSize(writer, ast.type))
+      writer.nextLocalSlot += slotSize(writer, ast.type)
+      writeBytes(writer, OpCodes.CheckStack, writer.nextLocalSlot)
+      return
+    } 
     writeExpr(writer, ast.left)
-    writeBytes(writer, OpCodes.GetField, getSlotOffset(writer, ast.field), slotSize(writer, ast.field.fieldType))
+    const fieldSlots = slotSize(writer, ast.type)
+    const prevFieldsSize = ast.field.sourceType.typeInfo.fields.slice(0, ast.field.index).reduce((acc, x) => acc + slotSize(writer, x.fieldType), 0)
+    const nextFieldsSize = ast.field.sourceType.typeInfo.fields.slice(ast.field.index + 1).reduce((acc, x) => acc + slotSize(writer, x.fieldType), 0)
+    if (nextFieldsSize > 0) writeBytes(writer, OpCodes.PopResult, nextFieldsSize, 0) // pop slots after
+    writeBytes(writer, OpCodes.PopResult, prevFieldsSize, fieldSlots) // pop slots before and return selected field
     writer.nextLocalSlot -= slotSize(writer, ast.left.type)
-    writer.nextLocalSlot += slotSize(writer, ast.type)
+    writer.nextLocalSlot += fieldSlots
+    writeBytes(writer, OpCodes.CheckStack, writer.nextLocalSlot)
+  },
+  setfield: (writer, ast) => {
+    if (ast.left.type.typeInfo.isReferenceType) {
+      writeExpr(writer, ast.value)
+      writeExpr(writer, ast.left) // Pointer goes last
+      writeBytes(writer, OpCodes.SetField, getSlotOffset(writer, ast.field), slotSize(writer, ast.field.fieldType))
+      writer.nextLocalSlot -= slotSize(writer, ast.left.type)
+      writer.nextLocalSlot -= slotSize(writer, ast.value.type)
+      return
+    }
+    
+    let left: Ast = ast.left
+    let leftmostAst: Ast = null!
+
+    const fields: TypeField[] = [ast.field]
+    while (left) {
+      if (left instanceof FieldAst) {
+        compilerAssert(!left.field.fieldType.typeInfo.isReferenceType, "Not implemented", { type: left.field.fieldType })
+        fields.push(left.field)
+        left = left.left
+      }
+      else {leftmostAst = left; break}
+    }
+
+    if (leftmostAst instanceof BindingAst) {
+      const binding = leftmostAst.binding
+      const local = writer.locals.find(x => x.binding === binding)
+      compilerAssert(local !== undefined, "Expected binding", { ast, locals: writer.locals });
+      let slot = local.slot
+      fields.forEach(field => {slot += getSlotOffset(writer, field)})
+      writeExpr(writer, ast.value)
+      writer.nextLocalSlot -= slotSize(writer, ast.value.type)
+      const op = getOpByType(writer, ast.value.type)
+      SetLocalByType[op].write(writer, slot, slotSize(writer, ast.value.type))
+      return
+    }
+    compilerAssert(false, "Not implemented", { ast })
   },
   subscript: (writer, ast) => {
     compilerAssert(ast.left.type instanceof ParameterizedType && ast.left.type.typeConstructor === ListTypeConstructor, "Expected list", { ast })
