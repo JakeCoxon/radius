@@ -312,3 +312,10 @@ test("meta", async () => {
   const test = runCompilerTest(input, { filename: 'meta' })
 
 });
+
+test("advanced", async () => {
+
+  const input = await Bun.file(`${import.meta.dir}/fixtures/advanced.rad`).text()
+  const test = runCompilerTest(input, { filename: 'advanced' })
+
+});

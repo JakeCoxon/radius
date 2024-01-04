@@ -346,8 +346,8 @@ export class ClassDefinition {
   concreteType: ConcreteClassType | undefined
 
   metaClass: ParseIdentifier | null
-
   isTypeConstructor: boolean = false
+  keywords: string[] = []
 
   constructor(
     public id: number,

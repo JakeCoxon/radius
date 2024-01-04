@@ -1,0 +1,25 @@
+type Person:
+  name : string
+  age : int
+
+type MyVec @struct:
+  x : int
+  y : int
+
+fn foo(tup: (int, float, Person, MyVec)):
+  print(tup._1 + int(tup._2) + tup._3.age + tup._4.x + tup._4.y)
+
+fn main():
+  vec := MyVec(4, 3) # value type
+  person := Person("Jake", 300) # reference type
+
+  tup := (1, float(2), person, vec)
+
+  foo(tup)
+
+  new_vec := MyVec(30, 40)
+  new_person := Person("Another Person", 100)
+  # overwrite tup
+  tup = (23, float(67), new_person, new_vec)
+
+  foo(tup)

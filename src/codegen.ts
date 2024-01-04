@@ -1,4 +1,4 @@
-import { Ast, AstWriterTable, Binding, BindingAst, BoolType, CodegenFunctionWriter, CodegenWriter, CompiledFunction, ConcreteClassType, DoubleType, ExternalTypeConstructor, FileWriter, FloatType, GlobalCompilerState, IntType, ListTypeConstructor, ParameterizedType, PrimitiveType, RawPointerType, Type, TypeField, VoidType, compilerAssert, textColors } from "./defs";
+import { Ast, AstWriterTable, Binding, BindingAst, BoolType, CodegenFunctionWriter, CodegenWriter, CompiledFunction, ConcreteClassType, DoubleType, ExternalTypeConstructor, FileWriter, FloatType, GlobalCompilerState, IntType, ListTypeConstructor, ParameterizedType, PrimitiveType, RawPointerType, StringType, Type, TypeField, VoidType, compilerAssert, textColors } from "./defs";
 
 const OpCodes = {
   Nil: 0,
@@ -222,6 +222,7 @@ const getOpByType = (writer: CodegenFunctionWriter, type: Type): keyof typeof Ge
   else if (type === FloatType) return 'F32'
   else if (type === DoubleType) return 'F64'
   else if (type === RawPointerType) return 'I64'
+  else if (type === StringType) return 'S'
   else if (type instanceof ParameterizedType || type instanceof ConcreteClassType) return 'S'
   compilerAssert(false, "Unexpected type", { type })
 }
@@ -280,6 +281,7 @@ const astWriter: AstWriterTable = {
     writeBytes(writer, OpCodes.ConstantS, index, lengthZ)
     writeBytes(writer, OpCodes.Alloc, lengthZ)
     writer.nextLocalSlot += slotSize(writer, ast.type)
+    writeBytes(writer, OpCodes.CheckStack, writer.nextLocalSlot)
   },
   cast: (writer, ast) => {
     writeExpr(writer, ast.expr)
@@ -433,9 +435,11 @@ const astWriter: AstWriterTable = {
   constructor: (writer, ast) => {
     ast.args.forEach(expr => writeExpr(writer, expr))
     if (ast.type.typeInfo.isReferenceType) {
-      ast.args.forEach(expr => writer.nextLocalSlot -= slotSize(writer, expr.type))
-      writeBytes(writer, OpCodes.Alloc, slotSize(writer, ast.type))
+      const fieldSize = ast.args.reduce((acc, expr) => acc + slotSize(writer, expr.type), 0)
+      writer.nextLocalSlot -= fieldSize;
+      writeBytes(writer, OpCodes.Alloc, fieldSize)
       writer.nextLocalSlot += slotSize(writer, ast.type) // Pointer size
+      writeBytes(writer, OpCodes.CheckStack, writer.nextLocalSlot)
     } else {} // Fields are kept on stack as value type
   },
   field: (writer, ast) => {

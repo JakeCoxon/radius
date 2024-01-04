@@ -17,7 +17,7 @@ fn main():
 
   print(tup._1 + int(tup._2) + tup._3.x + tup._3.y)
 
-  tup = (14124, float(23123), thing)
+  tup = (23, float(67), thing)
 
   foo(tup)
   foo2(tup)

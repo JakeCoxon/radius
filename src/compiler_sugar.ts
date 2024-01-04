@@ -137,6 +137,9 @@ export const defaultMetaFunction = (subCompilerState: SubCompilerState, compiled
   const iterate = templateScope['__iterate']
   compilerAssert(!iterate || iterate instanceof Closure)
 
+  if (compiledClass.classDefinition.keywords.includes('struct'))
+    compiledClass.type.typeInfo.isReferenceType = false
+
   const fnArgs: ArgumentTypePair[] = compiledClass.fields.map(x => 
     [new ParseIdentifier(createAnonymousToken(x.name)), 
     new ParseValue(createAnonymousToken(''), x.fieldType)] as ArgumentTypePair)
