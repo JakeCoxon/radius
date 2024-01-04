@@ -168,9 +168,8 @@ test("random", async () => {
 
 test("module", async () => {
 
-  const moduleLoader = createModuleLoader(`${import.meta.dir}/fixtures/imports/`)
   const input = await Bun.file(`${import.meta.dir}/fixtures/module.rad`).text()
-  const test = runCompilerTest(input, { moduleLoader, filename: 'module' })
+  const test = runCompilerTest(input, { filename: 'module' })
 
 });
 

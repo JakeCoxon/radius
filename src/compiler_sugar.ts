@@ -83,7 +83,7 @@ export const sliceSugar = (out: BytecodeWriter, node: ParseSlice) => {
   compilerAssert(out.state.expansion, "Expected expansion locus for slice operator")
   const index = out.state.expansion.selectors.length
   const indexIdentifier = new ParseFreshIden(node.token, new FreshBindingToken('i'))
-  out.state.expansion.selectors.push({ node: node.expr, start: node.a, end: node.b, step: node.c, indexIdentifier })
+  out.state.expansion.selectors.push({ node: node.expr, start: node.start, end: node.end, step: node.step, indexIdentifier })
   const indexNode = new ParseNumber(createAnonymousToken(index))
   const iteratorList = new ParseMeta(node.token, new ParseSubscript(node.token, out.state.expansion.iteratorListIdentifier, indexNode, false))
   const subscriptIterator = new ParseSubscript(node.token, iteratorList, indexIdentifier, false);
@@ -152,4 +152,19 @@ export const defaultMetaFunction = (subCompilerState: SubCompilerState, compiled
   const constructor = new Closure(funcDef, definitionScope, subCompilerState.lexicalParent!)
 
   Object.assign(compiledClass.metaobject, { iterate, constructor })
+}
+
+export const preloadModuleText = () => {
+  return `
+
+fn iterate!(f, T)(lst: List!T) @inline @method:
+  i := 0
+  while i < lst.length:
+    f(lst[i])
+    i += 1
+
+# This is needed for expansion operator
+fn length!(T)(lst: List!T) @inline @method:
+  lst.length
+`
 }

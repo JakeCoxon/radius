@@ -1164,9 +1164,28 @@ const topLevelLetConst = (ctx: TaskContext, expr: ParseLetConst, rootScope: Scop
   );
 }
 
+export const loadModule = (ctx: TaskContext, location: SourceLocation, moduleName: string, rootScope: Scope): Task<Module, CompilerError> => {
+  const loader = ctx.globalCompiler.moduleLoader
+  if (loader.cache[moduleName]) return Task.of(loader.cache[moduleName])
+  const parsedModule = loader.loadModule(moduleName)
+  const moduleScope = createScope({ ...rootScope }, undefined)
+
+  const subCompilerState = pushSubCompilerState(ctx, { debugName: `${moduleName} module`, lexicalParent: undefined, scope: moduleScope })
+  ;(subCompilerState as any).location = location
+
+  return (
+    TaskDef(runTopLevelTask, parsedModule.rootNode, rootScope, moduleScope)
+    .chainFn((task, _) => {
+      const module = new Module(moduleName, subCompilerState, parsedModule)
+      loader.cache[moduleName] = module
+      return Task.of(module)
+    }) as Task<Module, CompilerError>
+  )
+}
+
 export const importModule = (ctx: TaskContext, importNode: ParseImport, rootScope: Scope, existingScope: Scope) => {
   const moduleName = importNode.module.token.value
-  const ml = ctx.globalCompiler.moduleLoader
+  const loader = ctx.globalCompiler.moduleLoader
 
   const expandIntoScope = (module: Module) => {
     if (importNode.imports.length === 0) {
@@ -1186,23 +1205,10 @@ export const importModule = (ctx: TaskContext, importNode: ParseImport, rootScop
     
     return Task.concurrency(tasks)
   }
-  
-  if (ml.cache[moduleName]) {
-    ctx.subCompilerState = ml.cache[moduleName].compilerState
-    
-    return expandIntoScope(ml.cache[moduleName])
-  }
-  const parsedModule = ml.loadModule(moduleName)
-  const moduleScope = createScope({ ...rootScope }, undefined)
-
-  const subCompilerState = pushSubCompilerState(ctx, { debugName: `${moduleName} module`, lexicalParent: undefined, scope: moduleScope })
-  ;(subCompilerState as any).location = importNode.token.location
-
   return (
-    TaskDef(runTopLevelTask, parsedModule.rootNode, rootScope, moduleScope)
-    .chainFn((task, _) => {
-      const module = new Module(moduleName, subCompilerState, parsedModule)
-      ml.cache[moduleName] = module
+    TaskDef(loadModule, importNode.token.location, moduleName, rootScope)
+    .chainFn((task, module) => {
+      ctx.subCompilerState = loader.cache[moduleName].compilerState
       return expandIntoScope(module)
     })
   )
@@ -1210,6 +1216,22 @@ export const importModule = (ctx: TaskContext, importNode: ParseImport, rootScop
 
 export const runTopLevelTask = (ctx: TaskContext, stmts: ParseStatements, rootScope: Scope, moduleScope: Scope) => {
   const tasks: Task<unknown, unknown>[] = []
+
+  const copyEverythingIntoScope = (module: Module) => {
+    Object.getOwnPropertyNames(module.compilerState.scope).forEach((k) => {
+      const v = module.compilerState.scope[k]
+      // TODO: All of rootScope is also copied here
+      setScopeValueAndResolveEvents(moduleScope, k, v)
+    })
+
+    if (ctx.globalCompiler.methods.get(module.compilerState.scope)) {
+      const methods = [...ctx.globalCompiler.methods.get(module.compilerState.scope)!]
+      ctx.globalCompiler.methods.set(moduleScope, methods)
+    }
+  }
+  const loader = ctx.globalCompiler.moduleLoader
+  if (loader.cache["_preload"] && loader.cache["_preload"].compilerState.scope != moduleScope)
+    copyEverythingIntoScope(loader.cache['_preload'])
   
   stmts.exprs.forEach(node => {
     if (node.key === 'import') {

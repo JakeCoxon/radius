@@ -1,6 +1,3 @@
-fn length!(T)(lst: List!T) @inline:
-  lst.length
-
 fn main():
 
   lst1 := [1, 2, 3, 4, 5]

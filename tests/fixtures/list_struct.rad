@@ -1,10 +1,3 @@
-
-fn iterate!(f, T)(lst: List!T) @inline @method: 
-  i := 0
-  while i < lst.length:
-    f(lst[i])
-    i += 1
-    
 type Thing:
   x : int
   y : int

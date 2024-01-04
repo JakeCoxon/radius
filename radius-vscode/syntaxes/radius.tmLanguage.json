@@ -23,7 +23,12 @@
 				"1": {
 					"name": "punctuation.definition.list.end.radius"
 				}
-			}
+			},
+			"patterns": [
+				{
+					"include": "$self"
+				}
+			]
 		},
 		{
 			"captures": {

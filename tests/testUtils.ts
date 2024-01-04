@@ -1,11 +1,11 @@
 import { existsSync, unlinkSync, readFileSync } from "node:fs";
-import { runTopLevelTask } from "../src/compiler";
-import { BoolType, Closure, CompilerError, DoubleType, ExternalFunction, FloatType, GlobalCompilerState, IntType, Scope, StringType, SubCompilerState, TaskContext, VoidType, compilerAssert, createDefaultGlobalCompiler, createScope, expectMap, BuiltinTypes, ModuleLoader, SourceLocation, textColors, outputSourceLocation, TokenRoot } from "../src/defs";
+import { importModule, loadModule, runTopLevelTask } from "../src/compiler";
+import { BoolType, Closure, CompilerError, DoubleType, ExternalFunction, FloatType, GlobalCompilerState, IntType, Scope, StringType, SubCompilerState, TaskContext, VoidType, compilerAssert, createDefaultGlobalCompiler, createScope, expectMap, BuiltinTypes, ModuleLoader, SourceLocation, textColors, outputSourceLocation, TokenRoot, ParseImport, createAnonymousToken } from "../src/defs";
 import { makeParser } from "../src/parser"
 import { Queue, TaskDef, stepQueue, withContext } from "../src//tasks";
 import { expect } from "bun:test";
-import { createCallAstFromValue, functionTemplateTypeCheckAndCompileTask } from "../src/compiler_functions";
-import { VecTypeMetaClass } from "../src/compiler_sugar";
+import { createCallAstFromValue } from "../src/compiler_functions";
+import { VecTypeMetaClass, preloadModuleText } from "../src/compiler_sugar";
 import { writeFinalBytecode } from "../src/codegen";
 
 const runTestInner = (queue: Queue, input: string, filepath: string, globalCompiler: GlobalCompilerState, rootScope: Scope) => {
@@ -25,6 +25,12 @@ const runTestInner = (queue: Queue, input: string, filepath: string, globalCompi
     .wrap(withContext({ globalCompiler, subCompilerState } as TaskContext))
   );
   queue.enqueue(root)
+
+
+  queue.enqueue(
+    TaskDef(loadModule, SourceLocation.anon, "_preload", rootScope)
+    .wrap(withContext({ globalCompiler, subCompilerState } as TaskContext))
+  )
 
   let i;
   for (i = 0; i < 10000; i++) {
@@ -48,6 +54,7 @@ export const createModuleLoader = (basepath: string) => {
   return <ModuleLoader>{
     cache: {},
     loadModule: (module) => {
+      if (module === "_preload") return makeParser(preloadModuleText(), '_preload');
       const path = `${basepath}${module}.rad`
       const input = readFileSync(path, 'utf-8')
       return makeParser(input, path)
@@ -107,12 +114,7 @@ export const runCompilerTest = (input: string, { moduleLoader, filename, expectE
 
   const globalCompiler = createDefaultGlobalCompiler()
   globalCompiler.logger = logger
-  globalCompiler.moduleLoader = moduleLoader || {
-    cache: {},
-    loadModule: (module) => {
-      compilerAssert(false, "Not implemented")
-    }
-  }
+  globalCompiler.moduleLoader = moduleLoader || createModuleLoader(`${import.meta.dir}/fixtures/imports/`)
 
   let gotError = false;
   let fatalError = false;

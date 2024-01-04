@@ -30,3 +30,23 @@ fn main():
   tup = (23, float(67), new_person, new_vec)
 
   foo(tup)
+
+  list := [MyVec(30, 40), MyVec(1, 2), MyVec(3, 6)]
+
+  x := list[0].x + list[1].y
+  print(x)
+
+  list2 := [
+    Person("Person1", 101), 
+    Person("Person2", 102), 
+    Person("Person3", 103)]
+
+  print(list2[0].age)
+
+  list3 := [
+    (23, float(67), new_person, MyVec(124, 53)), 
+    (13, float(12), new_person, MyVec(123, 40)), 
+    (51, float(67), new_person, MyVec(312, 23))]
+
+  print(list3[:]) ...
+  
