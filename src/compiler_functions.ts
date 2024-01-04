@@ -151,8 +151,6 @@ export function functionTemplateTypeCheckAndCompileTask(ctx: TaskContext, { func
     TaskDef(createBytecodeVmAndExecuteTask, subCompilerState, func.templatePrototype.bytecode!, templateScope)
     .chainFn((task, ast) => {
 
-      const concreteTypes: Type[] = []
-
       ctx.globalCompiler.logger.log(textColors.cyan(`Compiled template ${func.debugName}`))
       
       compilerAssert(isAst(ast), "Expected ast got $ast", { ast });

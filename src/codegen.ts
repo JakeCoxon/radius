@@ -1,4 +1,4 @@
-import { Ast, AstWriterTable, Binding, BindingAst, BoolType, CodegenFunctionWriter, CodegenWriter, CompiledFunction, ConcreteClassType, DoubleType, ExternalTypeConstructor, FileWriter, FloatType, GlobalCompilerState, IntType, ListTypeConstructor, ParameterizedType, PrimitiveType, RawPointerType, Type, TypeField, VoidType, compilerAssert } from "./defs";
+import { Ast, AstWriterTable, Binding, BindingAst, BoolType, CodegenFunctionWriter, CodegenWriter, CompiledFunction, ConcreteClassType, DoubleType, ExternalTypeConstructor, FileWriter, FloatType, GlobalCompilerState, IntType, ListTypeConstructor, ParameterizedType, PrimitiveType, RawPointerType, Type, TypeField, VoidType, compilerAssert, textColors } from "./defs";
 
 const OpCodes = {
   Nil: 0,
@@ -23,71 +23,74 @@ const OpCodes = {
   ConstantS: 19,
   GetLocalS: 20,
   SetLocalS: 21,
-  ConstantV: 22,
-  ConstantF32: 23,
-  ConstantF64: 24,
-  ConstantI32: 25,
-  ConstantI64: 26,
-  GetLocalV: 27,
-  GetLocalF32: 28,
-  GetLocalF64: 29,
-  GetLocalI32: 30,
-  GetLocalI64: 31,
-  SetLocalV: 32,
-  SetLocalF32: 33,
-  SetLocalF64: 34,
-  SetLocalI32: 35,
-  SetLocalI64: 36,
-  EqualV: 37,
-  EqualF32: 38,
-  EqualF64: 39,
-  EqualI32: 40,
-  EqualI64: 41,
-  GreaterV: 42,
-  GreaterF32: 43,
-  GreaterF64: 44,
-  GreaterI32: 45,
-  GreaterI64: 46,
-  LessV: 47,
-  LessF32: 48,
-  LessF64: 49,
-  LessI32: 50,
-  LessI64: 51,
-  AddV: 52,
-  AddF32: 53,
-  AddF64: 54,
-  AddI32: 55,
-  AddI64: 56,
-  SubtractV: 57,
-  SubtractF32: 58,
-  SubtractF64: 59,
-  SubtractI32: 60,
-  SubtractI64: 61,
-  MultiplyV: 62,
-  MultiplyF32: 63,
-  MultiplyF64: 64,
-  MultiplyI32: 65,
-  MultiplyI64: 66,
-  DivideV: 67,
-  DivideF32: 68,
-  DivideF64: 69,
-  DivideI32: 70,
-  DivideI64: 71,
-  NotV: 72,
-  NotF32: 73,
-  NotF64: 74,
-  NotI32: 75,
-  NotI64: 76,
-  NegateV: 77,
-  NegateF32: 78,
-  NegateF64: 79,
-  NegateI32: 80,
-  NegateI64: 81,
-  ToStringV: 82,
-  ToStringF32: 83,
-  ToStringF64: 84,
-  ToStringI32: 85,
-  ToStringI64: 86,
+  F32_TO_I32: 22,
+  I32_TO_F32: 23,
+  CheckStack: 24,
+  ConstantV: 25,
+  ConstantF32: 26,
+  ConstantF64: 27,
+  ConstantI32: 28,
+  ConstantI64: 29,
+  GetLocalV: 30,
+  GetLocalF32: 31,
+  GetLocalF64: 32,
+  GetLocalI32: 33,
+  GetLocalI64: 34,
+  SetLocalV: 35,
+  SetLocalF32: 36,
+  SetLocalF64: 37,
+  SetLocalI32: 38,
+  SetLocalI64: 39,
+  EqualV: 40,
+  EqualF32: 41,
+  EqualF64: 42,
+  EqualI32: 43,
+  EqualI64: 44,
+  GreaterV: 45,
+  GreaterF32: 46,
+  GreaterF64: 47,
+  GreaterI32: 48,
+  GreaterI64: 49,
+  LessV: 50,
+  LessF32: 51,
+  LessF64: 52,
+  LessI32: 53,
+  LessI64: 54,
+  AddV: 55,
+  AddF32: 56,
+  AddF64: 57,
+  AddI32: 58,
+  AddI64: 59,
+  SubtractV: 60,
+  SubtractF32: 61,
+  SubtractF64: 62,
+  SubtractI32: 63,
+  SubtractI64: 64,
+  MultiplyV: 65,
+  MultiplyF32: 66,
+  MultiplyF64: 67,
+  MultiplyI32: 68,
+  MultiplyI64: 69,
+  DivideV: 70,
+  DivideF32: 71,
+  DivideF64: 72,
+  DivideI32: 73,
+  DivideI64: 74,
+  NotV: 75,
+  NotF32: 76,
+  NotF64: 77,
+  NotI32: 78,
+  NotI64: 79,
+  NegateV: 80,
+  NegateF32: 81,
+  NegateF64: 82,
+  NegateI32: 83,
+  NegateI64: 84,
+  ToStringV: 85,
+  ToStringF32: 86,
+  ToStringF64: 87,
+  ToStringI32: 88,
+  ToStringI64: 89,
 };
 
 const POINTER_SIZE = 2; // 64 bit
@@ -106,7 +109,8 @@ const operatorMap = {
 const writeBytes = (writer: CodegenFunctionWriter, ...values: number[]) => {
   values.forEach((x) => compilerAssert(x < 2 ** 8, `Expected ${x} < 256`));
   const name = Object.entries(OpCodes).find(x => x[1] === values[0])?.[0]
-  console.log(writer.bytecode.length, name, ...values.slice(1))
+  const indent = "  ".repeat(Math.max(writer.nextLocalSlot, 0))
+  console.log(textColors.green(String(writer.bytecode.length).padEnd(2, ' ')) + " |" + indent + name, ...values.slice(1))
   writer.bytecode.push(...values);
 };
 const writeJump = (writer: CodegenFunctionWriter, type: number) => {
@@ -169,8 +173,9 @@ const slotSize = (writer: CodegenFunctionWriter, type: Type): number => {
   if (type === VoidType) return 0
   if (type === IntType) return 1
   if (type === BoolType) return 1
+  if (type === FloatType) return 1
   if (type === RawPointerType) return POINTER_SIZE
-  
+
   if (writer.writer.typeSizes.get(type)) return writer.writer.typeSizes.get(type)!;
   const s = calculateTypeSize(writer, type);
   writer.writer.typeSizes.set(type, s)
@@ -214,6 +219,8 @@ const SetLocalByType = { I32: getFieldOp(OpCodes.SetLocalI32), I64: getFieldOp(O
 
 const getOpByType = (writer: CodegenFunctionWriter, type: Type): keyof typeof GetLocalByType => {
   if (type === IntType || type === BoolType) return 'I32'
+  else if (type === FloatType) return 'F32'
+  else if (type === DoubleType) return 'F64'
   else if (type === RawPointerType) return 'I64'
   else if (type instanceof ParameterizedType || type instanceof ConcreteClassType) return 'S'
   compilerAssert(false, "Unexpected type", { type })
@@ -226,23 +233,30 @@ const astWriter: AstWriterTable = {
     ast.statements.forEach((expr, i) => {
       writeExpr(writer, expr);
       if (i !== ast.statements.length - 1 && expr.type !== VoidType) {
-        writer.nextLocalSlot -= slotSize(writer, expr.type)
         writeBytes(writer, OpCodes.Pop, slotSize(writer, expr.type))
+        writer.nextLocalSlot -= slotSize(writer, expr.type)
       }
     })
 
     let numLocalSlots = 0
-    console.log("num locals", writer.locals.length, writer.nextLocalSlot)
+    // console.log("Prev locals is", writer.locals)
+    // console.log("writer.nextLocalSlot", writer.nextLocalSlot)
+    let popped = []
     while (writer.locals.length && writer.locals[writer.locals.length - 1].scopeIndex === writer.currentScopeIndex) {
       const sizeSlots = slotSize(writer, writer.locals[writer.locals.length - 1].binding.type)
       numLocalSlots += sizeSlots
-      writer.nextLocalSlot -= sizeSlots
+      // writer.nextLocalSlot -= sizeSlots
+      popped.push(writer.locals[writer.locals.length - 1].binding.name)
       writer.locals.pop()
     }
     compilerAssert(writer.nextLocalSlot >= 0, "Slot mismatch error", { fatal: true, nextLocalSlot: writer.nextLocalSlot })
-    console.log("Popped now new slot is ", writer.nextLocalSlot)
+    // console.log("Popped", popped)
+    // console.log("Popped ", numLocalSlots, " now new slot is ", writer.nextLocalSlot)
+    // console.log("New locals is", writer.locals)
     if (numLocalSlots > 0 || slotSize(writer, ast.type) > 0) 
       writeBytes(writer, OpCodes.PopResult, numLocalSlots, slotSize(writer, ast.type))
+
+    writer.nextLocalSlot -= numLocalSlots
     
     writer.currentScopeIndex --
   },
@@ -267,13 +281,25 @@ const astWriter: AstWriterTable = {
     writeBytes(writer, OpCodes.Alloc, lengthZ)
     writer.nextLocalSlot += slotSize(writer, ast.type)
   },
+  cast: (writer, ast) => {
+    writeExpr(writer, ast.expr)
+    let opcode = 0
+    if (ast.expr.type === IntType && ast.type === FloatType)      opcode = OpCodes.I32_TO_F32
+    else if (ast.expr.type === FloatType && ast.type === IntType) opcode = OpCodes.F32_TO_I32
+    else compilerAssert(false, "Not implemented yet", { from: ast.expr.type, to: ast.type })
+    // Probably the same size
+    writeBytes(writer, opcode)
+    writer.nextLocalSlot -= slotSize(writer, ast.expr.type)
+    writer.nextLocalSlot += slotSize(writer, ast.type)
+    writeBytes(writer, OpCodes.CheckStack, writer.nextLocalSlot)
+  },
   binding: (writer, ast) => {
     const local = writer.locals.find(x => x.binding === ast.binding)
     compilerAssert(local !== undefined, "Expected binding", { ast, locals: writer.locals });
     compilerAssert(ast.binding.type !== VoidType);
-    writer.nextLocalSlot += slotSize(writer, ast.type)
     const op = getOpByType(writer, ast.binding.type)
     GetLocalByType[op].write(writer, local.slot, slotSize(writer, local.binding.type))
+    writer.nextLocalSlot += slotSize(writer, ast.type)
   },
   let: (writer, ast) => {
     // TODO: No value should zero initialize?
@@ -281,25 +307,26 @@ const astWriter: AstWriterTable = {
     if (ast.value) writeExpr(writer, ast.value);
 
     writer.locals.push({ binding: ast.binding, slot: writer.nextLocalSlot - slotSize(writer, ast.binding.type), scopeIndex: writer.currentScopeIndex })
-    console.log("let", ast.binding.name, writer.nextLocalSlot)
+    console.log("let", ast.binding.name, "at", writer.nextLocalSlot - slotSize(writer, ast.binding.type), "size", slotSize(writer, ast.binding.type))
   },
   set: (writer, ast) => {
     const local = writer.locals.find(x => x.binding === ast.binding)
     compilerAssert(local !== undefined);
     writeExpr(writer, ast.value);
-    writer.nextLocalSlot -= slotSize(writer, ast.value.type)
+    console.log("set", ast.binding.name)
     const op = getOpByType(writer, ast.binding.type)
     SetLocalByType[op].write(writer, local.slot, slotSize(writer, ast.value.type))
+    writer.nextLocalSlot -= slotSize(writer, ast.value.type)
   },
   number: (writer, ast) => {
     compilerAssert(ast.type === IntType, "Expected int type", { ast })
-    writer.nextLocalSlot += slotSize(writer, ast.type);
     emitConstant(writer, IntType, ast.value)
+    writer.nextLocalSlot += slotSize(writer, ast.type);
   },
   bool: (writer, ast) => {
     compilerAssert(ast.type === BoolType, "Expected bool type", { ast })
-    writer.nextLocalSlot += slotSize(writer, ast.type);
     emitConstant(writer, BoolType, ast.value ? 1 : 0)
+    writer.nextLocalSlot += slotSize(writer, ast.type);
   },
   if: (writer, ast) => {
     writeExpr(writer, ast.expr);
@@ -365,11 +392,11 @@ const astWriter: AstWriterTable = {
       compilerAssert(ast.args.length === 1, "Print not implemented yet", { ast });
       // compilerAssert(false, "Not implemented 'print'", { ast })
       writeExpr(writer, ast.args[0])
-      writer.nextLocalSlot -= slotSize(writer, ast.args[0].type)
 
       if (ast.args[0].type === IntType) writeBytes(writer, OpCodes.ToStringI32);
       // else compilerAssert(false, `Unsupported ${ast.args[0].type._type}`);
       writeBytes(writer, OpCodes.Print, 1);
+      writer.nextLocalSlot -= slotSize(writer, ast.args[0].type)
       compilerAssert(ast.type === VoidType, "Expected void")
       return;
     }
@@ -381,8 +408,8 @@ const astWriter: AstWriterTable = {
   list: (writer, ast) => {
     ast.args.forEach(x => writeExpr(writer, x))
     ast.args.forEach(x => writer.nextLocalSlot -= slotSize(writer, x.type))
-    writer.nextLocalSlot += slotSize(writer, ast.type)
     writeBytes(writer, OpCodes.List, slotSize(writer, ast.args[0].type), ast.args.length)
+    writer.nextLocalSlot += slotSize(writer, ast.type)
   },
 
   usercall: (writer, ast) => {
@@ -397,18 +424,18 @@ const astWriter: AstWriterTable = {
   operator: (writer, ast) => {
     writeExpr(writer, ast.args[0]);
     writeExpr(writer, ast.args[1]);
+    writeOperator(writer, ast.operator, ast.type);
     writer.nextLocalSlot -= slotSize(writer, ast.args[0].type)
     writer.nextLocalSlot -= slotSize(writer, ast.args[1].type)
     writer.nextLocalSlot += slotSize(writer, ast.type)
     // writeBytes(operatorToBytecode(ast.values[0], ast.values[1].type));
-    writeOperator(writer, ast.operator, ast.type);
   },
   constructor: (writer, ast) => {
     ast.args.forEach(expr => writeExpr(writer, expr))
     if (ast.type.typeInfo.isReferenceType) {
       ast.args.forEach(expr => writer.nextLocalSlot -= slotSize(writer, expr.type))
-      writer.nextLocalSlot += slotSize(writer, ast.type) // Pointer size
       writeBytes(writer, OpCodes.Alloc, slotSize(writer, ast.type))
+      writer.nextLocalSlot += slotSize(writer, ast.type) // Pointer size
     } else {} // Fields are kept on stack as value type
   },
   field: (writer, ast) => {
@@ -418,34 +445,40 @@ const astWriter: AstWriterTable = {
         const binding = ast.left.binding
         const local = writer.locals.find(x => x.binding === binding)
         compilerAssert(local !== undefined, "Expected binding", { ast, locals: writer.locals });
+        console.log("get", local.binding.name, local.slot)
         const op = getOpByType(writer, ast.type)
-        GetLocalByType[op].write(writer, local.slot, slotSize(writer, ast.type))
+        const slot = local.slot + getSlotOffset(writer, ast.field)
+        GetLocalByType[op].write(writer, slot, slotSize(writer, ast.type))
+        writer.nextLocalSlot += slotSize(writer, ast.type)
+        writeBytes(writer, OpCodes.CheckStack, writer.nextLocalSlot)
+        return
       } else {
         writeExpr(writer, ast.left)
         const fieldSlots = slotSize(writer, ast.type)
-        writer.nextLocalSlot -= slotSize(writer, ast.left.type)
-        writer.nextLocalSlot += fieldSlots
         const prevFieldsSize = ast.field.sourceType.typeInfo.fields.slice(0, ast.field.index).reduce((acc, x) => acc + slotSize(writer, x.fieldType), 0)
         const nextFieldsSize = ast.field.sourceType.typeInfo.fields.slice(ast.field.index + 1).reduce((acc, x) => acc + slotSize(writer, x.fieldType), 0)
         if (nextFieldsSize > 0) writeBytes(writer, OpCodes.PopResult, nextFieldsSize, 0) // pop slots after
         writeBytes(writer, OpCodes.PopResult, prevFieldsSize, fieldSlots) // pop slots before and return selected field
+        writer.nextLocalSlot -= slotSize(writer, ast.left.type)
+        writer.nextLocalSlot += fieldSlots
+        writeBytes(writer, OpCodes.CheckStack, writer.nextLocalSlot)
         return
       }
     }
     writeExpr(writer, ast.left)
+    writeBytes(writer, OpCodes.GetField, getSlotOffset(writer, ast.field), slotSize(writer, ast.field.fieldType))
     writer.nextLocalSlot -= slotSize(writer, ast.left.type)
     writer.nextLocalSlot += slotSize(writer, ast.type)
-    writeBytes(writer, OpCodes.GetField, getSlotOffset(writer, ast.field), slotSize(writer, ast.field.fieldType))
   },
   subscript: (writer, ast) => {
     compilerAssert(ast.left.type instanceof ParameterizedType && ast.left.type.typeConstructor === ListTypeConstructor, "Expected list", { ast })
     compilerAssert(ast.right.type === IntType, "Expected int type", { ast })
     writeExpr(writer, ast.left)
     writeExpr(writer, ast.right)
+    writeBytes(writer, OpCodes.SubscriptList, slotSize(writer, ast.type))
     writer.nextLocalSlot -= slotSize(writer, ast.left.type)
     writer.nextLocalSlot -= slotSize(writer, ast.right.type)
     writer.nextLocalSlot += slotSize(writer, ast.type)
-    writeBytes(writer, OpCodes.SubscriptList, slotSize(writer, ast.type))
   },
   block: (writer, ast) => {
     writer.blocks.push({ binding: ast.binding, slotIndex: writer.nextLocalSlot, patches: [] })
@@ -456,9 +489,9 @@ const astWriter: AstWriterTable = {
   },
   not: (writer, ast) => {
     writeExpr(writer, ast.expr);
+    writeBytes(writer, OpCodes.NotI32);
     writer.nextLocalSlot -= slotSize(writer, ast.expr.type)
     writer.nextLocalSlot += slotSize(writer, ast.type)
-    writeBytes(writer, OpCodes.NotI32);
   },
   void: (writer, ast) => {}
 };
@@ -514,7 +547,7 @@ function writeLittleEndian16(arr: number[], offset: number, number: number) {
 }
 
 const writeFinalBytecodeFunction = (bytecodeWriter: CodegenWriter, func: CompiledFunction) => {
-
+  console.log("\nWriting func", func.functionDefinition.debugName, "\n")
   const funcWriter: CodegenFunctionWriter = {
     writer: bytecodeWriter,
     argSlots: 0,
