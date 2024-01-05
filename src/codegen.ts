@@ -419,7 +419,9 @@ const astWriter: AstWriterTable = {
       writeExpr(writer, ast.args[0])
 
       if (ast.args[0].type === IntType) writeBytes(writer, OpCodes.ToStringI32);
-      // else compilerAssert(false, `Unsupported ${ast.args[0].type._type}`);
+      else if (ast.args[0].type === FloatType) writeBytes(writer, OpCodes.ToStringF32);
+      else if (ast.args[0].type === DoubleType) writeBytes(writer, OpCodes.ToStringI64);
+      else compilerAssert(false, `Not implemented`, { type: ast.args[0].type });
       writeBytes(writer, OpCodes.Print, 1);
       writer.nextLocalSlot -= slotSize(writer, ast.args[0].type)
       compilerAssert(ast.type === VoidType, "Expected void")

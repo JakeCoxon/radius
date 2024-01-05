@@ -4,7 +4,7 @@ type Thing:
 
 fn foothing(a: Thing):
   print(a.x)
-  print(a)
+  # print(a)
   a.x = 64
   a.y = float(100)
 
