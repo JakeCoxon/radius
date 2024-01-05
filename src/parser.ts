@@ -5,7 +5,7 @@ type LexerState = { significantNewlines: boolean; parenStack: string[] };
 function* tokenize(source: Source, state: LexerState): Generator<Token> {
   const regexes = {
     KEYWORD:
-      /^(?:and|as\!|as|break|class|continue|comptime|def|defn|elif|else|fn|for|if|ifx|in|lambda|meta|null|not|or|pass|return|try|while|with|type|interface|import|block|fold)(?=\W)/, // note \b
+      /^(?:and|as\!|as|break|class|continue|comptime|def|defn|elif|else|fn|for|if|ifx|in|lambda|meta|null|or|pass|return|try|while|with|type|interface|import|block|fold)(?=\W)/, // note (?=\W)
     IDENTIFIER: /^[a-zA-Z_][a-zA-Z_0-9-]*/,
     STRING: /^(?:"(?:[^"\\]|\\.)*")/,
     SPECIALNUMBER: /^0o[0-7]+|^0x[0-9a-fA-F_]+|^0b[01_]+/,
@@ -13,7 +13,7 @@ function* tokenize(source: Source, state: LexerState): Generator<Token> {
     COMMENT: /^#.+(?=\n)/,
     OPENPAREN: /^[\[\{\(]/,
     CLOSEPAREN: /^[\]\}\)]/,
-    PUNCTUATION: /^(?:==|!=|:=|<=|>=|\+=|\-=|\*=|\/=|::|\->|\|\>|\.\.\.|[@!:,=<>\-+\.*\/'\|])/,
+    PUNCTUATION: /^(?:==|!=|:=|<=|>=|\+=|\-=|\*=|\/=|::|->|\|\>|\.\.\.|[@!:,=<>\-+\.*\/'\|])/,
     NEWLINE: /^\n/,
     WHITESPACE: /^[ ]+/ // Not newline
   };
@@ -290,7 +290,9 @@ export const makeParser = (input: string, debugName: string) => {
     }
   };
   
-  const parseAs = () => {        let left = parseCall();     while (match("as!") || match("as"))   left = new ParseCast(previous, left, parseCall());          return left; };
+  const parseNot = (): ParseNode => match("!")  ? new ParseNot(previous, parseNot()) : parseCall();
+
+  const parseAs = () => {        let left = parseNot();     while (match("as!") || match("as"))   left = new ParseCast(previous, left, parseNot());          return left; };
   const parseFactor = () => {    let left = parseAs();       while (match("*") || match("/"))      left = new ParseOperator(previous, [left, parseAs()]);      return left; };
   const parseSum = () => {       let left = parseFactor();   while (match("+") || match("-"))      left = new ParseOperator(previous, [left, parseFactor()]);  return left; };
 
@@ -301,8 +303,7 @@ export const makeParser = (input: string, debugName: string) => {
   const parseAnd = () => {     let left = parseEquality();   while (match("and"))    left = new ParseAnd(previous, [left, parseEquality()]);  return left; };
   const parseOr = () => {      let left = parseAnd();        while (match("or"))     left = new ParseOr(previous, [left, parseAnd()]);        return left; };
 
-  const parseNot = () =>   match("!") || match("not") ?   new ParseNot(previous, parseExpr()) :   parseOr();
-  const parseMeta = () =>  match("meta")  ?  new ParseMeta(previous, parseNot())  :  parseNot();
+  const parseMeta = () =>  match("meta")  ?  new ParseMeta(previous, parseOr())  :  parseOr();
 
   const parseAssignExpr = parseMeta; // parseAssignExpr excludes expansion dots
 

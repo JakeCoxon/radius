@@ -120,13 +120,13 @@
 		"keywords": {
 			"patterns": [{
 				"name": "keyword.control.radius",
-				"match": "\\b(and|as\\!|as|break|class|continue|comptime|def|defn|elif|else|fn|for|if|ifx|in|lambda|meta|null|not|or|pass|return|try|while|with|type|interface|import|block|fold)\\b"
+				"match": "\\b(and|as\\!|as|break|class|continue|comptime|def|defn|elif|else|fn|for|if|ifx|in|lambda|meta|null|or|pass|return|try|while|with|type|interface|import|block|fold)\\b"
 			}]
 		},
 		"operators": {
 			"patterns": [{
 				"name": "keyword.operator.radius",
-				"match": "\\b(==|!=|:=|<=|>=|\\+=|\\-=|\\*=|\\/=|::|\\|\\>|\\.\\.\\.|[@!:,=<>\\-+\\.*\/'\\|])\\b"
+				"match": "\\b(==|!=|:=|<=|>=|\\+=|\\-=|\\*=|\\/=|::|->|\\|\\>|\\.\\.\\.|[@!:,=<>\\-+\\.*\/'\\|])\\b"
 			}]
 		},
 		"strings": {
