@@ -1,80 +1,90 @@
-import { existsSync, unlinkSync, readFileSync } from "node:fs";
-import { importModule, loadModule, runTopLevelTask } from "../src/compiler";
-import { BoolType, Closure, CompilerError, DoubleType, ExternalFunction, FloatType, GlobalCompilerState, IntType, Scope, StringType, SubCompilerState, TaskContext, VoidType, compilerAssert, createDefaultGlobalCompiler, createScope, expectMap, BuiltinTypes, ModuleLoader, SourceLocation, textColors, outputSourceLocation, TokenRoot, ParseImport, createAnonymousToken } from "../src/defs";
-import { makeParser } from "../src/parser"
-import { Queue, TaskDef, stepQueue, withContext } from "../src//tasks";
-import { expect } from "bun:test";
-import { createCallAstFromValue } from "../src/compiler_functions";
-import { VecTypeMetaClass, preloadModuleText } from "../src/compiler_sugar";
-import { writeFinalBytecode } from "../src/codegen";
+import { existsSync, unlinkSync, readFileSync } from 'node:fs'
+import { importModule, loadModule, runTopLevelTask } from '../src/compiler'
+import { BoolType, Closure, CompilerError, DoubleType, ExternalFunction, FloatType, GlobalCompilerState, IntType, Scope, StringType, SubCompilerState, TaskContext, VoidType, compilerAssert, createDefaultGlobalCompiler, createScope, expectMap, BuiltinTypes, ModuleLoader, SourceLocation, textColors, outputSourceLocation, TokenRoot, ParseImport, createAnonymousToken } from "../src/defs"; // prettier-ignore
+import { makeParser } from '../src/parser'
+import { Queue, TaskDef, stepQueue, withContext } from '../src//tasks'
+import { expect } from 'bun:test'
+import { createCallAstFromValue } from '../src/compiler_functions'
+import { VecTypeMetaClass, preloadModuleText } from '../src/compiler_sugar'
+import { writeFinalBytecode } from '../src/codegen'
 
-const runTestInner = (queue: Queue, input: string, filepath: string, globalCompiler: GlobalCompilerState, rootScope: Scope) => {
+const runTestInner = (
+  queue: Queue,
+  input: string,
+  filepath: string,
+  globalCompiler: GlobalCompilerState,
+  rootScope: Scope
+) => {
   const parser = makeParser(input, filepath)
-  
-  const subCompilerState = new SubCompilerState('testmodule');
+
+  const subCompilerState = new SubCompilerState('testmodule')
   const moduleScope = createScope({ ...rootScope }, undefined)
   subCompilerState.scope = moduleScope
   subCompilerState.globalCompiler = globalCompiler
 
-  const root = (
-    TaskDef(runTopLevelTask, parser.rootNode, rootScope, moduleScope)
+  const root = TaskDef(runTopLevelTask, parser.rootNode, rootScope, moduleScope)
     .chainFn((task, arg) => {
-      const func: Closure = expectMap(moduleScope, "main", "No main function found");
+      const func: Closure = expectMap(moduleScope, 'main', 'No main function found')
       return TaskDef(createCallAstFromValue, func, [], [])
     })
     .wrap(withContext({ globalCompiler, subCompilerState } as TaskContext))
-  );
   queue.enqueue(root)
 
-
   queue.enqueue(
-    TaskDef(loadModule, SourceLocation.anon, "_preload", rootScope)
-    .wrap(withContext({ globalCompiler, subCompilerState } as TaskContext))
+    TaskDef(loadModule, SourceLocation.anon, '_preload', rootScope).wrap(
+      withContext({ globalCompiler, subCompilerState } as TaskContext)
+    )
   )
 
-  let i;
+  let i
   for (i = 0; i < 10000; i++) {
     if (queue.list.length === 0) {
       if (root._state !== 'completed') {
         // TODO: remove events after they are completed
-        globalCompiler.allWaitingEvents.forEach(e => e.failure({}))
+        globalCompiler.allWaitingEvents.forEach((e) => e.failure({}))
       }
       if (queue.list.length === 0) break
     }
-    stepQueue(queue);
+    stepQueue(queue)
   }
   if (root._failure) throw root._failure
   if (!root._success && i === 10000) {
-    compilerAssert(false, "Exhausted. maybe an infinite loop", { root })
+    compilerAssert(false, 'Exhausted. maybe an infinite loop', { root })
   }
-  compilerAssert(root._success, "Expected success", { root })
+  compilerAssert(root._success, 'Expected success', { root })
 }
 
 export const createModuleLoader = (basepath: string) => {
   return <ModuleLoader>{
     cache: {},
     loadModule: (module) => {
-      if (module === "_preload") return makeParser(preloadModuleText(), '_preload');
+      if (module === '_preload') return makeParser(preloadModuleText(), '_preload')
       const path = `${basepath}${module}.rad`
       const input = readFileSync(path, 'utf-8')
       return makeParser(input, path)
-    }
+    },
   }
 }
 
-const originalLog = console.log;
+const originalLog = console.log
 
-export const runCompilerTest = (input: string, { moduleLoader, filename, expectError=false }: { moduleLoader?: ModuleLoader, filename: string, expectError?: boolean }) => {
-
+export const runCompilerTest = (
+  input: string,
+  {
+    moduleLoader,
+    filename,
+    expectError = false,
+  }: { moduleLoader?: ModuleLoader; filename: string; expectError?: boolean }
+) => {
   const path = `${import.meta.dir}/output/${filename}.txt`
   if (existsSync(path)) unlinkSync(path)
-  const file = Bun.file(path);
-  const writer = file.writer();
-  
+  const file = Bun.file(path)
+  const writer = file.writer()
+
   const prints: unknown[] = []
 
   const writeToFile = (...args) => {
-    args.forEach(arg => {
+    args.forEach((arg) => {
       if (typeof arg === 'string') {
         writer.write(arg)
       } else writer.write(Bun.inspect(arg, { depth: 10, colors: true }))
@@ -83,72 +93,75 @@ export const runCompilerTest = (input: string, { moduleLoader, filename, expectE
     writer.write('\n')
   }
 
-  const logger = { log: (...args) => {
-    writeToFile(...args)
-  } }
+  const logger = {
+    log: (...args) => {
+      writeToFile(...args)
+    },
+  }
 
   globalThis.console.log = (...args) => {
     originalLog(...args)
     logger.log(...args)
   }
-  (globalThis as any).logger = logger;
+  ;(globalThis as any).logger = logger
 
-  const rootScope: Scope = createScope({
-    ...BuiltinTypes,
-    compfoo: { _function: (a, b) => 65 + a + b },
-    print: new ExternalFunction('print', VoidType, (...args) => {
-      logger.log("print called", ...args);
-      prints.push(...args)
-      return args[0];
-    }),
-    static_print: new ExternalFunction('static_print', VoidType, (...args) => {
-      logger.log("static_print called", ...args);
-      prints.push(...args)
-      return args[0];
-    }),
+  const rootScope: Scope = createScope(
+    {
+      ...BuiltinTypes,
+      compfoo: { _function: (a, b) => 65 + a + b },
+      print: new ExternalFunction('print', VoidType, (...args) => {
+        logger.log('print called', ...args)
+        prints.push(...args)
+        return args[0]
+      }),
+      static_print: new ExternalFunction('static_print', VoidType, (...args) => {
+        logger.log('static_print called', ...args)
+        prints.push(...args)
+        return args[0]
+      }),
 
-    VecType: VecTypeMetaClass
-  }, undefined);
+      VecType: VecTypeMetaClass,
+    },
+    undefined
+  )
 
-  const queue = new Queue();
+  const queue = new Queue()
 
   const globalCompiler = createDefaultGlobalCompiler()
   globalCompiler.logger = logger
   globalCompiler.moduleLoader = moduleLoader || createModuleLoader(`${import.meta.dir}/fixtures/imports/`)
 
-  let gotError = false;
-  let fatalError = false;
+  let gotError = false
+  let fatalError = false
 
   const writeBytecodeFile = () => {
-      const path = `${import.meta.dir}/output/${filename}.raw`
-      if (existsSync(path)) unlinkSync(path)
-      const file = Bun.file(path);
-      const bytecodeWriter = file.writer();
-      writeFinalBytecode(globalCompiler, bytecodeWriter)
-      bytecodeWriter.end()
-  }  
+    const path = `${import.meta.dir}/output/${filename}.raw`
+    if (existsSync(path)) unlinkSync(path)
+    const file = Bun.file(path)
+    const bytecodeWriter = file.writer()
+    writeFinalBytecode(globalCompiler, bytecodeWriter)
+    bytecodeWriter.end()
+  }
 
   try {
     runTestInner(queue, input, `${filename}.rad`, globalCompiler, rootScope)
 
     globalCompiler.compiledFunctions.forEach((func) => {
       writer.write(func.functionDefinition.debugName)
-      writer.write("\n")
-      writer.write(Bun.inspect(func.body, { depth: 100, colors: true }));
-      writer.write("\n\n")
+      writer.write('\n')
+      writer.write(Bun.inspect(func.body, { depth: 100, colors: true }))
+      writer.write('\n\n')
     })
 
     writeBytecodeFile()
-
   } catch (ex) {
-    gotError = true;
+    gotError = true
 
     if (ex instanceof Error) {
       if (ex.stack) logger.log(ex.stack)
       else logger.log(ex.toString())
     }
     if (ex instanceof CompilerError) {
-
       // (ex.info as any).currentTask = (queue.currentTask as any)?.def;
       // (ex.info as any).subCompilerState = (queue.currentTask?._context as TaskContext).subCompilerState
 
@@ -160,7 +173,7 @@ export const runCompilerTest = (input: string, { moduleLoader, filename, expectE
       }
 
       if ((ex.info as any)._userinfo) {
-        (ex.info as any)._userinfo.forEach(name => {
+        ;(ex.info as any)._userinfo.forEach((name) => {
           const item = ex.info[name]
           if (item && Object.getPrototypeOf(item) === TokenRoot) {
             const text = outputSourceLocation(item.location)
@@ -169,22 +182,19 @@ export const runCompilerTest = (input: string, { moduleLoader, filename, expectE
         })
       }
 
-      logger.log("\nError info")
+      logger.log('\nError info')
       Object.entries(ex.info).forEach(([name, value]) => {
         logger.log(`${name}:`, Bun.inspect(value, { depth: 10, colors: true }))
       })
       if ((ex.info as any).fatal) fatalError = true
-      
     }
   }
 
-
-  writer.flush();
-  writer.end();
+  writer.flush()
+  writer.end()
 
   expect(gotError).toBe(expectError)
-  expect(fatalError).toBe(false);
+  expect(fatalError).toBe(false)
 
-  return { prints, globalCompiler };
-
+  return { prints, globalCompiler }
 }
