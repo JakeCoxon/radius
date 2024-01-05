@@ -1,6 +1,6 @@
 import { BytecodeSecondOrder, getOperatorTable, visitParseNode } from "./compiler"
 import { insertFunctionDefinition } from "./compiler_functions"
-import { ArgumentTypePair, Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold } from "./defs"
+import { ArgumentTypePair, Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr } from "./defs"
 
 export const forLoopSugar = (out: BytecodeWriter, node: ParseFor) => {
   const fnArgs: ArgumentTypePair[] = [[node.identifier, null]]
@@ -71,19 +71,27 @@ export const expandLoopSugar = (out: BytecodeWriter, node: ParseExpand) => {
   const cond = iteratorNodes.slice(1).reduce((acc: ParseNode, x) => new ParseAnd(node.token, [acc, x.condNode]), iteratorNodes[0].condNode)
 
   let loopBody: ParseNode = new ParseBytecode(node.token, bytecode)
-  const after: ParseNode[] = []
+  const result: ParseNode[] = []
   
   if (expansion.fold) {
     lets.push(new ParseLet(node.token, expansion.fold.iden, null, expansion.fold.initial))
     loopBody = new ParseSet(node.token, expansion.fold.iden, loopBody)
-    after.push(expansion.fold.iden)
+    result.push(expansion.fold.iden)
   }
   const whileStmts = new ParseStatements(node.token, [loopBody, ...iteratorNodes.map(x => x.incNode)])
   const loop = new ParseWhile(node.token, cond, whileStmts)
   const metaList = new ParseMeta(node.token, letIteratorList)
-  visitParseNode(out, new ParseStatements(node.token, [metaList, ...lets, loop, ...after]))
+  visitParseNode(out, new ParseStatements(node.token, [metaList, ...lets, loop, ...result]))
 
   out.state.expansion = null
+}
+
+export const forExprSugar = (out: BytecodeWriter, node: ParseForExpr) => {
+  compilerAssert(false, "Not implemented")
+}
+
+export const whileExprSugar = (out: BytecodeWriter, node: ParseWhileExpr) => {
+  compilerAssert(false, "Not implemented")
 }
 
 export const foldSugar = (out: BytecodeWriter, node: ParseFold) => {
