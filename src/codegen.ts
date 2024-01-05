@@ -463,12 +463,15 @@ const astWriter: AstWriterTable = {
       else if (type === IntType) emitConstant(writer, IntType, 0)
       else if (type === BoolType) emitConstant(writer, BoolType, 0)
       else if (type === FloatType) emitConstant(writer, FloatType, 0)
-      else ast.type.typeInfo.fields.forEach(field => {recur(field.fieldType)})
+      else if (!type.typeInfo.isReferenceType) {
+        type.typeInfo.fields.forEach(field => {recur(field.fieldType)})
+      } else compilerAssert(false, "Not implemented", { type })
     }
     recur(ast.type)
     writer.nextLocalSlot += slotSize(writer, ast.type)
   },
   constructor: (writer, ast) => {
+    // TODO: Split this into two ASTs, a value type literal and an alloc
     compilerAssert(ast.args.length > 0 && ast.args.length === ast.type.typeInfo.fields.length, "Not implemented")
     ast.args.forEach(expr => writeExpr(writer, expr))
     if (ast.type.typeInfo.isReferenceType) {
@@ -479,6 +482,18 @@ const astWriter: AstWriterTable = {
       writeBytes(writer, OpCodes.CheckStack, writer.nextLocalSlot)
     } else {} // Fields are kept on stack as value type
   },
+  valuefield: (writer, ast) => {
+    // TODO: Another ast where it is a value type but left is not a BindingAst
+    const binding = ast.left.binding
+    const local = writer.locals.find(x => x.binding === binding)
+    compilerAssert(local !== undefined, "Expected binding", { ast, locals: writer.locals });
+    const slot = ast.fieldPath.reduce((acc, field) => acc + getSlotOffset(writer, field), local.slot)
+    log("get", local.binding.name, ast.fieldPath.map(x => x.name), slot)
+    const op = getOpByType(writer, ast.type)
+    GetLocalByType[op].write(writer, slot, slotSize(writer, ast.type))
+    writer.nextLocalSlot += slotSize(writer, ast.type)
+    writeBytes(writer, OpCodes.CheckStack, writer.nextLocalSlot)
+  },
   field: (writer, ast) => {
     if (ast.left.type.typeInfo.isReferenceType) {
       writeExpr(writer, ast.left)
@@ -487,18 +502,8 @@ const astWriter: AstWriterTable = {
       writer.nextLocalSlot += slotSize(writer, ast.type)
       return
     }
-    if (ast.left instanceof BindingAst) {
-      const binding = ast.left.binding
-      const local = writer.locals.find(x => x.binding === binding)
-      compilerAssert(local !== undefined, "Expected binding", { ast, locals: writer.locals });
-      log("get", local.binding.name, local.slot)
-      const slot = local.slot + getSlotOffset(writer, ast.field)
-      const op = getOpByType(writer, ast.type)
-      GetLocalByType[op].write(writer, slot, slotSize(writer, ast.type))
-      writer.nextLocalSlot += slotSize(writer, ast.type)
-      writeBytes(writer, OpCodes.CheckStack, writer.nextLocalSlot)
-      return
-    } 
+    compilerAssert(!(ast.left instanceof BindingAst), "should use valuefield", { fatal: true })
+    // TODO: Specific test for this, it does already happen in some tests
     writeExpr(writer, ast.left)
     const fieldSlots = slotSize(writer, ast.type)
     const prevFieldsSize = ast.field.sourceType.typeInfo.fields.slice(0, ast.field.index).reduce((acc, x) => acc + slotSize(writer, x.fieldType), 0)
@@ -509,6 +514,17 @@ const astWriter: AstWriterTable = {
     writer.nextLocalSlot += fieldSlots
     writeBytes(writer, OpCodes.CheckStack, writer.nextLocalSlot)
   },
+  setvaluefield: (writer, ast) => {
+    const binding = ast.left.binding
+    const local = writer.locals.find(x => x.binding === binding)
+    compilerAssert(local !== undefined, "Expected binding", { ast, locals: writer.locals });
+    let slot = local.slot
+    ast.fieldPath.forEach(field => {slot += getSlotOffset(writer, field)})
+    writeExpr(writer, ast.value)
+    writer.nextLocalSlot -= slotSize(writer, ast.value.type)
+    const op = getOpByType(writer, ast.value.type)
+    SetLocalByType[op].write(writer, slot, slotSize(writer, ast.value.type))
+  },
   setfield: (writer, ast) => {
     if (ast.left.type.typeInfo.isReferenceType) {
       writeExpr(writer, ast.value)
@@ -518,33 +534,7 @@ const astWriter: AstWriterTable = {
       writer.nextLocalSlot -= slotSize(writer, ast.value.type)
       return
     }
-    
-    let left: Ast = ast.left
-    let leftmostAst: Ast = null!
-
-    const fields: TypeField[] = [ast.field]
-    while (left) {
-      if (left instanceof FieldAst) {
-        compilerAssert(!left.field.fieldType.typeInfo.isReferenceType, "Not implemented", { type: left.field.fieldType })
-        fields.push(left.field)
-        left = left.left
-      }
-      else {leftmostAst = left; break}
-    }
-
-    if (leftmostAst instanceof BindingAst) {
-      const binding = leftmostAst.binding
-      const local = writer.locals.find(x => x.binding === binding)
-      compilerAssert(local !== undefined, "Expected binding", { ast, locals: writer.locals });
-      let slot = local.slot
-      fields.forEach(field => {slot += getSlotOffset(writer, field)})
-      writeExpr(writer, ast.value)
-      writer.nextLocalSlot -= slotSize(writer, ast.value.type)
-      const op = getOpByType(writer, ast.value.type)
-      SetLocalByType[op].write(writer, slot, slotSize(writer, ast.value.type))
-      return
-    }
-    compilerAssert(false, "Not implemented", { ast })
+    compilerAssert(false, "Not implemented", { ast }) // TODO: Tests for this
   },
   subscript: (writer, ast) => {
     compilerAssert(ast.left.type instanceof ParameterizedType && ast.left.type.typeConstructor === ListTypeConstructor, "Expected list", { ast })

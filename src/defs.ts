@@ -109,59 +109,58 @@ class ParseNodeType {
   }
 }
 
-export class ParseIdentifier extends ParseNodeType { key = 'identifier' as const; constructor(public token: Token) { super();} }
-export class ParseSymbol extends ParseNodeType {     key = 'symbol' as const;     constructor(public token: Token) { super();} }
-export class ParseNil extends ParseNodeType {        key = 'nil' as const;        constructor(public token: Token) { super();} }
-export class ParseNumber extends ParseNodeType {     key = 'number' as const;     constructor(public token: Token) { super();} }
-export class ParseString extends ParseNodeType {     key = 'string' as const;     constructor(public token: Token) { super();} }
-export class ParseBoolean extends ParseNodeType {    key = 'boolean' as const;    constructor(public token: Token) { super();} }
-
-export class ParseStatements extends ParseNodeType { key = 'statements' as const; constructor(public token: Token, public exprs: ParseNode[]) { super();} }
-export class ParseLet extends ParseNodeType {        key = 'let' as const;        constructor(public token: Token, public name: ParseIdentifier | ParseFreshIden, public type: ParseNode | null, public value: ParseNode | null) { super();} }
-export class ParseSet extends ParseNodeType {        key = 'set' as const;        constructor(public token: Token, public left: ParseNode, public value: ParseNode) { super();} }
-export class ParseOperator extends ParseNodeType {   key = 'operator' as const;   constructor(public token: Token, public exprs: ParseNode[]) { super();} }
-export class ParseNote extends ParseNodeType {       key = 'note' as const;       constructor(public token: Token, public expr: ParseNode) { super();} }
-export class ParseMeta extends ParseNodeType {       key = 'meta' as const;       constructor(public token: Token, public expr: ParseNode) { super();} }
-export class ParseMetaIf extends ParseNodeType {     key = 'metaif' as const;     constructor(public token: Token, public expr: ParseIf) { super();} }
-export class ParseMetaFor extends ParseNodeType {    key = 'metafor' as const;    constructor(public token: Token, public expr: ParseFor) { super();} }
-export class ParseMetaWhile extends ParseNodeType {  key = 'metawhile' as const;  constructor(public token: Token, public expr: ParseWhile) { super();} }
-export class ParseCompTime extends ParseNodeType {   key = 'comptime' as const;   constructor(public token: Token, public expr: ParseNode) { super();} }
-export class ParseCall extends ParseNodeType {       key = 'call' as const;       constructor(public token: Token, public left: ParseNode, public args: ParseNode[], public typeArgs: ParseNode[]) { super();} }
-export class ParseList extends ParseNodeType {       key = 'list' as const;       constructor(public token: Token, public exprs: ParseNode[]) { super();} }
-export class ParseListComp extends ParseNodeType {   key = 'listcomp' as const;   constructor(public token: Token, public exprs: ParseNode[], public mapping: ParseNode[], public reduce: ParseNode | null) { super();} }
-export class ParseOr extends ParseNodeType {         key = 'or' as const;         constructor(public token: Token, public exprs: ParseNode[]) { super();} }
-export class ParseAnd extends ParseNodeType {        key = 'and' as const;        constructor(public token: Token, public exprs: ParseNode[]) { super();} }
-export class ParseElse extends ParseNodeType {       key = 'else' as const;       constructor(public token: Token, public body: ParseNode) { super();} }
-export class ParseIf extends ParseNodeType {         key = 'if' as const;         constructor(public token: Token, public isExpr: boolean, public condition: ParseNode, public trueBody: ParseNode, public falseBody: ParseIf | ParseElse | null) { super();} }
-export class ParseLetConst extends ParseNodeType {   key = 'letconst' as const;   constructor(public token: Token, public name: ParseIdentifier, public value: ParseNode) { super();} }
-export class ParseFunction extends ParseNodeType {   key = 'function' as const;   constructor(public token: Token, public functionDecl: ParserFunctionDecl) { super();} }
-export class ParseClass extends ParseNodeType {      key = 'class' as const;      constructor(public token: Token, public classDecl: ParserClassDecl) { super();} }
-export class ParseReturn extends ParseNodeType {     key = 'return' as const;     constructor(public token: Token, public expr: ParseNode | null) { super();} }
-export class ParseBreak extends ParseNodeType {      key = 'break' as const;      constructor(public token: Token, public name: ParseIdentifier | null, public expr: ParseNode | null) { super();} }
-export class ParseContinue extends ParseNodeType {   key = 'continue' as const;   constructor(public token: Token, public expr: ParseNode | null) { super();} }
-export class ParseFor extends ParseNodeType {        key = 'for' as const;        constructor(public token: Token, public identifier: ParseIdentifier, public expr: ParseNode, public body: ParseNode) { super();} }
-export class ParseCast extends ParseNodeType {       key = 'cast' as const;       constructor(public token: Token, public expr: ParseNode, public as: ParseNode) { super();} }
-export class ParseOpEq extends ParseNodeType {       key = 'opeq' as const;       constructor(public token: Token, public left: ParseNode, public right: ParseNode) { super();} }
-export class ParseWhile extends ParseNodeType {      key = 'while' as const;      constructor(public token: Token, public condition: ParseNode, public body: ParseNode) { super();} }
-export class ParseWhileExpr extends ParseNodeType {  key = 'whileexpr' as const;  constructor(public token: Token, public condition: ParseNode, public body: ParseNode) { super();} }
-export class ParseForExpr extends ParseNodeType {    key = 'forexpr' as const;    constructor(public token: Token, public identifier: ParseIdentifier, public expr: ParseNode, public body: ParseNode) { super();} }
-export class ParseNot extends ParseNodeType {        key = 'not' as const;        constructor(public token: Token, public expr: ParseNode) { super();} }
-export class ParseField extends ParseNodeType {      key = 'field' as const;      constructor(public token: Token, public expr: ParseNode, public field: ParseIdentifier) { super();} }
-export class ParseExpand extends ParseNodeType {     key = 'expand' as const;     constructor(public token: Token, public expr: ParseNode) { super();} }
-export class ParseDict extends ParseNodeType {       key = 'dict' as const;       constructor(public token: Token, public pairs: [ParseNode, ParseNode][]) { super();} }
-export class ParsePostCall extends ParseNodeType {   key = 'postcall' as const;   constructor(public token: Token, public expr: ParseNode, public arg: ParseNode) { super();} }
-export class ParseSlice extends ParseNodeType {      key = 'slice' as const;      constructor(public token: Token, public expr: ParseNode, public start: ParseNode | null, public end: ParseNode | null, public step: ParseNode | null, public isStatic: boolean) { super();} }
-export class ParseSubscript extends ParseNodeType {  key = 'subscript' as const;  constructor(public token: Token, public expr: ParseNode, public subscript: ParseNode, public isStatic: boolean) { super();} }
-export class ParseTuple extends ParseNodeType {      key = 'tuple' as const;      constructor(public token: Token, public exprs: ParseNode[]) { super();} }
-export class ParseBlock extends ParseNodeType {      key = 'block' as const;      constructor(public token: Token, public breakType: BreakType | null, public name: ParseIdentifier | null, public statements: ParseStatements) { super();} }
-export class ParseImportName extends ParseNodeType { key = 'importname' as const; constructor(public token: Token, public identifier: ParseIdentifier, public rename: ParseIdentifier | null) { super();} }
-export class ParseImport extends ParseNodeType {     key = 'import' as const;     constructor(public token: Token, public module: ParseIdentifier, public rename: ParseIdentifier | null, public imports: ParseImportName[]) { super();} }
-export class ParseValue extends ParseNodeType {      key = 'value' as const;      constructor(public token: Token, public value: unknown) { super();} }
-export class ParseQuote extends ParseNodeType {      key = 'quote' as const;      constructor(public token: Token, public expr: ParseNode) { super();} }
-export class ParseFold extends ParseNodeType {        key = 'fold' as const;      constructor(public token: Token, public expr: ParseNode) { super();} }
-export class ParseBytecode extends ParseNodeType {   key = 'bytecode' as const;   constructor(public token: Token, public bytecode: { code: BytecodeInstr[]; locations: SourceLocation[]; }) { super();} }
-export class ParseFreshIden extends ParseNodeType {  key = 'freshiden' as const; constructor(public token: Token, public freshBindingToken: FreshBindingToken) { super();} }
-export class ParseConstructor extends ParseNodeType { key = 'constructor' as const; constructor(public token: Token, public type: ParseNode, public args: ParseNode[]) { super();} }
+export class ParseIdentifier extends ParseNodeType {   key = 'identifier' as const;   constructor(public token: Token) { super();} }
+export class ParseSymbol extends ParseNodeType {       key = 'symbol' as const;       constructor(public token: Token) { super();} }
+export class ParseNil extends ParseNodeType {          key = 'nil' as const;          constructor(public token: Token) { super();} }
+export class ParseNumber extends ParseNodeType {       key = 'number' as const;       constructor(public token: Token) { super();} }
+export class ParseString extends ParseNodeType {       key = 'string' as const;       constructor(public token: Token) { super();} }
+export class ParseBoolean extends ParseNodeType {      key = 'boolean' as const;      constructor(public token: Token) { super();} }
+export class ParseStatements extends ParseNodeType {   key = 'statements' as const;   constructor(public token: Token, public exprs: ParseNode[]) { super();} }
+export class ParseLet extends ParseNodeType {          key = 'let' as const;          constructor(public token: Token, public name: ParseIdentifier | ParseFreshIden, public type: ParseNode | null, public value: ParseNode | null) { super();} }
+export class ParseSet extends ParseNodeType {          key = 'set' as const;          constructor(public token: Token, public left: ParseNode, public value: ParseNode) { super();} }
+export class ParseOperator extends ParseNodeType {     key = 'operator' as const;     constructor(public token: Token, public exprs: ParseNode[]) { super();} }
+export class ParseNote extends ParseNodeType {         key = 'note' as const;         constructor(public token: Token, public expr: ParseNode) { super();} }
+export class ParseMeta extends ParseNodeType {         key = 'meta' as const;         constructor(public token: Token, public expr: ParseNode) { super();} }
+export class ParseMetaIf extends ParseNodeType {       key = 'metaif' as const;       constructor(public token: Token, public expr: ParseIf) { super();} }
+export class ParseMetaFor extends ParseNodeType {      key = 'metafor' as const;      constructor(public token: Token, public expr: ParseFor) { super();} }
+export class ParseMetaWhile extends ParseNodeType {    key = 'metawhile' as const;    constructor(public token: Token, public expr: ParseWhile) { super();} }
+export class ParseCompTime extends ParseNodeType {     key = 'comptime' as const;     constructor(public token: Token, public expr: ParseNode) { super();} }
+export class ParseCall extends ParseNodeType {         key = 'call' as const;         constructor(public token: Token, public left: ParseNode, public args: ParseNode[], public typeArgs: ParseNode[]) { super();} }
+export class ParseList extends ParseNodeType {         key = 'list' as const;         constructor(public token: Token, public exprs: ParseNode[]) { super();} }
+export class ParseListComp extends ParseNodeType {     key = 'listcomp' as const;     constructor(public token: Token, public exprs: ParseNode[], public mapping: ParseNode[], public reduce: ParseNode | null) { super();} }
+export class ParseOr extends ParseNodeType {           key = 'or' as const;           constructor(public token: Token, public exprs: ParseNode[]) { super();} }
+export class ParseAnd extends ParseNodeType {          key = 'and' as const;          constructor(public token: Token, public exprs: ParseNode[]) { super();} }
+export class ParseElse extends ParseNodeType {         key = 'else' as const;         constructor(public token: Token, public body: ParseNode) { super();} }
+export class ParseIf extends ParseNodeType {           key = 'if' as const;           constructor(public token: Token, public isExpr: boolean, public condition: ParseNode, public trueBody: ParseNode, public falseBody: ParseIf | ParseElse | null) { super();} }
+export class ParseLetConst extends ParseNodeType {     key = 'letconst' as const;     constructor(public token: Token, public name: ParseIdentifier, public value: ParseNode) { super();} }
+export class ParseFunction extends ParseNodeType {     key = 'function' as const;     constructor(public token: Token, public functionDecl: ParserFunctionDecl) { super();} }
+export class ParseClass extends ParseNodeType {        key = 'class' as const;        constructor(public token: Token, public classDecl: ParserClassDecl) { super();} }
+export class ParseReturn extends ParseNodeType {       key = 'return' as const;       constructor(public token: Token, public expr: ParseNode | null) { super();} }
+export class ParseBreak extends ParseNodeType {        key = 'break' as const;        constructor(public token: Token, public name: ParseIdentifier | null, public expr: ParseNode | null) { super();} }
+export class ParseContinue extends ParseNodeType {     key = 'continue' as const;     constructor(public token: Token, public expr: ParseNode | null) { super();} }
+export class ParseFor extends ParseNodeType {          key = 'for' as const;          constructor(public token: Token, public identifier: ParseIdentifier, public expr: ParseNode, public body: ParseNode) { super();} }
+export class ParseCast extends ParseNodeType {         key = 'cast' as const;         constructor(public token: Token, public expr: ParseNode, public as: ParseNode) { super();} }
+export class ParseOpEq extends ParseNodeType {         key = 'opeq' as const;         constructor(public token: Token, public left: ParseNode, public right: ParseNode) { super();} }
+export class ParseWhile extends ParseNodeType {        key = 'while' as const;        constructor(public token: Token, public condition: ParseNode, public body: ParseNode) { super();} }
+export class ParseWhileExpr extends ParseNodeType {    key = 'whileexpr' as const;    constructor(public token: Token, public condition: ParseNode, public body: ParseNode) { super();} }
+export class ParseForExpr extends ParseNodeType {      key = 'forexpr' as const;      constructor(public token: Token, public identifier: ParseIdentifier, public expr: ParseNode, public body: ParseNode) { super();} }
+export class ParseNot extends ParseNodeType {          key = 'not' as const;          constructor(public token: Token, public expr: ParseNode) { super();} }
+export class ParseField extends ParseNodeType {        key = 'field' as const;        constructor(public token: Token, public expr: ParseNode, public field: ParseIdentifier) { super();} }
+export class ParseExpand extends ParseNodeType {       key = 'expand' as const;       constructor(public token: Token, public expr: ParseNode) { super();} }
+export class ParseDict extends ParseNodeType {         key = 'dict' as const;         constructor(public token: Token, public pairs: [ParseNode, ParseNode][]) { super();} }
+export class ParsePostCall extends ParseNodeType {     key = 'postcall' as const;     constructor(public token: Token, public expr: ParseNode, public arg: ParseNode) { super();} }
+export class ParseSlice extends ParseNodeType {        key = 'slice' as const;        constructor(public token: Token, public expr: ParseNode, public start: ParseNode | null, public end: ParseNode | null, public step: ParseNode | null, public isStatic: boolean) { super();} }
+export class ParseSubscript extends ParseNodeType {    key = 'subscript' as const;    constructor(public token: Token, public expr: ParseNode, public subscript: ParseNode, public isStatic: boolean) { super();} }
+export class ParseTuple extends ParseNodeType {        key = 'tuple' as const;        constructor(public token: Token, public exprs: ParseNode[]) { super();} }
+export class ParseBlock extends ParseNodeType {        key = 'block' as const;        constructor(public token: Token, public breakType: BreakType | null, public name: ParseIdentifier | null, public statements: ParseStatements) { super();} }
+export class ParseImportName extends ParseNodeType {   key = 'importname' as const;   constructor(public token: Token, public identifier: ParseIdentifier, public rename: ParseIdentifier | null) { super();} }
+export class ParseImport extends ParseNodeType {       key = 'import' as const;       constructor(public token: Token, public module: ParseIdentifier, public rename: ParseIdentifier | null, public imports: ParseImportName[]) { super();} }
+export class ParseValue extends ParseNodeType {        key = 'value' as const;        constructor(public token: Token, public value: unknown) { super();} }
+export class ParseQuote extends ParseNodeType {        key = 'quote' as const;        constructor(public token: Token, public expr: ParseNode) { super();} }
+export class ParseFold extends ParseNodeType {         key = 'fold' as const;         constructor(public token: Token, public expr: ParseNode) { super();} }
+export class ParseBytecode extends ParseNodeType {     key = 'bytecode' as const;     constructor(public token: Token, public bytecode: { code: BytecodeInstr[]; locations: SourceLocation[]; }) { super();} }
+export class ParseFreshIden extends ParseNodeType {    key = 'freshiden' as const;    constructor(public token: Token, public freshBindingToken: FreshBindingToken) { super();} }
+export class ParseConstructor extends ParseNodeType {  key = 'constructor' as const;  constructor(public token: Token, public type: ParseNode, public args: ParseNode[]) { super();} }
 export class ParseCompilerIden extends ParseNodeType { key = 'compileriden' as const; constructor(public token: Token, public value: string) { super();} }
 
 export type ParseNode = ParseStatements | ParseLet | ParseSet | ParseOperator | ParseIdentifier | 
@@ -379,36 +378,39 @@ export class AstRoot {
     return options.stylize(`${this.constructor.name} `, 'string') + inspect(props, newOptions)
   }
 }
-export class NumberAst extends AstRoot {      key = 'number' as const;      constructor(public type: Type, public location: SourceLocation, public value: number) { super() } }
-export class StringAst extends AstRoot {      key = 'string' as const;      constructor(public type: Type, public location: SourceLocation, public value: string) { super() } }
-export class BindingAst extends AstRoot {     key = 'binding' as const;     constructor(public type: Type, public location: SourceLocation, public binding: Binding) { super() } }
-export class BoolAst extends AstRoot {        key = 'bool' as const;        constructor(public type: Type, public location: SourceLocation, public value: boolean) { super() } }
-export class LetAst extends AstRoot {         key = 'let' as const;         constructor(public type: Type, public location: SourceLocation, public binding: Binding, public value: Ast | null) { super() } }
-export class SetAst extends AstRoot {         key = 'set' as const;         constructor(public type: Type, public location: SourceLocation, public binding: Binding, public value: Ast) { super() } }
-export class OperatorAst extends AstRoot {    key = 'operator' as const;    constructor(public type: Type, public location: SourceLocation, public operator: string, public args: Ast[]) { super() } }
-export class IfAst extends AstRoot {          key = 'if' as const;          constructor(public type: Type, public location: SourceLocation, public expr: Ast, public trueBody: Ast, public falseBody: Ast | null) { super() } }
-export class ListAst extends AstRoot {        key = 'list' as const;        constructor(public type: Type, public location: SourceLocation, public args: Ast[]) { super() } }
-export class CallAst extends AstRoot {        key = 'call' as const;        constructor(public type: Type, public location: SourceLocation, public func: ExternalFunction, public args: Ast[]) { super() } }
-export class UserCallAst extends AstRoot {    key = 'usercall' as const;    constructor(public type: Type, public location: SourceLocation, public binding: Binding, public args: Ast[]) { super() } }
-export class AndAst extends AstRoot {         key = 'and' as const;         constructor(public type: Type, public location: SourceLocation, public args: Ast[]) { super() } }
-export class OrAst extends AstRoot {          key = 'or' as const;          constructor(public type: Type, public location: SourceLocation, public args: Ast[]) { super() } }
-export class StatementsAst extends AstRoot {  key = 'statements' as const;  constructor(public type: Type, public location: SourceLocation, public statements: Ast[]) { super() } }
-export class WhileAst extends AstRoot {       key = 'while' as const;       constructor(public type: Type, public location: SourceLocation, public condition: Ast, public body: Ast) { super() } }
-export class ReturnAst extends AstRoot {      key = 'return' as const;      constructor(public type: Type, public location: SourceLocation, public expr: Ast | null) { super() } }
-export class BreakAst extends AstRoot {       key = 'break' as const;       constructor(public type: Type, public location: SourceLocation, public binding: Binding, public expr: Ast | null) { super() } }
-export class BlockAst extends AstRoot {       key = 'block' as const;       constructor(public type: Type, public location: SourceLocation, public binding: Binding, public body: Ast) { super() } }
-export class FieldAst extends AstRoot {       key = 'field' as const;       constructor(public type: Type, public location: SourceLocation, public left: Ast, public field: TypeField) { super() } }
-export class SetFieldAst extends AstRoot {    key = 'setfield' as const;    constructor(public type: Type, public location: SourceLocation, public left: Ast, public field: TypeField, public value: Ast) { super() } }
-export class VoidAst extends AstRoot {        key = 'void' as const;        constructor(public type: Type, public location: SourceLocation) { super() } }
-export class CastAst extends AstRoot {        key = 'cast' as const;        constructor(public type: Type, public location: SourceLocation, public expr: Ast) { super() } }
-export class SubscriptAst extends AstRoot {   key = 'subscript' as const;   constructor(public type: Type, public location: SourceLocation, public left: Ast, public right: Ast) { super() } }
-export class NotAst extends AstRoot {         key = 'not' as const;         constructor(public type: Type, public location: SourceLocation, public expr: Ast) { super() } }
-export class ConstructorAst extends AstRoot { key = 'constructor' as const; constructor(public type: Type, public location: SourceLocation, public args: Ast[]) { super() } }
-export class DefaultConsAst extends AstRoot { key = 'defaultcons' as const; constructor(public type: Type, public location: SourceLocation) { super() } }
+export class NumberAst extends AstRoot {        key = 'number' as const;         constructor(public type: Type, public location: SourceLocation, public value: number) { super() } }
+export class StringAst extends AstRoot {        key = 'string' as const;         constructor(public type: Type, public location: SourceLocation, public value: string) { super() } }
+export class BindingAst extends AstRoot {       key = 'binding' as const;        constructor(public type: Type, public location: SourceLocation, public binding: Binding) { super() } }
+export class BoolAst extends AstRoot {          key = 'bool' as const;           constructor(public type: Type, public location: SourceLocation, public value: boolean) { super() } }
+export class LetAst extends AstRoot {           key = 'let' as const;            constructor(public type: Type, public location: SourceLocation, public binding: Binding, public value: Ast | null) { super() } }
+export class SetAst extends AstRoot {           key = 'set' as const;            constructor(public type: Type, public location: SourceLocation, public binding: Binding, public value: Ast) { super() } }
+export class OperatorAst extends AstRoot {      key = 'operator' as const;       constructor(public type: Type, public location: SourceLocation, public operator: string, public args: Ast[]) { super() } }
+export class IfAst extends AstRoot {            key = 'if' as const;             constructor(public type: Type, public location: SourceLocation, public expr: Ast, public trueBody: Ast, public falseBody: Ast | null) { super() } }
+export class ListAst extends AstRoot {          key = 'list' as const;           constructor(public type: Type, public location: SourceLocation, public args: Ast[]) { super() } }
+export class CallAst extends AstRoot {          key = 'call' as const;           constructor(public type: Type, public location: SourceLocation, public func: ExternalFunction, public args: Ast[]) { super() } }
+export class UserCallAst extends AstRoot {      key = 'usercall' as const;       constructor(public type: Type, public location: SourceLocation, public binding: Binding, public args: Ast[]) { super() } }
+export class AndAst extends AstRoot {           key = 'and' as const;            constructor(public type: Type, public location: SourceLocation, public args: Ast[]) { super() } }
+export class OrAst extends AstRoot {            key = 'or' as const;             constructor(public type: Type, public location: SourceLocation, public args: Ast[]) { super() } }
+export class StatementsAst extends AstRoot {    key = 'statements' as const;     constructor(public type: Type, public location: SourceLocation, public statements: Ast[]) { super() } }
+export class WhileAst extends AstRoot {         key = 'while' as const;          constructor(public type: Type, public location: SourceLocation, public condition: Ast, public body: Ast) { super() } }
+export class ReturnAst extends AstRoot {        key = 'return' as const;         constructor(public type: Type, public location: SourceLocation, public expr: Ast | null) { super() } }
+export class BreakAst extends AstRoot {         key = 'break' as const;          constructor(public type: Type, public location: SourceLocation, public binding: Binding, public expr: Ast | null) { super() } }
+export class BlockAst extends AstRoot {         key = 'block' as const;          constructor(public type: Type, public location: SourceLocation, public binding: Binding, public body: Ast) { super() } }
+export class FieldAst extends AstRoot {         key = 'field' as const;          constructor(public type: Type, public location: SourceLocation, public left: Ast, public field: TypeField) { super() } }
+export class ValueFieldAst extends AstRoot {    key = 'valuefield' as const;     constructor(public type: Type, public location: SourceLocation, public left: BindingAst, public fieldPath: TypeField[]) { super() } }
+export class SetFieldAst extends AstRoot {      key = 'setfield' as const;       constructor(public type: Type, public location: SourceLocation, public left: Ast, public field: TypeField, public value: Ast) { super() } }
+export class SetValueFieldAst extends AstRoot { key = 'setvaluefield' as const;  constructor(public type: Type, public location: SourceLocation, public left: BindingAst, public fieldPath: TypeField[], public value: Ast) { super() } }
+export class VoidAst extends AstRoot {          key = 'void' as const;           constructor(public type: Type, public location: SourceLocation) { super() } }
+export class CastAst extends AstRoot {          key = 'cast' as const;           constructor(public type: Type, public location: SourceLocation, public expr: Ast) { super() } }
+export class SubscriptAst extends AstRoot {     key = 'subscript' as const;      constructor(public type: Type, public location: SourceLocation, public left: Ast, public right: Ast) { super() } }
+export class NotAst extends AstRoot {           key = 'not' as const;            constructor(public type: Type, public location: SourceLocation, public expr: Ast) { super() } }
+export class ConstructorAst extends AstRoot {   key = 'constructor' as const;    constructor(public type: Type, public location: SourceLocation, public args: Ast[]) { super() } }
+export class DefaultConsAst extends AstRoot {   key = 'defaultcons' as const;    constructor(public type: Type, public location: SourceLocation) { super() } }
 
 export type Ast = NumberAst | LetAst | SetAst | OperatorAst | IfAst | ListAst | CallAst | AndAst | UserCallAst |
   OrAst | StatementsAst | WhileAst | ReturnAst | SetFieldAst | VoidAst | CastAst | SubscriptAst | ConstructorAst |
-  BindingAst | StringAst | NotAst | FieldAst | BlockAst | BreakAst | BoolAst | CastAst | DefaultConsAst
+  BindingAst | StringAst | NotAst | FieldAst | BlockAst | BreakAst | BoolAst | CastAst | DefaultConsAst | ValueFieldAst |
+  SetValueFieldAst
 export const isAst = (value: unknown): value is Ast => value instanceof AstRoot;
 
 export class Tuple {
