@@ -1,11 +1,11 @@
-import { ArgumentTypePair, ParseAnd, ParseNode, ParseBreak, ParseCall, ParseCast, ParseCompTime, ParseContinue, ParseDict, ParseExpand, ParseField, ParseFor, ParseForExpr, ParseIf, ParseLet, ParseLetConst, ParseList, ParseListComp, ParseMeta, ParseNot, ParseNumber, ParseOpEq, ParseOperator, ParseOr, ParseReturn, ParseSet, ParseStatements, ParseString, ParseIdentifier, ParseWhile, ParseWhileExpr, ParserFunctionDecl, Token, compilerAssert, ParsePostCall, ParseSymbol, ParseNote, ParseSlice, ParseSubscript, ParserClassDecl, ParseClass, ParseFunction, createToken, ParseBoolean, ParseElse, ParseMetaIf, ParseMetaFor, ParseBlock, ParseImport, ParsedModule, Source, ParseMetaWhile, ParseTuple, ParseImportName } from "./defs";
+import { ArgumentTypePair, ParseAnd, ParseNode, ParseBreak, ParseCall, ParseCast, ParseCompTime, ParseContinue, ParseDict, ParseExpand, ParseField, ParseFor, ParseForExpr, ParseIf, ParseLet, ParseLetConst, ParseList, ParseListComp, ParseMeta, ParseNot, ParseNumber, ParseOpEq, ParseOperator, ParseOr, ParseReturn, ParseSet, ParseStatements, ParseString, ParseIdentifier, ParseWhile, ParseWhileExpr, ParserFunctionDecl, Token, compilerAssert, ParsePostCall, ParseSymbol, ParseNote, ParseSlice, ParseSubscript, ParserClassDecl, ParseClass, ParseFunction, createToken, ParseBoolean, ParseElse, ParseMetaIf, ParseMetaFor, ParseBlock, ParseImport, ParsedModule, Source, ParseMetaWhile, ParseTuple, ParseImportName, ParseFold } from "./defs";
 
 type LexerState = { significantNewlines: boolean; parenStack: string[] };
 
 function* tokenize(source: Source, state: LexerState): Generator<Token> {
   const regexes = {
     KEYWORD:
-      /^(?:and|as\!|as|break|class|continue|comptime|def|defn|elif|else|fn|for|if|ifx|in|lambda|meta|null|not|or|pass|return|try|while|with|type|interface|import|block)(?=\W)/, // note \b
+      /^(?:and|as\!|as|break|class|continue|comptime|def|defn|elif|else|fn|for|if|ifx|in|lambda|meta|null|not|or|pass|return|try|while|with|type|interface|import|block|fold)(?=\W)/, // note \b
     IDENTIFIER: /^[a-zA-Z_][a-zA-Z_0-9-]*/,
     STRING: /^(?:"(?:[^"\\]|\\.)*")/,
     SPECIALNUMBER: /^0o[0-7]+|^0x[0-9a-fA-F_]+|^0b[01_]+/,
@@ -216,6 +216,13 @@ export const makeParser = (input: string, debugName: string) => {
     return new ParseDict(dictToken, pairs);
   };
 
+  const parseFold = (foldToken: Token) => {
+    expect("(", "Expected '(' after fold")
+    const expr = parseExpr()
+    expect(")", "Expected ')' after fold expression")
+    return new ParseFold(foldToken, expr)
+  }
+
   const parseLiteral = (): ParseNode => {
     if (match("("))          return parseParens(previous);
     else if (match("["))     return parseList();
@@ -229,6 +236,7 @@ export const makeParser = (input: string, debugName: string) => {
     else if (matchType("SPECIALNUMBER")) return parseNumberLiteral();
     else if (prevSignificantNewlines && match("|")) return parseBracelessLambda();
     else if (match("true") || match("false")) return new ParseBoolean(previous);
+    else if (match("fold"))  return parseFold(previous)
     else return parseIdentifier();
   };
 

@@ -6,3 +6,11 @@ fn main():
   print(lst1[:] + lst1[1:]) ...
 
   print(lst1[1:-2] + lst2[:100:2]) ...
+
+  x := (fold(0) + lst1[:] * 2 ...)
+
+  t := (fold(true) and lst1[:] > 4 ...)
+
+  m := (min(fold(1000), lst1[:]) ...)
+
+fn min(a: int, b: int) @inline: ifx a < b: a else: b
