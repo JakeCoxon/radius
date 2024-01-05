@@ -1,7 +1,9 @@
 {
   "compilerOptions": {
-    "lib": ["DOM"],
+    "lib": ["es2022", "DOM"],
     "types": [],
+    "module": "NodeNext",
+    "jsx": "react",
     "strictNullChecks": true,
     "target": "ES2015"
   }
