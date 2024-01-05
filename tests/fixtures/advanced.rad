@@ -48,5 +48,5 @@ fn main():
     (13, float(12), new_person, MyVec(123, 40)), 
     (51, float(67), new_person, MyVec(312, 23))]
 
-  print(list3[:]) ...
+  print(list3[:]._1) ...
   
