@@ -1,0 +1,5 @@
+{
+    // We want to include output files
+    "search.useIgnoreFiles": false
+    
+}
