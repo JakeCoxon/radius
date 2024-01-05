@@ -1,0 +1,8 @@
+
+fn foo(x: int, y: float) -> int, float:
+  (x, y)
+
+fn main():
+  tup := foo(100, float(3.1))
+  print(tup._1)
+  print(tup._2)

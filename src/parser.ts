@@ -13,7 +13,7 @@ function* tokenize(source: Source, state: LexerState): Generator<Token> {
     COMMENT: /^#.+(?=\n)/,
     OPENPAREN: /^[\[\{\(]/,
     CLOSEPAREN: /^[\]\}\)]/,
-    PUNCTUATION: /^(?:==|!=|:=|<=|>=|\+=|\-=|\*=|\/=|::|\|\>|\.\.\.|[@!:,=<>\-+\.*\/'\|])/,
+    PUNCTUATION: /^(?:==|!=|:=|<=|>=|\+=|\-=|\*=|\/=|::|\->|\|\>|\.\.\.|[@!:,=<>\-+\.*\/'\|])/,
     NEWLINE: /^\n/,
     WHITESPACE: /^[ ]+/ // Not newline
   };
@@ -357,10 +357,10 @@ export const makeParser = (input: string, debugName: string) => {
 
   const parseFunctionDef = () => {
 
-    const parseOptionalReturnType = () => {
-      if (token && token.value !== "@" && token.value !== ":" && token.type !== "NEWLINE")
-        return parseExpr();
-      return null
+    const parseOptionalReturnType = (arrowToken: Token) => {
+      const list = [parseExpr()]
+      while (match(",")) list.push(parseExpr())
+      return list.length > 1 ? new ParseTuple(arrowToken, list) : list[0];
     }
     const parseFunctionArgList = () => (expect("(", `Expected '(' after function name`), parseArgList(")"))
 
@@ -374,7 +374,8 @@ export const makeParser = (input: string, debugName: string) => {
 
     return createNamedFunc(state, previous, parseOptionalMetaName(), 
       parseIdentifier(), match("!") ? parseFunctionTypeParameters() : [], 
-      parseFunctionArgList(), parseOptionalReturnType(), parseKeywords(), parseBody())
+      parseFunctionArgList(), match('->') ? parseOptionalReturnType(previous) : null, 
+      parseKeywords(), parseBody())
   };
   const parseLambda = () => {
     const lambda = parseBracelessLambda();

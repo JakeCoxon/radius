@@ -1,5 +1,5 @@
 
-fn bar!(T)() int @inline:
+fn bar!(T)() -> int @inline:
   x := 43
   x + (meta T + 10)
 

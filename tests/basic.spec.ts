@@ -157,6 +157,10 @@ test('tuple', async () => {
   const test = runCompilerTest(input, { filename: 'tuple' })
 })
 
+test('tuple_return_type', async () => {
+  const input = await Bun.file(`${import.meta.dir}/fixtures/tuple_return_type.rad`).text()
+  const test = runCompilerTest(input, { filename: 'tuple_return_type' })
+})
 
 test('dict', async () => {
   const input = await Bun.file(`${import.meta.dir}/fixtures/dict.rad`).text()
