@@ -16,21 +16,21 @@ fn transduce_s!(trx, reducer, iterable)() -> any @inline:
   final_reducer.b(acc)
 
 fn map(mapping) -> any:
-  {|next| {
+  {|next| %{
     a = next.a,
     b = next.b,
     c = {|acc, x| next.c(acc, mapping(x))}
   } }
 
 fn filter(predicate) -> any:
-  {|next| {
+  {|next| %{
     a = next.a,
     b = next.b,
     c = {|acc, x| ifx predicate(x): next.c(acc, x) else: acc}
   } }
 
 fn sum() -> any: 
-  { a = {|| 0},
+  %{a = {|| 0},
     b = {|acc| acc},
     c = {|acc, x| acc + x} }
 

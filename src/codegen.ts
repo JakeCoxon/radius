@@ -463,9 +463,10 @@ const astWriter: AstWriterTable = {
       else if (type === IntType) emitConstant(writer, IntType, 0)
       else if (type === BoolType) emitConstant(writer, BoolType, 0)
       else if (type === FloatType) emitConstant(writer, FloatType, 0)
-      else if (!type.typeInfo.isReferenceType) {
+      else if (type.typeInfo.isReferenceType) emitConstant(writer, RawPointerType, 0)
+      else {
         type.typeInfo.fields.forEach(field => {recur(field.fieldType)})
-      } else compilerAssert(false, "Not implemented", { type })
+      }
     }
     recur(ast.type)
     writer.nextLocalSlot += slotSize(writer, ast.type)
@@ -554,10 +555,17 @@ const astWriter: AstWriterTable = {
       writeLittleEndian16(writer.bytecode, p.location, writer.bytecode.length))
   },
   not: (writer, ast) => {
-    writeExpr(writer, ast.expr);
-    writeBytes(writer, OpCodes.NotI32);
+    writeExpr(writer, ast.expr)
+    writeBytes(writer, OpCodes.NotI32)
     writer.nextLocalSlot -= slotSize(writer, ast.expr.type)
     writer.nextLocalSlot += slotSize(writer, ast.type)
+  },
+  return: (writer, ast) => {
+    if (ast.expr) {
+      writeExpr(writer, ast.expr)
+      writer.nextLocalSlot -= slotSize(writer, ast.expr.type)
+    }
+    writeBytes(writer, OpCodes.Return)
   },
   void: (writer, ast) => {}
 };

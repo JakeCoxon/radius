@@ -226,3 +226,8 @@ test('valtype', async () => {
   const input = await Bun.file(`${import.meta.dir}/fixtures/valtype.rad`).text()
   const test = runCompilerTest(input, { filename: 'valtype' })
 })
+
+test('returns', async () => {
+  const input = await Bun.file(`${import.meta.dir}/fixtures/returns.rad`).text()
+  const test = runCompilerTest(input, { filename: 'returns' })
+})

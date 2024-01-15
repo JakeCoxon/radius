@@ -11,7 +11,7 @@ function* tokenize(source: Source, state: LexerState): Generator<Token> {
     SPECIALNUMBER: /^0o[0-7]+|^0x[0-9a-fA-F_]+|^0b[01_]+/,
     NUMBER: /^-?(0|[1-9][0-9_]*)(\.[0-9_]+)?(?:[eE][+-]?[0-9]+)?/,
     COMMENT: /^#.+(?=\n)/,
-    OPENPAREN: /^[\[\{\(]/,
+    OPENPAREN: /^(?:[\[\{\(]|%{)/,
     CLOSEPAREN: /^[\]\}\)]/,
     PUNCTUATION: /^(?:==|!=|:=|<=|>=|\+=|\-=|\*=|\/=|::|->|\|\>|\.\.\.|[@!:,=<>\-+\.*\/'\|])/,
     NEWLINE: /^\n/,
@@ -153,7 +153,7 @@ export const makeParser = (input: string, debugName: string) => {
     const num = token?.location.line ?? previous?.location.line;
     const value = token?.value !== undefined ? `'${token?.value}' (${token?.type})` : "EOL";
     const msg = `${error} got ${value} on line ${num}`;
-    compilerAssert(false, msg, { lexer, token });
+    compilerAssert(false, msg, { lexer, token, previous, location: token?.location, prevLocation: previous?.location });
   };
   const expect = (expected: string | boolean, error: string) => {
     if (expected === true) return previous;
@@ -228,7 +228,8 @@ export const makeParser = (input: string, debugName: string) => {
     else if (match("["))     return parseList();
     else if (match("'"))     return new ParseSymbol(parseIdentifier().token);
     else if (match("@"))     return new ParseNote(previous, parseExpr());
-    else if (match("{"))     return match("|") ? parseLambda() : parseDict(previous)
+    else if (match("%{"))    return parseDict(previous)
+    else if (match("{"))     return match("|") ? parseLambda() : throwExpectError("Not implemented")
     else if (match("block")) return new ParseBlock(previous, null, token?.value != ':' ? parseIdentifier() : null, parseColonBlockExpr('block'))
     else if (match("ifx"))   return parseIf(previous, true, "if condition")
     else if (matchType("STRING")) return new ParseString(previous)

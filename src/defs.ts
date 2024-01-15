@@ -365,6 +365,8 @@ export class ClassDefinition {
     if (depth <= 1 || depth <= options.depth || options.ast) return options.stylize(`[ClassDefinition ${this.debugName}]`, 'special');
     return {...this}
   }
+
+  get shortName() { return this.name }
 }
 
 export class AstRoot {
@@ -428,7 +430,7 @@ export class Binding {
   definitionCompiler: SubCompilerState | undefined
   constructor(public name: string, public type: Type) {}
   [Inspect.custom](depth: any, options: any, inspect: any) {
-    return options.stylize(`[Binding ${this.name} ${inspect(this.type)}]`, 'special');
+    return options.stylize(`[Binding ${this.name} : ${this.type.shortName}]`, 'special');
   }
 }
 export class FreshBindingToken {
@@ -463,29 +465,27 @@ export interface TypeInfo {
 export class TypeRoot {}
 export class PrimitiveType extends TypeRoot {
   constructor(public typeName: string, public typeInfo: TypeInfo) { super() }
+  get shortName() { return this.typeName }
   [Inspect.custom](depth: any, options: any, inspect: any) {
     return options.stylize(`[PrimitiveType ${this.typeName}]`, 'special');
   }
 }
 
 export class ConcreteClassType extends TypeRoot {
-  constructor(public compiledClass: CompiledClass, public typeInfo: TypeInfo) { 
-    super()
-  }
+  constructor(public compiledClass: CompiledClass, public typeInfo: TypeInfo) { super() }
+  get shortName() { return this.compiledClass.debugName }
   [Inspect.custom](depth: any, options: any, inspect: any) {
     return options.stylize(`[ConcreteClassType ${this.compiledClass.debugName}]`, 'special');
   }
 }
 export class ParameterizedType extends TypeRoot {
-  constructor(public typeConstructor: TypeConstructor, public args: unknown[], public typeInfo: TypeInfo) {
-    super()
+  constructor(public typeConstructor: TypeConstructor, public args: unknown[], public typeInfo: TypeInfo) { super() }
+  get shortName(): string {
+    const args = this.args.map(x => isType(x) ? x.shortName : '?').join(', ')
+    return `${this.typeConstructor.shortName}!(${args})`
   }
   [Inspect.custom](depth: any, options: any, inspect: any) {
-    if (depth <= 1 || depth < options.depth) {
-      const t = this.typeConstructor instanceof ExternalTypeConstructor ? this.typeConstructor.typeName : this.typeConstructor.debugName
-      return options.stylize(`[ParameterizedType ${t}, ...]`, 'special');
-    }
-    return options.stylize(`[ParameterizedType ${inspect(this.typeConstructor, { depth: 0})}, ${this.args.map(x => inspect(x)).join(', ')}]`, 'special')
+    return options.stylize(`[ParameterizedType ${this.shortName}]`, 'special');
   }
 }
 
@@ -505,6 +505,7 @@ export class TypeMatcher {
 export class ExternalTypeConstructor {
   metaobject: {} = Object.create(null)
   constructor(public typeName: string, public createType: (argTypes: Type[]) => ParameterizedType) { }
+  get shortName() { return this.typeName }
   [Inspect.custom](depth: any, options: any, inspect: any) {
     return options.stylize(`[ExternalTypeConstructor ${this.typeName}]`, 'special');
   }
