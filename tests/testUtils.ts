@@ -1,10 +1,9 @@
 import { existsSync, unlinkSync, readFileSync } from 'node:fs'
-import { importModule, loadModule, runTopLevelTask } from '../src/compiler'
+import { programEntryTask } from '../src/compiler'
 import { BoolType, Closure, CompilerError, DoubleType, ExternalFunction, FloatType, GlobalCompilerState, IntType, Scope, StringType, SubCompilerState, TaskContext, VoidType, compilerAssert, createDefaultGlobalCompiler, createScope, expectMap, BuiltinTypes, ModuleLoader, SourceLocation, textColors, outputSourceLocation, TokenRoot, ParseImport, createAnonymousToken } from "../src/defs"; // prettier-ignore
 import { makeParser } from '../src/parser'
 import { Queue, TaskDef, stepQueue, withContext } from '../src//tasks'
 import { expect } from 'bun:test'
-import { createCallAstFromValue } from '../src/compiler_functions'
 import { VecTypeMetaClass, preloadModuleText } from '../src/compiler_sugar'
 import { writeFinalBytecode } from '../src/codegen'
 
@@ -21,20 +20,11 @@ const runTestInner = (
   const moduleScope = createScope({ ...rootScope }, undefined)
   subCompilerState.scope = moduleScope
   subCompilerState.globalCompiler = globalCompiler
+  subCompilerState.moduleCompiler = subCompilerState
 
-  const root = TaskDef(runTopLevelTask, parser.rootNode, rootScope, moduleScope)
-    .chainFn((task, arg) => {
-      const func: Closure = expectMap(moduleScope, 'main', 'No main function found')
-      return TaskDef(createCallAstFromValue, func, [], [])
-    })
+  const root = TaskDef(programEntryTask, parser, rootScope)
     .wrap(withContext({ globalCompiler, subCompilerState } as TaskContext))
   queue.enqueue(root)
-
-  queue.enqueue(
-    TaskDef(loadModule, SourceLocation.anon, '_preload', rootScope).wrap(
-      withContext({ globalCompiler, subCompilerState } as TaskContext)
-    )
-  )
 
   let i
   for (i = 0; i < 10000; i++) {

@@ -231,3 +231,8 @@ test('returns', async () => {
   const input = await Bun.file(`${import.meta.dir}/fixtures/returns.rad`).text()
   const test = runCompilerTest(input, { filename: 'returns' })
 })
+
+test('global', async () => {
+  const input = await Bun.file(`${import.meta.dir}/fixtures/global.rad`).text()
+  const test = runCompilerTest(input, { filename: 'global' })
+})

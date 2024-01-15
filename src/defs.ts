@@ -761,7 +761,8 @@ export type GlobalCompilerState = {
   methods: WeakMap<Scope, [TypeConstructor, Closure][]>,
   allWaitingEvents: Event<unknown, unknown>[],
   logger: Logger,
-  typeTable: TypeTable
+  typeTable: TypeTable,
+  globalLets: LetAst[]
 }
 
 export interface ParsedModule {
@@ -793,10 +794,11 @@ export const createDefaultGlobalCompiler = () => {
     functionDefinitions: [],
     classDefinitions: [],
     allWaitingEvents: [],
+    globalLets: [],
     moduleLoader: null!,
     methods: new WeakMap(),
     typeTable: new TypeTable(),
-    logger: null!
+    logger: null!,
   }
   return globalCompiler
 }
@@ -820,6 +822,7 @@ export class SubCompilerState {
   labelBlock: LabelBlock | null
   nextLabelBlockDepth: number = 0; // Just used for debug labelling
   globalCompiler: GlobalCompilerState
+  moduleCompiler: SubCompilerState
 
   [Inspect.custom](depth: any, options: any, inspect: any) {
     if (depth <= 1) return options.stylize(`[CompilerState ${this.debugName}]`, 'special');
@@ -840,6 +843,7 @@ export const pushSubCompilerState = (ctx: TaskContext, obj: { debugName: string,
   state.scope = obj.scope
   state.functionCompiler = state.lexicalParent?.functionCompiler
   state.inlineIntoCompiler = state.lexicalParent?.inlineIntoCompiler
+  state.moduleCompiler = ctx.subCompilerState.moduleCompiler
   ctx.subCompilerState = state;
   return state;
 }
@@ -875,11 +879,12 @@ export const outputSourceLocation = (location: SourceLocation) => {
   for (let i = -2; i < 3; i++) {
     const line = location.line + i
     if (lines[line - 1] !== undefined) {
-      out += textColors.gray(`${String(line).padStart(2)}|`)
+      const lineGutter = `${String(line).padStart(2)}|`
+      out += textColors.gray(lineGutter)
       out += `  ${lines[line - 1]}\n`
       if (i === 0) {
-        const repeat = " ".repeat(location.column);
-        out += textColors.red(`     ${repeat}^-- here\n`)
+        const repeat = " ".repeat(location.column + lineGutter.length);
+        out += textColors.red(`${repeat}^-- here\n`)
       }
     }
   }
@@ -912,4 +917,6 @@ export type CodegenWriter = {
   globalCompilerState: GlobalCompilerState
   functionToIndex: Map<Binding, number>
   typeSizes: Map<Type, number>
+  globals: Map<Binding, number>
+  nextGlobalSlot: number
 }

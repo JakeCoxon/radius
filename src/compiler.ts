@@ -551,7 +551,8 @@ const letLocalAst = (vm: Vm, name: string, type: Type | null, value: Ast | null)
   compilerAssert(!Object.hasOwn(vm.scope, name), `Already defined $name`, { name });
   const inferType = type || value!.type
   compilerAssert(inferType !== VoidType, "Expected type for local $name but got $inferType", { name, inferType })
-  const binding = (vm.scope[name] = new Binding(name, inferType));
+  const binding = new Binding(name, inferType)
+  setScopeValueAndResolveEvents(vm.scope, name, binding) // This is for globals usually. Locals should be in order
   binding.definitionCompiler = vm.context.subCompilerState
   value ||= new DefaultConsAst(inferType.typeInfo.isReferenceType ? RawPointerType : inferType, vm.location)
   return new LetAst(VoidType, vm.location, binding, value);
@@ -944,6 +945,9 @@ const instructions: InstructionMapping = {
 };
 
 const ensureBindingIsNotClosedOver = (subCompilerState: SubCompilerState, name: string, value: Binding) => {
+  if (!value.definitionCompiler) compilerAssert(false, "Binding has no definition")
+  if (value.definitionCompiler.moduleCompiler.scope === value.definitionCompiler.scope) return true // Global
+
   const found = (() => {
     let compiler: SubCompilerState | undefined = subCompilerState
     while (compiler) {
@@ -1158,7 +1162,7 @@ const topLevelLetConst = (ctx: TaskContext, expr: ParseLetConst, rootScope: Scop
   visitParseNode(out, expr.value);
   pushGeneratedBytecode(out, { type: "halt" })
 
-  ctx.globalCompiler.logger.log(textColors.cyan("Compiled top level def"))
+  ctx.globalCompiler.logger.log(textColors.cyan("Compiled top level let const"))
   ctx.globalCompiler.logger.log(bytecodeToString(out.bytecode))
   ctx.globalCompiler.logger.log("")
 
@@ -1168,6 +1172,34 @@ const topLevelLetConst = (ctx: TaskContext, expr: ParseLetConst, rootScope: Scop
     TaskDef(createBytecodeVmAndExecuteTask, subCompilerState, out.bytecode, rootScope)
     .chainFn((task, result) => {
       setScopeValueAndResolveEvents(rootScope, expr.name.token.value, result)
+      return Task.success()
+    })
+  );
+}
+
+const topLevelLet = (ctx: TaskContext, expr: ParseLet, moduleScope: Scope) => {
+  if (!expr.value) return Task.success()
+
+  const out: BytecodeWriter = {
+    bytecode: { code: [], locations: [] },
+    instructionTable: BytecodeSecondOrder,
+    globalCompilerState: ctx.globalCompiler,
+    state: { labelBlock: null, expansion: null }
+  }
+  visitParseNode(out, expr)
+  pushGeneratedBytecode(out, { type: "halt" })
+
+  ctx.globalCompiler.logger.log(textColors.cyan("Compiled top level let"))
+  ctx.globalCompiler.logger.log(bytecodeToString(out.bytecode))
+  ctx.globalCompiler.logger.log("")
+
+  const subCompilerState = pushSubCompilerState(ctx, { debugName: 'top level let', lexicalParent: ctx.subCompilerState, scope: ctx.subCompilerState.scope })
+
+  return (
+    TaskDef(createBytecodeVmAndExecuteTask, subCompilerState, out.bytecode, moduleScope)
+    .chainFn((task, result) => {
+      compilerAssert(result instanceof LetAst, "Expected let ast")
+      ctx.globalCompiler.globalLets.push(result)
       return Task.success()
     })
   );
@@ -1224,7 +1256,7 @@ export const importModule = (ctx: TaskContext, importNode: ParseImport, rootScop
 }
 
 export const runTopLevelTask = (ctx: TaskContext, stmts: ParseStatements, rootScope: Scope, moduleScope: Scope) => {
-  const tasks: Task<unknown, unknown>[] = []
+  const tasks: Task<unknown, CompilerError>[] = []
 
   const copyEverythingIntoScope = (module: Module) => {
     Object.getOwnPropertyNames(module.compilerState.scope).forEach((k) => {
@@ -1245,22 +1277,60 @@ export const runTopLevelTask = (ctx: TaskContext, stmts: ParseStatements, rootSc
   stmts.exprs.forEach(node => {
     if (node.key === 'import') {
       tasks.push(TaskDef(importModule, node, rootScope, moduleScope));
-      return
-    }
-    if (node.key === 'letconst') {
+    } else if (node.key === 'letconst') {
       tasks.push(TaskDef(topLevelLetConst, node, moduleScope));
-      return
-    }
-    if (node.key === 'function') {
+    } else if (node.key === 'let') {
+      tasks.push(TaskDef(topLevelLet, node, moduleScope));
+    } else if (node.key === 'function') {
       tasks.push(TaskDef(topLevelFunctionDefinitionTask, node.functionDecl, moduleScope ));
-      return
-    }
-    if (node.key === 'class') {
+    } else if (node.key === 'class') {
       tasks.push(TaskDef(topLevelClassDefinitionTask, node.classDecl, moduleScope ));
-      return
+    } else {
+      compilerAssert(false, `Not supported at top level $key`, { key: node.key })
     }
-    compilerAssert(false, `Not supported at top level $key`, { key: node.key })
   })
 
   return Task.concurrency(tasks);
+}
+
+export const programEntryTask = (ctx: TaskContext, entryModule: ParsedModule, rootScope: Scope): Task<unknown, CompilerError> => {
+  const moduleScope = ctx.subCompilerState.scope
+  return (
+    TaskDef(loadModule, SourceLocation.anon, '_preload', rootScope)
+    .chainFn(() => {
+      return TaskDef(runTopLevelTask, entryModule.rootNode, rootScope, moduleScope)
+    })
+    .chainFn((task, arg) => {
+      const func: Closure = expectMap(moduleScope, 'main', 'No main function found')
+      return createCallAstFromValue(SourceLocation.anon, func, [], [])
+    })
+    .chainFn((task, callAst: Ast) => {
+      const decl: ParserFunctionDecl = {
+        id: undefined,
+        debugName: `<entry point>`,
+        token: createAnonymousToken(''), functionMetaName: null, name: null, typeArgs: [], args: [],
+        keywords: [], anonymous: true, returnType: null, body: null
+      }
+      const func = insertFunctionDefinition(ctx.globalCompiler, decl)
+
+      // Map initializers and then call main
+      const ast = new StatementsAst(VoidType, SourceLocation.anon, [
+        ...ctx.globalCompiler.globalLets.map(globalLet => {
+          return new SetAst(VoidType, globalLet.location, globalLet.binding, globalLet.value)
+        }),
+        callAst
+      ])
+
+      const id = func.compiledFunctions.length
+      const binding = new Binding(`${func.debugName} compiled ${id}`, FunctionType)
+      const compiledFunction = new CompiledFunction(
+          binding, func, VoidType, [], ast, [], [], 0)
+      ctx.globalCompiler.compiledFunctions.set(binding, compiledFunction)
+      func.compiledFunctions.push(compiledFunction)
+
+      return Task.success()
+    })
+  )
+  
+  
 }

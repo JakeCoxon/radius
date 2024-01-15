@@ -24,74 +24,86 @@ const OpCodes = {
   ConstantS: 20,
   GetLocalS: 21,
   SetLocalS: 22,
-  F32_TO_I32: 23,
-  I32_TO_F32: 24,
-  CheckStack: 25,
-  ConstantV: 26,
-  ConstantF32: 27,
-  ConstantF64: 28,
-  ConstantI32: 29,
-  ConstantI64: 30,
-  GetLocalV: 31,
-  GetLocalF32: 32,
-  GetLocalF64: 33,
-  GetLocalI32: 34,
-  GetLocalI64: 35,
-  SetLocalV: 36,
-  SetLocalF32: 37,
-  SetLocalF64: 38,
-  SetLocalI32: 39,
-  SetLocalI64: 40,
-  EqualV: 41,
-  EqualF32: 42,
-  EqualF64: 43,
-  EqualI32: 44,
-  EqualI64: 45,
-  GreaterV: 46,
-  GreaterF32: 47,
-  GreaterF64: 48,
-  GreaterI32: 49,
-  GreaterI64: 50,
-  LessV: 51,
-  LessF32: 52,
-  LessF64: 53,
-  LessI32: 54,
-  LessI64: 55,
-  AddV: 56,
-  AddF32: 57,
-  AddF64: 58,
-  AddI32: 59,
-  AddI64: 60,
-  SubtractV: 61,
-  SubtractF32: 62,
-  SubtractF64: 63,
-  SubtractI32: 64,
-  SubtractI64: 65,
-  MultiplyV: 66,
-  MultiplyF32: 67,
-  MultiplyF64: 68,
-  MultiplyI32: 69,
-  MultiplyI64: 70,
-  DivideV: 71,
-  DivideF32: 72,
-  DivideF64: 73,
-  DivideI32: 74,
-  DivideI64: 75,
-  NotV: 76,
-  NotF32: 77,
-  NotF64: 78,
-  NotI32: 79,
-  NotI64: 80,
-  NegateV: 81,
-  NegateF32: 82,
-  NegateF64: 83,
-  NegateI32: 84,
-  NegateI64: 85,
-  ToStringV: 86,
-  ToStringF32: 87,
-  ToStringF64: 88,
-  ToStringI32: 89,
-  ToStringI64: 90,
+  GetGlobalS: 23,
+  SetGlobalS: 24,
+  F32_TO_I32: 25,
+  I32_TO_F32: 26,
+  CheckStack: 27,
+  ConstantV: 28,
+  ConstantF32: 29,
+  ConstantF64: 30,
+  ConstantI32: 31,
+  ConstantI64: 32,
+  GetLocalV: 33,
+  GetLocalF32: 34,
+  GetLocalF64: 35,
+  GetLocalI32: 36,
+  GetLocalI64: 37,
+  SetLocalV: 38,
+  SetLocalF32: 39,
+  SetLocalF64: 40,
+  SetLocalI32: 41,
+  SetLocalI64: 42,
+  GetGlobalV: 43,
+  GetGlobalF32: 44,
+  GetGlobalF64: 45,
+  GetGlobalI32: 46,
+  GetGlobalI64: 47,
+  SetGlobalV: 48,
+  SetGlobalF32: 49,
+  SetGlobalF64: 50,
+  SetGlobalI32: 51,
+  SetGlobalI64: 52,
+  EqualV: 53,
+  EqualF32: 54,
+  EqualF64: 55,
+  EqualI32: 56,
+  EqualI64: 57,
+  GreaterV: 58,
+  GreaterF32: 59,
+  GreaterF64: 60,
+  GreaterI32: 61,
+  GreaterI64: 62,
+  LessV: 63,
+  LessF32: 64,
+  LessF64: 65,
+  LessI32: 66,
+  LessI64: 67,
+  AddV: 68,
+  AddF32: 69,
+  AddF64: 70,
+  AddI32: 71,
+  AddI64: 72,
+  SubtractV: 73,
+  SubtractF32: 74,
+  SubtractF64: 75,
+  SubtractI32: 76,
+  SubtractI64: 77,
+  MultiplyV: 78,
+  MultiplyF32: 79,
+  MultiplyF64: 80,
+  MultiplyI32: 81,
+  MultiplyI64: 82,
+  DivideV: 83,
+  DivideF32: 84,
+  DivideF64: 85,
+  DivideI32: 86,
+  DivideI64: 87,
+  NotV: 88,
+  NotF32: 89,
+  NotF64: 90,
+  NotI32: 91,
+  NotI64: 92,
+  NegateV: 93,
+  NegateF32: 94,
+  NegateF64: 95,
+  NegateI32: 96,
+  NegateI64: 97,
+  ToStringV: 98,
+  ToStringF32: 99,
+  ToStringF64: 100,
+  ToStringI32: 101,
+  ToStringI64: 102,
 };
 
 const POINTER_SIZE = 2; // 64 bit
@@ -189,13 +201,15 @@ const writeOperator = (writer: CodegenFunctionWriter, op: string, type: Type) =>
   compilerAssert(bytecode !== undefined, "No op found", { op, s });
   writeBytes(writer, bytecode);
 };
-const slotSize = (writer: CodegenFunctionWriter, type: Type): number => {
+
+type WriterLike = { writer: CodegenWriter } // Make it easy for callers to pass this
+const slotSize = (writer: WriterLike, type: Type): number => {
   if (writer.writer.typeSizes.get(type)) return writer.writer.typeSizes.get(type)!;
   const s = calculateTypeSize(writer, type);
   writer.writer.typeSizes.set(type, s)
   return s
 }
-const calculateTypeSize = (writer: CodegenFunctionWriter, type: ParameterizedType | ConcreteClassType | PrimitiveType) => {
+const calculateTypeSize = (writer: WriterLike, type: ParameterizedType | ConcreteClassType | PrimitiveType) => {
   if (type.typeInfo.isReferenceType) return POINTER_SIZE;
   return type.typeInfo.fields.reduce((acc, x) => acc + slotSize(writer, x.fieldType), 0)
 }
@@ -239,6 +253,8 @@ const getFieldOp  = (opcode: number) => ({ opcode, write: (writer: CodegenFuncti
 const getFieldOpS = (opcode: number) => ({ opcode, write: (writer: CodegenFunctionWriter, slot: number, size: number) => writeBytes(writer, opcode, slot, size) })
 const GetLocalByType = { I32: getFieldOp(OpCodes.GetLocalI32), I64: getFieldOp(OpCodes.GetLocalI64), F32: getFieldOp(OpCodes.GetLocalF32), F64: getFieldOp(OpCodes.GetLocalF64), S: getFieldOpS(OpCodes.GetLocalS) }
 const SetLocalByType = { I32: getFieldOp(OpCodes.SetLocalI32), I64: getFieldOp(OpCodes.SetLocalI64), F32: getFieldOp(OpCodes.SetLocalF32), F64: getFieldOp(OpCodes.SetLocalF64), S: getFieldOpS(OpCodes.SetLocalS) }
+const GetGlobalByType = { I32: getFieldOp(OpCodes.GetGlobalI32), I64: getFieldOp(OpCodes.GetGlobalI64), F32: getFieldOp(OpCodes.GetGlobalF32), F64: getFieldOp(OpCodes.GetGlobalF64), S: getFieldOpS(OpCodes.GetGlobalS) }
+const SetGlobalByType = { I32: getFieldOp(OpCodes.SetGlobalI32), I64: getFieldOp(OpCodes.SetGlobalI64), F32: getFieldOp(OpCodes.SetGlobalF32), F64: getFieldOp(OpCodes.SetGlobalF64), S: getFieldOpS(OpCodes.SetGlobalS) }
 
 const getOpByType = (writer: CodegenFunctionWriter, type: Type): keyof typeof GetLocalByType => {
   if (type === IntType || type === BoolType) return 'I32'
@@ -255,8 +271,9 @@ const astWriter: AstWriterTable = {
     writer.currentScopeIndex ++
     // TODO: Filter voids?
     ast.statements.forEach((expr, i) => {
-      writeExpr(writer, expr);
-      if (i !== ast.statements.length - 1 && expr.type !== VoidType) {
+      writeExpr(writer, expr)
+      const toPop = i !== ast.statements.length - 1 || ast.type === VoidType
+      if (expr.type !== VoidType && toPop) {
         writeBytes(writer, OpCodes.Pop, slotSize(writer, expr.type))
         writer.nextLocalSlot -= slotSize(writer, expr.type)
       }
@@ -319,9 +336,15 @@ const astWriter: AstWriterTable = {
     writeBytes(writer, OpCodes.CheckStack, writer.nextLocalSlot)
   },
   binding: (writer, ast) => {
+    compilerAssert(ast.binding.type !== VoidType);
+    if (writer.writer.globals.has(ast.binding)) {
+      const op = getOpByType(writer, ast.binding.type)
+      GetGlobalByType[op].write(writer, writer.writer.globals.get(ast.binding)!, slotSize(writer, ast.binding.type))
+      writer.nextLocalSlot += slotSize(writer, ast.type)
+      return
+    }
     const local = writer.locals.find(x => x.binding === ast.binding)
     compilerAssert(local !== undefined, "Expected binding", { ast, locals: writer.locals });
-    compilerAssert(ast.binding.type !== VoidType);
     const op = getOpByType(writer, ast.binding.type)
     GetLocalByType[op].write(writer, local.slot, slotSize(writer, local.binding.type))
     writer.nextLocalSlot += slotSize(writer, ast.type)
@@ -335,6 +358,13 @@ const astWriter: AstWriterTable = {
     // log("let", ast.binding.name, "at", writer.nextLocalSlot - slotSize(writer, ast.binding.type), "size", slotSize(writer, ast.binding.type))
   },
   set: (writer, ast) => {
+    if (writer.writer.globals.has(ast.binding)) {
+      writeExpr(writer, ast.value);
+      const op = getOpByType(writer, ast.binding.type)
+      SetGlobalByType[op].write(writer, writer.writer.globals.get(ast.binding)!, slotSize(writer, ast.binding.type))
+      writer.nextLocalSlot -= slotSize(writer, ast.binding.type)
+      return
+    }
     const local = writer.locals.find(x => x.binding === ast.binding)
     compilerAssert(local !== undefined);
     writeExpr(writer, ast.value);
@@ -575,7 +605,9 @@ export const writeFinalBytecode = (globalCompilerState: GlobalCompilerState, out
     functions: [],
     globalCompilerState,
     functionToIndex: new Map(),
-    typeSizes: new Map()
+    typeSizes: new Map(),
+    globals: new Map(),
+    nextGlobalSlot: 0,
   }
 
   bytecodeWriter.typeSizes.set(VoidType, 0)
@@ -583,6 +615,11 @@ export const writeFinalBytecode = (globalCompilerState: GlobalCompilerState, out
   bytecodeWriter.typeSizes.set(BoolType, 1)
   bytecodeWriter.typeSizes.set(FloatType, 1)
   bytecodeWriter.typeSizes.set(RawPointerType, POINTER_SIZE)
+
+  globalCompilerState.globalLets.forEach(globalLet => {
+    bytecodeWriter.globals.set(globalLet.binding, bytecodeWriter.nextGlobalSlot)
+    bytecodeWriter.nextGlobalSlot += slotSize({ writer: bytecodeWriter }, globalLet.type)
+  })
   
   let index = 0;
   globalCompilerState.compiledFunctions.forEach(func => {
@@ -596,6 +633,7 @@ export const writeFinalBytecode = (globalCompilerState: GlobalCompilerState, out
   log('\n\n', bytecodeWriter.typeSizes)
 
   const bytes: number[] = []
+  // TODO: write bytecodeWriter.nextGlobalSlot
   bytes.push(funcWriters.length)
   for (const f of funcWriters) {
     bytes.push(f.argSlots);
@@ -642,8 +680,9 @@ const writeFinalBytecodeFunction = (bytecodeWriter: CodegenWriter, func: Compile
     blocks: [],
     locals: [],
     currentScopeIndex: 0,
-    nextLocalSlot: 0
+    nextLocalSlot: 0,
   }
+
   funcWriter.argSlots = Object.values(func.concreteTypes).reduce((acc, x) => acc + slotSize(funcWriter, x), 0); // prettier-ignore
   funcWriter.returnSlots = slotSize(funcWriter, func.returnType);
 
