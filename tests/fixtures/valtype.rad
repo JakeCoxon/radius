@@ -12,7 +12,7 @@ fn main():
   print(thing.x)
   print(thing.y)
   thing.x = 41
-  thing.y = float(2.23)
+  thing.y = 2.23
 
   foo: Foo
 
@@ -23,5 +23,5 @@ fn main():
   print(foo.thing2.y)
 
   foo.thing2.x = 32
-  foo.thing2.y = float(1.2)
+  foo.thing2.y = 1.2
   

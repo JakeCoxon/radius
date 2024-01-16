@@ -241,6 +241,12 @@ const writeExpr = (writer: CodegenFunctionWriter, ast: Ast) => {
   astWriter[ast.key](writer, ast as any);
 };
 
+const constantTableByType = (writer: CodegenFunctionWriter, type: Type) => {
+  if (type === RawPointerType || type === BoolType) type = IntType // normalise int types
+  let byType = writer.constantsByType.get(type)
+  if (!byType) { byType = new Map(); writer.constantsByType.set(type, byType) }
+  return byType
+}
 const emitConstant = (writer: CodegenFunctionWriter, type: Type, value: number) => {
   if (type === RawPointerType) {
     // TODO: Cache values by type size
@@ -251,11 +257,12 @@ const emitConstant = (writer: CodegenFunctionWriter, type: Type, value: number) 
     return
   }
   
-  let index = writer.constants.get(value);
+  const byType = constantTableByType(writer, type)
+  let index = byType.get(value);
   if (index === undefined) {
     index = writer.nextConstantSlot
     writer.nextConstantSlot += slotSize(writer, type)
-    writer.constants.set(value, index)
+    byType.set(value, index)
     writeTypeAt(writer.constantSlots, writer.constantSlots.length, type, value)
   }
   if (type === IntType || type === BoolType) writeBytes(writer, OpCodes.ConstantI32, index)
@@ -320,7 +327,8 @@ const astWriter: AstWriterTable = {
     writer.currentScopeIndex --
   },
   string: (writer, ast) => {
-    let index = writer.constants.get(ast.value);
+    const byType = constantTableByType(writer, StringType)
+    let index = byType.get(ast.value);
     const uint8 = new TextEncoder().encode(ast.value)
     const lengthZ = uint8.length + 1
 
@@ -328,7 +336,7 @@ const astWriter: AstWriterTable = {
       index = writer.nextConstantSlot
 
       writer.nextConstantSlot += lengthZ
-      writer.constants.set(ast.value, index)
+      byType.set(ast.value, index)
       let i = 0
       for (; i < uint8.length; i++) 
         writeUint32LittleEndian(writer.constantSlots, writer.constantSlots.length, uint8[i])
@@ -724,7 +732,7 @@ const writeFinalBytecodeFunction = (bytecodeWriter: CodegenWriter, func: Compile
     argSlots: 0,
     returnSlots: 0,
     bytecode: [],
-    constants: new Map(),
+    constantsByType: new Map(),
     constantSlots: [],
     nextConstantSlot: 0,
     blocks: [],

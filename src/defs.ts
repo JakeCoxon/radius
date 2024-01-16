@@ -912,7 +912,7 @@ export type CodegenFunctionWriter = {
   argSlots: number
   returnSlots: number
   bytecode: number[]
-  constants: Map<unknown, number>
+  constantsByType: Map<Type, Map<unknown, number>>
   constantSlots: number[]
   nextConstantSlot: number
   locals: { binding: Binding, slot: number, scopeIndex: number }[]
