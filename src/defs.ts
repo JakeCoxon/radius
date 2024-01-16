@@ -200,7 +200,7 @@ export type BytecodeInstr =
   { type: 'endblockast' } |
   { type: 'bindingast', name: string } |
   { type: 'totype' } |
-  { type: 'numberast', value: number } |
+  { type: 'numberast', value: string } |
   { type: 'stringast', value: string } |
   { type: 'boolast', value: boolean } |
   { type: 'setlocalast', name: string } |

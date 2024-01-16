@@ -242,7 +242,7 @@ export const BytecodeSecondOrder: ParseTreeTable = {
   identifier:   (out, node) => pushBytecode(out, node.token, { type: "bindingast", name: node.token.value }),
 
   value:    (out, node) => pushBytecode(out, node.token, { type: "push", value: node.value }), 
-  number:   (out, node) => pushBytecode(out, node.token, { type: "numberast", value: Number(node.token.value) }),
+  number:   (out, node) => pushBytecode(out, node.token, { type: "numberast", value: node.token.value }),
   string:   (out, node) => pushBytecode(out, node.token, { type: "stringast", value: node.token.value }),
   boolean:  (out, node) => pushBytecode(out, node.token, { type: "boolast", value: node.token.value !== 'false' }),
 
@@ -553,6 +553,7 @@ const letLocalAst = (vm: Vm, name: string, type: Type | null, value: Ast | null)
   compilerAssert(inferType !== VoidType, "Expected type for local $name but got $inferType", { name, inferType })
   const binding = new Binding(name, inferType)
   setScopeValueAndResolveEvents(vm.scope, name, binding) // This is for globals usually. Locals should be in order
+  if (value) compilerAssert(inferType === value.type, "Mismatch types got $got expected $expected", { got: value.type, expected: inferType })
   binding.definitionCompiler = vm.context.subCompilerState
   value ||= new DefaultConsAst(inferType.typeInfo.isReferenceType ? RawPointerType : inferType, vm.location)
   return new LetAst(VoidType, vm.location, binding, value);
@@ -627,13 +628,16 @@ const instructions: InstructionMapping = {
   push: (vm, { value }) => vm.stack.push(value),
   nil: (vm) => vm.stack.push(null),
 
-  numberast: (vm, { value }) => vm.stack.push(new NumberAst(IntType, vm.location, value)),
-  stringast: (vm, { value }) => vm.stack.push(new StringAst(StringType, vm.location, value)),
-  boolast: (vm, { value }) =>   vm.stack.push(new BoolAst(BoolType, vm.location, value)),
-  orast: (vm, { count }) =>     vm.stack.push(new OrAst(BoolType, vm.location, expectAsts(popValues(vm, count)))),
-  andast: (vm, { count }) =>    vm.stack.push(new AndAst(BoolType, vm.location, expectAsts(popValues(vm, count)))),
-  whileast: (vm) =>             vm.stack.push(new WhileAst(VoidType, vm.location, expectAst(popStack(vm)), expectAst(popStack(vm)))),
-  returnast: (vm, { r }) =>     vm.stack.push(new ReturnAst(VoidType, vm.location, r ? expectAst(popStack(vm)) : null)),
+  numberast: (vm, { value }) => {
+    const type = value.includes('.') ? FloatType : IntType
+    vm.stack.push(new NumberAst(type, vm.location, Number(value)))
+  },
+  stringast: (vm, { value }) =>   vm.stack.push(new StringAst(StringType, vm.location, value)),
+  boolast: (vm, { value }) =>     vm.stack.push(new BoolAst(BoolType, vm.location, value)),
+  orast: (vm, { count }) =>       vm.stack.push(new OrAst(BoolType, vm.location, expectAsts(popValues(vm, count)))),
+  andast: (vm, { count }) =>      vm.stack.push(new AndAst(BoolType, vm.location, expectAsts(popValues(vm, count)))),
+  whileast: (vm) =>               vm.stack.push(new WhileAst(VoidType, vm.location, expectAst(popStack(vm)), expectAst(popStack(vm)))),
+  returnast: (vm, { r }) =>       vm.stack.push(new ReturnAst(VoidType, vm.location, r ? expectAst(popStack(vm)) : null)),
   letast: (vm, { name, t, v }) => vm.stack.push(letLocalAst(vm, name, t ? expectType(popStack(vm)) : null, v ? expectAst(popStack(vm)) : null)),
   ifast: (vm, { f, e }) => {
     const cond = expectAst(popStack(vm))

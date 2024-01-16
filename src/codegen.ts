@@ -192,7 +192,7 @@ const writeTypeAt = (arr: number[], offset: number, type: Type, value: number) =
     writeUint64LittleEndian(arr, offset, value);
     return
   }
-  compilerAssert(type === IntType || type === BoolType);
+  compilerAssert(type === IntType || type === FloatType || type === BoolType);
   writeUint32LittleEndian(arr, offset, value);
 };
 const writeOperator = (writer: CodegenFunctionWriter, op: string, type: Type) => {
@@ -392,8 +392,8 @@ const astWriter: AstWriterTable = {
     writer.nextLocalSlot -= slotSize(writer, ast.value.type)
   },
   number: (writer, ast) => {
-    compilerAssert(ast.type === IntType, "Expected int type", { ast })
-    emitConstant(writer, IntType, ast.value)
+    compilerAssert(ast.type === IntType || ast.type === FloatType || ast.type === DoubleType, "Expected int type", { ast })
+    emitConstant(writer, ast.type, ast.value)
     writer.nextLocalSlot += slotSize(writer, ast.type);
   },
   bool: (writer, ast) => {

@@ -241,3 +241,8 @@ test('compiler_module', async () => {
   const input = await Bun.file(`${import.meta.dir}/fixtures/compiler_module.rad`).text()
   const test = runCompilerTest(input, { filename: 'compiler_module' })
 })
+
+test('numbers', async () => {
+  const input = await Bun.file(`${import.meta.dir}/fixtures/numbers.rad`).text()
+  const test = runCompilerTest(input, { filename: 'numbers' })
+})
