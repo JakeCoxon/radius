@@ -1,4 +1,5 @@
-import { Ast, AstWriterTable, Binding, BindingAst, BoolType, CodegenFunctionWriter, CodegenWriter, CompiledFunction, ConcreteClassType, ConstructorAst, DefaultConsAst, DoubleType, ExternalTypeConstructor, FieldAst, FileWriter, FloatType, GlobalCompilerState, IntType, ListTypeConstructor, ParameterizedType, PrimitiveType, RawPointerType, StringType, Type, TypeField, VoidType, compilerAssert, textColors } from "./defs";
+import { mallocExternal } from "./compiler_sugar";
+import { Ast, AstType, AstWriterTable, Binding, BindingAst, BoolType, CodegenFunctionWriter, CodegenWriter, CompiledFunction, ConcreteClassType, ConstructorAst, DefaultConsAst, DoubleType, ExternalTypeConstructor, FieldAst, FileWriter, FloatType, GlobalCompilerState, IntType, ListTypeConstructor, ParameterizedType, PrimitiveType, RawPointerType, StringType, Type, TypeField, VoidType, compilerAssert, isAst, textColors } from "./defs";
 
 const OpCodes = {
   Nil: 0,
@@ -26,84 +27,97 @@ const OpCodes = {
   SetLocalS: 22,
   GetGlobalS: 23,
   SetGlobalS: 24,
-  F32_TO_I32: 25,
-  I32_TO_F32: 26,
-  CheckStack: 27,
-  ConstantV: 28,
-  ConstantF32: 29,
-  ConstantF64: 30,
-  ConstantI32: 31,
-  ConstantI64: 32,
-  GetLocalV: 33,
-  GetLocalF32: 34,
-  GetLocalF64: 35,
-  GetLocalI32: 36,
-  GetLocalI64: 37,
-  SetLocalV: 38,
-  SetLocalF32: 39,
-  SetLocalF64: 40,
-  SetLocalI32: 41,
-  SetLocalI64: 42,
-  GetGlobalV: 43,
-  GetGlobalF32: 44,
-  GetGlobalF64: 45,
-  GetGlobalI32: 46,
-  GetGlobalI64: 47,
-  SetGlobalV: 48,
-  SetGlobalF32: 49,
-  SetGlobalF64: 50,
-  SetGlobalI32: 51,
-  SetGlobalI64: 52,
-  EqualV: 53,
-  EqualF32: 54,
-  EqualF64: 55,
-  EqualI32: 56,
-  EqualI64: 57,
-  GreaterV: 58,
-  GreaterF32: 59,
-  GreaterF64: 60,
-  GreaterI32: 61,
-  GreaterI64: 62,
-  LessV: 63,
-  LessF32: 64,
-  LessF64: 65,
-  LessI32: 66,
-  LessI64: 67,
-  AddV: 68,
-  AddF32: 69,
-  AddF64: 70,
-  AddI32: 71,
-  AddI64: 72,
-  SubtractV: 73,
-  SubtractF32: 74,
-  SubtractF64: 75,
-  SubtractI32: 76,
-  SubtractI64: 77,
-  MultiplyV: 78,
-  MultiplyF32: 79,
-  MultiplyF64: 80,
-  MultiplyI32: 81,
-  MultiplyI64: 82,
-  DivideV: 83,
-  DivideF32: 84,
-  DivideF64: 85,
-  DivideI32: 86,
-  DivideI64: 87,
-  NotV: 88,
-  NotF32: 89,
-  NotF64: 90,
-  NotI32: 91,
-  NotI64: 92,
-  NegateV: 93,
-  NegateF32: 94,
-  NegateF64: 95,
-  NegateI32: 96,
-  NegateI64: 97,
-  ToStringV: 98,
-  ToStringF32: 99,
-  ToStringF64: 100,
-  ToStringI32: 101,
-  ToStringI64: 102,
+  AllocS: 25,
+  SubscriptS: 26,
+  SetSubscriptS: 27,
+  F32_TO_I32: 28,
+  I32_TO_F32: 29,
+  CheckStack: 30,
+  ConstantV: 31,
+  ConstantF32: 32,
+  ConstantF64: 33,
+  ConstantI32: 34,
+  ConstantI64: 35,
+  GetLocalV: 36,
+  GetLocalF32: 37,
+  GetLocalF64: 38,
+  GetLocalI32: 39,
+  GetLocalI64: 40,
+  SetLocalV: 41,
+  SetLocalF32: 42,
+  SetLocalF64: 43,
+  SetLocalI32: 44,
+  SetLocalI64: 45,
+  GetGlobalV: 46,
+  GetGlobalF32: 47,
+  GetGlobalF64: 48,
+  GetGlobalI32: 49,
+  GetGlobalI64: 50,
+  SetGlobalV: 51,
+  SetGlobalF32: 52,
+  SetGlobalF64: 53,
+  SetGlobalI32: 54,
+  SetGlobalI64: 55,
+  SubscriptV: 56,
+  SubscriptF32: 57,
+  SubscriptF64: 58,
+  SubscriptI32: 59,
+  SubscriptI64: 60,
+  SetSubscriptV: 61,
+  SetSubscriptF32: 62,
+  SetSubscriptF64: 63,
+  SetSubscriptI32: 64,
+  SetSubscriptI64: 65,
+  EqualV: 66,
+  EqualF32: 67,
+  EqualF64: 68,
+  EqualI32: 69,
+  EqualI64: 70,
+  GreaterV: 71,
+  GreaterF32: 72,
+  GreaterF64: 73,
+  GreaterI32: 74,
+  GreaterI64: 75,
+  LessV: 76,
+  LessF32: 77,
+  LessF64: 78,
+  LessI32: 79,
+  LessI64: 80,
+  AddV: 81,
+  AddF32: 82,
+  AddF64: 83,
+  AddI32: 84,
+  AddI64: 85,
+  SubtractV: 86,
+  SubtractF32: 87,
+  SubtractF64: 88,
+  SubtractI32: 89,
+  SubtractI64: 90,
+  MultiplyV: 91,
+  MultiplyF32: 92,
+  MultiplyF64: 93,
+  MultiplyI32: 94,
+  MultiplyI64: 95,
+  DivideV: 96,
+  DivideF32: 97,
+  DivideF64: 98,
+  DivideI32: 99,
+  DivideI64: 100,
+  NotV: 101,
+  NotF32: 102,
+  NotF64: 103,
+  NotI32: 104,
+  NotI64: 105,
+  NegateV: 106,
+  NegateF32: 107,
+  NegateF64: 108,
+  NegateI32: 109,
+  NegateI64: 110,
+  ToStringV: 111,
+  ToStringF32: 112,
+  ToStringF64: 113,
+  ToStringI32: 114,
+  ToStringI64: 115,
 };
 
 const POINTER_SIZE = 2; // 64 bit
@@ -251,10 +265,14 @@ const emitConstant = (writer: CodegenFunctionWriter, type: Type, value: number) 
 
 const getFieldOp  = (opcode: number) => ({ opcode, write: (writer: CodegenFunctionWriter, slot: number, size: number) => writeBytes(writer, opcode, slot) })
 const getFieldOpS = (opcode: number) => ({ opcode, write: (writer: CodegenFunctionWriter, slot: number, size: number) => writeBytes(writer, opcode, slot, size) })
-const GetLocalByType = { I32: getFieldOp(OpCodes.GetLocalI32), I64: getFieldOp(OpCodes.GetLocalI64), F32: getFieldOp(OpCodes.GetLocalF32), F64: getFieldOp(OpCodes.GetLocalF64), S: getFieldOpS(OpCodes.GetLocalS) }
-const SetLocalByType = { I32: getFieldOp(OpCodes.SetLocalI32), I64: getFieldOp(OpCodes.SetLocalI64), F32: getFieldOp(OpCodes.SetLocalF32), F64: getFieldOp(OpCodes.SetLocalF64), S: getFieldOpS(OpCodes.SetLocalS) }
-const GetGlobalByType = { I32: getFieldOp(OpCodes.GetGlobalI32), I64: getFieldOp(OpCodes.GetGlobalI64), F32: getFieldOp(OpCodes.GetGlobalF32), F64: getFieldOp(OpCodes.GetGlobalF64), S: getFieldOpS(OpCodes.GetGlobalS) }
-const SetGlobalByType = { I32: getFieldOp(OpCodes.SetGlobalI32), I64: getFieldOp(OpCodes.SetGlobalI64), F32: getFieldOp(OpCodes.SetGlobalF32), F64: getFieldOp(OpCodes.SetGlobalF64), S: getFieldOpS(OpCodes.SetGlobalS) }
+const subscriptOp  = (opcode: number) => ({ opcode, write: (writer: CodegenFunctionWriter, size: number) => writeBytes(writer, opcode) })
+const subscriptOpS = (opcode: number) => ({ opcode, write: (writer: CodegenFunctionWriter, size: number) => writeBytes(writer, opcode, size) })
+const GetLocalByType     = { I32: getFieldOp(OpCodes.GetLocalI32), I64: getFieldOp(OpCodes.GetLocalI64), F32: getFieldOp(OpCodes.GetLocalF32), F64: getFieldOp(OpCodes.GetLocalF64), S: getFieldOpS(OpCodes.GetLocalS) }
+const SetLocalByType     = { I32: getFieldOp(OpCodes.SetLocalI32), I64: getFieldOp(OpCodes.SetLocalI64), F32: getFieldOp(OpCodes.SetLocalF32), F64: getFieldOp(OpCodes.SetLocalF64), S: getFieldOpS(OpCodes.SetLocalS) }
+const GetGlobalByType    = { I32: getFieldOp(OpCodes.GetGlobalI32), I64: getFieldOp(OpCodes.GetGlobalI64), F32: getFieldOp(OpCodes.GetGlobalF32), F64: getFieldOp(OpCodes.GetGlobalF64), S: getFieldOpS(OpCodes.GetGlobalS) }
+const SetGlobalByType    = { I32: getFieldOp(OpCodes.SetGlobalI32), I64: getFieldOp(OpCodes.SetGlobalI64), F32: getFieldOp(OpCodes.SetGlobalF32), F64: getFieldOp(OpCodes.SetGlobalF64), S: getFieldOpS(OpCodes.SetGlobalS) }
+const SubscriptByType    = { I32: subscriptOp(OpCodes.SubscriptI32), I64: subscriptOp(OpCodes.SubscriptI64), F32: subscriptOp(OpCodes.SubscriptF32), F64: subscriptOp(OpCodes.SubscriptF64), S: subscriptOpS(OpCodes.SubscriptS) }
+const SetSubscriptByType = { I32: subscriptOp(OpCodes.SetSubscriptI32), I64: subscriptOp(OpCodes.SetSubscriptI64), F32: subscriptOp(OpCodes.SetSubscriptF32), F64: subscriptOp(OpCodes.SetSubscriptF64), S: subscriptOpS(OpCodes.SetSubscriptS) }
 
 const getOpByType = (writer: CodegenFunctionWriter, type: Type): keyof typeof GetLocalByType => {
   if (type === IntType || type === BoolType) return 'I32'
@@ -294,7 +312,7 @@ const astWriter: AstWriterTable = {
     // log("Popped", popped)
     // log("Popped ", numLocalSlots, " now new slot is ", writer.nextLocalSlot)
     // log("New locals is", writer.locals)
-    if (numLocalSlots > 0 || slotSize(writer, ast.type) > 0) 
+    if (numLocalSlots > 0) 
       writeBytes(writer, OpCodes.PopResult, numLocalSlots, slotSize(writer, ast.type))
 
     writer.nextLocalSlot -= numLocalSlots
@@ -458,7 +476,17 @@ const astWriter: AstWriterTable = {
       compilerAssert(ast.type === VoidType, "Expected void")
       return;
     }
-    compilerAssert(false, "Not supported");
+
+    if (ast.func === mallocExternal) {
+      compilerAssert(ast.args.length == 1 && ast.args[0].type === IntType, "Expected int arg", { ast })
+      writeExpr(writer, ast.args[0])
+      writeBytes(writer, OpCodes.AllocS)
+      writer.nextLocalSlot -= slotSize(writer, IntType)
+      writer.nextLocalSlot += slotSize(writer, ast.type) // Pointer size
+      return
+    }
+    
+    compilerAssert(false, `External function not supported in codegen: ${ast.func.name}`);
     // TODO: func name
     // params.forEach(writeExpr);
     // writeBytes(OpCodes.Call, params.length);
@@ -507,7 +535,7 @@ const astWriter: AstWriterTable = {
     ast.args.forEach(expr => writeExpr(writer, expr))
     if (ast.type.typeInfo.isReferenceType) {
       const fieldSize = ast.args.reduce((acc, expr) => acc + slotSize(writer, expr.type), 0)
-      writer.nextLocalSlot -= fieldSize;
+      writer.nextLocalSlot -= fieldSize
       writeBytes(writer, OpCodes.Alloc, fieldSize)
       writer.nextLocalSlot += slotSize(writer, ast.type) // Pointer size
       writeBytes(writer, OpCodes.CheckStack, writer.nextLocalSlot)
@@ -568,6 +596,16 @@ const astWriter: AstWriterTable = {
     compilerAssert(false, "Not implemented", { ast }) // TODO: Tests for this
   },
   subscript: (writer, ast) => {
+    if (ast.left.type === RawPointerType) {
+      writeExpr(writer, ast.left)
+      writeExpr(writer, ast.right)
+      const op = getOpByType(writer, ast.type)
+      SubscriptByType[op].write(writer, slotSize(writer, ast.type))
+      writer.nextLocalSlot -= slotSize(writer, ast.left.type)
+      writer.nextLocalSlot -= slotSize(writer, ast.right.type)
+      writer.nextLocalSlot += slotSize(writer, ast.type)
+      return
+    }
     compilerAssert(ast.left.type instanceof ParameterizedType && ast.left.type.typeConstructor === ListTypeConstructor, "Expected list", { ast })
     compilerAssert(ast.right.type === IntType, "Expected int type", { ast })
     writeExpr(writer, ast.left)
@@ -575,6 +613,18 @@ const astWriter: AstWriterTable = {
     writeBytes(writer, OpCodes.SubscriptList, slotSize(writer, ast.type))
     writer.nextLocalSlot -= slotSize(writer, ast.left.type)
     writer.nextLocalSlot -= slotSize(writer, ast.right.type)
+    writer.nextLocalSlot += slotSize(writer, ast.type)
+  },
+  setsubscript: (writer, ast) => {
+    compilerAssert(ast.left.type === RawPointerType, "Not implemented")
+    writeExpr(writer, ast.left)
+    writeExpr(writer, ast.right)
+    writeExpr(writer, ast.value)
+    const op = getOpByType(writer, ast.value.type)
+    SetSubscriptByType[op].write(writer, slotSize(writer, ast.value.type))
+    writer.nextLocalSlot -= slotSize(writer, ast.left.type)
+    writer.nextLocalSlot -= slotSize(writer, ast.right.type)
+    writer.nextLocalSlot -= slotSize(writer, ast.value.type)
     writer.nextLocalSlot += slotSize(writer, ast.type)
   },
   block: (writer, ast) => {
@@ -705,7 +755,7 @@ const writeFinalBytecodeFunction = (bytecodeWriter: CodegenWriter, func: Compile
 
   // Make sure locals/pops match up
   compilerAssert(funcWriter.locals.length === 0, "Compile error got $x expected 0", { x: funcWriter.locals.length, fatal: true })
-  compilerAssert(funcWriter.nextLocalSlot === funcWriter.returnSlots, "Compile error got $x expected 0", { x: funcWriter.nextLocalSlot, fatal: true })
+  compilerAssert(funcWriter.nextLocalSlot === funcWriter.returnSlots, "Compile error got $got expected $expected", { got: funcWriter.nextLocalSlot, expected: funcWriter.returnSlots, fatal: true })
 
   bytecodeWriter.functions.push(funcWriter);
   return funcWriter

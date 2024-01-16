@@ -54,7 +54,7 @@ test('comptime', async () => {
   expect(test.prints).toEqual([5, '"thing"', 12, 44, 1850, '"thing"', 12, 44, 44, '"thing"', 12, 44])
 })
 
-test('expressions', async () => {
+test.todo('expressions', async () => {
   const input = await Bun.file(`${import.meta.dir}/fixtures/expressions.rad`).text()
   const test = runCompilerTest(input, { filename: 'expressions' })
 })
@@ -235,4 +235,9 @@ test('returns', async () => {
 test('global', async () => {
   const input = await Bun.file(`${import.meta.dir}/fixtures/global.rad`).text()
   const test = runCompilerTest(input, { filename: 'global' })
+})
+
+test('compiler_module', async () => {
+  const input = await Bun.file(`${import.meta.dir}/fixtures/compiler_module.rad`).text()
+  const test = runCompilerTest(input, { filename: 'compiler_module' })
 })

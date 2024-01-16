@@ -1,0 +1,9 @@
+import compiler
+
+fn main():
+  a := 32
+  ptr := compiler.malloc(a)
+  f := compiler.unsafe_subscript!int(ptr, 2)
+  print(f + 1)
+
+  compiler.unsafe_set_subscript(ptr, 2, 100)

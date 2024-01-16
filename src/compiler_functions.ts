@@ -1,5 +1,5 @@
 import { BytecodeDefault, BytecodeSecondOrder, compileClassTask, compileFunctionPrototype, createBytecodeVmAndExecuteTask, pushBytecode, pushGeneratedBytecode, visitParseNode } from "./compiler";
-import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, ExternalFunction, CallAst, IntType, Closure, UserCallAst, ExternalType, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition, ParseTypeCheck, ParseCall, TypeVariable, TypeMatcher, typeMatcherEquals, SourceLocation, OverloadSet, ExternalTypeConstructor, ScopeParentSymbol, SubCompilerState } from "./defs";
+import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, ExternalFunction, CallAst, IntType, Closure, UserCallAst, ExternalType, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition, ParseTypeCheck, ParseCall, TypeVariable, TypeMatcher, typeMatcherEquals, SourceLocation, OverloadSet, ExternalTypeConstructor, ScopeParentSymbol, SubCompilerState, CompilerFunction } from "./defs";
 import { Task, TaskDef, Unit } from "./tasks";
 
 
@@ -286,6 +286,9 @@ export function createCallAstFromValue(location: SourceLocation, value: unknown,
 
   if (value instanceof ExternalFunction) {
     return Task.of(new CallAst(value.returnType, location, value, args))
+  }
+  if (value instanceof CompilerFunction) {
+    return Task.of(value.func(location, typeArgs, args))
   }
 
   if (value instanceof Closure) {

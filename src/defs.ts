@@ -405,6 +405,7 @@ export class SetValueFieldAst extends AstRoot { key = 'setvaluefield' as const; 
 export class VoidAst extends AstRoot {          key = 'void' as const;           constructor(public type: Type, public location: SourceLocation) { super() } }
 export class CastAst extends AstRoot {          key = 'cast' as const;           constructor(public type: Type, public location: SourceLocation, public expr: Ast) { super() } }
 export class SubscriptAst extends AstRoot {     key = 'subscript' as const;      constructor(public type: Type, public location: SourceLocation, public left: Ast, public right: Ast) { super() } }
+export class SetSubscriptAst extends AstRoot {  key = 'setsubscript' as const;   constructor(public type: Type, public location: SourceLocation, public left: Ast, public right: Ast, public value: Ast) { super() } }
 export class NotAst extends AstRoot {           key = 'not' as const;            constructor(public type: Type, public location: SourceLocation, public expr: Ast) { super() } }
 export class ConstructorAst extends AstRoot {   key = 'constructor' as const;    constructor(public type: Type, public location: SourceLocation, public args: Ast[]) { super() } }
 export class DefaultConsAst extends AstRoot {   key = 'defaultcons' as const;    constructor(public type: Type, public location: SourceLocation) { super() } }
@@ -412,7 +413,7 @@ export class DefaultConsAst extends AstRoot {   key = 'defaultcons' as const;   
 export type Ast = NumberAst | LetAst | SetAst | OperatorAst | IfAst | ListAst | CallAst | AndAst | UserCallAst |
   OrAst | StatementsAst | WhileAst | ReturnAst | SetFieldAst | VoidAst | CastAst | SubscriptAst | ConstructorAst |
   BindingAst | StringAst | NotAst | FieldAst | BlockAst | BreakAst | BoolAst | CastAst | DefaultConsAst | ValueFieldAst |
-  SetValueFieldAst
+  SetValueFieldAst | SetSubscriptAst
 export const isAst = (value: unknown): value is Ast => value instanceof AstRoot;
 
 export class Tuple {
@@ -554,6 +555,12 @@ export class ExternalFunction {
     return options.stylize(`[ExternalFunction ${this.name}]`, 'special');
   }
 }
+export class CompilerFunction {
+  constructor(public name: string, public func: Function) {}
+  [Inspect.custom](depth: any, options: any, inspect: any) {
+    return options.stylize(`[CompilerFunction ${this.name}]`, 'special');
+  }
+}
 
 export const VoidType =       new PrimitiveType("void",     { fields: [], metaobject: Object.create(null), isReferenceType: false })
 export const IntType =        new PrimitiveType("int",      { fields: [], metaobject: Object.create(null), isReferenceType: false })
@@ -562,6 +569,7 @@ export const FloatType =      new PrimitiveType("float",    { fields: [], metaob
 export const DoubleType =     new PrimitiveType("double",   { fields: [], metaobject: Object.create(null), isReferenceType: false })
 export const FunctionType =   new PrimitiveType("function", { fields: [], metaobject: Object.create(null), isReferenceType: false })
 export const RawPointerType = new PrimitiveType("rawptr",   { fields: [], metaobject: Object.create(null), isReferenceType: false })
+export const AstType        = new PrimitiveType("ast",      { fields: [], metaobject: Object.create(null), isReferenceType: false })
 
 export const StringType = (() => {
   const type = new PrimitiveType("string", { fields: [], metaobject: Object.create(null), isReferenceType: false })
@@ -879,9 +887,9 @@ export const outputSourceLocation = (location: SourceLocation) => {
   for (let i = -2; i < 3; i++) {
     const line = location.line + i
     if (lines[line - 1] !== undefined) {
-      const lineGutter = `${String(line).padStart(2)}|`
+      const lineGutter = `${String(line).padStart(2)}|  `
       out += textColors.gray(lineGutter)
-      out += `  ${lines[line - 1]}\n`
+      out += `${lines[line - 1]}\n`
       if (i === 0) {
         const repeat = " ".repeat(location.column + lineGutter.length);
         out += textColors.red(`${repeat}^-- here\n`)
