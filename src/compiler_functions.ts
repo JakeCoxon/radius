@@ -1,5 +1,5 @@
-import { BytecodeDefault, BytecodeSecondOrder, compileClassTask, compileFunctionPrototype, createBytecodeVmAndExecuteTask, pushBytecode, pushGeneratedBytecode, visitParseNode } from "./compiler";
-import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, ExternalFunction, CallAst, IntType, Closure, UserCallAst, ExternalType, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition, ParseTypeCheck, ParseCall, TypeVariable, TypeMatcher, typeMatcherEquals, SourceLocation, OverloadSet, ExternalTypeConstructor, ScopeParentSymbol, SubCompilerState, CompilerFunction } from "./defs";
+import { BytecodeDefault, BytecodeSecondOrder, compileClassTask, compileFunctionPrototype, createBytecodeVmAndExecuteTask, propagateLiteralType, propagatedLiteralAst, pushBytecode, pushGeneratedBytecode, visitParseNode } from "./compiler";
+import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, ExternalFunction, CallAst, IntType, Closure, UserCallAst, ExternalType, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition, ParseTypeCheck, ParseCall, TypeVariable, TypeMatcher, typeMatcherEquals, SourceLocation, OverloadSet, ExternalTypeConstructor, ScopeParentSymbol, SubCompilerState, CompilerFunction, IntLiteralType, FloatLiteralType, FloatType } from "./defs";
 import { Task, TaskDef, Unit } from "./tasks";
 
 
@@ -80,8 +80,11 @@ function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, args, typ
 
       compilerAssert(compiledArgTypes instanceof Tuple, "Expected tuple")
       compiledArgTypes.values.forEach((type, i) => {
+        let givenType = args[i].type
         if (type === null) {
-          concreteTypes.push(args[i].type)
+          if (givenType === IntLiteralType) givenType = IntType
+          else if (givenType === FloatLiteralType) givenType = FloatType
+          concreteTypes.push(givenType)
           return
         }
         if (type instanceof TypeMatcher) {
@@ -90,12 +93,19 @@ function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, args, typ
           compilerAssert(matches, "Type check failed. Expected $expected got $got", { expected: type, got: args[i].type })
           concreteTypes.push(args[i].type) // TODO: Fill in the type for real
         } else if (type instanceof TypeVariable) {
+          
           concreteTypes.push(args[i].type)
         } else {
           compilerAssert(isType(type), "Expected type got $type", { type });
-          compilerAssert(args[i].type === type, "Argument $name of type $value does not match $expected", { name: func.args[i][0].token, value: args[i].type, expected: type })
+          
+          if (givenType === IntLiteralType && type === FloatType) givenType = FloatType
+          else if (givenType === IntLiteralType) givenType = IntType
+          else if (givenType === FloatLiteralType) givenType = FloatType
+          compilerAssert(givenType === type, "Argument $name of type $value does not match $expected", { name: func.args[i][0].token, value: args[i].type, expected: type })
           concreteTypes.push(type)
         }
+
+        compilerAssert(concreteTypes.at(-1) !== IntLiteralType && concreteTypes.at(-1) !== FloatLiteralType)
       })
       return Task.success()
     })
@@ -201,10 +211,11 @@ function functionInlineTask(ctx: TaskContext, { location, func, typeArgs, args, 
   
   func.args.forEach(([iden, type], i) => {
     compilerAssert(concreteTypes[i], `Expected type`, { args, concreteTypes })
+    compilerAssert(concreteTypes[i] !== IntLiteralType)
     const binding = new Binding(iden.token.value, concreteTypes[i]);
     binding.definitionCompiler = inlineInto;
     templateScope[iden.token.value] = binding;
-    statements.push(new LetAst(VoidType, location, binding, args[i]))
+    statements.push(new LetAst(VoidType, location, binding, propagatedLiteralAst(args[i])))
     argBindings.push(binding);
   });
   
@@ -271,7 +282,7 @@ export function createCallAstFromValueAndPushValue(vm: Vm, value: unknown, typeA
 export function createCallAstFromValue(location: SourceLocation, value: unknown, typeArgs: unknown[], args: Ast[]): Task<Ast, CompilerError> {
   if (value instanceof PrimitiveType) {
     compilerAssert(args.length === 1 && typeArgs.length === 0, "Expected 1 arg got $count", { count: args.length })
-    return Task.of(new CastAst(value, location, args[0]))
+    return Task.of(new CastAst(value, location, propagatedLiteralAst(args[0])))
   }
 
   if (value instanceof ClassDefinition) {
@@ -285,6 +296,7 @@ export function createCallAstFromValue(location: SourceLocation, value: unknown,
   }
 
   if (value instanceof ExternalFunction) {
+    args.forEach((ast, i) => { propagateLiteralType(ast.type, ast) })
     return Task.of(new CallAst(value.returnType, location, value, args))
   }
   if (value instanceof CompilerFunction) {
@@ -306,6 +318,7 @@ export function createCallAstFromValue(location: SourceLocation, value: unknown,
       .chainFn((task, compiledFunction) => {
         const binding = compiledFunction.binding;
         const returnType = compiledFunction.returnType;
+        args.forEach((ast, i) => { propagateLiteralType(call.concreteTypes[i], ast) })
         return Task.of(new UserCallAst(returnType, location, binding, args))
       })
     )

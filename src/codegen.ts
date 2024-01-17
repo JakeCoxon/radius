@@ -400,7 +400,7 @@ const astWriter: AstWriterTable = {
     writer.nextLocalSlot -= slotSize(writer, ast.value.type)
   },
   number: (writer, ast) => {
-    compilerAssert(ast.type === IntType || ast.type === FloatType || ast.type === DoubleType, "Expected int type", { ast })
+    compilerAssert(ast.type === IntType || ast.type === FloatType || ast.type === DoubleType, "Expected number type", { ast })
     emitConstant(writer, ast.type, ast.value)
     writer.nextLocalSlot += slotSize(writer, ast.type);
   },

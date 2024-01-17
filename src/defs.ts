@@ -366,7 +366,7 @@ export class ClassDefinition {
     return {...this}
   }
 
-  get shortName() { return this.name }
+  get shortName(): string { return this.name?.token.value ?? 'unknown' }
 }
 
 export class AstRoot {
@@ -562,14 +562,16 @@ export class CompilerFunction {
   }
 }
 
-export const VoidType =       new PrimitiveType("void",     { fields: [], metaobject: Object.create(null), isReferenceType: false })
-export const IntType =        new PrimitiveType("int",      { fields: [], metaobject: Object.create(null), isReferenceType: false })
-export const BoolType =       new PrimitiveType("bool",     { fields: [], metaobject: Object.create(null), isReferenceType: false })
-export const FloatType =      new PrimitiveType("float",    { fields: [], metaobject: Object.create(null), isReferenceType: false })
-export const DoubleType =     new PrimitiveType("double",   { fields: [], metaobject: Object.create(null), isReferenceType: false })
-export const FunctionType =   new PrimitiveType("function", { fields: [], metaobject: Object.create(null), isReferenceType: false })
-export const RawPointerType = new PrimitiveType("rawptr",   { fields: [], metaobject: Object.create(null), isReferenceType: false })
-export const AstType        = new PrimitiveType("ast",      { fields: [], metaobject: Object.create(null), isReferenceType: false })
+export const VoidType =         new PrimitiveType("void",          { fields: [], metaobject: Object.create(null), isReferenceType: false })
+export const IntType =          new PrimitiveType("int",           { fields: [], metaobject: Object.create(null), isReferenceType: false })
+export const IntLiteralType =   new PrimitiveType("int_literal",   { fields: [], metaobject: Object.create(null), isReferenceType: false })
+export const FloatLiteralType = new PrimitiveType("float_literal", { fields: [], metaobject: Object.create(null), isReferenceType: false })
+export const BoolType =         new PrimitiveType("bool",          { fields: [], metaobject: Object.create(null), isReferenceType: false })
+export const FloatType =        new PrimitiveType("float",         { fields: [], metaobject: Object.create(null), isReferenceType: false })
+export const DoubleType =       new PrimitiveType("double",        { fields: [], metaobject: Object.create(null), isReferenceType: false })
+export const FunctionType =     new PrimitiveType("function",      { fields: [], metaobject: Object.create(null), isReferenceType: false })
+export const RawPointerType =   new PrimitiveType("rawptr",        { fields: [], metaobject: Object.create(null), isReferenceType: false })
+export const AstType =          new PrimitiveType("ast",           { fields: [], metaobject: Object.create(null), isReferenceType: false })
 
 export const StringType = (() => {
   const type = new PrimitiveType("string", { fields: [], metaobject: Object.create(null), isReferenceType: false })
