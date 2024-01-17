@@ -4,6 +4,23 @@ fn foo(x: int, y: float):
 
 fn main():
   x : int = 2
+
+  b := x < 2
+  b2 := 2 < float(2)
+  b3 := 2 < 2.0
+  b4 := 2.0 < float(2)
+
+  g1 := 2.0 == 2
+  g2 := 2 == 2
+  g3 := 2 == 2.0
+  g4 := 2.0 == 2.0
+  g5 := int(2) == 2
+  g6 := float(2) == 2.0
+  g7 := 2 == int(2)
+  g8 := 2.0 == float(2.23)
+
+  c := 2 + 1
+
   y : float = 2.0
   y2 : float = 2.3
 
@@ -21,3 +38,7 @@ fn main():
   z2 := float(z1) + 2.3
 
   print(2)
+
+  list1 := [1, 2, 3, int(2)]
+  list2 := [1, 2, 3, 4.5]
+  list3 := [1, 2, 3, float(3.4)]

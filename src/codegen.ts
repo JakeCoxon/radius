@@ -352,6 +352,7 @@ const astWriter: AstWriterTable = {
   cast: (writer, ast) => {
     writeExpr(writer, ast.expr)
     let opcode = 0
+    if (ast.expr.type === ast.type) return
     if (ast.expr.type === IntType && ast.type === FloatType)      opcode = OpCodes.I32_TO_F32
     else if (ast.expr.type === FloatType && ast.type === IntType) opcode = OpCodes.F32_TO_I32
     else compilerAssert(false, "Not implemented yet", { from: ast.expr.type, to: ast.type })
@@ -446,8 +447,8 @@ const astWriter: AstWriterTable = {
   },
   and: (writer, ast) => {
     const [a, b] = ast.args;
-    compilerAssert(a.type === BoolType || a.type === IntType)
-    compilerAssert(b.type === BoolType || b.type === IntType)
+    compilerAssert(a.type === BoolType || a.type === IntType, "Invalid type", { a, b })
+    compilerAssert(b.type === BoolType || b.type === IntType, "Invalid type", { a, b })
     writeExpr(writer, a);
     writer.nextLocalSlot -= slotSize(writer, a.type)
     const patch = writeJump(writer, OpCodes.JumpIfFalse);
@@ -518,7 +519,7 @@ const astWriter: AstWriterTable = {
   operator: (writer, ast) => {
     writeExpr(writer, ast.args[0]);
     writeExpr(writer, ast.args[1]);
-    writeOperator(writer, ast.operator, ast.type);
+    writeOperator(writer, ast.operator, ast.args[0].type);
     writer.nextLocalSlot -= slotSize(writer, ast.args[0].type)
     writer.nextLocalSlot -= slotSize(writer, ast.args[1].type)
     writer.nextLocalSlot += slotSize(writer, ast.type)

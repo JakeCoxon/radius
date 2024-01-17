@@ -1,4 +1,4 @@
-import { BytecodeSecondOrder, getOperatorTable, visitParseNode } from "./compiler"
+import { BytecodeSecondOrder, getOperatorTable, propagatedLiteralAst, visitParseNode } from "./compiler"
 import { insertFunctionDefinition } from "./compiler_functions"
 import { ArgumentTypePair, Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst } from "./defs"
 import { Task } from "./tasks"
@@ -193,12 +193,12 @@ export const unsafe_subscript = new CompilerFunction('unsafe_subscript', (locati
   const [left, right] = args
   compilerAssert(left.type === RawPointerType, "Expected rawptr", { left })
   const type = expectType(typeArgs[0])
-  return new SubscriptAst(type, location, left, right)
+  return new SubscriptAst(type, location, left, propagatedLiteralAst(right))
 })
 export const unsafe_set_subscript = new CompilerFunction('unsafe_set_subscript', (location: SourceLocation, typeArgs: unknown[], args: Ast[]) => {
   const [left, right, value] = args
   compilerAssert(left.type === RawPointerType, "Expected rawptr", { left })
-  return new SetSubscriptAst(VoidType, location, left, right, value)
+  return new SetSubscriptAst(VoidType, location, left, propagatedLiteralAst(right), propagatedLiteralAst(value))
 })
 
 export const createCompilerModuleTask = (ctx: TaskContext): Task<Module, CompilerError> => {

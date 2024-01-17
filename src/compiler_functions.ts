@@ -164,6 +164,7 @@ export function functionTemplateTypeCheckAndCompileTask(ctx: TaskContext, { func
       ctx.globalCompiler.logger.log(textColors.cyan(`Compiled template ${func.debugName}`))
       
       compilerAssert(isAst(ast), "Expected ast got $ast", { ast });
+      propagatedLiteralAst(ast)
 
       const id = func.compiledFunctions.length;
       const binding = new Binding(`${func.debugName} compiled ${id}`, FunctionType);

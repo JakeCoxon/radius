@@ -41,6 +41,7 @@ export const BytecodeDefault: ParseTreeTable = {
   opeq:      (out, node) => compilerAssert(false, "Not implemented 'opeq' in BytecodeDefault"),
   import:    (out, node) => compilerAssert(false, "Not implemented 'import' in BytecodeDefault"),
   bytecode:  (out, node) => compilerAssert(false, "Not implemented 'bytecode' in BytecodeDefault"),
+  fold:      (out, node) => compilerAssert(false, "Not implemented 'fold' in BytecodeDefault"),
   constructor: (out, node) => compilerAssert(false, "Not implemented 'constructor' in BytecodeDefault"),
   compileriden: (out, node) => compilerAssert(false, "Not implemented 'compileriden' in BytecodeDefault"),
 
@@ -525,55 +526,55 @@ const createOperator = (op: string, operatorName: string, typeCheck: (config: Ty
         compilerAssert(metafunc instanceof ExternalFunction, "Not implemented yet", { metafunc })
         return metafunc.func(location, a, b)
       }
-      // if (a.type === IntType && b.type === IntLiteralType)
-      // compilerAssert(a.type === b.type, "Can't use operator $op on types $aType and $bType. Both types must be the same", { op, a, b, aType: a.type, bType: b.type  })
-      const typeCheckConfig: TypeCheckConfig = { a: a.type, b: b.type, inferType: null }
+      const typeCheckConfig: TypeCheckConfig = { a: { type: a.type }, b: { type: b.type }, inferType: null }
       typeCheck(typeCheckConfig)
-      if (typeCheckConfig.b !== typeCheckConfig.inferType) {
-        propagateLiteralType(typeCheckConfig.inferType!, b)
-      }
-      if (typeCheckConfig.a !== typeCheckConfig.inferType) {
-        propagateLiteralType(typeCheckConfig.inferType!, a)
-      }
       compilerAssert(typeCheckConfig.inferType, "Expected infer type", { type: typeCheckConfig.inferType })
+      if (typeCheckConfig.a.type !== a.type) propagateLiteralType(typeCheckConfig.a.type, a)
+      if (typeCheckConfig.b.type !== b.type) propagateLiteralType(typeCheckConfig.b.type, b)
       return new OperatorAst(typeCheckConfig.inferType, location, op, [a, b])
     }
   }
 }
-type TypeCheckConfig = { a: Type, b: Type, inferType: Type | null }
-const typecheckNumberOperator = (config: TypeCheckConfig): void => {
-  if (config.a === IntType) {
-    compilerAssert(config.b === IntType || config.b === IntLiteralType, "Expected int, float or double type got $b", { b: config.b })
-    config.inferType = IntType
-    return
-  }
-  if (config.a === FloatType) {
-    compilerAssert(config.b === FloatType || config.b === IntLiteralType || config.b === FloatLiteralType, "Expected int, float or double type got $b", { b: config.b })
-    config.inferType = FloatType
-    return
-  }
-  if (config.a === IntLiteralType) {
-    if (config.b === IntLiteralType || config.b === FloatLiteralType) {
-      config.inferType = config.b
-      return
-    }
-    return typecheckNumberOperator({ a: config.b, b: config.a, inferType: null })
-  }
-  if (config.a === FloatLiteralType) {
-    if (config.b === IntLiteralType || config.b === FloatLiteralType) {
-      config.inferType = FloatLiteralType
-      return
-    }
-    return typecheckNumberOperator({ a: config.b, b: config.a, inferType: null })
-  }
-  compilerAssert(false, "Expected int, float or double type got $a $b", { a: config.a, b: config.b })
+
+type TypeCheckVar = { type: Type }
+type TypeCheckConfig = { a: TypeCheckVar, b: TypeCheckVar, inferType: Type | null }
+
+const normalizeNumberOperatorType = (from: TypeCheckVar, to: TypeCheckVar) => {
+  if (from.type === IntLiteralType && to.type === FloatType) from.type = FloatType
+  else if (from.type === IntLiteralType && to.type === FloatLiteralType) from.type = FloatLiteralType
+  else if (from.type === IntLiteralType && to.type === IntType) from.type = IntType
+  else if (from.type === FloatLiteralType && to.type === FloatType) from.type = FloatType
 }
+const numberOperatorTypeToConcrete = (from: TypeCheckVar) => {
+  if (from.type === IntLiteralType) from.type = IntType
+  else if (from.type === FloatLiteralType) from.type = FloatType
+}
+const typecheckNumberOperator = (config: TypeCheckConfig): void => {
+  normalizeNumberOperatorType(config.a, config.b)
+  normalizeNumberOperatorType(config.b, config.a)
+  compilerAssert(config.a.type === config.b.type, "Expected int, float or double type got $a $b", { a: config.a.type, b: config.b.type })
+  config.inferType = config.b.type
+}
+
 const typecheckNumberComparison = (config: TypeCheckConfig) => {
-  compilerAssert(config.a === IntType || config.a === FloatType || config.a === DoubleType, "Expected int, float or double type got $a $b", { a: config.a, b: config.b })
+  normalizeNumberOperatorType(config.a, config.b)
+  normalizeNumberOperatorType(config.b, config.a)
+  numberOperatorTypeToConcrete(config.a)
+  numberOperatorTypeToConcrete(config.b)
+  const aok = config.a.type === IntType || config.a.type === FloatType || config.a.type === DoubleType
+  const bok = config.b.type === IntType || config.b.type === FloatType || config.b.type === DoubleType
+  compilerAssert(aok && bok, "Expected int, float or double type got $a $b", { a: config.a.type, b: config.b.type })
   config.inferType = BoolType
 }
 
-const typecheckEquality = (config: TypeCheckConfig) => { compilerAssert(config.a === IntType || config.a === BoolType || config.a === FloatType || config.a === DoubleType); config.inferType = BoolType }
+const typecheckEquality = (config: TypeCheckConfig) => {
+  normalizeNumberOperatorType(config.a, config.b)
+  normalizeNumberOperatorType(config.b, config.a)
+  numberOperatorTypeToConcrete(config.a)
+  numberOperatorTypeToConcrete(config.b)
+  compilerAssert(config.a.type === BoolType || config.a.type === IntType || config.a.type === FloatType || config.a.type === DoubleType, "Expected bool, int, float or double type got $type", { type: config.a.type })
+  config.inferType = BoolType
+}
 createOperator("-",  "sub", typecheckNumberOperator,   (a, b) => a - b)
 createOperator("*",  "mul", typecheckNumberOperator,   (a, b) => a * b)
 createOperator("+",  "add", typecheckNumberOperator,   (a, b) => a + b)
@@ -596,6 +597,11 @@ export const propagateLiteralType = (inferType: Type, ast: Ast | null): Type => 
     } else if (ast instanceof OperatorAst) {
       if (ast.type === IntLiteralType || ast.type === FloatLiteralType) {
         ast.type = inferType; recur(ast.args[0]); recur(ast.args[1])
+      }
+      else compilerAssert(ast.type === inferType, "Unexpected", { ast, inferType })
+    } else if (ast instanceof StatementsAst) {
+      if (ast.type === IntLiteralType || ast.type === FloatLiteralType) {
+        ast.type = inferType; recur(ast.statements.at(-1)!)
       }
       else compilerAssert(ast.type === inferType, "Unexpected", { ast, inferType })
     }
@@ -695,14 +701,17 @@ const instructions: InstructionMapping = {
   stringast: (vm, { value }) =>   vm.stack.push(new StringAst(StringType, vm.location, value)),
   boolast: (vm, { value }) =>     vm.stack.push(new BoolAst(BoolType, vm.location, value)),
   orast: (vm, { count }) =>       vm.stack.push(new OrAst(BoolType, vm.location, expectAsts(popValues(vm, count)))),
-  andast: (vm, { count }) =>      vm.stack.push(new AndAst(BoolType, vm.location, expectAsts(popValues(vm, count)))),
+  andast: (vm, { count }) => {
+    const [a, b] = expectAsts(popValues(vm, count))
+    vm.stack.push(new AndAst(BoolType, vm.location, [propagatedLiteralAst(a), propagatedLiteralAst(b)]))
+  },
   whileast: (vm) =>               vm.stack.push(new WhileAst(VoidType, vm.location, expectAst(popStack(vm)), expectAst(popStack(vm)))),
   returnast: (vm, { r }) =>       vm.stack.push(new ReturnAst(VoidType, vm.location, r ? propagatedLiteralAst(expectAst(popStack(vm))) : null)),
   letast: (vm, { name, t, v }) => vm.stack.push(letLocalAst(vm, name, t ? expectType(popStack(vm)) : null, v ? expectAst(popStack(vm)) : null)),
   ifast: (vm, { f, e }) => {
     const cond = propagatedLiteralAst(expectAst(popStack(vm)))
-    const trueBody = expectAst(popStack(vm))
-    const falseBody = f ? expectAst(popStack(vm)) : null
+    const trueBody = propagatedLiteralAst(expectAst(popStack(vm)))
+    const falseBody = f ? propagatedLiteralAst(expectAst(popStack(vm))) : null
     const resultType = e && falseBody ? falseBody.type : VoidType
     if (e) compilerAssert(falseBody && falseBody.type === trueBody.type, "If expression inferred to be of type $trueType but got $falseType", { trueType: trueBody.type, falseType: falseBody?.type })
     vm.stack.push(new IfAst(resultType, vm.location, cond, trueBody, falseBody))
@@ -711,7 +720,7 @@ const instructions: InstructionMapping = {
     const values = expectAsts(popValues(vm, count));
     const elementType = getCommonType(values.map(x => x.type))
     const type = createParameterizedExternalType(vm.context.globalCompiler, ListTypeConstructor, [elementType]);
-    
+    values.forEach((ast) => propagateLiteralType(elementType, ast))
     vm.stack.push(new ListAst(type, vm.location, values))
   },
   callast: (vm, { name, count, tcount, method }) => {
@@ -775,8 +784,14 @@ const instructions: InstructionMapping = {
     if (type instanceof ConcreteClassType) {
       type.compiledClass.fields.forEach((field, i) => {
         compilerAssert(args[i].type === field.fieldType, "Expected $expected but got $got for field $name of constructor for object $obj", { expected: field.fieldType, got: args[i].type, name: field.name, obj: type.compiledClass})
+        compilerAssert(args[i].type !== IntLiteralType && args[i].type !== FloatLiteralType, "Not implemented", { type })
       })
-    } else compilerAssert(false, "Not implemented", { type })
+    } else if (type instanceof ParameterizedType) {
+      type.typeInfo.fields.forEach((field, i) => {
+        compilerAssert(args[i].type === field.fieldType, "Expected $expected but got $got for field $name of constructor for object $obj", { expected: field.fieldType, got: args[i].type, name: field.name, obj: type})
+        compilerAssert(args[i].type !== IntLiteralType && args[i].type !== FloatLiteralType, "Not implemented", { type })
+      })
+    }
     vm.stack.push(new ConstructorAst(type, vm.location, args))
   },
   operatorast: (vm, { name, count }) => {
@@ -832,7 +847,7 @@ const instructions: InstructionMapping = {
   list: (vm, { count }) => vm.stack.push(popValues(vm, count)),
   
   breakast: (vm, { v, n }) => {
-    const expr = v ? expectAst(popStack(vm)) : null
+    const expr = v ? propagatedLiteralAst(expectAst(popStack(vm))) : null
     const name = n ? popStack(vm) : null
     compilerAssert(!name || name instanceof Binding, "Expected binding", { name })
     let block: LabelBlock
@@ -880,7 +895,7 @@ const instructions: InstructionMapping = {
     compilerAssert(labelBlock, "Invalid endblockast")
     const binding = labelBlock.binding
     compilerAssert(binding, "Expected binding", { labelBlock: labelBlock })
-    const body = expectAst(vm.stack.pop())
+    const body = propagatedLiteralAst(expectAst(vm.stack.pop()))
     const blockType = labelBlock.type ?? body.type
     if (labelBlock.type) compilerAssert(labelBlock.type === VoidType || labelBlock.type === body.type, "Block type inferred to be of type $blockType but the result expression was type $bodyType", { blockType: labelBlock.type, bodyType: body.type })
     vm.stack.push(new BlockAst(blockType, vm.location, binding, body))
@@ -1154,6 +1169,14 @@ export function compileClassTask(ctx: TaskContext, { classDef, typeArgs }: { cla
 }
 
 const getCommonType = (types: Type[]): Type => {
+  if (types.some(x => x === FloatLiteralType || x === FloatType)) {
+    compilerAssert(types.every(x => x === IntLiteralType || x === FloatLiteralType || x === FloatType), "Expected types to be the same for list literal")
+    return FloatType
+  }
+  if (types.some(x => x === IntLiteralType || x === IntType)) {
+    compilerAssert(types.every(x => x === IntLiteralType || x === IntType), "Expected types to be the same for list literal")
+    return IntType
+  }
   compilerAssert(types.every(x => x === types[0]), "Expected types to be the same")
   return types[0];
 }
@@ -1375,7 +1398,7 @@ export const programEntryTask = (ctx: TaskContext, entryModule: ParsedModule, ro
       return TaskDef(runTopLevelTask, entryModule.rootNode, rootScope, moduleScope)
     })
     .chainFn((task, arg) => {
-      const func: Closure = expectMap(moduleScope, 'main', 'No main function found')
+      const func = expectMap(moduleScope, 'main', 'No main function found')
       return createCallAstFromValue(SourceLocation.anon, func, [], [])
     })
     .chainFn((task, callAst: Ast) => {
@@ -1390,7 +1413,8 @@ export const programEntryTask = (ctx: TaskContext, entryModule: ParsedModule, ro
       // Map initializers and then call main
       const ast = new StatementsAst(VoidType, SourceLocation.anon, [
         ...ctx.globalCompiler.globalLets.map(globalLet => {
-          return new SetAst(VoidType, globalLet.location, globalLet.binding, globalLet.value)
+          const value = globalLet.value || new DefaultConsAst(globalLet.binding.type, globalLet.location)
+          return new SetAst(VoidType, globalLet.location, globalLet.binding, value)
         }),
         callAst
       ])
