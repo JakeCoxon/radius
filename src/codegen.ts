@@ -1,5 +1,5 @@
 import { mallocExternal } from "./compiler_sugar";
-import { Ast, AstType, AstWriterTable, Binding, BindingAst, BoolType, CodegenFunctionWriter, CodegenWriter, CompiledFunction, ConcreteClassType, ConstructorAst, DefaultConsAst, DerefAst, DoubleType, ExternalTypeConstructor, FieldAst, FileWriter, FloatType, GlobalCompilerState, IntType, ListTypeConstructor, ParameterizedType, PrimitiveType, RawPointerType, StringType, Type, TypeField, VoidType, compilerAssert, isAst, textColors } from "./defs";
+import { Ast, AstType, AstWriterTable, Binding, BindingAst, BoolType, CodegenFunctionWriter, CodegenWriter, CompiledFunction, ConcreteClassType, DoubleType, FileWriter, FloatType, GlobalCompilerState, IntType, ListTypeConstructor, ParameterizedType, PrimitiveType, RawPointerType, StringType, Type, TypeField, VoidType, compilerAssert, textColors } from "./defs";
 
 const OpCodes = {
   Nil: 0,
@@ -31,96 +31,94 @@ const OpCodes = {
   SubscriptS: 26,
   SetSubscriptS: 27,
   LocalAddress: 28,
-  DerefAddress: 29,
-  DerefStore: 30,
-  F32_TO_I32: 31,
-  I32_TO_F32: 32,
-  CheckStack: 33,
-  ConstantV: 34,
-  ConstantF32: 35,
-  ConstantF64: 36,
-  ConstantI32: 37,
-  ConstantI64: 38,
-  GetLocalV: 39,
-  GetLocalF32: 40,
-  GetLocalF64: 41,
-  GetLocalI32: 42,
-  GetLocalI64: 43,
-  SetLocalV: 44,
-  SetLocalF32: 45,
-  SetLocalF64: 46,
-  SetLocalI32: 47,
-  SetLocalI64: 48,
-  GetGlobalV: 49,
-  GetGlobalF32: 50,
-  GetGlobalF64: 51,
-  GetGlobalI32: 52,
-  GetGlobalI64: 53,
-  SetGlobalV: 54,
-  SetGlobalF32: 55,
-  SetGlobalF64: 56,
-  SetGlobalI32: 57,
-  SetGlobalI64: 58,
-  SubscriptV: 59,
-  SubscriptF32: 60,
-  SubscriptF64: 61,
-  SubscriptI32: 62,
-  SubscriptI64: 63,
-  SetSubscriptV: 64,
-  SetSubscriptF32: 65,
-  SetSubscriptF64: 66,
-  SetSubscriptI32: 67,
-  SetSubscriptI64: 68,
-  EqualV: 69,
-  EqualF32: 70,
-  EqualF64: 71,
-  EqualI32: 72,
-  EqualI64: 73,
-  GreaterV: 74,
-  GreaterF32: 75,
-  GreaterF64: 76,
-  GreaterI32: 77,
-  GreaterI64: 78,
-  LessV: 79,
-  LessF32: 80,
-  LessF64: 81,
-  LessI32: 82,
-  LessI64: 83,
-  AddV: 84,
-  AddF32: 85,
-  AddF64: 86,
-  AddI32: 87,
-  AddI64: 88,
-  SubtractV: 89,
-  SubtractF32: 90,
-  SubtractF64: 91,
-  SubtractI32: 92,
-  SubtractI64: 93,
-  MultiplyV: 94,
-  MultiplyF32: 95,
-  MultiplyF64: 96,
-  MultiplyI32: 97,
-  MultiplyI64: 98,
-  DivideV: 99,
-  DivideF32: 100,
-  DivideF64: 101,
-  DivideI32: 102,
-  DivideI64: 103,
-  NotV: 104,
-  NotF32: 105,
-  NotF64: 106,
-  NotI32: 107,
-  NotI64: 108,
-  NegateV: 109,
-  NegateF32: 110,
-  NegateF64: 111,
-  NegateI32: 112,
-  NegateI64: 113,
-  ToStringV: 114,
-  ToStringF32: 115,
-  ToStringF64: 116,
-  ToStringI32: 117,
-  ToStringI64: 118,
+  F32_TO_I32: 29,
+  I32_TO_F32: 30,
+  CheckStack: 31,
+  ConstantV: 32,
+  ConstantF32: 33,
+  ConstantF64: 34,
+  ConstantI32: 35,
+  ConstantI64: 36,
+  GetLocalV: 37,
+  GetLocalF32: 38,
+  GetLocalF64: 39,
+  GetLocalI32: 40,
+  GetLocalI64: 41,
+  SetLocalV: 42,
+  SetLocalF32: 43,
+  SetLocalF64: 44,
+  SetLocalI32: 45,
+  SetLocalI64: 46,
+  GetGlobalV: 47,
+  GetGlobalF32: 48,
+  GetGlobalF64: 49,
+  GetGlobalI32: 50,
+  GetGlobalI64: 51,
+  SetGlobalV: 52,
+  SetGlobalF32: 53,
+  SetGlobalF64: 54,
+  SetGlobalI32: 55,
+  SetGlobalI64: 56,
+  SubscriptV: 57,
+  SubscriptF32: 58,
+  SubscriptF64: 59,
+  SubscriptI32: 60,
+  SubscriptI64: 61,
+  SetSubscriptV: 62,
+  SetSubscriptF32: 63,
+  SetSubscriptF64: 64,
+  SetSubscriptI32: 65,
+  SetSubscriptI64: 66,
+  EqualV: 67,
+  EqualF32: 68,
+  EqualF64: 69,
+  EqualI32: 70,
+  EqualI64: 71,
+  GreaterV: 72,
+  GreaterF32: 73,
+  GreaterF64: 74,
+  GreaterI32: 75,
+  GreaterI64: 76,
+  LessV: 77,
+  LessF32: 78,
+  LessF64: 79,
+  LessI32: 80,
+  LessI64: 81,
+  AddV: 82,
+  AddF32: 83,
+  AddF64: 84,
+  AddI32: 85,
+  AddI64: 86,
+  SubtractV: 87,
+  SubtractF32: 88,
+  SubtractF64: 89,
+  SubtractI32: 90,
+  SubtractI64: 91,
+  MultiplyV: 92,
+  MultiplyF32: 93,
+  MultiplyF64: 94,
+  MultiplyI32: 95,
+  MultiplyI64: 96,
+  DivideV: 97,
+  DivideF32: 98,
+  DivideF64: 99,
+  DivideI32: 100,
+  DivideI64: 101,
+  NotV: 102,
+  NotF32: 103,
+  NotF64: 104,
+  NotI32: 105,
+  NotI64: 106,
+  NegateV: 107,
+  NegateF32: 108,
+  NegateF64: 109,
+  NegateI32: 110,
+  NegateI64: 111,
+  ToStringV: 112,
+  ToStringF32: 113,
+  ToStringF64: 114,
+  ToStringI32: 115,
+  ToStringI64: 116,
 };
 
 const POINTER_SIZE = 2; // 64 bit
@@ -168,17 +166,21 @@ function writeLittleEndian32At(arr: number[], offset: number, number: number) {
 
 const arrayBuffer = new Uint32Array(2)
 
+function writeFloatLittleEndian(arr: number[], offset: number, number: number) {
+  let dataView = new DataView(arrayBuffer.buffer, arrayBuffer.byteOffset, arrayBuffer.byteLength)
+  dataView.setFloat32(0, number, true)
+  arr[offset + 0] = arrayBuffer[0]
+}
 function writeDoubleLittleEndian(arr: number[], offset: number, number: number) {
-  let dataView = new DataView(arrayBuffer.buffer, arrayBuffer.byteOffset, arrayBuffer.byteLength); // prettier-ignore
-  dataView.setFloat64(0, number, true);
-  arr[offset + 0] = arrayBuffer[0];
-  arr[offset + 1] = arrayBuffer[1];
-  // console.log(dataView, arrayBuffer);
+  let dataView = new DataView(arrayBuffer.buffer, arrayBuffer.byteOffset, arrayBuffer.byteLength)
+  dataView.setFloat64(0, number, true)
+  arr[offset + 0] = arrayBuffer[0]
+  arr[offset + 1] = arrayBuffer[1]
 }
 function writeUint32LittleEndian(arr: number[], offset: number, number: number) {
-  let dataView = new DataView(arrayBuffer.buffer, arrayBuffer.byteOffset, arrayBuffer.byteLength); // prettier-ignore
-  dataView.setUint32(0, number, true);
-  arr[offset] = arrayBuffer[0];
+  let dataView = new DataView(arrayBuffer.buffer, arrayBuffer.byteOffset, arrayBuffer.byteLength)
+  dataView.setUint32(0, number, true)
+  arr[offset] = arrayBuffer[0]
 }
 function writeUint64LittleEndian(arr: number[], offset: number, number: number) {
   const left = number % 0x100000000
@@ -195,7 +197,11 @@ const writeTypeAt = (arr: number[], offset: number, type: Type, value: number) =
     writeUint64LittleEndian(arr, offset, value);
     return
   }
-  compilerAssert(type === IntType || type === FloatType || type === BoolType);
+  if (type === FloatType) {
+    writeFloatLittleEndian(arr, offset, value)
+    return
+  }
+  compilerAssert(type === IntType || type === BoolType);
   writeUint32LittleEndian(arr, offset, value);
 };
 const writeOperator = (writer: CodegenFunctionWriter, op: string, type: Type) => {
@@ -645,7 +651,7 @@ const astWriter: AstWriterTable = {
     const size = slotSize(writer, ast.type)
     const op = getOpByType(writer, RawPointerType)
     GetLocalByType[op].write(writer, local.slot, slotSize(writer, RawPointerType))
-    writeBytes(writer, OpCodes.DerefAddress, slot, size)
+    writeBytes(writer, OpCodes.GetField, slot, size)
     writer.nextLocalSlot += size
   },
   setderef: (writer, ast) => {
@@ -654,10 +660,10 @@ const astWriter: AstWriterTable = {
     compilerAssert(local !== undefined, "Expected binding", { ast, locals: writer.locals })
     const slot = ast.fieldPath.reduce((acc, field) => acc + getSlotOffset(writer, field), local.slot)
     const size = slotSize(writer, ast.value.type)
+    writeExpr(writer, ast.value)
     const op = getOpByType(writer, RawPointerType)
     GetLocalByType[op].write(writer, local.slot, slotSize(writer, RawPointerType))
-    writeExpr(writer, ast.value)
-    writeBytes(writer, OpCodes.DerefStore, slot, size)
+    writeBytes(writer, OpCodes.SetField, slot, size)
     writer.nextLocalSlot -= slotSize(writer, ast.value.type)
   },
   block: (writer, ast) => {
