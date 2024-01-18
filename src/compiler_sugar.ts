@@ -1,12 +1,12 @@
 import { BytecodeSecondOrder, getOperatorTable, propagatedLiteralAst, visitParseNode } from "./compiler"
 import { insertFunctionDefinition } from "./compiler_functions"
-import { ArgumentTypePair, Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst } from "./defs"
+import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter } from "./defs"
 import { Task } from "./tasks"
 
 export const forLoopSugar = (out: BytecodeWriter, node: ParseFor) => {
-  const fnArgs: ArgumentTypePair[] = [[node.identifier, null]]
+  const fnParams: ParserFunctionParameter[] = [{ name: node.identifier, storage: null, type: null }]
   const continueBlock = new ParseBlock(node.token, 'continue', null, new ParseStatements(node.token, [node.body]))
-  const decl = createAnonymousParserFunctionDecl("for", node.token, fnArgs, continueBlock)
+  const decl = createAnonymousParserFunctionDecl("for", node.token, fnParams, continueBlock)
   const fn = new ParseFunction(node.token, decl)
   const iterateFn = new ParseCompilerIden(createAnonymousToken(''), 'iteratefn');
   const call = new ParseCall(node.token, iterateFn, [node.expr], [fn])
@@ -125,7 +125,7 @@ export const listComprehensionSugar = (out: BytecodeWriter, node: ParseListComp)
 }
 
 const insertMetaObjectPairwiseOperator = (compiledClass: CompiledClass, operatorName: string, operatorSymbol: string) => {
-  const operatorFunc = new ExternalFunction(operatorName, VoidType, (location: SourceLocation, a: Ast, b: Ast) => {
+  const operatorFunc = new CompilerFunction(operatorName, (location: SourceLocation, a: Ast, b: Ast) => {
     if (b.type instanceof ParameterizedType && b.type.typeConstructor === TupleTypeConstructor) {
       compilerAssert(b.type.args.length === compiledClass.fields.length, `Expected tuple of size ${compiledClass.fields.length}, got ${b.type.args.length}`, { type: b.type })
       const constructorArgs = compiledClass.fields.map((field, i) => {
@@ -162,25 +162,25 @@ export const defaultMetaFunction = (subCompilerState: SubCompilerState, compiled
   if (compiledClass.classDefinition.keywords.includes('struct'))
     compiledClass.type.typeInfo.isReferenceType = false
 
-  const fnArgs: ArgumentTypePair[] = compiledClass.fields.map(x => 
-    [new ParseIdentifier(createAnonymousToken(x.name)), 
-    new ParseValue(createAnonymousToken(''), x.fieldType)] as ArgumentTypePair)
+  const fnParams: ParserFunctionParameter[] = compiledClass.fields.map(x => 
+    ({ name: new ParseIdentifier(createAnonymousToken(x.name)), storage: null,
+    type: new ParseValue(createAnonymousToken(''), x.fieldType)}) as ParserFunctionParameter)
   const constructorBody = new ParseConstructor(
     createAnonymousToken(''), 
     new ParseValue(createAnonymousToken(''), compiledClass.type), 
     compiledClass.fields.map(x => new ParseIdentifier(createAnonymousToken(x.name))))
-  const decl = createAnonymousParserFunctionDecl("constructor", createAnonymousToken(''), fnArgs, constructorBody)
+  const decl = createAnonymousParserFunctionDecl("constructor", createAnonymousToken(''), fnParams, constructorBody)
   const funcDef = insertFunctionDefinition(subCompilerState.globalCompiler, decl)
   const constructor = new Closure(funcDef, definitionScope, subCompilerState.lexicalParent!)
 
   Object.assign(compiledClass.metaobject, { iterate, constructor })
 }
 
-export const thing = new ExternalFunction('thing', VoidType, (ast) => {
+export const thing = new ExternalFunction('thing', VoidType, (ast: Ast) => {
   console.log("thinged", ast)
 })
 
-export const mallocExternal = new ExternalFunction('malloc', VoidType, (ast) => {
+export const mallocExternal = new ExternalFunction('malloc', VoidType, (ast: Ast) => {
   compilerAssert(false, "Implemented elsewhere")
 })
 

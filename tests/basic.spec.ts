@@ -246,3 +246,13 @@ test('numbers', async () => {
   const input = await Bun.file(`${import.meta.dir}/fixtures/numbers.rad`).text()
   const test = runCompilerTest(input, { filename: 'numbers' })
 })
+
+test('refparam', async () => {
+  const input = await Bun.file(`${import.meta.dir}/fixtures/refparam.rad`).text()
+  const test = runCompilerTest(input, { filename: 'refparam' })
+})
+
+test('refparam_method', async () => {
+  const input = await Bun.file(`${import.meta.dir}/fixtures/refparam_method.rad`).text()
+  const test = runCompilerTest(input, { filename: 'refparam_method' })
+})

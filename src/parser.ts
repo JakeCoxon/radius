@@ -1,11 +1,11 @@
-import { ArgumentTypePair, ParseAnd, ParseNode, ParseBreak, ParseCall, ParseCast, ParseCompTime, ParseContinue, ParseDict, ParseExpand, ParseField, ParseFor, ParseForExpr, ParseIf, ParseLet, ParseLetConst, ParseList, ParseListComp, ParseMeta, ParseNot, ParseNumber, ParseOpEq, ParseOperator, ParseOr, ParseReturn, ParseSet, ParseStatements, ParseString, ParseIdentifier, ParseWhile, ParseWhileExpr, ParserFunctionDecl, Token, compilerAssert, ParsePostCall, ParseSymbol, ParseNote, ParseSlice, ParseSubscript, ParserClassDecl, ParseClass, ParseFunction, createToken, ParseBoolean, ParseElse, ParseMetaIf, ParseMetaFor, ParseBlock, ParseImport, ParsedModule, Source, ParseMetaWhile, ParseTuple, ParseImportName, ParseFold } from "./defs";
+import { ParseAnd, ParseNode, ParseBreak, ParseCall, ParseCast, ParseCompTime, ParseContinue, ParseDict, ParseExpand, ParseField, ParseFor, ParseForExpr, ParseIf, ParseLet, ParseLetConst, ParseList, ParseListComp, ParseMeta, ParseNot, ParseNumber, ParseOpEq, ParseOperator, ParseOr, ParseReturn, ParseSet, ParseStatements, ParseString, ParseIdentifier, ParseWhile, ParseWhileExpr, ParserFunctionDecl, Token, compilerAssert, ParsePostCall, ParseSymbol, ParseNote, ParseSlice, ParseSubscript, ParserClassDecl, ParseClass, ParseFunction, createToken, ParseBoolean, ParseElse, ParseMetaIf, ParseMetaFor, ParseBlock, ParseImport, ParsedModule, Source, ParseMetaWhile, ParseTuple, ParseImportName, ParseFold, ParserFunctionParameter } from "./defs";
 
 type LexerState = { significantNewlines: boolean; parenStack: string[] };
 
 function* tokenize(source: Source, state: LexerState): Generator<Token> {
   const regexes = {
     KEYWORD:
-      /^(?:and|as\!|as|break|class|continue|comptime|def|defn|elif|else|fn|for|if|ifx|in|lambda|meta|null|or|pass|return|try|while|with|type|interface|import|block|fold)(?=\W)/, // note (?=\W)
+      /^(?:and|as\!|as|break|class|continue|comptime|def|defn|elif|else|fn|for|if|ifx|in|lambda|meta|null|or|pass|return|try|while|with|type|interface|import|block|fold|ref)(?=\W)/, // note (?=\W)
     IDENTIFIER: /^[a-zA-Z_][a-zA-Z_0-9-]*/,
     STRING: /^(?:"(?:[^"\\]|\\.)*")/,
     SPECIALNUMBER: /^0o[0-7]+|^0x[0-9a-fA-F_]+|^0b[01_]+/,
@@ -317,17 +317,17 @@ export const makeParser = (input: string, debugName: string) => {
   };
   const parseExpr = parseDots;
 
-  const parseArg = (): ArgumentTypePair => {
+  const parseFunctionParam = (): ParserFunctionParameter => {
     const name = parseIdentifier()
-    if (match(":")) return [name, parseExpr()];
-    return [name, null];
+    if (match(":")) return { name, storage: match('ref') ? 'ref' : null, type: parseExpr() };
+    return { name, storage: null, type: null };
   };
-  const parseArgList = (final: string = ")") => {
+  const parseFunctionParamList = (final: string = ")") => {
     if (match(final)) return [];
-    const args = [parseArg()];
-    while (match(",")) args.push(parseArg());
+    const params = [parseFunctionParam()];
+    while (match(",")) params.push(parseFunctionParam());
     expect(final, `Expected '${final}' after arg list`);
-    return args;
+    return params
   };
   const parseColonBlockExpr = (afterMessage: string): ParseStatements => {
     expect(":", `Expected ':' after ${afterMessage}`);
@@ -364,7 +364,7 @@ export const makeParser = (input: string, debugName: string) => {
       while (match(",")) list.push(parseExpr())
       return list.length > 1 ? new ParseTuple(arrowToken, list) : list[0];
     }
-    const parseFunctionArgList = () => (expect("(", `Expected '(' after function name`), parseArgList(")"))
+    const parseFunctionParamListParen = () => (expect("(", `Expected '(' after function name`), parseFunctionParamList(")"))
 
     const parseBody = () => {
       if (matchType("NEWLINE")) return null;
@@ -376,7 +376,7 @@ export const makeParser = (input: string, debugName: string) => {
 
     return createNamedFunc(state, previous, parseOptionalMetaName(), 
       parseIdentifier(), match("!") ? parseFunctionTypeParameters() : [], 
-      parseFunctionArgList(), match('->') ? parseOptionalReturnType(previous) : null, 
+      parseFunctionParamListParen(), match('->') ? parseOptionalReturnType(previous) : null, 
       parseKeywords(), parseBody())
   };
   const parseLambda = () => {
@@ -396,7 +396,7 @@ export const makeParser = (input: string, debugName: string) => {
     : new ParseStatements(previous, [parseExpr()])
 
   const parseBracelessLambda = (): ParseNode => {
-    return createAnonymousFunc(state, previous, parseArgList("|"), 
+    return createAnonymousFunc(state, previous, parseFunctionParamList("|"), 
       parseKeywords(), parseOptionalReturnType(), parseSingleOrMultilineBody())
   };
   const parseOptionalMetaClass = () => match("<") ? parseIdentifier() :  null;
@@ -509,22 +509,22 @@ export const makeParser = (input: string, debugName: string) => {
   return <ParsedModule>{ rootNode, classDefs: state.classDecls, functionDecls: state.functionDecls };
 };
 
-const createNamedFunc = (state: any, token: Token, functionMetaName: ParseIdentifier | null, name: ParseIdentifier, typeArgs: ParseNode[], args: ArgumentTypePair[], returnType: ParseNode | null, keywords: ParseNode[], body: ParseNode | null) => {
+const createNamedFunc = (state: any, token: Token, functionMetaName: ParseIdentifier | null, name: ParseIdentifier, typeParams: ParseNode[], params: ParserFunctionParameter[], returnType: ParseNode | null, keywords: ParseNode[], body: ParseNode | null) => {
   const decl: ParserFunctionDecl = {
     id: undefined,
     debugName: `${name.token.value}`,
-    token: token, functionMetaName, name, typeArgs, args,
+    token: token, functionMetaName, name, typeParams, params,
     keywords, returnType, body
   };
   state.functionDecls.push(decl)
   return new ParseFunction(token, decl)
 }
 
-const createAnonymousFunc = (state: any, token: Token, args: ArgumentTypePair[], keywords: ParseNode[], returnType: ParseNode | null, body: ParseStatements) => {
+const createAnonymousFunc = (state: any, token: Token, params: ParserFunctionParameter[], keywords: ParseNode[], returnType: ParseNode | null, body: ParseStatements) => {
   const decl: ParserFunctionDecl = {
     id: undefined,
     debugName: `<anonymous line ${token.location.line}>`,
-    token: token, functionMetaName: null, name: null, typeArgs: [], args,
+    token: token, functionMetaName: null, name: null, typeParams: [], params,
     keywords, anonymous: true, returnType, body
   };
   state.functionDecls.push(decl)

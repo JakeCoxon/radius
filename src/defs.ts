@@ -30,7 +30,7 @@ export function compilerAssert(expected: unknown, message: string="", info: obje
   throw createCompilerError(message, info)
 }
 
-const makeColor = (x) => {
+const makeColor = (x: unknown) => {
   return Inspect({
     [Inspect.custom](depth: any, options: any, inspect: any) {
       return options.stylize(x, 'special');
@@ -62,27 +62,30 @@ export const TokenRoot = {
 export const createToken = (source: Source, value: any, type = "NONE"): Token => Object.assign(Object.create(TokenRoot), { value, type, location: new SourceLocation(0, 0, source) });
 export const createAnonymousToken = (value: any, type = "NONE"): Token => Object.assign(Object.create(TokenRoot), { value, type, location: new SourceLocation(-1, -1, null!) });
 
-export type ArgumentTypePair = [ParseIdentifier, ParseNode | null];
-
+export type ParserFunctionParameter = {
+  name: ParseIdentifier,
+  type: ParseNode | null,
+  storage: 'ref' | null
+}
 // These are reference types that id will be filled in later.
 export type ParserFunctionDecl = {
   id: number | undefined, debugName: string, anonymous?: boolean,
   token: Token, functionMetaName: ParseIdentifier | null,
-  name: ParseIdentifier | null, typeArgs: ParseNode[], args: ArgumentTypePair[], 
+  name: ParseIdentifier | null, typeParams: ParseNode[], params: ParserFunctionParameter[], 
   returnType: ParseNode | null, body: ParseNode | null, keywords: ParseNode[] }
 
-export const createAnonymousParserFunctionDecl = (debugName: string, sourceToken: Token, args: ArgumentTypePair[], body: ParseNode) => {
+export const createAnonymousParserFunctionDecl = (debugName: string, sourceToken: Token, params: ParserFunctionParameter[], body: ParseNode) => {
   const decl: ParserFunctionDecl = {
     debugName: debugName,
     id: undefined,
-    args: args,
+    params: params,
     name: null,
     body: body,
     returnType: null,
     anonymous: true,
     token: sourceToken,
     keywords: [],
-    typeArgs: [],
+    typeParams: [],
     functionMetaName: null
   }
   return decl;
@@ -290,8 +293,8 @@ export class FunctionDefinition {
     public id: number,
     public debugName: string,
     public name: ParseIdentifier | null,
-    public typeArgs: ParseNode[],
-    public args: ArgumentTypePair[],
+    public typeParams: ParseNode[],
+    public params: ParserFunctionParameter[],
     public returnType: ParseNode | null,
     public body: ParseNode | null,
     public inline: boolean) {}
@@ -409,11 +412,14 @@ export class SetSubscriptAst extends AstRoot {  key = 'setsubscript' as const;  
 export class NotAst extends AstRoot {           key = 'not' as const;            constructor(public type: Type, public location: SourceLocation, public expr: Ast) { super() } }
 export class ConstructorAst extends AstRoot {   key = 'constructor' as const;    constructor(public type: Type, public location: SourceLocation, public args: Ast[]) { super() } }
 export class DefaultConsAst extends AstRoot {   key = 'defaultcons' as const;    constructor(public type: Type, public location: SourceLocation) { super() } }
+export class AddressAst extends AstRoot {       key = 'address' as const;        constructor(public type: Type, public location: SourceLocation, public binding: Binding) { super() } }
+export class DerefAst extends AstRoot {         key = 'deref' as const;          constructor(public type: Type, public location: SourceLocation, public left: BindingAst, public fieldPath: TypeField[]) { super() } }
+export class SetDerefAst extends AstRoot {      key = 'setderef' as const;       constructor(public type: Type, public location: SourceLocation, public left: BindingAst, public fieldPath: TypeField[], public value: Ast) { super() } }
 
 export type Ast = NumberAst | LetAst | SetAst | OperatorAst | IfAst | ListAst | CallAst | AndAst | UserCallAst |
   OrAst | StatementsAst | WhileAst | ReturnAst | SetFieldAst | VoidAst | CastAst | SubscriptAst | ConstructorAst |
   BindingAst | StringAst | NotAst | FieldAst | BlockAst | BreakAst | BoolAst | CastAst | DefaultConsAst | ValueFieldAst |
-  SetValueFieldAst | SetSubscriptAst
+  SetValueFieldAst | SetSubscriptAst | AddressAst | DerefAst | SetDerefAst
 export const isAst = (value: unknown): value is Ast => value instanceof AstRoot;
 
 export class Tuple {
@@ -429,9 +435,10 @@ export const isPlainObject = (obj: unknown): obj is UnknownObject & { _object: t
 
 export class Binding {
   definitionCompiler: SubCompilerState | undefined
+  storage: 'ref' | null = null
   constructor(public name: string, public type: Type) {}
   [Inspect.custom](depth: any, options: any, inspect: any) {
-    return options.stylize(`[Binding ${this.name} : ${this.type.shortName}]`, 'special');
+    return options.stylize(`[Binding ${this.name} : ${this.type.shortName}${this.storage ? ` (${this.storage})` : ''}]`, 'special');
   }
 }
 export class FreshBindingToken {

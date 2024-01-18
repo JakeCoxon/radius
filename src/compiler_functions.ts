@@ -1,5 +1,5 @@
 import { BytecodeDefault, BytecodeSecondOrder, compileClassTask, compileFunctionPrototype, createBytecodeVmAndExecuteTask, propagateLiteralType, propagatedLiteralAst, pushBytecode, pushGeneratedBytecode, visitParseNode } from "./compiler";
-import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, ExternalFunction, CallAst, IntType, Closure, UserCallAst, ExternalType, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition, ParseTypeCheck, ParseCall, TypeVariable, TypeMatcher, typeMatcherEquals, SourceLocation, OverloadSet, ExternalTypeConstructor, ScopeParentSymbol, SubCompilerState, CompilerFunction, IntLiteralType, FloatLiteralType, FloatType } from "./defs";
+import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, ExternalFunction, CallAst, IntType, Closure, UserCallAst, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition, ParseCall, TypeVariable, TypeMatcher, typeMatcherEquals, SourceLocation, ExternalTypeConstructor, ScopeParentSymbol, SubCompilerState, CompilerFunction, IntLiteralType, FloatLiteralType, FloatType, RawPointerType, AddressAst, BindingAst } from "./defs";
 import { Task, TaskDef, Unit } from "./tasks";
 
 
@@ -11,7 +11,7 @@ export const insertFunctionDefinition = (compilerState: GlobalCompilerState, dec
   const inline = !!decl.anonymous || keywords.includes('inline')
   const funcDef = new FunctionDefinition(
     decl.id, decl.debugName,
-    decl.name, decl.typeArgs, decl.args,
+    decl.name, decl.typeParams, decl.params,
     decl.returnType, decl.body,
     inline)
   funcDef.keywords.push(...keywords)
@@ -30,10 +30,10 @@ export type TypeCheckHeaderArg = {
 
 function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, args, typeArgs, parentScope, concreteTypes }: TypeCheckHeaderArg): Task<Unit, CompilerError> {
 
-  compilerAssert(typeArgs.length <= func.typeArgs.length, "Expected $expected type parameters, got $got", { expected: func.typeArgs.length, got: typeArgs.length, func })
-  compilerAssert(args.length === func.args.length, 'Expected $expected args got $got', { expected: func.args.length, got: args.length, func })
+  compilerAssert(typeArgs.length <= func.typeParams.length, "Expected $expected type parameters, got $got", { expected: func.typeParams.length, got: typeArgs.length, func })
+  compilerAssert(args.length === func.params.length, 'Expected $expected args got $got', { expected: func.params.length, got: args.length, func })
 
-  if (func.args.length === 0) return Task.success();
+  if (func.params.length === 0) return Task.success();
   
   if (!func.headerPrototype) {
 
@@ -46,13 +46,13 @@ function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, args, typ
       state: { labelBlock: null, expansion: null }
     }
     // visitParseNode(out, func.headerPrototype.body);
-    func.args.forEach(([name, type], i) => {
+    func.params.forEach(({ name, type }, i) => {
       if (type === null) return visitParseNode(out, new ParseNil(createAnonymousToken('')));
       visitParseNode(out, type)
       pushBytecode(out, type.token, { type: 'totype' });
     })
 
-    pushGeneratedBytecode(out, { type: "tuple", count: func.args.length })
+    pushGeneratedBytecode(out, { type: "tuple", count: func.params.length })
     pushGeneratedBytecode(out, { type: "halt" })
 
     ctx.globalCompiler.logger.log(textColors.cyan(`Compiled ${func.headerPrototype.name}`))
@@ -65,13 +65,13 @@ function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, args, typ
   ;(subCompilerState as any).location = func.name?.token.location
   subCompilerState.functionCompiler = subCompilerState
 
-  func.args.forEach((arg, i) => {
-    scope[arg[0].token.value] = args[i]
+  func.params.forEach((param, i) => {
+    scope[param.name.token.value] = args[i]
   })
-  func.typeArgs.forEach((typeArg, i) => {
-    compilerAssert(typeArg instanceof ParseIdentifier)
-    if (!typeArgs[i]) scope[typeArg.token.value] = new TypeVariable(typeArg.token.value)
-    else scope[typeArg.token.value] = typeArgs[i];
+  func.typeParams.forEach((typeParam, i) => {
+    compilerAssert(typeParam instanceof ParseIdentifier)
+    if (!typeArgs[i]) scope[typeParam.token.value] = new TypeVariable(typeParam.token.value)
+    else scope[typeParam.token.value] = typeArgs[i];
   })
 
   return (
@@ -101,7 +101,7 @@ function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, args, typ
           if (givenType === IntLiteralType && type === FloatType) givenType = FloatType
           else if (givenType === IntLiteralType) givenType = IntType
           else if (givenType === FloatLiteralType) givenType = FloatType
-          compilerAssert(givenType === type, "Argument $name of type $value does not match $expected", { name: func.args[i][0].token, value: args[i].type, expected: type })
+          compilerAssert(givenType === type, "Argument $name of type $value does not match $expected", { name: func.params[i].name.token, value: args[i].type, expected: type })
           concreteTypes.push(type)
         }
 
@@ -145,16 +145,17 @@ export function functionTemplateTypeCheckAndCompileTask(ctx: TaskContext, { func
   ;(subCompilerState as any).location = func.name?.token.location
   subCompilerState.functionCompiler = subCompilerState
   
-  func.args.forEach(([iden, type], i) => {
-    const binding = new Binding(iden.token.value, concreteTypes[i]);
+  func.params.forEach(({ name, type, storage }, i) => {
+    const binding = new Binding(name.token.value, concreteTypes[i]);
+    binding.storage = storage
     binding.definitionCompiler = subCompilerState
-    templateScope[iden.token.value] = binding;
+    templateScope[name.token.value] = binding;
     argBindings.push(binding);
   });
   
-  func.typeArgs.forEach((typeArg, i) => {
-    compilerAssert(typeArg instanceof ParseIdentifier, "Not implemented")
-    templateScope[typeArg.token.value] = typeArgs[i];
+  func.typeParams.forEach((typeParam, i) => {
+    compilerAssert(typeParam instanceof ParseIdentifier, "Not implemented")
+    templateScope[typeParam.token.value] = typeArgs[i];
   });
 
   return (
@@ -210,19 +211,20 @@ function functionInlineTask(ctx: TaskContext, { location, func, typeArgs, args, 
   subCompilerState.labelBlock = lexicalParent.labelBlock
   subCompilerState.nextLabelBlockDepth = inlineInto.nextLabelBlockDepth
   
-  func.args.forEach(([iden, type], i) => {
+  func.params.forEach(({ name, type, storage }, i) => {
     compilerAssert(concreteTypes[i], `Expected type`, { args, concreteTypes })
     compilerAssert(concreteTypes[i] !== IntLiteralType)
-    const binding = new Binding(iden.token.value, concreteTypes[i]);
+    const binding = new Binding(name.token.value, concreteTypes[i])
+    binding.storage = storage // is this right for inline?
     binding.definitionCompiler = inlineInto;
-    templateScope[iden.token.value] = binding;
+    templateScope[name.token.value] = binding;
     statements.push(new LetAst(VoidType, location, binding, propagatedLiteralAst(args[i])))
     argBindings.push(binding);
   });
   
-  func.typeArgs.forEach((typeArg, i) => {
-    compilerAssert(typeArg instanceof ParseIdentifier, "Not implemented")
-    templateScope[typeArg.token.value] = typeArgs[i];
+  func.typeParams.forEach((typeParam, i) => {
+    compilerAssert(typeParam instanceof ParseIdentifier, "Not implemented")
+    templateScope[typeParam.token.value] = typeArgs[i];
   });
 
   return (
@@ -248,7 +250,7 @@ export type CompileTimeFunctionCallArg = {
 
 export function functionCompileTimeCompileTask(ctx: TaskContext, { vm, func, typeArgs, args, parentScope }: CompileTimeFunctionCallArg): Task<Unit, CompilerError> {
   compilerAssert(func.body, "Expected body");
-  compilerAssert(args.length === func.args.length, "Expected $expected arguments got $got", { expected: func.args.length, got: func.args.length, func })
+  compilerAssert(args.length === func.params.length, "Expected $expected arguments got $got", { expected: func.params.length, got: args.length, func })
 
   if (!func.compileTimePrototype) 
     func.compileTimePrototype = { name: `${func.debugName} comptime bytecode`, body: func.body, initialInstructionTable: BytecodeDefault };
@@ -259,11 +261,11 @@ export function functionCompileTimeCompileTask(ctx: TaskContext, { vm, func, typ
   subCompilerState.functionCompiler = subCompilerState
 
   args.forEach((arg, i) => {
-    scope[func.args[i][0].token.value] = arg;
+    scope[func.params[i].name.token.value] = arg;
   });
-  func.typeArgs.forEach((typeArg, i) => {
-    compilerAssert(typeArg instanceof ParseIdentifier, "Not implemented")
-    scope[typeArg.token.value] = typeArgs[i];
+  func.typeParams.forEach((typeParam, i) => {
+    compilerAssert(typeParam instanceof ParseIdentifier, "Not implemented")
+    scope[typeParam.token.value] = typeArgs[i];
   });
   compileFunctionPrototype(ctx, func.compileTimePrototype);
 
@@ -283,6 +285,8 @@ export function createCallAstFromValueAndPushValue(vm: Vm, value: unknown, typeA
 export function createCallAstFromValue(location: SourceLocation, value: unknown, typeArgs: unknown[], args: Ast[]): Task<Ast, CompilerError> {
   if (value instanceof PrimitiveType) {
     compilerAssert(args.length === 1 && typeArgs.length === 0, "Expected 1 arg got $count", { count: args.length })
+    const ast = propagatedLiteralAst(args[0])
+    if (ast.type === value) return Task.of(ast)
     return Task.of(new CastAst(value, location, propagatedLiteralAst(args[0])))
   }
 
@@ -319,8 +323,15 @@ export function createCallAstFromValue(location: SourceLocation, value: unknown,
       .chainFn((task, compiledFunction) => {
         const binding = compiledFunction.binding;
         const returnType = compiledFunction.returnType;
-        args.forEach((ast, i) => { propagateLiteralType(call.concreteTypes[i], ast) })
-        return Task.of(new UserCallAst(returnType, location, binding, args))
+        const mappedArgs = args.map((ast, i) => {
+          propagateLiteralType(call.concreteTypes[i], ast)
+          if (func.params[i].storage === 'ref') {
+            compilerAssert(ast instanceof BindingAst, "Expected binding ast for now", { ast })
+            return new AddressAst(RawPointerType, ast.location, ast.binding)
+          }
+          return ast
+        })
+        return Task.of(new UserCallAst(returnType, location, binding, mappedArgs))
       })
     )
   }

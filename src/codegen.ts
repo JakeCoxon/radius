@@ -1,5 +1,5 @@
 import { mallocExternal } from "./compiler_sugar";
-import { Ast, AstType, AstWriterTable, Binding, BindingAst, BoolType, CodegenFunctionWriter, CodegenWriter, CompiledFunction, ConcreteClassType, ConstructorAst, DefaultConsAst, DoubleType, ExternalTypeConstructor, FieldAst, FileWriter, FloatType, GlobalCompilerState, IntType, ListTypeConstructor, ParameterizedType, PrimitiveType, RawPointerType, StringType, Type, TypeField, VoidType, compilerAssert, isAst, textColors } from "./defs";
+import { Ast, AstType, AstWriterTable, Binding, BindingAst, BoolType, CodegenFunctionWriter, CodegenWriter, CompiledFunction, ConcreteClassType, ConstructorAst, DefaultConsAst, DerefAst, DoubleType, ExternalTypeConstructor, FieldAst, FileWriter, FloatType, GlobalCompilerState, IntType, ListTypeConstructor, ParameterizedType, PrimitiveType, RawPointerType, StringType, Type, TypeField, VoidType, compilerAssert, isAst, textColors } from "./defs";
 
 const OpCodes = {
   Nil: 0,
@@ -30,94 +30,97 @@ const OpCodes = {
   AllocS: 25,
   SubscriptS: 26,
   SetSubscriptS: 27,
-  F32_TO_I32: 28,
-  I32_TO_F32: 29,
-  CheckStack: 30,
-  ConstantV: 31,
-  ConstantF32: 32,
-  ConstantF64: 33,
-  ConstantI32: 34,
-  ConstantI64: 35,
-  GetLocalV: 36,
-  GetLocalF32: 37,
-  GetLocalF64: 38,
-  GetLocalI32: 39,
-  GetLocalI64: 40,
-  SetLocalV: 41,
-  SetLocalF32: 42,
-  SetLocalF64: 43,
-  SetLocalI32: 44,
-  SetLocalI64: 45,
-  GetGlobalV: 46,
-  GetGlobalF32: 47,
-  GetGlobalF64: 48,
-  GetGlobalI32: 49,
-  GetGlobalI64: 50,
-  SetGlobalV: 51,
-  SetGlobalF32: 52,
-  SetGlobalF64: 53,
-  SetGlobalI32: 54,
-  SetGlobalI64: 55,
-  SubscriptV: 56,
-  SubscriptF32: 57,
-  SubscriptF64: 58,
-  SubscriptI32: 59,
-  SubscriptI64: 60,
-  SetSubscriptV: 61,
-  SetSubscriptF32: 62,
-  SetSubscriptF64: 63,
-  SetSubscriptI32: 64,
-  SetSubscriptI64: 65,
-  EqualV: 66,
-  EqualF32: 67,
-  EqualF64: 68,
-  EqualI32: 69,
-  EqualI64: 70,
-  GreaterV: 71,
-  GreaterF32: 72,
-  GreaterF64: 73,
-  GreaterI32: 74,
-  GreaterI64: 75,
-  LessV: 76,
-  LessF32: 77,
-  LessF64: 78,
-  LessI32: 79,
-  LessI64: 80,
-  AddV: 81,
-  AddF32: 82,
-  AddF64: 83,
-  AddI32: 84,
-  AddI64: 85,
-  SubtractV: 86,
-  SubtractF32: 87,
-  SubtractF64: 88,
-  SubtractI32: 89,
-  SubtractI64: 90,
-  MultiplyV: 91,
-  MultiplyF32: 92,
-  MultiplyF64: 93,
-  MultiplyI32: 94,
-  MultiplyI64: 95,
-  DivideV: 96,
-  DivideF32: 97,
-  DivideF64: 98,
-  DivideI32: 99,
-  DivideI64: 100,
-  NotV: 101,
-  NotF32: 102,
-  NotF64: 103,
-  NotI32: 104,
-  NotI64: 105,
-  NegateV: 106,
-  NegateF32: 107,
-  NegateF64: 108,
-  NegateI32: 109,
-  NegateI64: 110,
-  ToStringV: 111,
-  ToStringF32: 112,
-  ToStringF64: 113,
-  ToStringI32: 114,
-  ToStringI64: 115,
+  LocalAddress: 28,
+  DerefAddress: 29,
+  DerefStore: 30,
+  F32_TO_I32: 31,
+  I32_TO_F32: 32,
+  CheckStack: 33,
+  ConstantV: 34,
+  ConstantF32: 35,
+  ConstantF64: 36,
+  ConstantI32: 37,
+  ConstantI64: 38,
+  GetLocalV: 39,
+  GetLocalF32: 40,
+  GetLocalF64: 41,
+  GetLocalI32: 42,
+  GetLocalI64: 43,
+  SetLocalV: 44,
+  SetLocalF32: 45,
+  SetLocalF64: 46,
+  SetLocalI32: 47,
+  SetLocalI64: 48,
+  GetGlobalV: 49,
+  GetGlobalF32: 50,
+  GetGlobalF64: 51,
+  GetGlobalI32: 52,
+  GetGlobalI64: 53,
+  SetGlobalV: 54,
+  SetGlobalF32: 55,
+  SetGlobalF64: 56,
+  SetGlobalI32: 57,
+  SetGlobalI64: 58,
+  SubscriptV: 59,
+  SubscriptF32: 60,
+  SubscriptF64: 61,
+  SubscriptI32: 62,
+  SubscriptI64: 63,
+  SetSubscriptV: 64,
+  SetSubscriptF32: 65,
+  SetSubscriptF64: 66,
+  SetSubscriptI32: 67,
+  SetSubscriptI64: 68,
+  EqualV: 69,
+  EqualF32: 70,
+  EqualF64: 71,
+  EqualI32: 72,
+  EqualI64: 73,
+  GreaterV: 74,
+  GreaterF32: 75,
+  GreaterF64: 76,
+  GreaterI32: 77,
+  GreaterI64: 78,
+  LessV: 79,
+  LessF32: 80,
+  LessF64: 81,
+  LessI32: 82,
+  LessI64: 83,
+  AddV: 84,
+  AddF32: 85,
+  AddF64: 86,
+  AddI32: 87,
+  AddI64: 88,
+  SubtractV: 89,
+  SubtractF32: 90,
+  SubtractF64: 91,
+  SubtractI32: 92,
+  SubtractI64: 93,
+  MultiplyV: 94,
+  MultiplyF32: 95,
+  MultiplyF64: 96,
+  MultiplyI32: 97,
+  MultiplyI64: 98,
+  DivideV: 99,
+  DivideF32: 100,
+  DivideF64: 101,
+  DivideI32: 102,
+  DivideI64: 103,
+  NotV: 104,
+  NotF32: 105,
+  NotF64: 106,
+  NotI32: 107,
+  NotI64: 108,
+  NegateV: 109,
+  NegateF32: 110,
+  NegateF64: 111,
+  NegateI32: 112,
+  NegateI64: 113,
+  ToStringV: 114,
+  ToStringF32: 115,
+  ToStringF64: 116,
+  ToStringI32: 117,
+  ToStringI64: 118,
 };
 
 const POINTER_SIZE = 2; // 64 bit
@@ -352,7 +355,6 @@ const astWriter: AstWriterTable = {
   cast: (writer, ast) => {
     writeExpr(writer, ast.expr)
     let opcode = 0
-    if (ast.expr.type === ast.type) return
     if (ast.expr.type === IntType && ast.type === FloatType)      opcode = OpCodes.I32_TO_F32
     else if (ast.expr.type === FloatType && ast.type === IntType) opcode = OpCodes.F32_TO_I32
     else compilerAssert(false, "Not implemented yet", { from: ast.expr.type, to: ast.type })
@@ -401,7 +403,7 @@ const astWriter: AstWriterTable = {
     writer.nextLocalSlot -= slotSize(writer, ast.value.type)
   },
   number: (writer, ast) => {
-    compilerAssert(ast.type === IntType || ast.type === FloatType || ast.type === DoubleType, "Expected number type", { ast })
+    compilerAssert(ast.type === IntType || ast.type === FloatType || ast.type === DoubleType, "Expected int type", { ast })
     emitConstant(writer, ast.type, ast.value)
     writer.nextLocalSlot += slotSize(writer, ast.type);
   },
@@ -447,8 +449,8 @@ const astWriter: AstWriterTable = {
   },
   and: (writer, ast) => {
     const [a, b] = ast.args;
-    compilerAssert(a.type === BoolType || a.type === IntType, "Invalid type", { a, b })
-    compilerAssert(b.type === BoolType || b.type === IntType, "Invalid type", { a, b })
+    compilerAssert(a.type === BoolType || a.type === IntType)
+    compilerAssert(b.type === BoolType || b.type === IntType)
     writeExpr(writer, a);
     writer.nextLocalSlot -= slotSize(writer, a.type)
     const patch = writeJump(writer, OpCodes.JumpIfFalse);
@@ -519,7 +521,7 @@ const astWriter: AstWriterTable = {
   operator: (writer, ast) => {
     writeExpr(writer, ast.args[0]);
     writeExpr(writer, ast.args[1]);
-    writeOperator(writer, ast.operator, ast.args[0].type);
+    writeOperator(writer, ast.operator, ast.type);
     writer.nextLocalSlot -= slotSize(writer, ast.args[0].type)
     writer.nextLocalSlot -= slotSize(writer, ast.args[1].type)
     writer.nextLocalSlot += slotSize(writer, ast.type)
@@ -570,7 +572,6 @@ const astWriter: AstWriterTable = {
       writer.nextLocalSlot += slotSize(writer, ast.type)
       return
     }
-    compilerAssert(!(ast.left instanceof BindingAst), "should use valuefield", { fatal: true })
     // TODO: Specific test for this, it does already happen in some tests
     writeExpr(writer, ast.left)
     const fieldSlots = slotSize(writer, ast.type)
@@ -636,6 +637,29 @@ const astWriter: AstWriterTable = {
     writer.nextLocalSlot -= slotSize(writer, ast.value.type)
     writer.nextLocalSlot += slotSize(writer, ast.type)
   },
+  deref: (writer, ast) => {
+    const binding = ast.left.binding
+    const local = writer.locals.find(x => x.binding === binding)
+    compilerAssert(local !== undefined, "Expected binding", { ast, locals: writer.locals })
+    const slot = ast.fieldPath.reduce((acc, field) => acc + getSlotOffset(writer, field), local.slot)
+    const size = slotSize(writer, ast.type)
+    const op = getOpByType(writer, RawPointerType)
+    GetLocalByType[op].write(writer, local.slot, slotSize(writer, RawPointerType))
+    writeBytes(writer, OpCodes.DerefAddress, slot, size)
+    writer.nextLocalSlot += size
+  },
+  setderef: (writer, ast) => {
+    const binding = ast.left.binding
+    const local = writer.locals.find(x => x.binding === binding)
+    compilerAssert(local !== undefined, "Expected binding", { ast, locals: writer.locals })
+    const slot = ast.fieldPath.reduce((acc, field) => acc + getSlotOffset(writer, field), local.slot)
+    const size = slotSize(writer, ast.value.type)
+    const op = getOpByType(writer, RawPointerType)
+    GetLocalByType[op].write(writer, local.slot, slotSize(writer, RawPointerType))
+    writeExpr(writer, ast.value)
+    writeBytes(writer, OpCodes.DerefStore, slot, size)
+    writer.nextLocalSlot -= slotSize(writer, ast.value.type)
+  },
   block: (writer, ast) => {
     writer.blocks.push({ binding: ast.binding, slotIndex: writer.nextLocalSlot, patches: [] })
     writeExpr(writer, ast.body)
@@ -655,6 +679,13 @@ const astWriter: AstWriterTable = {
       writer.nextLocalSlot -= slotSize(writer, ast.expr.type)
     }
     writeBytes(writer, OpCodes.Return)
+  },
+  address: (writer, ast) => {
+    const binding = ast.binding
+    const local = writer.locals.find(x => x.binding === binding)
+    compilerAssert(local !== undefined, "Expected binding", { ast, locals: writer.locals });
+    writeBytes(writer, OpCodes.LocalAddress, local.slot)
+    writer.nextLocalSlot += slotSize(writer, ast.type)
   },
   void: (writer, ast) => {}
 };
@@ -747,7 +778,8 @@ const writeFinalBytecodeFunction = (bytecodeWriter: CodegenWriter, func: Compile
 
   func.argBindings.forEach((binding, i) => {
     funcWriter.locals.push({ binding, slot: funcWriter.nextLocalSlot, scopeIndex: funcWriter.currentScopeIndex })
-    funcWriter.nextLocalSlot += slotSize(funcWriter, binding.type);
+    const type = func.functionDefinition.params[i].storage === 'ref' ? RawPointerType : binding.type
+    funcWriter.nextLocalSlot += slotSize(funcWriter, type);
   });
 
   writeExpr(funcWriter, func.body);

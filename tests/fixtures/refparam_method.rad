@@ -1,0 +1,13 @@
+type Thing @struct:
+  x: int
+  y: float
+
+fn main():
+  thing := Thing(1, 2.0)
+  thing.foo_ref
+  
+  print(thing.x)
+
+fn foo_ref(t: ref Thing) @method:
+  t.x = 23
+  t.y = 3.2
