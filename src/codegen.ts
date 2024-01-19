@@ -142,7 +142,7 @@ const writeBytes = (writer: CodegenFunctionWriter, ...values: number[]) => {
   values.forEach((x) => compilerAssert(x < 2 ** 8, `Expected ${x} < 256`));
   const name = Object.entries(OpCodes).find(x => x[1] === values[0])?.[0]
   const indent = "  ".repeat(Math.max(writer.nextLocalSlot, 0))
-  log(textColors.green(String(writer.bytecode.length).padEnd(2, ' ')) + " |" + indent + name, ...values.slice(1))
+  log(textColors.green(String(writer.bytecode.length).padEnd(3, ' ')) + " |" + indent + name, ...values.slice(1))
   writer.bytecode.push(...values);
 };
 const writeJump = (writer: CodegenFunctionWriter, type: number) => {
@@ -671,7 +671,7 @@ const astWriter: AstWriterTable = {
     writeExpr(writer, ast.body)
     const block = writer.blocks.pop()!
     block.patches.forEach(p => 
-      writeLittleEndian16(writer.bytecode, p.location, writer.bytecode.length))
+      writeLittleEndian16(writer.bytecode, p.location, writer.bytecode.length - p.location - 2))
   },
   not: (writer, ast) => {
     writeExpr(writer, ast.expr)
