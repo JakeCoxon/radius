@@ -1,11 +1,12 @@
 import { existsSync, unlinkSync, readFileSync } from 'node:fs'
 import { programEntryTask } from '../src/compiler'
-import { BoolType, Closure, CompilerError, DoubleType, ExternalFunction, FloatType, GlobalCompilerState, IntType, Scope, StringType, SubCompilerState, TaskContext, VoidType, compilerAssert, createDefaultGlobalCompiler, createScope, expectMap, BuiltinTypes, ModuleLoader, SourceLocation, textColors, outputSourceLocation, TokenRoot, ParseImport, createAnonymousToken } from "../src/defs"; // prettier-ignore
+import { BoolType, Closure, CompilerError, DoubleType, ExternalFunction, FloatType, GlobalCompilerState, IntType, Scope, StringType, SubCompilerState, TaskContext, VoidType, compilerAssert, createDefaultGlobalCompiler, createScope, expectMap, BuiltinTypes, ModuleLoader, SourceLocation, textColors, outputSourceLocation, TokenRoot, ParseImport, createAnonymousToken, Logger } from "../src/defs"; // prettier-ignore
 import { makeParser } from '../src/parser'
 import { Queue, TaskDef, stepQueue, withContext } from '../src//tasks'
 import { expect } from 'bun:test'
 import { VecTypeMetaClass, preloadModuleText } from '../src/compiler_sugar'
 import { writeFinalBytecode } from '../src/codegen'
+import { FileSink } from 'bun';
 
 const runTestInner = (
   queue: Queue,
@@ -62,38 +63,14 @@ export const runCompilerTest = (
   input: string,
   {
     moduleLoader,
-    filename,
     expectError = false,
-  }: { moduleLoader?: ModuleLoader; filename: string; expectError?: boolean }
+    testObject
+  }: { moduleLoader?: ModuleLoader; testObject: TestObject, expectError?: boolean }
 ) => {
-  const path = `${import.meta.dir}/output/${filename}.txt`
-  if (existsSync(path)) unlinkSync(path)
-  const file = Bun.file(path)
-  const writer = file.writer()
+  const logger = testObject.logger;
+  const writer = testObject.writer;
 
-  const prints: unknown[] = []
-
-  const writeToFile = (...args) => {
-    args.forEach((arg) => {
-      if (typeof arg === 'string') {
-        writer.write(arg)
-      } else writer.write(Bun.inspect(arg, { depth: 10, colors: true }))
-      writer.write(' ')
-    })
-    writer.write('\n')
-  }
-
-  const logger = {
-    log: (...args) => {
-      writeToFile(...args)
-    },
-  }
-
-  globalThis.console.log = (...args) => {
-    originalLog(...args)
-    logger.log(...args)
-  }
-  ;(globalThis as any).logger = logger
+  const prints = testObject.prints
 
   const rootScope: Scope = createScope(
     {
@@ -125,7 +102,7 @@ export const runCompilerTest = (
   let fatalError = false
 
   const writeBytecodeFile = () => {
-    const path = `${import.meta.dir}/output/${filename}.raw`
+    const path = testObject.rawPath
     if (existsSync(path)) unlinkSync(path)
     const file = Bun.file(path)
     const bytecodeWriter = file.writer()
@@ -134,7 +111,7 @@ export const runCompilerTest = (
   }
 
   try {
-    runTestInner(queue, input, `${filename}.rad`, globalCompiler, rootScope)
+    runTestInner(queue, input, `${testObject.moduleName}.rad`, globalCompiler, rootScope)
 
     globalCompiler.compiledFunctions.forEach((func) => {
       writer.write(func.functionDefinition.debugName)
@@ -180,11 +157,80 @@ export const runCompilerTest = (
     }
   }
 
-  writer.flush()
-  writer.end()
+  testObject.fail = gotError
 
   expect(gotError).toBe(expectError)
   expect(fatalError).toBe(false)
 
   return { prints, globalCompiler }
+}
+
+type TestObject = { 
+  moduleName: string
+  outputPath: string
+  inputPath: string
+  rawPath: string
+  logger: Logger
+  writer: FileSink,
+  fail: boolean
+  prints: unknown[]
+  close: () => void
+}
+export const createTest = ({ moduleName, inputPath, outputPath, rawPath } : { moduleName: string, inputPath: string, outputPath: string, rawPath: string }) => {
+  if (existsSync(outputPath)) unlinkSync(outputPath)
+  const file = Bun.file(outputPath)
+  const writer = file.writer()
+
+  const writeToFile = (...args) => {
+    args.forEach((arg) => {
+      if (typeof arg === 'string') {
+        writer.write(arg)
+      } else writer.write(Bun.inspect(arg, { depth: 10, colors: true }))
+      writer.write(' ')
+    })
+    writer.write('\n')
+  }
+
+  const logger = {
+    log: (...args) => {
+      writeToFile(...args)
+    },
+  }
+
+  globalThis.console.log = (...args) => {
+    originalLog(...args)
+    logger.log(...args)
+  }
+  ;(globalThis as any).logger = logger
+
+  const close = () => {
+    writer.flush()
+    writer.end()
+  }
+
+  return <TestObject>{ moduleName, fail: false, inputPath, rawPath, outputPath, logger, writer, close, prints: [] }
+}
+
+export const runVm = async ({ testObject}: { testObject: TestObject }) => {
+  if (testObject.fail) return;
+
+  const dir = "/Users/jake/Dev/vm/build"
+  const vm = `${dir}/vm`
+  
+  const proc = Bun.spawn([vm, testObject.rawPath], {
+    cwd: dir,
+    env: { NO_DEBUG: "1" },
+    stderr: 'pipe',
+  });
+  const text = await new Response(proc.stdout).text();
+  const error = await new Response(proc.stderr).text();
+  testObject.writer.write(`\n---- VM output ----\n\n`)
+  testObject.writer.write(text)
+  if (error) {
+    testObject.writer.write(`\n---- VM error ----\n\n`)
+    testObject.writer.write(error)
+    testObject.fail = true
+    expect(error).toBe('')
+  }
+  // console.log(text)
 }

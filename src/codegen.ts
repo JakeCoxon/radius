@@ -520,8 +520,8 @@ const astWriter: AstWriterTable = {
     compilerAssert(index !== undefined, "Expected function");
     // TODO: func name
     ast.args.forEach(x => writeExpr(writer, x));
-    ast.args.forEach(expr => writer.nextLocalSlot -= slotSize(writer, expr.type));
     writeBytes(writer, OpCodes.Call, index, ast.args.length);
+    ast.args.forEach(expr => writer.nextLocalSlot -= slotSize(writer, expr.type));
     writer.nextLocalSlot += slotSize(writer, ast.type)
   },
   operator: (writer, ast) => {
@@ -596,9 +596,9 @@ const astWriter: AstWriterTable = {
     let slot = local.slot
     ast.fieldPath.forEach(field => {slot += getSlotOffset(writer, field)})
     writeExpr(writer, ast.value)
-    writer.nextLocalSlot -= slotSize(writer, ast.value.type)
     const op = getOpByType(writer, ast.value.type)
     SetLocalByType[op].write(writer, slot, slotSize(writer, ast.value.type))
+    writer.nextLocalSlot -= slotSize(writer, ast.value.type)
   },
   setfield: (writer, ast) => {
     if (ast.left.type.typeInfo.isReferenceType) {
@@ -732,10 +732,14 @@ export const writeFinalBytecode = (globalCompilerState: GlobalCompilerState, out
   // TODO: write bytecodeWriter.nextGlobalSlot
   bytes.push(funcWriters.length)
   for (const f of funcWriters) {
-    bytes.push(f.argSlots);
-    bytes.push(f.returnSlots);
-    bytes.push(f.constantSlots.length);
-    bytes.push(f.bytecode.length);
+    bytes.push(f.argSlots)
+    bytes.push(f.returnSlots)
+
+    compilerAssert(f.bytecode.length < (1 << 16), "Too many bytecodes")
+    writeLittleEndian16At(bytes, bytes.length, f.constantSlots.length)
+    
+    compilerAssert(f.constantSlots.length < (1 << 16), "Too many constants")
+    writeLittleEndian16At(bytes, bytes.length, f.bytecode.length)
   }
   outputWriter.write(new Uint8Array(bytes))
 

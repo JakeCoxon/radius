@@ -7,8 +7,7 @@ fn iterate!(f)(thing: Thing) @inline:
   f(32 + thing.x)
 
 fn main():
-  thing : Thing
-  thing.x = 200
+  thing := Thing(200)
 
   for x in thing:
     print(x)
