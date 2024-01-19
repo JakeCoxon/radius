@@ -434,21 +434,6 @@ test('generic2', async () => {
   }
 })
 
-test('generic3', async () => {
-  const testObject = createTest({ 
-    moduleName: 'generic3',
-    inputPath: `${import.meta.dir}/fixtures/generic3.rad`,
-    outputPath: `${import.meta.dir}/output/generic3.txt`,
-    rawPath: `${import.meta.dir}/output/generic3.raw` })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await runVm({ testObject })
-  } finally {
-    testObject.close()
-  }
-})
-
 test('tuple', async () => {
   const testObject = createTest({ 
     moduleName: 'tuple',

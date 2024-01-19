@@ -449,7 +449,9 @@ const astWriter: AstWriterTable = {
     compilerAssert(block, "Block expected", { ast, fatal: true })
     const returnSize = ast.expr ? slotSize(writer, ast.expr.type) : 0
     const popSize = writer.nextLocalSlot - block.slotIndex
-    if (popSize > 0) writeBytes(writer, OpCodes.PopResult, popSize, returnSize)
+    if (ast.expr) writeExpr(writer, ast.expr)
+    if (popSize > 0 || returnSize > 0) writeBytes(writer, OpCodes.PopResult, popSize, returnSize)
+    writer.nextLocalSlot -= returnSize
     writeBytes(writer, OpCodes.Jump, 0, 0)
     block.patches.push({ location: writer.bytecode.length - 2 })
   },
