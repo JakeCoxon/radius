@@ -1,0 +1,10 @@
+type Thing @struct:
+  x: int
+
+fn main():
+  thing := Thing(3)
+
+  thing.x += 1
+  thing.x *= 2
+
+  print(thing.x)

@@ -180,13 +180,23 @@ export const thing = new ExternalFunction('thing', VoidType, (ast: Ast) => {
   console.log("thinged", ast)
 })
 
-export const mallocExternal = new ExternalFunction('malloc', VoidType, (ast: Ast) => {
-  compilerAssert(false, "Implemented elsewhere")
-})
+export const mallocExternal = new ExternalFunction('malloc', VoidType, (ast: Ast) => { compilerAssert(false, "Implemented elsewhere") })
+export const reallocExternal = new ExternalFunction('realloc', VoidType, (ast: Ast) => { compilerAssert(false, "Implemented elsewhere") })
+export const freeExternal = new ExternalFunction('free', VoidType, (ast: Ast) => { compilerAssert(false, "Implemented elsewhere") })
 
 export const malloc = new CompilerFunction('malloc', (location: SourceLocation, typeArgs: unknown[], args: Ast[]) => {
   compilerAssert(args.length === 1 && args[0].type === IntType, "Expected int argument")
   return new CallAst(RawPointerType, location, mallocExternal, args)
+})
+
+export const realloc = new CompilerFunction('realloc', (location: SourceLocation, typeArgs: unknown[], args: Ast[]) => {
+  compilerAssert(args.length === 2 && args[0].type === RawPointerType && args[1].type === IntType, "Expected rawptr, int argument")
+  return new CallAst(RawPointerType, location, reallocExternal, args)
+})
+
+export const free = new CompilerFunction('free', (location: SourceLocation, typeArgs: unknown[], args: Ast[]) => {
+  compilerAssert(args.length === 1 && args[0].type === RawPointerType , "Expected rawptr argument")
+  return new CallAst(RawPointerType, location, freeExternal, args)
 })
 
 export const unsafe_subscript = new CompilerFunction('unsafe_subscript', (location: SourceLocation, typeArgs: unknown[], args: Ast[]) => {
@@ -203,7 +213,7 @@ export const unsafe_set_subscript = new CompilerFunction('unsafe_set_subscript',
 
 export const createCompilerModuleTask = (ctx: TaskContext): Task<Module, CompilerError> => {
   const moduleScope = createScope({}, undefined)
-  Object.assign(moduleScope, { thing, malloc, unsafe_subscript, unsafe_set_subscript, rawptr: RawPointerType })
+  Object.assign(moduleScope, { thing, malloc, realloc, free, unsafe_subscript, unsafe_set_subscript, rawptr: RawPointerType })
   const subCompilerState = pushSubCompilerState(ctx, { debugName: `compiler module`, lexicalParent: undefined, scope: moduleScope })
   const module = new Module('compiler', subCompilerState, null!)
   return Task.of(module)

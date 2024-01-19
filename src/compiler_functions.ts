@@ -1,5 +1,5 @@
 import { BytecodeDefault, BytecodeSecondOrder, compileClassTask, compileFunctionPrototype, createBytecodeVmAndExecuteTask, propagateLiteralType, propagatedLiteralAst, pushBytecode, pushGeneratedBytecode, visitParseNode } from "./compiler";
-import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, ExternalFunction, CallAst, IntType, Closure, UserCallAst, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition, ParseCall, TypeVariable, TypeMatcher, typeMatcherEquals, SourceLocation, ExternalTypeConstructor, ScopeParentSymbol, SubCompilerState, CompilerFunction, IntLiteralType, FloatLiteralType, FloatType, RawPointerType, AddressAst, BindingAst } from "./defs";
+import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, ExternalFunction, CallAst, IntType, Closure, UserCallAst, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition, ParseCall, TypeVariable, TypeMatcher, typeMatcherEquals, SourceLocation, ExternalTypeConstructor, ScopeParentSymbol, SubCompilerState, CompilerFunction, IntLiteralType, FloatLiteralType, FloatType, RawPointerType, AddressAst, BindingAst, UnknownObject } from "./defs";
 import { Task, TaskDef, Unit } from "./tasks";
 
 
@@ -26,9 +26,10 @@ export type TypeCheckHeaderArg = {
   args: Ast[],
   parentScope: Scope
   concreteTypes: Type[] // output
+  substitutions: UnknownObject // output
 }
 
-function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, args, typeArgs, parentScope, concreteTypes }: TypeCheckHeaderArg): Task<Unit, CompilerError> {
+function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, args, typeArgs, parentScope, concreteTypes, substitutions }: TypeCheckHeaderArg): Task<Unit, CompilerError> {
 
   compilerAssert(typeArgs.length <= func.typeParams.length, "Expected $expected type parameters, got $got", { expected: func.typeParams.length, got: typeArgs.length, func })
   compilerAssert(args.length === func.params.length, 'Expected $expected args got $got', { expected: func.params.length, got: args.length, func })
@@ -81,31 +82,24 @@ function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, args, typ
       compilerAssert(compiledArgTypes instanceof Tuple, "Expected tuple")
       compiledArgTypes.values.forEach((type, i) => {
         let givenType = args[i].type
+        if (givenType === IntLiteralType && type === FloatType) givenType = FloatType
+        else if (givenType === IntLiteralType) givenType = IntType
+        else if (givenType === FloatLiteralType) givenType = FloatType
+        
         if (type === null) {
-          if (givenType === IntLiteralType) givenType = IntType
-          else if (givenType === FloatLiteralType) givenType = FloatType
-          concreteTypes.push(givenType)
-          return
-        }
-        if (type instanceof TypeMatcher) {
-          const output = {}
-          const matches = typeMatcherEquals(type, args[i].type, output)
+        } else if (type instanceof TypeMatcher) {
+          const matches = typeMatcherEquals(type, args[i].type, substitutions)
           compilerAssert(matches, "Type check failed. Expected $expected got $got", { expected: type, got: args[i].type })
-          concreteTypes.push(args[i].type) // TODO: Fill in the type for real
         } else if (type instanceof TypeVariable) {
-          
-          concreteTypes.push(args[i].type)
         } else {
           compilerAssert(isType(type), "Expected type got $type", { type });
-          
-          if (givenType === IntLiteralType && type === FloatType) givenType = FloatType
-          else if (givenType === IntLiteralType) givenType = IntType
-          else if (givenType === FloatLiteralType) givenType = FloatType
           compilerAssert(givenType === type, "Argument $name of type $value does not match $expected", { name: func.params[i].name.token, value: args[i].type, expected: type })
-          concreteTypes.push(type)
         }
 
-        compilerAssert(concreteTypes.at(-1) !== IntLiteralType && concreteTypes.at(-1) !== FloatLiteralType)
+        compilerAssert(givenType !== IntLiteralType && givenType !== FloatLiteralType, "Unexpected literal type", { type: concreteTypes.at(-1) })
+
+        concreteTypes.push(givenType)
+
       })
       return Task.success()
     })
@@ -188,10 +182,11 @@ export type FunctionCallArg = {
   args: Ast[],
   parentScope: Scope
   lexicalParent: SubCompilerState
-  concreteTypes: Type[]
+  concreteTypes: Type[] // output
+  substitutions: UnknownObject // output
 }
 
-function functionInlineTask(ctx: TaskContext, { location, func, typeArgs, args, parentScope, lexicalParent, concreteTypes }: FunctionCallArg): Task<Ast, CompilerError> {
+function functionInlineTask(ctx: TaskContext, { location, func, typeArgs, args, parentScope, lexicalParent, concreteTypes, substitutions }: FunctionCallArg): Task<Ast, CompilerError> {
 
   const argBindings: Binding[] = [];
   const statements: Ast[] = []
@@ -224,7 +219,9 @@ function functionInlineTask(ctx: TaskContext, { location, func, typeArgs, args, 
   
   func.typeParams.forEach((typeParam, i) => {
     compilerAssert(typeParam instanceof ParseIdentifier, "Not implemented")
-    templateScope[typeParam.token.value] = typeArgs[i];
+    const typeArg = typeArgs[i] || substitutions[typeParam.token.value]
+    compilerAssert(typeArg, "Type arg not found $name", { name: typeParam.token.value, typeArgs })
+    templateScope[typeParam.token.value] = typeArg
   });
 
   return (
@@ -311,7 +308,7 @@ export function createCallAstFromValue(location: SourceLocation, value: unknown,
   if (value instanceof Closure) {
 
     const { func, scope: parentScope, lexicalParent } = value
-    const call: FunctionCallArg = { location, func, typeArgs, args, parentScope, lexicalParent, concreteTypes: [] }
+    const call: FunctionCallArg = { location, func, typeArgs, args, parentScope, lexicalParent, concreteTypes: [], substitutions: {} }
     
     if (func.inline) return (
       TaskDef(compileAndExecuteFunctionHeaderTask, call)

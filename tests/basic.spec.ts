@@ -759,3 +759,33 @@ test('refparam_method', async () => {
     testObject.close()
   }
 })
+
+test('array', async () => {
+  const testObject = createTest({ 
+    moduleName: 'array',
+    inputPath: `${import.meta.dir}/fixtures/array.rad`,
+    outputPath: `${import.meta.dir}/output/array.txt`,
+    rawPath: `${import.meta.dir}/output/array.raw` })
+  try {
+    const input = await Bun.file(testObject.inputPath).text()
+    runCompilerTest(input, { testObject })
+    await runVm({ testObject })
+  } finally {
+    testObject.close()
+  }
+})
+
+test('ops', async () => {
+  const testObject = createTest({ 
+    moduleName: 'ops',
+    inputPath: `${import.meta.dir}/fixtures/ops.rad`,
+    outputPath: `${import.meta.dir}/output/ops.txt`,
+    rawPath: `${import.meta.dir}/output/ops.raw` })
+  try {
+    const input = await Bun.file(testObject.inputPath).text()
+    runCompilerTest(input, { testObject })
+    await runVm({ testObject })
+  } finally {
+    testObject.close()
+  }
+})

@@ -319,7 +319,7 @@ export class TypeField {
     public fieldType: Type,
     ) {}
   [Inspect.custom](depth: any, options: any, inspect: any) {
-    return options.stylize(`[TypeField ${this.index} ${inspect(this.sourceType)} ${this.name}]`, 'special');
+    return options.stylize(`[TypeField ${this.index} ${this.sourceType.shortName} ${this.name} : ${this.fieldType.shortName}]`, 'special');
   }
 }
 export class CompiledClass {
@@ -614,6 +614,7 @@ export const BuiltinTypes = {
   bool: BoolType,
   List: ListTypeConstructor,
   Tuple: TupleTypeConstructor,
+  rawptr: RawPointerType
 }
 
 class TypeTable {
@@ -655,7 +656,7 @@ const typesEqual = (t1: unknown, t2: any): boolean => {
   return false;
 }
 
-export const typeMatcherEquals = (matcher: TypeMatcher, expected: Type, output: UnknownObject) => {
+export const typeMatcherEquals = (matcher: TypeMatcher, expected: Type, substitutions: UnknownObject) => {
   const testTypeConstructor = (matcher: ExternalTypeConstructor | ClassDefinition, expected: TypeConstructor) => {
     if (matcher instanceof ExternalTypeConstructor) {
       if (matcher === expected) return true
@@ -686,8 +687,8 @@ export const typeMatcherEquals = (matcher: TypeMatcher, expected: Type, output: 
       return true;
     }
     if (matcher instanceof TypeVariable) {
-      if (output[matcher.name]) return output[matcher.name] === expected;
-      output[matcher.name] = expected;
+      if (substitutions[matcher.name]) return substitutions[matcher.name] === expected;
+      substitutions[matcher.name] = expected;
       return true
     }
     if (matcher instanceof TypeMatcher && expected instanceof ConcreteClassType) {

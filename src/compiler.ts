@@ -333,15 +333,23 @@ export const BytecodeSecondOrder: ParseTreeTable = {
     pushBytecode(out, node.token, { type: 'subscriptast' })
   },
   opeq: (out, node) => {
+    const op = node.token.value.endsWith('=') ? node.token.value.substring(0, node.token.value.length - 1) : node.token.value
     if (node.left instanceof ParseIdentifier || node.left instanceof ParseFreshIden) {
       visitParseNode(out, node.left)
       visitParseNode(out, node.right)
-      const op = node.token.value.endsWith('=') ? node.token.value.substring(0, node.token.value.length - 1) : node.token.value
       pushBytecode(out, node.token, { type: 'operatorast', name: op, count: 2 })
       pushBytecode(out, node.token, { type: 'setlocalast', name: node.left instanceof ParseFreshIden ? node.left.freshBindingToken.identifier : node.left.token.value })
       return
     }
-    compilerAssert(false, "Not implemented yet", { node })
+    if (node.left instanceof ParseField) {
+      visitParseNode(out, node.left.expr)
+      visitParseNode(out, node.left)
+      visitParseNode(out, node.right)
+      pushBytecode(out, node.token, { type: 'operatorast', name: op, count: 2 })
+      pushBytecode(out, node.token, { type: 'setfieldast', name: node.left.field.token.value })
+      return
+    }
+    compilerAssert(false, "Invalid operator", { node })
   },
 
   postcall: (out, node) => {

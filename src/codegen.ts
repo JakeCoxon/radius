@@ -1,4 +1,4 @@
-import { mallocExternal } from "./compiler_sugar";
+import { mallocExternal, reallocExternal } from "./compiler_sugar";
 import { Ast, AstType, AstWriterTable, Binding, BindingAst, BoolType, CodegenFunctionWriter, CodegenWriter, CompiledFunction, ConcreteClassType, DoubleType, FileWriter, FloatType, GlobalCompilerState, IntType, ListTypeConstructor, ParameterizedType, PrimitiveType, RawPointerType, StringType, Type, TypeField, VoidType, compilerAssert, textColors } from "./defs";
 
 const OpCodes = {
@@ -496,9 +496,20 @@ const astWriter: AstWriterTable = {
 
     if (ast.func === mallocExternal) {
       compilerAssert(ast.args.length == 1 && ast.args[0].type === IntType, "Expected int arg", { ast })
+      emitConstant(writer, RawPointerType, 0)
       writeExpr(writer, ast.args[0])
       writeBytes(writer, OpCodes.AllocS)
       writer.nextLocalSlot -= slotSize(writer, IntType)
+      writer.nextLocalSlot += slotSize(writer, ast.type) // Pointer size
+      return
+    }
+    if (ast.func === reallocExternal) {
+      compilerAssert(ast.args.length == 2 && ast.args[0].type === RawPointerType && ast.args[1].type === IntType, "Expected int arg", { ast })
+      writeExpr(writer, ast.args[0])
+      writeExpr(writer, ast.args[1])
+      writeBytes(writer, OpCodes.AllocS)
+      writer.nextLocalSlot -= slotSize(writer, ast.args[0].type)
+      writer.nextLocalSlot -= slotSize(writer, ast.args[1].type)
       writer.nextLocalSlot += slotSize(writer, ast.type) // Pointer size
       return
     }
@@ -651,8 +662,8 @@ const astWriter: AstWriterTable = {
     const size = slotSize(writer, ast.type)
     const op = getOpByType(writer, RawPointerType)
     GetLocalByType[op].write(writer, local.slot, slotSize(writer, RawPointerType))
-    writeBytes(writer, OpCodes.GetField, slot, size)
     writer.nextLocalSlot += size
+    writeBytes(writer, OpCodes.GetField, slot, size)
   },
   setderef: (writer, ast) => {
     const binding = ast.left.binding
@@ -663,8 +674,8 @@ const astWriter: AstWriterTable = {
     writeExpr(writer, ast.value)
     const op = getOpByType(writer, RawPointerType)
     GetLocalByType[op].write(writer, local.slot, slotSize(writer, RawPointerType))
-    writeBytes(writer, OpCodes.SetField, slot, size)
     writer.nextLocalSlot -= slotSize(writer, ast.value.type)
+    writeBytes(writer, OpCodes.SetField, slot, size)
   },
   block: (writer, ast) => {
     writer.blocks.push({ binding: ast.binding, slotIndex: writer.nextLocalSlot, patches: [] })
@@ -783,13 +794,17 @@ const writeFinalBytecodeFunction = (bytecodeWriter: CodegenWriter, func: Compile
     nextLocalSlot: 0,
   }
 
-  funcWriter.argSlots = Object.values(func.concreteTypes).reduce((acc, x) => acc + slotSize(funcWriter, x), 0); // prettier-ignore
+  funcWriter.argSlots = Object.values(func.concreteTypes).reduce((acc, concreteType, i) => {
+    const storageType = func.functionDefinition.params[i].storage === 'ref' ? RawPointerType : concreteType
+    return acc + slotSize(funcWriter, storageType)
+  }, 0)
   funcWriter.returnSlots = slotSize(funcWriter, func.returnType);
 
   func.argBindings.forEach((binding, i) => {
     funcWriter.locals.push({ binding, slot: funcWriter.nextLocalSlot, scopeIndex: funcWriter.currentScopeIndex })
-    const type = func.functionDefinition.params[i].storage === 'ref' ? RawPointerType : binding.type
-    funcWriter.nextLocalSlot += slotSize(funcWriter, type);
+    compilerAssert(binding.type === func.concreteTypes[i], "??")
+    const storageType = func.functionDefinition.params[i].storage === 'ref' ? RawPointerType : binding.type
+    funcWriter.nextLocalSlot += slotSize(funcWriter, storageType);
   });
 
   writeExpr(funcWriter, func.body);
@@ -798,7 +813,9 @@ const writeFinalBytecodeFunction = (bytecodeWriter: CodegenWriter, func: Compile
   // Remove locals including args we pushed before
   let numLocalSlots = 0
   while (funcWriter.locals.length && funcWriter.locals[funcWriter.locals.length - 1].scopeIndex === funcWriter.currentScopeIndex) {
-    const sizeSlots = slotSize(funcWriter, funcWriter.locals[funcWriter.locals.length - 1].binding.type)
+    const binding = funcWriter.locals[funcWriter.locals.length - 1].binding
+    const storageType = binding.storage === 'ref' ? RawPointerType : binding.type
+    const sizeSlots = slotSize(funcWriter, storageType)
     numLocalSlots += sizeSlots
     funcWriter.nextLocalSlot -= sizeSlots
     funcWriter.locals.pop()
