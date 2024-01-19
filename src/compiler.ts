@@ -856,6 +856,7 @@ const instructions: InstructionMapping = {
       compilerAssert(left.type instanceof ParameterizedType)
       const elemType = expectType(left.type.args[0])
       vm.stack.push(new SubscriptAst(elemType, vm.location, left, right))
+      return
     }
     const subscript = left.type.typeInfo.metaobject['subscript']
     compilerAssert(subscript, "No 'subscript' operator found for $type", { type: left.type })

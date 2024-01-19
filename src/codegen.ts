@@ -725,7 +725,7 @@ export const writeFinalBytecode = (globalCompilerState: GlobalCompilerState, out
 
   globalCompilerState.globalLets.forEach(globalLet => {
     bytecodeWriter.globals.set(globalLet.binding, bytecodeWriter.nextGlobalSlot)
-    bytecodeWriter.nextGlobalSlot += slotSize({ writer: bytecodeWriter }, globalLet.type)
+    bytecodeWriter.nextGlobalSlot += slotSize({ writer: bytecodeWriter }, globalLet.binding.type)
   })
   
   let index = 0;
@@ -740,10 +740,18 @@ export const writeFinalBytecode = (globalCompilerState: GlobalCompilerState, out
   log('\n\n', bytecodeWriter.typeSizes)
 
   const bytes: number[] = []
-  // TODO: write bytecodeWriter.nextGlobalSlot
-  bytes.push(funcWriters.length)
+  compilerAssert(bytecodeWriter.nextGlobalSlot < (1 << 16), "Too many global slots")
+  writeLittleEndian16At(bytes, bytes.length, bytecodeWriter.nextGlobalSlot)
+
+  compilerAssert(funcWriters.length < (1 << 16), "Too many functions")
+  writeLittleEndian16At(bytes, bytes.length, funcWriters.length)
+
+  compilerAssert(bytecodeWriter.nextGlobalSlot < (1 << 8) && bytecodeWriter.nextGlobalSlot < (1 << 8), "TODO: implement instructions that can actually read these")
+
   for (const f of funcWriters) {
+    compilerAssert(f.argSlots < (1 << 8), "Too many arg slots")
     bytes.push(f.argSlots)
+    compilerAssert(f.returnSlots < (1 << 8), "Too many return slots")
     bytes.push(f.returnSlots)
 
     compilerAssert(f.bytecode.length < (1 << 16), "Too many bytecodes")

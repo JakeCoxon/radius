@@ -19,3 +19,5 @@ fn main():
   foo()
   thing += 10
   print(thing)
+  #print(foo1.y) # TODO
+  
