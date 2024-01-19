@@ -324,8 +324,14 @@ export const BytecodeSecondOrder: ParseTreeTable = {
       visitParseNode(out, node.value);
       pushBytecode(out, node.token, { type: 'setfieldast', name: node.left.field.token.value })
       return
+    } else if (node.left instanceof ParseSubscript) {
+      visitParseNode(out, node.left.expr)
+      visitParseNode(out, node.left.subscript)
+      visitParseNode(out, node.value)
+      pushBytecode(out, node.token, { type: 'setsubscriptast' })
+      return
     }
-    compilerAssert(false, "Not implemented")
+    compilerAssert(false, "Not implemented", { node })
   },
   subscript: (out, node) => {
     visitParseNode(out, node.expr)
@@ -843,12 +849,25 @@ const instructions: InstructionMapping = {
   },
   subscriptast: (vm, {}) => {
     const right = propagatedLiteralAst(expectAst(popStack(vm)))
-    const left = expectAst(popStack(vm));
-    compilerAssert(isParameterizedTypeOf(left.type, ListTypeConstructor), "Expected list got $x", { x: left.type })
-    compilerAssert(right.type === IntType, "Expected int got $x", { x: right.type })
-    compilerAssert(left.type instanceof ParameterizedType)
-    const elemType = expectType(left.type.args[0])
-    vm.stack.push(new SubscriptAst(elemType, vm.location, left, right))
+    const left = expectAst(popStack(vm))
+    if (isParameterizedTypeOf(left.type, ListTypeConstructor)) {
+      compilerAssert(isParameterizedTypeOf(left.type, ListTypeConstructor), "Expected list got $x", { x: left.type })
+      compilerAssert(right.type === IntType, "Expected int got $x", { x: right.type })
+      compilerAssert(left.type instanceof ParameterizedType)
+      const elemType = expectType(left.type.args[0])
+      vm.stack.push(new SubscriptAst(elemType, vm.location, left, right))
+    }
+    const subscript = left.type.typeInfo.metaobject['subscript']
+    compilerAssert(subscript, "No 'subscript' operator found for $type", { type: left.type })
+    return createCallAstFromValueAndPushValue(vm, subscript, [], [left, right])
+  },
+  setsubscriptast: (vm, {}) => {
+    const value = propagatedLiteralAst(expectAst(popStack(vm)))
+    const right = propagatedLiteralAst(expectAst(popStack(vm)))
+    const left = propagatedLiteralAst(expectAst(popStack(vm)))
+    const set_subscript = left.type.typeInfo.metaobject['set_subscript']
+    compilerAssert(set_subscript, "No 'set_subscript' operator found for $type", { type: left.type })
+    return createCallAstFromValueAndPushValue(vm, set_subscript, [], [left, right, value])
   },
   list: (vm, { count }) => vm.stack.push(popValues(vm, count)),
   

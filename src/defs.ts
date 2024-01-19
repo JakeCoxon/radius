@@ -211,6 +211,7 @@ export type BytecodeInstr =
   { type: 'fieldast', name: string } |
   { type: 'field', name: string } |
   { type: 'subscriptast' } |
+  { type: 'setsubscriptast' } |
   { type: 'subscript' } |
   { type: 'operatorast', name: string, count: number } |
   { type: 'constructorast', count: number } |

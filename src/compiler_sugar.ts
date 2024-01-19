@@ -158,6 +158,10 @@ export const VecTypeMetaClass = new ExternalFunction('VecType', VoidType, (compi
 export const defaultMetaFunction = (subCompilerState: SubCompilerState, compiledClass: CompiledClass, definitionScope: Scope, templateScope: Scope) => {
   const iterate = templateScope['__iterate']
   compilerAssert(!iterate || iterate instanceof Closure)
+  const subscript = templateScope['__subscript']
+  compilerAssert(!subscript || subscript instanceof Closure)
+  const set_subscript = templateScope['__set_subscript']
+  compilerAssert(!set_subscript || set_subscript instanceof Closure)
 
   if (compiledClass.classDefinition.keywords.includes('struct'))
     compiledClass.type.typeInfo.isReferenceType = false
@@ -173,7 +177,7 @@ export const defaultMetaFunction = (subCompilerState: SubCompilerState, compiled
   const funcDef = insertFunctionDefinition(subCompilerState.globalCompiler, decl)
   const constructor = new Closure(funcDef, definitionScope, subCompilerState.lexicalParent!)
 
-  Object.assign(compiledClass.metaobject, { iterate, constructor })
+  Object.assign(compiledClass.metaobject, { iterate, subscript, set_subscript, constructor })
 }
 
 export const thing = new ExternalFunction('thing', VoidType, (ast: Ast) => {
@@ -201,13 +205,18 @@ export const free = new CompilerFunction('free', (location: SourceLocation, type
 
 export const unsafe_subscript = new CompilerFunction('unsafe_subscript', (location: SourceLocation, typeArgs: unknown[], args: Ast[]) => {
   const [left, right] = args
-  compilerAssert(left.type === RawPointerType, "Expected rawptr", { left })
+  propagatedLiteralAst(right)
+  compilerAssert(right && right.type === IntType, "Expected int type", { right })
+  compilerAssert(left && left.type === RawPointerType, "Expected rawptr", { left })
   const type = expectType(typeArgs[0])
   return new SubscriptAst(type, location, left, propagatedLiteralAst(right))
 })
 export const unsafe_set_subscript = new CompilerFunction('unsafe_set_subscript', (location: SourceLocation, typeArgs: unknown[], args: Ast[]) => {
   const [left, right, value] = args
-  compilerAssert(left.type === RawPointerType, "Expected rawptr", { left })
+  propagatedLiteralAst(right)
+  compilerAssert(right && right.type === IntType, "Expected int type", { right })
+  compilerAssert(left && left.type === RawPointerType, "Expected rawptr", { left })
+  compilerAssert(value, "Expected value", { value })
   return new SetSubscriptAst(VoidType, location, left, propagatedLiteralAst(right), propagatedLiteralAst(value))
 })
 
