@@ -126,6 +126,9 @@ code {
   background-color: var(--color-tabset-background-selected);
   background-image: none;
 }
+.monospace {
+  font-family: monospace;
+}
 
 textarea {
   background: #111;
@@ -172,10 +175,13 @@ const TaskView = () => {
   const task = store.useValue((x) => x.currentTask)
   return (
     <div>
-      <div>
+      <div class="flex-row">
         <button onClick={stepUi}>Step</button>
+        <button onClick={runToEndUi}>Compile</button>
       </div>
-      <pre>{`${inspect(queue.currentTask, { depth: 1 })}\n`}</pre>
+      <div class="monospace">
+        {inspect(queue.currentTask, { depth: 1 })}
+      </div>
     </div>
   )
 }
@@ -208,12 +214,12 @@ const LogView = () => {
 const FunctionsView = () => {
   const stepIndex = store.useValue((x) => x.stepIndex)
 
-  let text = ''
-  Array.from(compiler.compiledFunctions.entries()).forEach(([key, value]) => {
-    text += `${key}: ${inspect(value, { depth: 1 })}\n`
-  })
+  // let frags: any = []
+  const entries = Array.from(compiler.compiledFunctions.entries())
+  const value = Object.fromEntries(entries.map(x => [x[0].name, x[1]]))
+  const frags = inspect(value, { depth: 2 })
 
-  return <pre>{text}</pre>
+  return <div class="monospace">{frags}</div>
 }
 
 const runTestInner = (input: string) => {
@@ -246,6 +252,7 @@ const runTestInner = (input: string) => {
 
   const subCompilerState = new SubCompilerState('moduleScope')
   subCompilerState.globalCompiler = globalCompiler
+  subCompilerState.moduleCompiler = subCompilerState
   subCompilerState.scope = moduleScope
   const root = TaskDef(runTopLevelTask, parser.rootNode, rootScope, moduleScope)
     .chainFn((task, arg) => {
@@ -268,6 +275,10 @@ const runTestInner = (input: string) => {
       if ((queue.currentTask as any).def) break
     }
   }
+  function runToEnd() {
+    while (queue.list.length) { stepQueue(queue) }
+    end()
+  }
   function end() {
     if (root._state !== 'completed') {
       // TODO: remove events after they are completed
@@ -276,7 +287,7 @@ const runTestInner = (input: string) => {
     compilerAssert(root._success, 'Expected success', { root })
   }
 
-  return { compiler: globalCompiler, step, queue }
+  return { compiler: globalCompiler, step, queue, runToEnd }
 }
 
 const logs: any[][] = []
@@ -305,7 +316,7 @@ fn main():
 
 `
 
-const { compiler, step, queue } = runTestInner(input)
+const { compiler, step, runToEnd, queue } = runTestInner(input)
 const store = createStore({
   currentTask: null as Task<unknown, unknown> | null,
   stepIndex: 0,
@@ -313,6 +324,10 @@ const store = createStore({
 
 const stepUi = () => {
   step()
+  store.update({ currentTask: queue.currentTask, stepIndex: store.state.stepIndex + 1 })
+}
+const runToEndUi = () => {
+  runToEnd()
   store.update({ currentTask: queue.currentTask, stepIndex: store.state.stepIndex + 1 })
 }
 
@@ -362,12 +377,17 @@ const inspect = (obj, options = {}) => {
   if (typeof obj === 'number') return obj
   if (obj === null) return `null`
   if (obj === undefined) return `undefined`
-  if (options.depth <= 0) return `[Object]`
+  if (options.depth <= 0) {
+    if (obj[Inspect.custom]) {
+      return obj[Inspect.custom](0, { stylize: (x) => x }, null)
+    }
+    return `[Object]`
+  }
   if (typeof obj !== 'object') return `??`
 
-  let text = ''
-  for (const [key, value] of Object.entries(obj)) {
-    text += `  ${key}: ${inspect(value, { depth: options.depth - 1 })}\n`
-  }
-  return text
+  const frags: any[] = []
+  Object.entries(obj).forEach(([key, value]) => {
+    frags.push(<div><div>{key}</div>{inspect(value, { depth: options.depth - 1 })}</div>)
+  })
+  return frags
 }
