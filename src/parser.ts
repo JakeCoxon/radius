@@ -1,19 +1,19 @@
-import { ArgumentTypePair, ParseAnd, ParseNode, ParseBreak, ParseCall, ParseCast, ParseCompTime, ParseContinue, ParseDict, ParseExpand, ParseField, ParseFor, ParseForExpr, ParseIf, ParseLet, ParseLetConst, ParseList, ParseListComp, ParseMeta, ParseNot, ParseNumber, ParseOpEq, ParseOperator, ParseOr, ParseReturn, ParseSet, ParseStatements, ParseString, ParseIdentifier, ParseWhile, ParseWhileExpr, ParserFunctionDecl, Token, compilerAssert, ParsePostCall, ParseSymbol, ParseNote, ParseSlice, ParseSubscript, ParserClassDecl, ParseClass, ParseFunction, createToken, ParseBoolean, ParseElse, ParseMetaIf, ParseMetaFor, ParseBlock, ParseImport, ParsedModule, Source, ParseMetaWhile, ParseTuple, ParseImportName, ParseFold } from "./defs";
+import { ParseAnd, ParseNode, ParseBreak, ParseCall, ParseCast, ParseCompTime, ParseContinue, ParseDict, ParseExpand, ParseField, ParseFor, ParseForExpr, ParseIf, ParseLet, ParseLetConst, ParseList, ParseListComp, ParseMeta, ParseNot, ParseNumber, ParseOpEq, ParseOperator, ParseOr, ParseReturn, ParseSet, ParseStatements, ParseString, ParseIdentifier, ParseWhile, ParseWhileExpr, ParserFunctionDecl, Token, compilerAssert, ParsePostCall, ParseSymbol, ParseNote, ParseSlice, ParseSubscript, ParserClassDecl, ParseClass, ParseFunction, createToken, ParseBoolean, ParseElse, ParseMetaIf, ParseMetaFor, ParseBlock, ParseImport, ParsedModule, Source, ParseMetaWhile, ParseTuple, ParseImportName, ParseFold, ParserFunctionParameter } from "./defs";
 
 type LexerState = { significantNewlines: boolean; parenStack: string[] };
 
 function* tokenize(source: Source, state: LexerState): Generator<Token> {
   const regexes = {
     KEYWORD:
-      /^(?:and|as\!|as|break|class|continue|comptime|def|defn|elif|else|fn|for|if|ifx|in|lambda|meta|null|not|or|pass|return|try|while|with|type|interface|import|block|fold)(?=\W)/, // note \b
+      /^(?:and|as\!|as|break|class|continue|comptime|def|defn|elif|else|fn|for|if|ifx|in|lambda|meta|null|or|pass|return|try|while|with|type|interface|import|block|fold|ref)(?=\W)/, // note (?=\W)
     IDENTIFIER: /^[a-zA-Z_][a-zA-Z_0-9-]*/,
     STRING: /^(?:"(?:[^"\\]|\\.)*")/,
     SPECIALNUMBER: /^0o[0-7]+|^0x[0-9a-fA-F_]+|^0b[01_]+/,
     NUMBER: /^-?(0|[1-9][0-9_]*)(\.[0-9_]+)?(?:[eE][+-]?[0-9]+)?/,
     COMMENT: /^#.+(?=\n)/,
-    OPENPAREN: /^[\[\{\(]/,
+    OPENPAREN: /^(?:[\[\{\(]|%{)/,
     CLOSEPAREN: /^[\]\}\)]/,
-    PUNCTUATION: /^(?:==|!=|:=|<=|>=|\+=|\-=|\*=|\/=|::|\|\>|\.\.\.|[@!:,=<>\-+\.*\/'\|])/,
+    PUNCTUATION: /^(?:==|!=|:=|<=|>=|\+=|\-=|\*=|\/=|::|->|\|\>|\.\.\.|[@!:,=<>\-+\.*\/'\|])/,
     NEWLINE: /^\n/,
     WHITESPACE: /^[ ]+/ // Not newline
   };
@@ -153,7 +153,7 @@ export const makeParser = (input: string, debugName: string) => {
     const num = token?.location.line ?? previous?.location.line;
     const value = token?.value !== undefined ? `'${token?.value}' (${token?.type})` : "EOL";
     const msg = `${error} got ${value} on line ${num}`;
-    compilerAssert(false, msg, { lexer, token });
+    compilerAssert(false, msg, { lexer, token, previous, location: token?.location, prevLocation: previous?.location });
   };
   const expect = (expected: string | boolean, error: string) => {
     if (expected === true) return previous;
@@ -228,7 +228,8 @@ export const makeParser = (input: string, debugName: string) => {
     else if (match("["))     return parseList();
     else if (match("'"))     return new ParseSymbol(parseIdentifier().token);
     else if (match("@"))     return new ParseNote(previous, parseExpr());
-    else if (match("{"))     return match("|") ? parseLambda() : parseDict(previous)
+    else if (match("%{"))    return parseDict(previous)
+    else if (match("{"))     return match("|") ? parseLambda() : throwExpectError("Not implemented")
     else if (match("block")) return new ParseBlock(previous, null, token?.value != ':' ? parseIdentifier() : null, parseColonBlockExpr('block'))
     else if (match("ifx"))   return parseIf(previous, true, "if condition")
     else if (matchType("STRING")) return new ParseString(previous)
@@ -290,7 +291,9 @@ export const makeParser = (input: string, debugName: string) => {
     }
   };
   
-  const parseAs = () => {        let left = parseCall();     while (match("as!") || match("as"))   left = new ParseCast(previous, left, parseCall());          return left; };
+  const parseNot = (): ParseNode => match("!")  ? new ParseNot(previous, parseNot()) : parseCall();
+
+  const parseAs = () => {        let left = parseNot();     while (match("as!") || match("as"))   left = new ParseCast(previous, left, parseNot());          return left; };
   const parseFactor = () => {    let left = parseAs();       while (match("*") || match("/"))      left = new ParseOperator(previous, [left, parseAs()]);      return left; };
   const parseSum = () => {       let left = parseFactor();   while (match("+") || match("-"))      left = new ParseOperator(previous, [left, parseFactor()]);  return left; };
 
@@ -301,8 +304,7 @@ export const makeParser = (input: string, debugName: string) => {
   const parseAnd = () => {     let left = parseEquality();   while (match("and"))    left = new ParseAnd(previous, [left, parseEquality()]);  return left; };
   const parseOr = () => {      let left = parseAnd();        while (match("or"))     left = new ParseOr(previous, [left, parseAnd()]);        return left; };
 
-  const parseNot = () =>   match("!") || match("not") ?   new ParseNot(previous, parseExpr()) :   parseOr();
-  const parseMeta = () =>  match("meta")  ?  new ParseMeta(previous, parseNot())  :  parseNot();
+  const parseMeta = () =>  match("meta")  ?  new ParseMeta(previous, parseOr())  :  parseOr();
 
   const parseAssignExpr = parseMeta; // parseAssignExpr excludes expansion dots
 
@@ -315,17 +317,17 @@ export const makeParser = (input: string, debugName: string) => {
   };
   const parseExpr = parseDots;
 
-  const parseArg = (): ArgumentTypePair => {
+  const parseFunctionParam = (): ParserFunctionParameter => {
     const name = parseIdentifier()
-    if (match(":")) return [name, parseExpr()];
-    return [name, null];
+    if (match(":")) return { name, storage: match('ref') ? 'ref' : null, type: parseExpr() };
+    return { name, storage: null, type: null };
   };
-  const parseArgList = (final: string = ")") => {
+  const parseFunctionParamList = (final: string = ")") => {
     if (match(final)) return [];
-    const args = [parseArg()];
-    while (match(",")) args.push(parseArg());
+    const params = [parseFunctionParam()];
+    while (match(",")) params.push(parseFunctionParam());
     expect(final, `Expected '${final}' after arg list`);
-    return args;
+    return params
   };
   const parseColonBlockExpr = (afterMessage: string): ParseStatements => {
     expect(":", `Expected ':' after ${afterMessage}`);
@@ -357,12 +359,12 @@ export const makeParser = (input: string, debugName: string) => {
 
   const parseFunctionDef = () => {
 
-    const parseOptionalReturnType = () => {
-      if (token && token.value !== "@" && token.value !== ":" && token.type !== "NEWLINE")
-        return parseExpr();
-      return null
+    const parseOptionalReturnType = (arrowToken: Token) => {
+      const list = [parseExpr()]
+      while (match(",")) list.push(parseExpr())
+      return list.length > 1 ? new ParseTuple(arrowToken, list) : list[0];
     }
-    const parseFunctionArgList = () => (expect("(", `Expected '(' after function name`), parseArgList(")"))
+    const parseFunctionParamListParen = () => (expect("(", `Expected '(' after function name`), parseFunctionParamList(")"))
 
     const parseBody = () => {
       if (matchType("NEWLINE")) return null;
@@ -374,7 +376,8 @@ export const makeParser = (input: string, debugName: string) => {
 
     return createNamedFunc(state, previous, parseOptionalMetaName(), 
       parseIdentifier(), match("!") ? parseFunctionTypeParameters() : [], 
-      parseFunctionArgList(), parseOptionalReturnType(), parseKeywords(), parseBody())
+      parseFunctionParamListParen(), match('->') ? parseOptionalReturnType(previous) : null, 
+      parseKeywords(), parseBody())
   };
   const parseLambda = () => {
     const lambda = parseBracelessLambda();
@@ -393,7 +396,7 @@ export const makeParser = (input: string, debugName: string) => {
     : new ParseStatements(previous, [parseExpr()])
 
   const parseBracelessLambda = (): ParseNode => {
-    return createAnonymousFunc(state, previous, parseArgList("|"), 
+    return createAnonymousFunc(state, previous, parseFunctionParamList("|"), 
       parseKeywords(), parseOptionalReturnType(), parseSingleOrMultilineBody())
   };
   const parseOptionalMetaClass = () => match("<") ? parseIdentifier() :  null;
@@ -506,22 +509,22 @@ export const makeParser = (input: string, debugName: string) => {
   return <ParsedModule>{ rootNode, classDefs: state.classDecls, functionDecls: state.functionDecls };
 };
 
-const createNamedFunc = (state: any, token: Token, functionMetaName: ParseIdentifier | null, name: ParseIdentifier, typeArgs: ParseNode[], args: ArgumentTypePair[], returnType: ParseNode | null, keywords: ParseNode[], body: ParseNode | null) => {
+const createNamedFunc = (state: any, token: Token, functionMetaName: ParseIdentifier | null, name: ParseIdentifier, typeParams: ParseNode[], params: ParserFunctionParameter[], returnType: ParseNode | null, keywords: ParseNode[], body: ParseNode | null) => {
   const decl: ParserFunctionDecl = {
     id: undefined,
     debugName: `${name.token.value}`,
-    token: token, functionMetaName, name, typeArgs, args,
+    token: token, functionMetaName, name, typeParams, params,
     keywords, returnType, body
   };
   state.functionDecls.push(decl)
   return new ParseFunction(token, decl)
 }
 
-const createAnonymousFunc = (state: any, token: Token, args: ArgumentTypePair[], keywords: ParseNode[], returnType: ParseNode | null, body: ParseStatements) => {
+const createAnonymousFunc = (state: any, token: Token, params: ParserFunctionParameter[], keywords: ParseNode[], returnType: ParseNode | null, body: ParseStatements) => {
   const decl: ParserFunctionDecl = {
     id: undefined,
     debugName: `<anonymous line ${token.location.line}>`,
-    token: token, functionMetaName: null, name: null, typeArgs: [], args,
+    token: token, functionMetaName: null, name: null, typeParams: [], params,
     keywords, anonymous: true, returnType, body
   };
   state.functionDecls.push(decl)

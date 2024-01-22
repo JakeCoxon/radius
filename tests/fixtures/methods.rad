@@ -11,7 +11,7 @@ fn bam(thing: Thing):
 
 fn main():
 
-  thing : Thing
+  thing := Thing(0, 0)
 
   thing.x = 1
   thing.y = 10

@@ -1,0 +1,27 @@
+type Thing @struct:
+  x : int
+  y : float
+
+type Foo @struct:
+  thing1: Thing
+  thing2: Thing
+
+fn main():
+
+  thing: Thing
+  print(thing.x)
+  print(thing.y)
+  thing.x = 41
+  thing.y = 2.23
+
+  foo: Foo
+
+  # We can get the local directly since the fieldpath are all value types
+  print(foo.thing1.x)
+  print(foo.thing1.y)
+  print(foo.thing2.x)
+  print(foo.thing2.y)
+
+  foo.thing2.x = 32
+  foo.thing2.y = 1.2
+  

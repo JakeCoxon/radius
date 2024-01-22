@@ -1,4 +1,4 @@
-fn create_adder(x) any:
+fn create_adder(x) -> any:
   {|y| y + x}
 
 fn main():

@@ -18,7 +18,7 @@ type MyList!(T) @struct:
 
 fn foothing(a: Thing):
   print(a.x)
-  print(a)
+  #print(a)
 
 fn foo_list!(E)(a: MyList!E):
   print(a.elem)

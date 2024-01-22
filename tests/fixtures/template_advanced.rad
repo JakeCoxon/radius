@@ -1,4 +1,4 @@
-fn bar!(T)() int:
+fn bar!(T)() -> int:
   meta if T == 123:
     65
   else:

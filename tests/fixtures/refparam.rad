@@ -1,0 +1,22 @@
+type Thing @struct:
+  x: int
+  y: float
+
+fn main():
+  thing := Thing(12, 22.0)
+  foo_ref(thing) # pass as pointer
+
+  print(thing.x)
+
+fn foo_ref(t: ref Thing):
+  print(t.x)
+  print(t.y)
+
+  t.x = 56
+  t.y = 3.2
+
+  foo_value(t) # convert ref to value
+
+fn foo_value(t: Thing):
+  t.x = 3
+  print(t.x)

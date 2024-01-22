@@ -1,10 +1,10 @@
 fn bamp(x: int):
   print(x)
 
-fn foop!(T)(x: T) int:
+fn foop!(T)(x: T) -> int:
   12 + x
 
-fn bar!(T)() int:
+fn bar!(T)() -> int:
   12 + (meta T + 10)
 
 fn main():

@@ -1,36 +1,36 @@
-fn compose3(a, b, c) any:
+fn compose3(a, b, c) -> any:
   {|x| c(b(a(x)))}
 
-fn transduce!(trx, reducer)(iterable) any @inline:
+fn transduce!(trx, reducer)(iterable) -> any @inline:
   final_reducer :: trx(reducer)
   acc := final_reducer.a()
   for x in iterable:
     acc = final_reducer.c(acc, x)
   final_reducer.b(acc)
 
-fn transduce_s!(trx, reducer, iterable)() any @inline:
+fn transduce_s!(trx, reducer, iterable)() -> any @inline:
   final_reducer :: trx(reducer)
   acc := final_reducer.a()
   for x in iterable:
     acc = final_reducer.c(acc, x)
   final_reducer.b(acc)
 
-fn map(mapping) any:
-  {|next| {
+fn map(mapping) -> any:
+  {|next| %{
     a = next.a,
     b = next.b,
     c = {|acc, x| next.c(acc, mapping(x))}
   } }
 
-fn filter(predicate) any:
-  {|next| {
+fn filter(predicate) -> any:
+  {|next| %{
     a = next.a,
     b = next.b,
     c = {|acc, x| ifx predicate(x): next.c(acc, x) else: acc}
   } }
 
-fn sum() any: 
-  { a = {|| 0},
+fn sum() -> any: 
+  %{a = {|| 0},
     b = {|acc| acc},
     c = {|acc, x| acc + x} }
 

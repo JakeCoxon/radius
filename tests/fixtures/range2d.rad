@@ -6,7 +6,7 @@ type Range2d:
   __iterate :: range2d_iterate
 
 # the loop body is passed as a template parameter 'f'. and the function must be marked @inline
-fn range2d_iterate!(f)(range: Range2d) void @inline:
+fn range2d_iterate!(f)(range: Range2d) -> void @inline:
   for j in Range(0, range.h):
     for i in Range(0, range.w):
       f(vec2i(i, j))
@@ -16,7 +16,7 @@ type Range:
   end: int
   __iterate :: range_iterate
 
-fn range_iterate!(f)(range: Range) void @inline:
+fn range_iterate!(f)(range: Range) -> void @inline:
   i := range.start
   while i < range.end:
     f(i)

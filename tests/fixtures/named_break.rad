@@ -11,11 +11,11 @@ fn foo():
   foo := block cool_block2:
     y := 32
     if y > 0:
-      break cool_block2 with 32
+      break cool_block2 with 40
 
-    if y < 0:
-      break cool_block2 with 1
+    print("Never get here")
     2
+  print(foo)
     
 fn main():
   foo()

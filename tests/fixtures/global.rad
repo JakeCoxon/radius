@@ -1,0 +1,23 @@
+# Globals can be out of order
+
+foo1 := Foo(float(2), thing2)
+
+thing2 := foo()
+thing := 100
+thing3 := meta 1 + 2 + 3
+
+type Foo @struct:
+  x: float
+  y: int
+
+fn foo() -> int:
+  thing += 1
+  thing * 10
+
+fn main():
+  foo()
+  foo()
+  thing += 10
+  print(thing)
+  #print(foo1.y) # TODO
+  

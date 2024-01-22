@@ -1,0 +1,14 @@
+fn foo(z: int):
+  if 2:
+    return
+  print("OK")
+
+fn bam() -> int:
+  if 2:
+    return 2
+  return 8
+
+fn main():
+
+  foo(2)
+  bam()
