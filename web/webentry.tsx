@@ -113,6 +113,11 @@ const layoutConfig = {
                 name: 'Log',
                 component: 'LogView',
               },
+              {
+                type: 'tab',
+                name: 'Timeline',
+                component: 'TimelineView',
+              },
             ],
           },
         ],
@@ -214,6 +219,18 @@ button {
 .flexlayout__tab_button_content {
   user-select: none;
 }
+.timelinetask:hover {
+  outline: 2px solid white;
+  cursor: default;
+}
+.timelinelabel {
+  font-size: 10px;
+  box-sizing: border-box;
+  margin: 1px;
+  padding: 2px;
+  pointerEvents: none;
+  white-space: nowrap;
+}
 
 textarea {
   background: #111;
@@ -281,6 +298,8 @@ function App() {
       return <InputView />
     } else if (component === 'LogView') {
       return <LogView />
+    } else if (component === 'TimelineView') {
+      return <TimelineView />
     } else if (component === 'InspectView') {
       return <InspectView />
     } else if (component === 'FunctionsView') {
@@ -360,7 +379,103 @@ const FunctionsView = () => {
   return <div class="monospace scrollx h-full">{frags}</div>
 }
 
-const runTestInner = (input: string) => {
+
+const timeline: any[][] = []
+const updateTimeline = (currentTask: Task<unknown, unknown>) => {
+  
+  const v: any[] = []
+  timeline.push(v)
+  
+  if (currentTask) {
+    let task = currentTask
+
+    while (task) {
+      v.push(task);
+      const dep = task._dependant ?? task._prevInChain
+      task = dep
+    }
+  }
+  v.reverse()
+  console.log(timeline)
+}
+
+const makeTree = (rootTask, events, width) => {
+  if (!store.state.testRunner) return;
+
+  const taskDivs: any[] = []
+  const taskLabels: any[] = []
+  const queue = store.state.testRunner.queue
+
+  let max = 0;
+  let maxTicks = timeline.length
+
+  const itemWidth = Math.max((width) / maxTicks, 2)
+  
+  const div = (task, startTick, top, width) => {
+    const background = task._state === 'started' ? 'blue' : task._state === 'completed' ? 'green' : "red"
+    const div = <div 
+      {...events(task)}
+      class="timelinetask"
+      style={{ position: 'absolute',
+        left: startTick * itemWidth,
+        top: top * 15,
+        height: 14,
+        width: (width * itemWidth) - 1,
+        fontSize: 10,
+        boxSizing: "border-box",
+          color: 'white', margin: 1, background, padding: 2 }}
+      ></div>
+    const divLabel = <div class="timelinelabel"
+      style={{ position: 'absolute',
+        left: startTick * itemWidth,
+        top: top * 15 }}
+      >{task.id}{task.def ? ` ${task.def}` : null}</div>
+    taskDivs.push(div)
+    taskLabels.push(divLabel)
+  }
+
+  let i = 0;
+  for (const v of timeline) {
+    max = Math.max(max, v.length)
+    let j = 0;
+    for (const task of v) {
+      let before = timeline[i - 1] && timeline[i - 1][j] === task;
+      if (!before) {
+        let width = 1;
+        for (let w = i+1; w < timeline.length && timeline[w][j] === task; w++) {
+          width ++
+        }
+        div(task, i, j, width)
+      }
+      j ++;
+    }
+    i++
+  }
+  
+  return <div style={{position:'relative', width: itemWidth * maxTicks, height: max * 20, overflowX: 'hidden'}}>
+    {taskDivs}
+    {taskLabels}
+  </div>
+
+}
+
+const TimelineView = () => {
+  const stepIndex = store.useValue((x) => x.stepIndex)
+  const [s, setS] = React.useState(0)
+  const ref = React.useRef()
+
+  const createEvents = (task) => {
+    return { onClick: () => clickInspect(task, [], false) } 
+  }
+  React.useEffect(() => {
+    if (!ref.current) setS(s => s + 1)
+  }, [])
+  if (!ref.current) return <div ref={ref}></div>
+
+  return <div ref={ref}>{makeTree(null, createEvents, ref.current.offsetWidth - 10)}</div>
+}
+
+const runTestInner = (input: string, { onStep }) => {
   const globalCompiler = createDefaultGlobalCompiler()
   globalCompiler.logger = logger
   globalCompiler.moduleLoader = {
@@ -408,13 +523,15 @@ const runTestInner = (input: string) => {
 
   function step() {
     if (queue.list.length === 0) end()
+    if (queue.list.length === 0) return
     while (true) {
       stepQueue(queue)
+      onStep(queue.currentTask)
       if ((queue.currentTask as any).def) break
     }
   }
   function runToEnd() {
-    while (queue.list.length) { stepQueue(queue) }
+    while (queue.list.length) { stepQueue(queue); onStep(queue.currentTask) }
     end()
   }
   function end() {
@@ -464,13 +581,23 @@ const store = createStore({
   error: null as any
 })
 
-const stepUi = () => {
+
+const onStep = (currentTask: Task<unknown, unknown>) => {
+  console.log("1 step")
+  updateTimeline(currentTask)
+}
+const getOrCreateTestRunner = () => {
   let testRunner: any = store.state.testRunner
   if (!testRunner) {
-    testRunner = runTestInner(store.state.input)
+    testRunner = runTestInner(store.state.input, { onStep })
     store.update({ testRunner })
     logs.length = 0
+    timeline.length = 0
   }
+  return testRunner
+}
+const stepUi = () => {
+  const testRunner = getOrCreateTestRunner()
   let error = null
   try {
     testRunner.step()
@@ -482,12 +609,7 @@ const stepUi = () => {
   store.update({ error, currentTask: testRunner.queue.currentTask, stepIndex: store.state.stepIndex + 1 })
 }
 const runToEndUi = () => {
-  let testRunner: any = store.state.testRunner
-  if (!store.state.testRunner) {
-    testRunner = runTestInner(store.state.input)
-    store.update({ testRunner })
-    logs.length = 0
-  }
+  const testRunner = getOrCreateTestRunner()
   let error = null
   try {
     testRunner.runToEnd()
@@ -598,7 +720,10 @@ const inspect = (obj: unknown, options = {}) => {
     if (Array.isArray(obj)) {
       const frags: any = []
       frags.push(`[`)
-      frags.push(...obj.map((item, i) => inspect(item, {...subOptions, key: keyed(i)})))
+      obj.forEach((item, i) => {
+        if (i !== 0) frags.push(", ")
+        frags.push(inspect(item, {...subOptions, key: keyed(i)}))
+      })
       frags.push(`]`)
       return frags 
     }
