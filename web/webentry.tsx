@@ -185,7 +185,7 @@ code {
   color: #eab308;
 }
 .inspect-error {
-  color: red;
+  color: #dc2626;
 }
 .inspect--clickable {
   cursor: default;
@@ -228,7 +228,7 @@ button {
   box-sizing: border-box;
   margin: 1px;
   padding: 2px;
-  pointerEvents: none;
+  pointer-events: none;
   white-space: nowrap;
 }
 
@@ -332,9 +332,7 @@ const TaskView = () => {
 const InputView = () => {
   const input = store.useValue((x) => x.input)
   return (
-    <div>
-      <EnhancedTextArea text={input} onTextChange={updateInput} />
-    </div>
+    <EnhancedTextArea text={input} onTextChange={updateInput} />
   )
 }
 const InspectView = () => {
@@ -399,7 +397,7 @@ const updateTimeline = (currentTask: Task<unknown, unknown>) => {
   console.log(timeline)
 }
 
-const makeTree = (rootTask, events, width) => {
+const makeTree = (rootTask, { events, width, fit }) => {
   if (!store.state.testRunner) return;
 
   const taskDivs: any[] = []
@@ -409,10 +407,10 @@ const makeTree = (rootTask, events, width) => {
   let max = 0;
   let maxTicks = timeline.length
 
-  const itemWidth = Math.max((width) / maxTicks, 2)
+  const itemWidth = Math.max((width) / maxTicks, fit ? 0 : 20)
   
   const div = (task, startTick, top, width) => {
-    const background = task._state === 'started' ? 'blue' : task._state === 'completed' ? 'green' : "red"
+    const background = task._state === 'started' ? '#0e7490' : task._state === 'completed' ? '#166534' : "#b91c1c"
     const div = <div 
       {...events(task)}
       class="timelinetask"
@@ -463,16 +461,23 @@ const TimelineView = () => {
   const stepIndex = store.useValue((x) => x.stepIndex)
   const [s, setS] = React.useState(0)
   const ref = React.useRef()
+  const [fit, setFit] = React.useState(true)
 
   const createEvents = (task) => {
     return { onClick: () => clickInspect(task, [], false) } 
   }
   React.useEffect(() => {
-    if (!ref.current) setS(s => s + 1)
+    setTimeout(() => setS(s => s + 1), 10)
   }, [])
-  if (!ref.current) return <div ref={ref}></div>
 
-  return <div ref={ref}>{makeTree(null, createEvents, ref.current.offsetWidth - 10)}</div>
+  return <div>
+    <button class="button" onClick={() => setFit(f => !f)}>Fit</button>
+    <div ref={ref}>{ref.current ? makeTree(null, { 
+      events: createEvents,
+      width: ref.current.offsetWidth - 10,
+      fit
+    }) : null}</div>
+  </div>
 }
 
 const runTestInner = (input: string, { onStep }) => {
