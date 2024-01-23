@@ -43,7 +43,8 @@ const layoutConfig = {
     children: [
       {
         type: 'tabset',
-        weight: 50,
+        width: 400,
+        // weight: 50,
         children: [
           {
             type: 'tab',
@@ -114,12 +115,34 @@ const layoutConfig = {
 
 const STYLE = `
 body {
-  background: #111;
+  background: #0d0d0d;
   color: #eee;
+
 }
 code {
   white-space: pre;
   font-family: monospace;
+}
+.flex-row {
+  display: flex;
+  flex-direction: row;
+}
+.flex-column {
+  display: flex;
+  flex-direction: column;
+}
+.pin {
+  position: absolute;
+  left: 0; right: 0;
+  top: 0; bottom: 0;
+}
+
+.flexlayout__layout {
+  --color-background: transparent;
+  --color-tabset-background: transparent;
+  --color-tabset-background-selected: transparent;
+  --color-splitter: black;
+  --color-tabset-divider-line: black;
 }
 
 .flexlayout__tabset-selected {
@@ -128,6 +151,44 @@ code {
 }
 .monospace {
   font-family: monospace;
+}
+.scrollx {
+  overflow-x: auto;
+  white-space: nowrap;
+}
+.h-full {
+  height: 100%;
+}
+.inspect-object {
+  color: #0ea5e9;
+}
+.inspect-string {
+  color: #10b981;
+}
+.inspect-number {
+  color: #eab308;
+}
+.inspect--clickable {
+  cursor: default;
+}
+.inspect--clickable:hover {
+  text-decoration: underline;
+}
+button {
+  font-size: inherit;
+}
+.button {
+  border: 0;
+  background: #333;
+  margin: 2px;
+  color: #ccc;
+  border-radius: 2px;
+}
+.button:hover {
+  background: #444;
+}
+.button--thick {
+  padding: 4px 8px;
 }
 
 textarea {
@@ -169,19 +230,21 @@ function App() {
     }
   }
 
-  return <Layout model={model} factory={factory} />
+  return <div class='flex-column pin'>
+    <div class='flex-row'>
+      <button class="button button--thick" onClick={stepUi}>Step</button>
+      <button class="button button--thick" onClick={runToEndUi}>Compile</button>
+    </div>
+    <div style={{position:'relative', flexGrow:1}}>
+      <Layout model={model} factory={factory} />
+    </div>
+  </div>
 }
 const TaskView = () => {
   const task = store.useValue((x) => x.currentTask)
   return (
-    <div>
-      <div class="flex-row">
-        <button onClick={stepUi}>Step</button>
-        <button onClick={runToEndUi}>Compile</button>
-      </div>
-      <div class="monospace">
-        {inspect(queue.currentTask, { depth: 1 })}
-      </div>
+    <div class="monospace scrollx h-full">
+      {inspect(queue.currentTask, { depth: 1 })}
     </div>
   )
 }
@@ -193,33 +256,42 @@ const InputView = () => {
   )
 }
 const InspectView = () => {
-  return <div>inspect</div>
+  const inspectObject = store.useValue(x => x.inspectObject)
+  const inspectKey = store.useValue(x => x.inspectKey)
+
+  if (inspectObject === null || inspectObject === undefined) return <div></div>
+
+  const finalObj = inspectKey.reduce((acc, x) => acc[x], inspectObject)
+
+  return <div class="monospace scrollx h-full">
+    <div style={{marginBottom:4, color: '#666'}}>
+      <small>
+        <button class="button" onClick={() => clickInspectUp()}>Up</button>
+        {['inspect', ...inspectKey].join(".")}</small></div>
+    <div>{inspect(finalObj, { depth: 1, relativeView: true })}</div>
+  </div>
 }
+
 const LogView = () => {
   const stepIndex = store.useValue((x) => x.stepIndex)
 
-  let text = ''
-
-  text += `\n\n`
-  text += `Logs: \n`
+  const frags: any[] = []
   for (const log of logs) {
     for (const item of log) {
-      text += inspect(item) + ' '
+      frags.push(<div><code>{item}</code></div>)
     }
-    text += `\n`
   }
 
-  return <pre>{text}</pre>
+  return <div class="monospace">{frags}</div>
 }
 const FunctionsView = () => {
   const stepIndex = store.useValue((x) => x.stepIndex)
 
-  // let frags: any = []
   const entries = Array.from(compiler.compiledFunctions.entries())
   const value = Object.fromEntries(entries.map(x => [x[0].name, x[1]]))
-  const frags = inspect(value, { depth: 2 })
+  const frags = inspect(value, { depth: 2, space: 20 })
 
-  return <div class="monospace">{frags}</div>
+  return <div class="monospace scrollx h-full">{frags}</div>
 }
 
 const runTestInner = (input: string) => {
@@ -320,6 +392,8 @@ const { compiler, step, runToEnd, queue } = runTestInner(input)
 const store = createStore({
   currentTask: null as Task<unknown, unknown> | null,
   stepIndex: 0,
+  inspectObject: null as unknown,
+  inspectKey: [] as string[]
 })
 
 const stepUi = () => {
@@ -372,22 +446,58 @@ const runToEndUi = () => {
 //   console.log("Hello")
 // })
 
-const inspect = (obj, options = {}) => {
-  if (typeof obj === 'string') return obj
-  if (typeof obj === 'number') return obj
+const clickInspect = (obj: unknown, key: string[], relativeView: boolean) => {
+  // console.log(obj)
+  console.log("key", key)
+  if (relativeView) {
+    store.update(s => s.inspectKey.push(...key))
+  } else {
+    store.update({ inspectObject: obj, inspectKey: [] })
+  }
+}
+const clickInspectUp = () => {
+  store.update(s => s.inspectKey.pop())
+}
+
+const inspect = (obj: unknown, options = {}) => {
+  const key = options.key || []
+  const keyed = (str: unknown) => [...key, str]
+  const subOptions = { depth: options.depth - 1, relativeView: options.relativeView }
+
+  if (typeof obj === 'string') return <span class="inspect-string">"{obj}"</span>
+  if (typeof obj === 'number') return <span class="inspect-number">{obj}</span>
+  if (typeof obj === 'boolean') return <span class="inspect-boolean">{String(obj)}</span>
   if (obj === null) return `null`
   if (obj === undefined) return `undefined`
   if (options.depth <= 0) {
-    if (obj[Inspect.custom]) {
-      return obj[Inspect.custom](0, { stylize: (x) => x }, null)
+    if (Array.isArray(obj)) {
+      const frags: any = []
+      frags.push(`[`)
+      frags.push(...obj.map((item, i) => inspect(item, {...subOptions, key: keyed(i)})))
+      frags.push(`]`)
+      return frags 
     }
-    return `[Object]`
+    if (obj[Inspect.custom]) {
+      const item = obj[Inspect.custom](0, { stylize: (x) => x }, subOptions)
+      return <span class="inspect-object inspect--clickable" onClick={() => clickInspect(obj, key, options.relativeView)}>{item}</span>
+    }
+    const name = obj.constructor?.name || "Object"
+    return <span class="inspect-object inspect--clickable" onClick={() => clickInspect(obj, key, options.relativeView)}>[{name}]</span>
   }
   if (typeof obj !== 'object') return `??`
 
   const frags: any[] = []
-  Object.entries(obj).forEach(([key, value]) => {
-    frags.push(<div><div>{key}</div>{inspect(value, { depth: options.depth - 1 })}</div>)
+  Object.entries(obj).forEach(([key, value], i) => {
+    if (options.space && i !== 0) frags.push(<div style={{height: options.space}}></div>)
+
+    const valueObj = inspect(value, {...subOptions, key: keyed(key) })
+
+    if (options.depth == 1) {
+      frags.push(<div class="flex-row"><div style={{width:150, flexShrink: 0}}>{key}</div>
+        {valueObj}</div>)
+    } else {
+      frags.push(<div><div>{key}</div>{valueObj}</div>)
+    }
   })
   return frags
 }
