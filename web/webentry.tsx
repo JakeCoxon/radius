@@ -19,6 +19,9 @@ import {
   expectMap,
   BuiltinTypes,
   Inspect,
+  outputSourceLocation,
+  TokenRoot,
+  SourceLocation,
 } from '../src/defs'
 import { makeParser } from '../src/parser'
 import { Queue, Task, TaskDef, stepQueue, withContext } from '../src/tasks'
@@ -31,6 +34,11 @@ import { Layout, Model } from 'flexlayout-react'
 import css from 'flexlayout-react/style/dark.css'
 import { createStore } from './pureStore'
 import { EnhancedTextArea } from './Textarea'
+
+import * as Popover from '@radix-ui/react-popover';
+import * as Immer from 'immer'
+
+Immer.setAutoFreeze(false) // This breaks stuff otherwise, because we put the compiler state in immer
 
 const layoutConfig = {
   global: {
@@ -117,7 +125,7 @@ const STYLE = `
 body {
   background: #0d0d0d;
   color: #eee;
-
+  font-family: arial;
 }
 code {
   white-space: pre;
@@ -156,6 +164,9 @@ code {
   overflow-x: auto;
   white-space: nowrap;
 }
+.scrolly {
+  overflow-y: auto;
+}
 .h-full {
   height: 100%;
 }
@@ -168,6 +179,9 @@ code {
 .inspect-number {
   color: #eab308;
 }
+.inspect-error {
+  color: red;
+}
 .inspect--clickable {
   cursor: default;
 }
@@ -176,6 +190,7 @@ code {
 }
 button {
   font-size: inherit;
+  font-family: inherit;
 }
 .button {
   border: 0;
@@ -189,6 +204,15 @@ button {
 }
 .button--thick {
   padding: 4px 8px;
+}
+.popover-content {
+  background: #333;
+  padding: 8px;
+  box-shadow: 10px 10px 52px -29px rgba(0,0,0,0.75);
+  min-width: 300px;
+}
+.flexlayout__tab_button_content {
+  user-select: none;
 }
 
 textarea {
@@ -211,6 +235,40 @@ root.render(<App />)
 
 const model = Model.fromJson(layoutConfig)
 
+const loadFile = async (file: string) => {
+  const content = await fetch(`/fixtures/${file}`).then(x => x.text())
+  store.update({
+    currentTask: null,
+    stepIndex: 0,
+    inspectKey: [],
+    inspectObject: null,
+    input: content,
+    testRunner: null
+  })
+  logs.length = 0
+}
+
+const LoadMenu = ({ trigger }) => {
+  const [open, setOpen] = React.useState(false)
+  return (
+    <Popover.Root open={open} onOpenChange={setOpen}>
+      <Popover.Trigger asChild>{trigger}</Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content
+          className="popover-content"
+          sideOffset={5}
+        >
+          <div class="flex-column scrolly" style={{height: 300}}>
+          {globalThis.FILES.map(file => {
+            return <button class="button" style={{textAlign: 'left'}} onClick={() => {loadFile(file); setOpen(false)}}>{file}</button>
+          })}
+          </div>
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
+  )
+}
+
 function App() {
   const factory = (node) => {
     var component = node.getComponent()
@@ -232,6 +290,7 @@ function App() {
 
   return <div class='flex-column pin'>
     <div class='flex-row'>
+      <LoadMenu trigger={<button className="button button--thick">Load</button>} />
       <button class="button button--thick" onClick={stepUi}>Step</button>
       <button class="button button--thick" onClick={runToEndUi}>Compile</button>
     </div>
@@ -242,16 +301,20 @@ function App() {
 }
 const TaskView = () => {
   const task = store.useValue((x) => x.currentTask)
+  const testRunner = store.useValue((x) => x.testRunner)
+  if (!testRunner) return;
+
   return (
     <div class="monospace scrollx h-full">
-      {inspect(queue.currentTask, { depth: 1 })}
+      {inspect(testRunner.queue.currentTask, { depth: 1 })}
     </div>
   )
 }
 const InputView = () => {
+  const input = store.useValue((x) => x.input)
   return (
     <div>
-      <EnhancedTextArea initialText={input} />
+      <EnhancedTextArea text={input} onTextChange={updateInput} />
     </div>
   )
 }
@@ -286,6 +349,9 @@ const LogView = () => {
 }
 const FunctionsView = () => {
   const stepIndex = store.useValue((x) => x.stepIndex)
+  const testRunner = store.useValue((x) => x.testRunner)
+  if (!testRunner) return;
+  const compiler = testRunner.compiler
 
   const entries = Array.from(compiler.compiledFunctions.entries())
   const value = Object.fromEntries(entries.map(x => [x[0].name, x[1]]))
@@ -378,7 +444,7 @@ fn foo2(x: int):
   print(x)
 `
 
-const input = `
+const initialInput = `
 
 import my_module for foo
 
@@ -388,21 +454,80 @@ fn main():
 
 `
 
-const { compiler, step, runToEnd, queue } = runTestInner(input)
 const store = createStore({
   currentTask: null as Task<unknown, unknown> | null,
   stepIndex: 0,
   inspectObject: null as unknown,
-  inspectKey: [] as string[]
+  inspectKey: [] as string[],
+  testRunner: null as unknown,
+  input: initialInput,
+  error: null as any
 })
 
 const stepUi = () => {
-  step()
-  store.update({ currentTask: queue.currentTask, stepIndex: store.state.stepIndex + 1 })
+  let testRunner: any = store.state.testRunner
+  if (!testRunner) {
+    testRunner = runTestInner(store.state.input)
+    store.update({ testRunner })
+    logs.length = 0
+  }
+  let error = null
+  try {
+    testRunner.step()
+  } catch(ex) {
+    error = ex
+    console.error(ex)
+    logError(ex)
+  }
+  store.update({ error, currentTask: testRunner.queue.currentTask, stepIndex: store.state.stepIndex + 1 })
 }
 const runToEndUi = () => {
-  runToEnd()
-  store.update({ currentTask: queue.currentTask, stepIndex: store.state.stepIndex + 1 })
+  let testRunner: any = store.state.testRunner
+  if (!store.state.testRunner) {
+    testRunner = runTestInner(store.state.input)
+    store.update({ testRunner })
+    logs.length = 0
+  }
+  let error = null
+  try {
+    testRunner.runToEnd()
+  } catch(ex) {
+    error = ex
+    console.error(ex)
+    logError(ex)
+  }
+  store.update({ error, currentTask: testRunner.queue.currentTask, stepIndex: store.state.stepIndex + 1 })
+}
+const updateInput = (input: string) => {
+  store.update({ input, testRunner: null })
+}
+const logError = (ex: Error) => {
+  if (ex instanceof Error) {
+    // if (ex.stack) logger.log(ex.stack)
+    logger.log(<span class='inspect-error'>{ex.toString()}</span>)
+  }
+  if (ex instanceof CompilerError) {
+    const location = (ex.info as any).location as SourceLocation
+    if (location) {
+      const text = outputSourceLocation(location)
+      logger.log(text)
+    }
+
+    if ((ex.info as any)._userinfo) {
+      ;(ex.info as any)._userinfo.forEach((name) => {
+        const item = ex.info[name]
+        if (item && Object.getPrototypeOf(item) === TokenRoot) {
+          const text = outputSourceLocation(item.location)
+          logger.log(text)
+        }
+      })
+    }
+
+    logger.log('\nError info')
+    const o = Object.fromEntries(Object.entries(ex.info))
+    logger.log(inspect(o, { depth: 1}))
+    
+  }
 }
 
 // document.addEventListener('DOMContentLoaded', () => {

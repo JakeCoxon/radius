@@ -124,35 +124,8 @@ export const runCompilerTest = (
   } catch (ex) {
     gotError = true
 
-    if (ex instanceof Error) {
-      if (ex.stack) logger.log(ex.stack)
-      else logger.log(ex.toString())
-    }
+    logError(ex, logger)
     if (ex instanceof CompilerError) {
-      // (ex.info as any).currentTask = (queue.currentTask as any)?.def;
-      // (ex.info as any).subCompilerState = (queue.currentTask?._context as TaskContext).subCompilerState
-
-      // logger.log("\nCompiler stack")
-      const location = (ex.info as any).location as SourceLocation
-      if (location) {
-        const text = outputSourceLocation(location)
-        logger.log(text)
-      }
-
-      if ((ex.info as any)._userinfo) {
-        ;(ex.info as any)._userinfo.forEach((name) => {
-          const item = ex.info[name]
-          if (item && Object.getPrototypeOf(item) === TokenRoot) {
-            const text = outputSourceLocation(item.location)
-            logger.log(text)
-          }
-        })
-      }
-
-      logger.log('\nError info')
-      Object.entries(ex.info).forEach(([name, value]) => {
-        logger.log(`${name}:`, Bun.inspect(value, { depth: 10, colors: true }))
-      })
       if ((ex.info as any).fatal) fatalError = true
     }
   }
@@ -163,6 +136,39 @@ export const runCompilerTest = (
   expect(fatalError).toBe(false)
 
   return { prints, globalCompiler }
+}
+
+export const logError = (ex: Error, logger: Logger) => {
+  if (ex instanceof Error) {
+    if (ex.stack) logger.log(ex.stack)
+    else logger.log(ex.toString())
+  }
+  if (ex instanceof CompilerError) {
+    // (ex.info as any).currentTask = (queue.currentTask as any)?.def;
+    // (ex.info as any).subCompilerState = (queue.currentTask?._context as TaskContext).subCompilerState
+
+    // logger.log("\nCompiler stack")
+    const location = (ex.info as any).location as SourceLocation
+    if (location) {
+      const text = outputSourceLocation(location)
+      logger.log(text)
+    }
+
+    if ((ex.info as any)._userinfo) {
+      ;(ex.info as any)._userinfo.forEach((name) => {
+        const item = ex.info[name]
+        if (item && Object.getPrototypeOf(item) === TokenRoot) {
+          const text = outputSourceLocation(item.location)
+          logger.log(text)
+        }
+      })
+    }
+
+    logger.log('\nError info')
+    Object.entries(ex.info).forEach(([name, value]) => {
+      logger.log(`${name}:`, Bun.inspect(value, { depth: 10, colors: true }))
+    })
+  }
 }
 
 type TestObject = { 

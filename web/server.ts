@@ -1,3 +1,5 @@
+import { readdir } from "node:fs/promises";
+
 const root = `${import.meta.dir}/..`
 const app = Bun.serve({
   async fetch(req) {
@@ -12,12 +14,20 @@ const app = Bun.serve({
       } catch (ex) {
         console.error(ex)
       }
+      let files = await readdir(`${root}/tests/fixtures`);
+      files.sort()
+      files = files.filter(x => x.endsWith('.rad'))
 
-      return new Response(`<!DOCTYPE html><html><body><script src="webentry.js"></script></body></html>`, {
+      return new Response(`<!DOCTYPE html><html><body>
+      <script>globalThis.FILES = ${JSON.stringify(files)}</script>
+      <script src="webentry.js"></script></body></html>`, {
         headers: {
           'Content-Type': 'text/html',
         },
       })
+    }
+    if (url.pathname.startsWith('/fixtures/')) {
+      return new Response(Bun.file(`${root}/tests/${url.pathname}`))
     }
     return new Response(Bun.file(`${root}/build/${url.pathname}`))
     // return new Response("404!");

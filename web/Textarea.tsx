@@ -5,7 +5,7 @@ type EnhancedTextAreaProps = {
   onTextChange?: (text: string) => void
   className?: string
   spellCheck?: boolean
-  initialText?: string
+  textUpdate: { content: string }
 
   tabSize?: number
 }
@@ -19,14 +19,14 @@ export const EnhancedTextArea = forwardRef<EnhancedTextAreaRefs, EnhancedTextAre
     {
       onTextChange = undefined,
       className = undefined,
-      initialText = '',
+      text,
 
       tabSize = 2,
       spellCheck = false,
     }: EnhancedTextAreaProps,
     ref
   ) => {
-    const [text, setText] = useState(initialText)
+    // const [text, setText] = useState(textUpdate.content)
     const [stateSelectionStart, setStateSelectionStart] = useState(0)
     const [stateSelectionEnd, setStateSelectionEnd] = useState(0)
 
@@ -55,7 +55,7 @@ export const EnhancedTextArea = forwardRef<EnhancedTextAreaRefs, EnhancedTextAre
     async function handleCodeChange(e: React.ChangeEvent<HTMLTextAreaElement>): Promise<void> {
       const text = e.target.value
 
-      setText(text)
+      // setText(text)
 
       if (onTextChange) {
         onTextChange(text)

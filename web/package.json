@@ -9,6 +9,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@radix-ui/react-popover": "^1.0.7",
     "flexlayout-react": "^0.7.15",
     "immer": "^10.0.3",
     "prettier": "^3.1.1",
