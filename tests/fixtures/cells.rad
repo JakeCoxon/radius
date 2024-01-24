@@ -23,16 +23,17 @@ fn main():
 
     copy_pixels(0, scale, 320, 240, 0, 0)
 
+    for x in Range(1, num_cells - 1):
+      next_cells[x] = calculate_state(
+        cells[x - 1], cells[x], cells[x + 1])
+
     for x in Range(0, num_cells):
-      next_cells[x] = (ifx x == 0 or x == num_cells - 1: 0 else:
-          calculate_state(cells[x - 1], cells[x], cells[x + 1]))
-    
       c := ifx next_cells[x] == 1: 0xffffffff else: 0
       fill_rect(scale * x, 240 - scale, scale, scale, c)
 
-    foo := cells
+    swap := cells
     cells = next_cells
-    next_cells = foo
+    next_cells = swap
 
     render_app()
     delay(5)
