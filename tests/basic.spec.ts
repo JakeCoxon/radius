@@ -774,3 +774,18 @@ test('ops', async () => {
     testObject.close()
   }
 })
+
+test('cells', async () => {
+  const testObject = createTest({ 
+    moduleName: 'cells',
+    inputPath: `${import.meta.dir}/fixtures/cells.rad`,
+    outputPath: `${import.meta.dir}/output/cells.txt`,
+    rawPath: `${import.meta.dir}/output/cells.raw` })
+  try {
+    const input = await Bun.file(testObject.inputPath).text()
+    runCompilerTest(input, { testObject })
+    // Don't run this because it runs a window
+  } finally {
+    testObject.close()
+  }
+})

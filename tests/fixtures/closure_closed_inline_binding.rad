@@ -1,4 +1,4 @@
-fn transduce(iterable) -> any @inline:
+fn transduce(iterable) @inline:
   acc := 1
   for x in iterable:
     zzz := 1

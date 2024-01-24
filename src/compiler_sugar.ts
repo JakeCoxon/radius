@@ -180,13 +180,23 @@ export const defaultMetaFunction = (subCompilerState: SubCompilerState, compiled
   Object.assign(compiledClass.metaobject, { iterate, subscript, set_subscript, constructor })
 }
 
-export const thing = new ExternalFunction('thing', VoidType, (ast: Ast) => {
-  console.log("thinged", ast)
-})
-
 export const mallocExternal = new ExternalFunction('malloc', VoidType, (ast: Ast) => { compilerAssert(false, "Implemented elsewhere") })
 export const reallocExternal = new ExternalFunction('realloc', VoidType, (ast: Ast) => { compilerAssert(false, "Implemented elsewhere") })
 export const freeExternal = new ExternalFunction('free', VoidType, (ast: Ast) => { compilerAssert(false, "Implemented elsewhere") })
+
+// Order index is external index in VM
+export const externals: {[key:string]: ExternalFunction} = {
+  begin_app: new ExternalFunction('begin_app', VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
+  end_app: new ExternalFunction('end_app', VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
+  window_open: new ExternalFunction('window_open', VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
+  render_app: new ExternalFunction('render_app', VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
+  frame_ticks: new ExternalFunction('frame_ticks', VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
+  set_pixel: new ExternalFunction('set_pixel', VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
+  fill_rect: new ExternalFunction('fill_rect', VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
+  get_pixel: new ExternalFunction('get_pixel', VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
+  delay: new ExternalFunction('delay', VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
+  copy_pixels: new ExternalFunction('copy_pixels', VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
+}
 
 export const malloc = new CompilerFunction('malloc', (location: SourceLocation, typeArgs: unknown[], args: Ast[]) => {
   compilerAssert(args.length === 1 && args[0].type === IntType, "Expected int argument")
@@ -222,7 +232,7 @@ export const unsafe_set_subscript = new CompilerFunction('unsafe_set_subscript',
 
 export const createCompilerModuleTask = (ctx: TaskContext): Task<Module, CompilerError> => {
   const moduleScope = createScope({}, undefined)
-  Object.assign(moduleScope, { thing, malloc, realloc, free, unsafe_subscript, unsafe_set_subscript, rawptr: RawPointerType })
+  Object.assign(moduleScope, { malloc, realloc, free, unsafe_subscript, unsafe_set_subscript, rawptr: RawPointerType })
   const subCompilerState = pushSubCompilerState(ctx, { debugName: `compiler module`, lexicalParent: undefined, scope: moduleScope })
   const module = new Module('compiler', subCompilerState, null!)
   return Task.of(module)
@@ -241,5 +251,6 @@ fn iterate!(f, T)(list: List!T) @inline @method:
 # This is needed for expansion operator
 fn length!(T)(list: List!T) @inline @method:
   list.length
+
 `
 }

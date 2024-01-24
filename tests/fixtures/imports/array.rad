@@ -1,0 +1,44 @@
+type Array!(T) @struct:
+  data: rawptr
+  size: int
+  capacity: int
+
+  __iterate :: array_iterate
+  __subscript :: array_subscript
+  __set_subscript :: array_set_subscript
+
+fn array_create!(T)(initial_size: int) -> Array!T:
+  array: Array!T
+  array.data = compiler.malloc(initial_size)
+  array.size = initial_size
+  array.capacity = initial_size
+  array
+
+fn append!(T)(array: ref Array!T, element: T) @method:
+  if array.size == array.capacity:
+    array.capacity = 16 if array.capacity == 0
+    array.capacity *= 2
+    array.data = compiler.realloc(array.data, array.capacity)
+  compiler.unsafe_set_subscript(array.data, array.size, element)
+  array.size += 1
+
+fn array_free!(T)(array: ref Array!T):
+  compiler.free(array.data)
+  array.data = 0 as rawptr
+  array.size = 0
+  array.capacity = 0
+
+fn array_iterate!(f, T)(array: Array!T) -> void @inline:
+  i := 0
+  while i < array.size:
+    f(compiler.unsafe_subscript!T(array.data, i))
+    i += 1
+
+fn array_subscript!(T)(array: Array!T, index: int) -> T @inline:
+  compiler.unsafe_subscript!T(array.data, index)
+
+fn array_set_subscript!(T)(array: Array!T, index: int, value: T) @inline:
+  compiler.unsafe_set_subscript!T(array.data, index, value)
+
+fn length!(T)(array: ref Array!T) @method:
+  array.size

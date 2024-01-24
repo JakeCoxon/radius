@@ -1,4 +1,4 @@
-import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol, ScopeParentSymbol, isPlainObject, ParseLet, ParseList, ParseExpand, ParseBlock, findLabelByBinding, ParseSubscript, ParseNumber, ParseQuote, ParseWhile, ParseOperator, ParseBytecode, ParseOpEq, ParseSet, ParseFreshIden, UnknownObject, ParseNote, DefaultConsAst, RawPointerType, ValueFieldAst, SetValueFieldAst, FloatLiteralType, IntLiteralType, CompilerFunction, DerefAst, SetDerefAst } from "./defs";
+import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol, ScopeParentSymbol, isPlainObject, ParseLet, ParseList, ParseExpand, ParseBlock, findLabelByBinding, ParseSubscript, ParseNumber, ParseQuote, ParseWhile, ParseOperator, ParseBytecode, ParseOpEq, ParseSet, ParseFreshIden, UnknownObject, ParseNote, DefaultConsAst, RawPointerType, ValueFieldAst, SetValueFieldAst, FloatLiteralType, IntLiteralType, CompilerFunction, DerefAst, SetDerefAst, ParseSlice } from "./defs";
 import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, functionCompileTimeCompileTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall } from "./compiler_functions";
 import { Event, Task, TaskDef, Unit, isTask, isTaskResult, withContext } from "./tasks";
 import { createCompilerModuleTask, defaultMetaFunction, expandLoopSugar, foldSugar, forExprSugar, forLoopSugar, listComprehensionSugar, sliceSugar, whileExprSugar } from "./compiler_sugar";
@@ -327,6 +327,11 @@ export const BytecodeSecondOrder: ParseTreeTable = {
     } else if (node.left instanceof ParseSubscript) {
       visitParseNode(out, node.left.expr)
       visitParseNode(out, node.left.subscript)
+      visitParseNode(out, node.value)
+      pushBytecode(out, node.token, { type: 'setsubscriptast' })
+      return
+    } else if (node.left instanceof ParseSlice) {
+      visitParseNode(out, node.left)
       visitParseNode(out, node.value)
       pushBytecode(out, node.token, { type: 'setsubscriptast' })
       return
@@ -710,7 +715,9 @@ const instructions: InstructionMapping = {
 
   numberast: (vm, { value }) => {
     const type = value.includes('.') ? FloatLiteralType : IntLiteralType
-    vm.stack.push(new NumberAst(type, vm.location, Number(value)))
+    const literal = Number(value.replace(/_/g, ""))
+    compilerAssert(!Number.isNaN(literal), "Error parsing $value", { value })
+    vm.stack.push(new NumberAst(type, vm.location, literal))
   },
   stringast: (vm, { value }) =>   vm.stack.push(new StringAst(StringType, vm.location, value)),
   boolast: (vm, { value }) =>     vm.stack.push(new BoolAst(BoolType, vm.location, value)),

@@ -188,12 +188,7 @@ export const makeParser = (input: string, debugName: string) => {
     if (!mapping.length && !reduce) return new ParseList(listToken, list);
     return new ParseListComp(listToken, list, mapping, reduce);
   };
-  const parseNumberLiteral = () => {
-    let literal = tokenString(previous).replace(/_/g, "");
-    if (tokenString(previous).startsWith("0x"))   return new ParseNumber(parseInt(literal.substring(2), 16));
-    if (tokenString(previous).startsWith("0b"))   return new ParseNumber(parseInt(literal.substring(2), 2));
-    return new ParseNumber(previous); // Number(literal))
-  };
+  const parseNumberLiteral = () => new ParseNumber(previous);
   const parseArgs = () => {
     if (match(")")) return [];
     const args = [parseExpr()];

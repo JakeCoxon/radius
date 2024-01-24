@@ -1,7 +1,7 @@
 fn compose3(a, b, c) -> any:
   {|x| c(b(a(x)))}
 
-fn transduce!(trx, reducer)(iterable) -> any @inline:
+fn transduce!(trx, reducer)(iterable) @inline:
   final_reducer :: trx(reducer)
   acc := final_reducer.a()
   for x in iterable:

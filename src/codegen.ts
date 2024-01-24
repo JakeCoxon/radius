@@ -1,4 +1,4 @@
-import { mallocExternal, reallocExternal } from "./compiler_sugar";
+import { externals, mallocExternal, reallocExternal } from "./compiler_sugar";
 import { Ast, AstType, AstWriterTable, Binding, BindingAst, BoolType, CodegenFunctionWriter, CodegenWriter, CompiledFunction, ConcreteClassType, DoubleType, FileWriter, FloatType, GlobalCompilerState, IntType, ListTypeConstructor, ParameterizedType, PrimitiveType, RawPointerType, StringType, Type, TypeField, VoidType, compilerAssert, textColors } from "./defs";
 
 const OpCodes = {
@@ -33,92 +33,93 @@ const OpCodes = {
   LocalAddress: 28,
   F32_TO_I32: 29,
   I32_TO_F32: 30,
-  CheckStack: 31,
-  ConstantV: 32,
-  ConstantF32: 33,
-  ConstantF64: 34,
-  ConstantI32: 35,
-  ConstantI64: 36,
-  GetLocalV: 37,
-  GetLocalF32: 38,
-  GetLocalF64: 39,
-  GetLocalI32: 40,
-  GetLocalI64: 41,
-  SetLocalV: 42,
-  SetLocalF32: 43,
-  SetLocalF64: 44,
-  SetLocalI32: 45,
-  SetLocalI64: 46,
-  GetGlobalV: 47,
-  GetGlobalF32: 48,
-  GetGlobalF64: 49,
-  GetGlobalI32: 50,
-  GetGlobalI64: 51,
-  SetGlobalV: 52,
-  SetGlobalF32: 53,
-  SetGlobalF64: 54,
-  SetGlobalI32: 55,
-  SetGlobalI64: 56,
-  SubscriptV: 57,
-  SubscriptF32: 58,
-  SubscriptF64: 59,
-  SubscriptI32: 60,
-  SubscriptI64: 61,
-  SetSubscriptV: 62,
-  SetSubscriptF32: 63,
-  SetSubscriptF64: 64,
-  SetSubscriptI32: 65,
-  SetSubscriptI64: 66,
-  EqualV: 67,
-  EqualF32: 68,
-  EqualF64: 69,
-  EqualI32: 70,
-  EqualI64: 71,
-  GreaterV: 72,
-  GreaterF32: 73,
-  GreaterF64: 74,
-  GreaterI32: 75,
-  GreaterI64: 76,
-  LessV: 77,
-  LessF32: 78,
-  LessF64: 79,
-  LessI32: 80,
-  LessI64: 81,
-  AddV: 82,
-  AddF32: 83,
-  AddF64: 84,
-  AddI32: 85,
-  AddI64: 86,
-  SubtractV: 87,
-  SubtractF32: 88,
-  SubtractF64: 89,
-  SubtractI32: 90,
-  SubtractI64: 91,
-  MultiplyV: 92,
-  MultiplyF32: 93,
-  MultiplyF64: 94,
-  MultiplyI32: 95,
-  MultiplyI64: 96,
-  DivideV: 97,
-  DivideF32: 98,
-  DivideF64: 99,
-  DivideI32: 100,
-  DivideI64: 101,
-  NotV: 102,
-  NotF32: 103,
-  NotF64: 104,
-  NotI32: 105,
-  NotI64: 106,
-  NegateV: 107,
-  NegateF32: 108,
-  NegateF64: 109,
-  NegateI32: 110,
-  NegateI64: 111,
-  ToStringV: 112,
-  ToStringF32: 113,
-  ToStringF64: 114,
-  ToStringI32: 115,
-  ToStringI64: 116,
+  ExternalCall: 31,
+  CheckStack: 32,
+  ConstantV: 33,
+  ConstantF32: 34,
+  ConstantF64: 35,
+  ConstantI32: 36,
+  ConstantI64: 37,
+  GetLocalV: 38,
+  GetLocalF32: 39,
+  GetLocalF64: 40,
+  GetLocalI32: 41,
+  GetLocalI64: 42,
+  SetLocalV: 43,
+  SetLocalF32: 44,
+  SetLocalF64: 45,
+  SetLocalI32: 46,
+  SetLocalI64: 47,
+  GetGlobalV: 48,
+  GetGlobalF32: 49,
+  GetGlobalF64: 50,
+  GetGlobalI32: 51,
+  GetGlobalI64: 52,
+  SetGlobalV: 53,
+  SetGlobalF32: 54,
+  SetGlobalF64: 55,
+  SetGlobalI32: 56,
+  SetGlobalI64: 57,
+  SubscriptV: 58,
+  SubscriptF32: 59,
+  SubscriptF64: 60,
+  SubscriptI32: 61,
+  SubscriptI64: 62,
+  SetSubscriptV: 63,
+  SetSubscriptF32: 64,
+  SetSubscriptF64: 65,
+  SetSubscriptI32: 66,
+  SetSubscriptI64: 67,
+  EqualV: 68,
+  EqualF32: 69,
+  EqualF64: 70,
+  EqualI32: 71,
+  EqualI64: 72,
+  GreaterV: 73,
+  GreaterF32: 74,
+  GreaterF64: 75,
+  GreaterI32: 76,
+  GreaterI64: 77,
+  LessV: 78,
+  LessF32: 79,
+  LessF64: 80,
+  LessI32: 81,
+  LessI64: 82,
+  AddV: 83,
+  AddF32: 84,
+  AddF64: 85,
+  AddI32: 86,
+  AddI64: 87,
+  SubtractV: 88,
+  SubtractF32: 89,
+  SubtractF64: 90,
+  SubtractI32: 91,
+  SubtractI64: 92,
+  MultiplyV: 93,
+  MultiplyF32: 94,
+  MultiplyF64: 95,
+  MultiplyI32: 96,
+  MultiplyI64: 97,
+  DivideV: 98,
+  DivideF32: 99,
+  DivideF64: 100,
+  DivideI32: 101,
+  DivideI64: 102,
+  NotV: 103,
+  NotF32: 104,
+  NotF64: 105,
+  NotI32: 106,
+  NotI64: 107,
+  NegateV: 108,
+  NegateF32: 109,
+  NegateF64: 110,
+  NegateI32: 111,
+  NegateI64: 112,
+  ToStringV: 113,
+  ToStringF32: 114,
+  ToStringF64: 115,
+  ToStringI32: 116,
+  ToStringI64: 117,
 };
 
 const POINTER_SIZE = 2; // 64 bit
@@ -409,7 +410,7 @@ const astWriter: AstWriterTable = {
     writer.nextLocalSlot -= slotSize(writer, ast.value.type)
   },
   number: (writer, ast) => {
-    compilerAssert(ast.type === IntType || ast.type === FloatType || ast.type === DoubleType, "Expected int type", { ast })
+    compilerAssert(ast.type === IntType || ast.type === FloatType || ast.type === DoubleType, "Expected number type got $type", { ast, type: ast.type })
     emitConstant(writer, ast.type, ast.value)
     writer.nextLocalSlot += slotSize(writer, ast.type);
   },
@@ -469,13 +470,14 @@ const astWriter: AstWriterTable = {
     patch();
   },
   or: (writer, ast) => {
-    compilerAssert(false, "Not implemented")
+    // compilerAssert(false, "Not implemented", { ast })
     const [a, b] = ast.args;
     writeExpr(writer, a);
     const patch1 = writeJump(writer, OpCodes.JumpIfFalse);
     const patch2 = writeJump(writer, OpCodes.Jump);
     patch1();
     writeBytes(writer, OpCodes.Pop, slotSize(writer, a.type));
+    writer.nextLocalSlot -= slotSize(writer, a.type)
     writeExpr(writer, b);
     patch2();
   },
@@ -515,11 +517,13 @@ const astWriter: AstWriterTable = {
       writer.nextLocalSlot += slotSize(writer, ast.type) // Pointer size
       return
     }
-    
-    compilerAssert(false, `External function not supported in codegen: ${ast.func.name}`);
-    // TODO: func name
-    // params.forEach(writeExpr);
-    // writeBytes(OpCodes.Call, params.length);
+    const externalIndex = Array.from(Object.values(externals)).findIndex(x => x === ast.func)
+    compilerAssert(externalIndex > -1, `External function not supported in codegen: ${ast.func.name}`);
+
+    ast.args.forEach(x => writeExpr(writer, x))
+    writeBytes(writer, OpCodes.ExternalCall, externalIndex)
+    ast.args.forEach(x => writer.nextLocalSlot -= slotSize(writer, x.type))
+    writer.nextLocalSlot += slotSize(writer, ast.type)
   },
   list: (writer, ast) => {
     ast.args.forEach(x => writeExpr(writer, x))

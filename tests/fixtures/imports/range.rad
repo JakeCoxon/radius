@@ -1,0 +1,10 @@
+type Range:
+  start: int
+  end: int
+  __iterate :: range_iterate
+
+fn range_iterate!(f)(range: Range) -> void @inline:
+  i := range.start
+  while i < range.end:
+    f(i)
+    i += 1
