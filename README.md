@@ -35,11 +35,12 @@ fn foo(x: int) -> int:
 * Functions are templated and monomorphise to independent functions like C++ templates (rather than Java generics)
 * Out of order compilation - implemented using a custom task system and queue where tasks can be paused and resumed
 * [Experimental web debugger](docs/debugger.md) - which lets you step through the compilation of a program and inspect every data struture used by the compiler, including the AST, compiled bytecode etc
-* [Compile-time closure](docs/closures.md) - Closures that are firstclass at compile-time and are inlined at the callsite. They can be composed and passed around to compile-time functions
-* [Internal iterators](docs/iterators.md) - very simple to implement, customisable iterator functions that for-loop uses
-* [Transducers](docs/transducers.md) - Implemented as library functions which allow for composable, higher-order array operations
+* [Compile-time closures](docs/closures.md) - Closures that are firstclass at compile-time and are inlined at the callsite. They can be composed and passed around to compile-time functions
+* [Iterator functions](docs/iterators.md) - Very simple to implement, customisable internal-iterator functions that is used by for-loop and has no runtime overhead.
+* [Zero-overhead transducers](docs/transducers.md) - Composable, extensible, higher-order array operations with zero-overhead and fairly simple interface.
 * [Metaprogramming AST](docs/compile_time.md) - AST manipulation at compile-time without macros, implemented using a builtin bytecode VM with instructions to create and manipulate AST objects
 * [Vector value types using metaclasses](docs/metaclasses.md) - for 3d math with basic operator overloading
+* [Built in windowing and graphics library](docs/graphics.md)
 * Shorthand array operations - syntax sugar for mapping, zipping and reducing without higher order functions
 
 
@@ -67,12 +68,11 @@ Why is compile time evaluation so important? It can replace many features from o
 * Type checking helpers
 * Library and standard library functions that can be configured with no runtime overhead or external build tools
 * Produce statistics, visualisations, debug info about program during compilation
-* Macros to add syntax (Probably not worth it to be honest)
 * Functional programming utilities
 * Metacompile function definitions as function calls for potental speed?
 * Compile-time closures
 * Metaobject/metaclasses to customise object behaviour without any runtime overhead
-* Editor/debugger integration?
+* Editor/debugger integration
 
 These things are written in the same language as regular code, so can they can use the same standard library functions that regular code uses
 
@@ -133,11 +133,32 @@ fn main():
   thing := MyThing!int(123)
 ```
 
+---
 
+In Radius the type checking rules are kept extremely simple to keep implementation simple. Combined with the fact that the last statement in a block is used as the result, it's difficult to type check an `if` used as expression.
 
-## Running
+The solution to that is an `ifx` keyword that enforces two branches that resolve to the same type. This can be used normally as multi line, or single line expression
 
-* Requires `bun`
+```python
+fn main():
+  # Regular if statement doesn't need an else branch
+  if something():
+    print("OK")
+
+  foo := ifx something(): 2 else: 3
+  bar := ifx something():
+    x := 3
+    y := 8
+    something_complicated(x, y)
+  else:
+    something_else()
+```
+
+## Development
+
+It's at early stage so I wouldn't suggest using it properly yet.
+
+* Requires [Bun](https://bun.sh/)
 * Install with `bun install`
 * Run tests with `bun test`
-* Experimental web interface using `bun web/server.ts`
+* Experimental web interface using `bun web/server.ts` (web-experiment branch)

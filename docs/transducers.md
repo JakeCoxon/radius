@@ -33,7 +33,8 @@ comptime:
 
 ```
 
-Compiled C code (in the past the Radius compiler output the below C but nowadays it generates its own bytecode, but it is basically the same as below)
+Compiled C code (in the past the Radius compiler output the below C but nowadays it generates its own bytecode, but it is basically the same as below). As you can see there is no extra heap allocation, closures or function calls. It's almost exactly how you'd write the while loop yourself.
+
 ```c
 void main_1(void) {
   int _0[] = {1, 2, 3, 2, 1};
@@ -122,6 +123,25 @@ res := [all_ints()... | map {|x| some_function(x)} | take_while {|x| x < 1000}]
 
 We can also include other transducers for splitting the input in different ways eg: sliding window, partition, chunking, pagination.
 
+### Composable operations
+
+I will explain more here in the future
+
+In short, you should be able to compose transducers better than constructs in other languages
+
+```javascript
+// find then getIndex isn't possible
+people.find(p => p.age > 32).getIndex()
+
+// You have to make a whole new method which
+// is combination of filter, first, and indexOf
+people.findFirstIndexOf(p => p.age > 32)
+```
+
+In Radius it would be like this
+```python
+[people... | index_of | filter {|p| p.age > 32} |> first()]
+```
 
 ## Future work
 
