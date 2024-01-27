@@ -44,7 +44,7 @@ fn foo(x: int) -> int:
 
 
 <div align=center style="background:white"><img src="./docs/files.png" width=400></div>
-<div align=center><small>Dependency graph and line count of each file - total = 4528</small></div>
+<div align=center><small>Dependency graph and line count of each file - total = 4836</small></div>
 
 
 ## Future goals / ideas
