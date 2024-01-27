@@ -74,4 +74,21 @@ fn main():
 
 ---
 
+Functions can also be passed as type parameters and used like regular. This is a limited version of higher-order functions that aren't closures
+ 
+```python
+fn my_function!(f)():
+  f(1)
+  f(2)
+  f(3)
+
+fn main():
+  foo :: {|x| print(x)}
+  my_function!foo()
+
+  # Prints 1, 2, 3
+```
+
+---
+
 In the future more information about types and more AST operations will be available

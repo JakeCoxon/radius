@@ -4,7 +4,11 @@ Iterators don't exist in this language because you can just write a function in 
 
 Importantly break, continue and return are lexically bound so they work exactly how you'd expect. This makes it nice to make infinite iterators that you can pause later. See the [transducers section](./transducers.md) for high level operators.
 
+---
+
 Here is an example of a custom iterator over a 2d grid. The break and continue target is lexically scoped so it knows to break out of *both* while loops, so it just works how you would expect.
+
+The `__iterate` is a special constant that the default [metaclass](./metaclasses.md) looks for.
 
 ```python
 type Range2d:

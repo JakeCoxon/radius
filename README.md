@@ -30,16 +30,17 @@ fn foo(x: int) -> int:
 
 * No external dependencies (except bun runtime) and less than 5000 lines of code.
 * Static typing with generics - Sizes of structs are known at compile time so can compile to efficient staticly typed bytecode. One-way type inference, no automatic type conversions (except number literals)
+* Currently compiles to custom statically typed VM bytecode but in the future other backends will hopefully be supported.
 * Dynamic arrays and strings with size field and bounds checks
 * Functions are templated and monomorphise to independent functions like C++ templates (rather than Java generics)
 * Out of order compilation - implemented using a custom task system and queue where tasks can be paused and resumed
 * [Experimental web debugger](docs/debugger.md) - which lets you step through the compilation of a program and inspect every data struture used by the compiler, including the AST, compiled bytecode etc
 * [Compile-time closure](docs/closures.md) - Closures that are firstclass at compile-time and are inlined at the callsite. They can be composed and passed around to compile-time functions
-* [Internal iterators](docs/iterators.md) - very simple to implement, customisable iterator functions that for loop uses
+* [Internal iterators](docs/iterators.md) - very simple to implement, customisable iterator functions that for-loop uses
 * [Transducers](docs/transducers.md) - Implemented as library functions which allow for composable, higher-order array operations
 * [Metaprogramming AST](docs/compile_time.md) - AST manipulation at compile-time without macros, implemented using a builtin bytecode VM with instructions to create and manipulate AST objects
+* [Vector value types using metaclasses](docs/metaclasses.md) - for 3d math with basic operator overloading
 * Shorthand array operations - syntax sugar for mapping, zipping and reducing without higher order functions
-* Vector value types builtin - for 3d math with basic operator overloading
 
 
 <div align=center style="background:white"><img src="./docs/files.png" width=400></div>
