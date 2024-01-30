@@ -101,7 +101,7 @@ export const foldSugar = (out: BytecodeWriter, node: ParseFold) => {
   expansion.fold = { iden: new ParseFreshIden(node.token, new FreshBindingToken('fold_iden')), initial: node.expr }
   visitParseNode(out, expansion.fold.iden)
 }
-export const sliceSugar = (out: BytecodeWriter, node: ParseSlice) => {
+export const sliceSugar = (out: BytecodeWriter, node: ParseSlice, assignValue: ParseNode | null) => {
   compilerAssert(out.state.expansion, "Expected expansion locus for slice operator")
   const index = out.state.expansion.selectors.length
   const indexIdentifier = new ParseFreshIden(node.token, new FreshBindingToken('i'))
@@ -109,7 +109,8 @@ export const sliceSugar = (out: BytecodeWriter, node: ParseSlice) => {
   const indexNode = new ParseNumber(createAnonymousToken(index))
   const iteratorList = new ParseMeta(node.token, new ParseSubscript(node.token, out.state.expansion.iteratorListIdentifier, indexNode, false))
   const subscriptIterator = new ParseSubscript(node.token, iteratorList, indexIdentifier, false);
-  visitParseNode(out, subscriptIterator)
+  const finalNode = assignValue ? new ParseSet(node.token, subscriptIterator, assignValue) : subscriptIterator
+  visitParseNode(out, finalNode)
 }
 
 export const listComprehensionSugar = (out: BytecodeWriter, node: ParseListComp) => {
@@ -229,10 +230,44 @@ export const unsafe_set_subscript = new CompilerFunction('unsafe_set_subscript',
   compilerAssert(value, "Expected value", { value })
   return new SetSubscriptAst(VoidType, location, left, propagatedLiteralAst(right), propagatedLiteralAst(value))
 })
+export const operator_bitshift_left = new CompilerFunction('operator_bitshift_left', (location: SourceLocation, typeArgs: unknown[], args: Ast[]) => {
+  const [a, b] = args
+  propagatedLiteralAst(a)
+  propagatedLiteralAst(b)
+  compilerAssert(a && a.type === IntType, "Expected int type", { a })
+  compilerAssert(b && b.type === IntType, "Expected int type", { b })
+  return new OperatorAst(IntType, location, "<<", [a, b])
+})
+export const operator_bitshift_right = new CompilerFunction('operator_bitshift_right', (location: SourceLocation, typeArgs: unknown[], args: Ast[]) => {
+  const [a, b] = args
+  propagatedLiteralAst(a)
+  propagatedLiteralAst(b)
+  compilerAssert(a && a.type === IntType, "Expected int type", { a })
+  compilerAssert(b && b.type === IntType, "Expected int type", { b })
+  return new OperatorAst(IntType, location, ">>", [a, b])
+})
+export const operator_bitwise_and = new CompilerFunction('operator_bitwise_and', (location: SourceLocation, typeArgs: unknown[], args: Ast[]) => {
+  const [a, b] = args
+  propagatedLiteralAst(a)
+  propagatedLiteralAst(b)
+  compilerAssert(a && a.type === IntType, "Expected int type", { a })
+  compilerAssert(b && b.type === IntType, "Expected int type", { b })
+  return new OperatorAst(IntType, location, "&", [a, b])
+})
+export const operator_bitwise_or = new CompilerFunction('operator_bitwise_or', (location: SourceLocation, typeArgs: unknown[], args: Ast[]) => {
+  const [a, b] = args
+  propagatedLiteralAst(a)
+  propagatedLiteralAst(b)
+  compilerAssert(a && a.type === IntType, "Expected int type", { a })
+  compilerAssert(b && b.type === IntType, "Expected int type", { b })
+  return new OperatorAst(IntType, location, "|", [a, b])
+})
 
 export const createCompilerModuleTask = (ctx: TaskContext): Task<Module, CompilerError> => {
   const moduleScope = createScope({}, undefined)
-  Object.assign(moduleScope, { malloc, realloc, free, unsafe_subscript, unsafe_set_subscript, rawptr: RawPointerType })
+  Object.assign(moduleScope, { malloc, realloc, free, unsafe_subscript, unsafe_set_subscript, 
+    operator_bitshift_left, operator_bitshift_right, operator_bitwise_and, operator_bitwise_or,
+    rawptr: RawPointerType })
   const subCompilerState = pushSubCompilerState(ctx, { debugName: `compiler module`, lexicalParent: undefined, scope: moduleScope })
   const module = new Module('compiler', subCompilerState, null!)
   return Task.of(module)

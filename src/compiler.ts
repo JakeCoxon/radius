@@ -260,7 +260,7 @@ export const BytecodeSecondOrder: ParseTreeTable = {
   expand:   (out, node) => expandLoopSugar(out, node),
   fold:     (out, node) => foldSugar(out, node),
   listcomp: (out, node) => listComprehensionSugar(out, node),
-  slice:    (out, node) => sliceSugar(out, node),
+  slice:    (out, node) => sliceSugar(out, node, null),
 
   dict: (out, node) => {
     node.pairs.forEach(([key, value]) => {
@@ -331,9 +331,7 @@ export const BytecodeSecondOrder: ParseTreeTable = {
       pushBytecode(out, node.token, { type: 'setsubscriptast' })
       return
     } else if (node.left instanceof ParseSlice) {
-      visitParseNode(out, node.left)
-      visitParseNode(out, node.value)
-      pushBytecode(out, node.token, { type: 'setsubscriptast' })
+      sliceSugar(out, node.left, node.value)
       return
     }
     compilerAssert(false, "Not implemented", { node })
@@ -780,6 +778,12 @@ const instructions: InstructionMapping = {
       compilerAssert(name in expr, "Not found $name in object $expr", { name, expr })
       vm.stack.push(expr[name])
       return
+    }
+    if (expr instanceof Module) {
+      return (
+        TaskDef(resolveScope, expr.compilerState.scope, name)
+        .chainFn((task, value) => { vm.stack.push(value); return Task.success() })
+      )
     }
     compilerAssert(false, "Not implemented", { expr, name })
   },

@@ -377,8 +377,8 @@ export const createMethodCall = (vm: Vm, receiver: Ast, name: string, typeArgs: 
   compilerAssert(t instanceof ClassDefinition || t instanceof ExternalTypeConstructor || t instanceof PrimitiveType, "Expected class, type or type constructor got $t", { t })
 
   // TODO: Must wait for event if not found
-  const closure = (() => {
-    let checkScope: Scope | undefined = vm.scope;
+  const findClosure = (initialScope: Scope) => {
+    let checkScope: Scope | undefined = initialScope;
     while (checkScope) {
       const methods = vm.context.globalCompiler.methods.get(checkScope)
       if (methods) {
@@ -388,7 +388,13 @@ export const createMethodCall = (vm: Vm, receiver: Ast, name: string, typeArgs: 
       if (checkScope[name] !== undefined) return checkScope[name]
       checkScope = (checkScope as any)[ScopeParentSymbol]
     }
-  })()
+  }
+  let closure = findClosure(vm.scope)
+  if (!closure && type instanceof ConcreteClassType) {
+    closure = findClosure(type.compiledClass.classDefinition.parentScope)
+  } else if (!closure && type instanceof ClassDefinition) {
+    closure = findClosure(type.parentScope)
+  }
 
   compilerAssert(closure && closure instanceof Closure, "No method $name found for type $t", { name, t })
   return createCallAstFromValueAndPushValue(vm, closure, typeArgs, [receiver, ...args])
