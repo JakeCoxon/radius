@@ -5,6 +5,7 @@ Currently this is a very basic proof-of-concept that uses SDL and a software all
 ![](cells.png)
 
 ```python
+import compiler
 import range for Range
 import array for Array, array_create
 import gui for begin_app, end_app, window_open, render_app, frame_ticks, set_pixel, get_pixel, fill_rect, delay, copy_pixels
@@ -19,9 +20,7 @@ fn main():
   cells := array_create!int(num_cells)
   next_cells := array_create!int(num_cells)
 
-  for x in Range(0, num_cells):
-    cells[x] = 0
-
+  cells[:] = 0 ...
   cells[num_cells / 2] = 1
 
   fill_rect(0, 0, 320, 240, 0)
@@ -47,23 +46,15 @@ fn main():
 
   end_app()
 
-# TODO: Improve this with bitshift operators
+# https://mathworld.wolfram.com/ElementaryCellularAutomaton.html
+rule_num :: 126
+
+bsl :: compiler.operator_bitshift_left
+bsr :: compiler.operator_bitshift_right
+band :: compiler.operator_bitwise_and
+
 fn calculate_state(a: int, b: int, c: int) -> int:
-  if   a == 0 and b == 0 and c == 0:
-    return 0
-  elif a == 0 and b == 0 and c == 1:
-    return 1
-  elif a == 0 and b == 1 and c == 0:
-    return 0
-  elif a == 0 and b == 1 and c == 1:
-    return 1
-  elif a == 1 and b == 0 and c == 0:
-    return 1
-  elif a == 1 and b == 0 and c == 1:
-    return 0
-  elif a == 1 and b == 1 and c == 0:
-    return 1
-  elif a == 1 and b == 1 and c == 1:
-    return 0
-  0
+  index := bsl(a, 2) + bsl(b, 1) + c
+  band(bsr(rule_num, index), 1)
+
 ```
