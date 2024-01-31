@@ -781,7 +781,8 @@ export type GlobalCompilerState = {
   allWaitingEvents: Event<unknown, unknown>[],
   logger: Logger,
   typeTable: TypeTable,
-  globalLets: LetAst[]
+  globalLets: LetAst[],
+  entryFunction: CompiledFunction | undefined
 }
 
 export interface ParsedModule {
@@ -818,6 +819,7 @@ export const createDefaultGlobalCompiler = () => {
     methods: new WeakMap(),
     typeTable: new TypeTable(),
     logger: null!,
+    entryFunction: undefined, // Inserted later
   }
   return globalCompiler
 }
@@ -915,8 +917,8 @@ export type FileWriter = {
     chunk: string | ArrayBufferView | ArrayBuffer | SharedArrayBuffer,
   ): number;
 }
-export type AstWriterTable = {
-  [A in Ast as A['key']]: (writer: CodegenFunctionWriter, ast: A) => void;
+export type AstWriterTable<Writer> = {
+  [A in Ast as A['key']]: (writer: Writer, ast: A) => void;
 }
 export type CodegenFunctionWriter = {
   writer: CodegenWriter
@@ -938,4 +940,31 @@ export type CodegenWriter = {
   typeSizes: Map<Type, number>
   globals: Map<Binding, number>
   nextGlobalSlot: number
+}
+
+export type LlvmFunctionWriter = {
+  writer: LlvmWriter
+  argSlots: number
+  returnSlots: number
+  bytecode: number[]
+  constantsByType: Map<Type, Map<unknown, number>>
+  constantSlots: number[]
+  nextConstantSlot: number
+  locals: { binding: Binding, slot: number, scopeIndex: number }[]
+  blocks: { binding: Binding, slotIndex: number, patches: { location: number }[] }[],
+  currentScopeIndex: number
+  nextLocalSlot: number,
+  nameStack: string[],
+  valueStack: string[],
+}
+export type LlvmWriter = {
+  functions: LlvmFunctionWriter[]
+  globalCompilerState: GlobalCompilerState
+  functionToIndex: Map<Binding, number>
+  typeSizes: Map<Type, number>
+  globals: Map<Binding, number>
+  globalNames: Map<Binding | Type, string>
+  globalNameToBinding: Map<string, Binding | Type>
+  nextGlobalSlot: number,
+  outputWriter: FileWriter,
 }

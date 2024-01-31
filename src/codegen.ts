@@ -313,7 +313,7 @@ const getOpByType = (writer: CodegenFunctionWriter, type: Type): keyof typeof Ge
   compilerAssert(false, "Unexpected type", { type })
 }
 
-const astWriter: AstWriterTable = {
+const astWriter: AstWriterTable<CodegenFunctionWriter> = {
   statements: (writer, ast) => {
     writer.currentScopeIndex ++
     // TODO: Filter voids?

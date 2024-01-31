@@ -1,0 +1,10 @@
+fn foo(a: int, b: int) -> int:
+  a * b * 2
+
+fn main():
+
+  x := 32
+  y := 24
+  z := x + y + 3 + foo(3, 4)
+  print(z)
+  print(2)

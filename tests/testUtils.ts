@@ -7,6 +7,7 @@ import { expect } from 'bun:test'
 import { VecTypeMetaClass, preloadModuleText } from '../src/compiler_sugar'
 import { writeFinalBytecode } from '../src/codegen'
 import { FileSink } from 'bun';
+import { writeLlvmBytecode } from '../src/codegen_llvm';
 
 const runTestInner = (
   queue: Queue,
@@ -98,6 +99,8 @@ export const runCompilerTest = (
   globalCompiler.logger = logger
   globalCompiler.moduleLoader = moduleLoader || createModuleLoader(`${import.meta.dir}/fixtures/imports/`)
 
+  testObject.globalCompiler = globalCompiler
+
   let gotError = false
   let fatalError = false
 
@@ -109,6 +112,7 @@ export const runCompilerTest = (
     writeFinalBytecode(globalCompiler, bytecodeWriter)
     bytecodeWriter.end()
   }
+
 
   try {
     runTestInner(queue, input, `${testObject.moduleName}.rad`, globalCompiler, rootScope)
@@ -165,18 +169,32 @@ export const runCompilerTest = (
   return { prints, globalCompiler }
 }
 
+export const writeLlvmBytecodeFile = async (testObject: TestObject) => {
+  compilerAssert(testObject.globalCompiler, "Not compiled")
+  const path = testObject.llvmPath
+  if (existsSync(path)) unlinkSync(path)
+  const file = Bun.file(path)
+  const bytecodeWriter = file.writer()
+  writeLlvmBytecode(testObject.globalCompiler, bytecodeWriter)
+  bytecodeWriter.end()
+  console.log("LLVm file")
+  console.log(await file.text())
+}
+
 type TestObject = { 
   moduleName: string
   outputPath: string
   inputPath: string
   rawPath: string
+  llvmPath: string
   logger: Logger
   writer: FileSink,
+  globalCompiler?: GlobalCompilerState,
   fail: boolean
   prints: unknown[]
   close: () => void
 }
-export const createTest = ({ moduleName, inputPath, outputPath, rawPath } : { moduleName: string, inputPath: string, outputPath: string, rawPath: string }) => {
+export const createTest = ({ moduleName, inputPath, outputPath, rawPath, llvmPath } : { moduleName: string, inputPath: string, outputPath: string, rawPath: string, llvmPath: string }) => {
   if (existsSync(outputPath)) unlinkSync(outputPath)
   const file = Bun.file(outputPath)
   const writer = file.writer()
@@ -208,7 +226,7 @@ export const createTest = ({ moduleName, inputPath, outputPath, rawPath } : { mo
     writer.end()
   }
 
-  return <TestObject>{ moduleName, fail: false, inputPath, rawPath, outputPath, logger, writer, close, prints: [] }
+  return <TestObject>{ moduleName, fail: false, inputPath, rawPath, outputPath, llvmPath, logger, writer, close, prints: [] }
 }
 
 export const runVm = async ({ testObject}: { testObject: TestObject }) => {

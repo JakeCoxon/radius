@@ -1464,6 +1464,7 @@ export const programEntryTask = (ctx: TaskContext, entryModule: ParsedModule, ro
           binding, func, VoidType, [], ast, [], [], 0)
       ctx.globalCompiler.compiledFunctions.set(binding, compiledFunction)
       func.compiledFunctions.push(compiledFunction)
+      ctx.globalCompiler.entryFunction = compiledFunction
 
       return Task.success()
     })

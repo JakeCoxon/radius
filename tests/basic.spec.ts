@@ -1,5 +1,22 @@
 import { test, expect, describe } from 'bun:test'
-import { createModuleLoader, createTest, runCompilerTest, runVm } from './testUtils'
+import { createModuleLoader, createTest, runCompilerTest, runVm, writeLlvmBytecodeFile } from './testUtils'
+
+test('superbasic', async () => {
+  const testObject = createTest({ 
+    moduleName: 'superbasic',
+    inputPath: `${import.meta.dir}/fixtures/superbasic.rad`,
+    outputPath: `${import.meta.dir}/output/superbasic.txt`,
+    rawPath: `${import.meta.dir}/output/superbasic.raw`,
+    llvmPath: `${import.meta.dir}/output/superbasic.ll` })
+  try {
+    const input = await Bun.file(testObject.inputPath).text()
+    runCompilerTest(input, { testObject })
+    await writeLlvmBytecodeFile(testObject)
+    // await runVm({ testObject })
+  } finally {
+    testObject.close()
+  }
+})
 
 test('basic', async () => {
   const testObject = createTest({ 
