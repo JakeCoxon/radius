@@ -18,17 +18,24 @@ fn bar(a: int, b: int) -> int:
 
 fn main():
 
-  x := 2 == 2 and 1 == 2
-  print(bar(2, 3))
-  print(true)
-  print(bar(2, 3))
-  print(bar(2, 3))
-  print(bar(2, 3))
-  print(bar(3, 3))
-  print(bar(4, 3))
-  print(bar(4, 2))
-  print(bar(4, 1))
-  print(bar(2, 4))
+  # x := 2 == 2 and 1 == 2
+  # print(bar(2, 3))
+  # print(true)
+  # print(bar(2, 3))
+  # print(bar(2, 3))
+  # print(bar(2, 3))
+  # print(bar(3, 3))
+  # print(bar(4, 3))
+  # print(bar(4, 2))
+  # print(bar(4, 1))
+  # print(bar(2, 4))
+
+  i := 1
+  while true:
+    print(i)
+    if i > 200000:
+      break
+    i = (i + 4) * 3
 
   # x := 32
   # y := 24

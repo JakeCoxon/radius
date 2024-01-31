@@ -193,10 +193,39 @@ const astWriter: AstWriterTable<LlvmFunctionWriter> = {
     writer.valueStack.push(outName)
   },
   while: (writer, ast) => {
-    compilerAssert(false, "Not implemented")
+    const loopCondition = generateName(writer.writer, new Binding(`while_condition`, VoidType))
+    const loopBody = generateName(writer.writer, new Binding(`while_body`, VoidType))
+    const loopEnd = generateName(writer.writer, new Binding(`while_end`, VoidType))
+
+    format(writer, `  br label %$\n`, loopCondition)
+    format(writer, `$:\n`, loopCondition)
+    writer.currentBlockLabel = loopCondition
+    writeExpr(writer, ast.condition)
+    const aVal = writer.valueStack.pop()!
+    format(writer, `  br i1 $, label %$, label %$\n\n`, aVal, loopBody, loopEnd)
+
+    format(writer, `$:\n`, loopBody)
+    writer.currentBlockLabel = loopBody
+    writeExpr(writer, ast.body)
+    format(writer, `  br label %$\n\n`, loopCondition)
+
+    format(writer, `$:\n`, loopEnd)
+    writer.currentBlockLabel = loopEnd
+  },
+
+  block: (writer, ast) => {
+    writer.blocks.push({ binding: ast.binding }) // not strictly necessary?
+    writeExpr(writer, ast.body)
+    writer.blocks.pop()!
+    const blockEndLabel = generateName(writer.writer, ast.binding)
+    format(writer, `  br label %$\n\n`, blockEndLabel)
+    format(writer, `$:\n`, blockEndLabel)
+    writer.currentBlockLabel = blockEndLabel
   },
   break: (writer, ast) => {
-    compilerAssert(false, "Not implemented")
+    const block = writer.blocks.findLast(x => x.binding === ast.binding)
+    compilerAssert(block, "Programmer error. Expected block") // Programmer error
+    format(writer, `  br label %$\n`, ast.binding)
   },
   call: (writer, ast) => {
     if (ast.func.name === "print") {
@@ -250,43 +279,40 @@ const astWriter: AstWriterTable<LlvmFunctionWriter> = {
     writer.valueStack.push(name)
   },
   defaultcons: (writer, ast) => {
-    compilerAssert(false, "Not implemented")
+    compilerAssert(false, "Not implemented 'defaultcons'")
   },
   constructor: (writer, ast) => {
-    compilerAssert(false, "Not implemented")
+    compilerAssert(false, "Not implemented 'constructor'")
   },
   valuefield: (writer, ast) => {
-    compilerAssert(false, "Not implemented")
+    compilerAssert(false, "Not implemented 'valuefield'")
   },
   field: (writer, ast) => {
-    compilerAssert(false, "Not implemented")
+    compilerAssert(false, "Not implemented 'field'")
   },
   setvaluefield: (writer, ast) => {
-    compilerAssert(false, "Not implemented")
+    compilerAssert(false, "Not implemented 'setvaluefield'")
   },
   setfield: (writer, ast) => {
-    compilerAssert(false, "Not implemented")
+    compilerAssert(false, "Not implemented 'setfield'")
   },
   subscript: (writer, ast) => {
-    compilerAssert(false, "Not implemented")
+    compilerAssert(false, "Not implemented 'subscript'")
   },
   setsubscript: (writer, ast) => {
-    compilerAssert(false, "Not implemented")
+    compilerAssert(false, "Not implemented 'setsubscript'")
   },
   deref: (writer, ast) => {
-    compilerAssert(false, "Not implemented")
+    compilerAssert(false, "Not implemented 'deref'")
   },
   setderef: (writer, ast) => {
-    compilerAssert(false, "Not implemented")
-  },
-  block: (writer, ast) => {
-    compilerAssert(false, "Not implemented")
+    compilerAssert(false, "Not implemented 'setderef'")
   },
   return: (writer, ast) => {
-    compilerAssert(false, "Not implemented")
+    compilerAssert(false, "Not implemented 'return'")
   },
   address: (writer, ast) => {
-    compilerAssert(false, "Not implemented")
+    compilerAssert(false, "Not implemented 'address'")
   },
   void: (writer, ast) => {}
 };
@@ -297,14 +323,12 @@ const format = (writer: LlvmFunctionWriter, format: string, ...args: (string | T
     const v = args[i++]
     
     if (typeof v === 'string') return v
-    if (isType(v)) return getName(writer.writer, v)
+    if (isType(v)) return getTypeName(writer.writer, v)
+    if (v instanceof Binding) { return generateName(writer.writer, v) }
     if (isAst(v)) {
       writeExpr(writer, v)
       compilerAssert(writer.valueStack.length, "Expected value")
       return writer.valueStack.pop()!
-    }
-    if (v instanceof Binding) {
-      return generateName(writer.writer, v)
     }
     return ''
   })
@@ -360,14 +384,11 @@ const generateName = (writer: LlvmWriter, binding: Binding) => {
   return newName
 }
 
-const getName = (writer: LlvmWriter, obj: Binding | Type): string => {
+const getTypeName = (writer: LlvmWriter, obj: Type): string => {
   if (writer.globalNames.get(obj)) {
     return writer.globalNames.get(obj)!
   }
-  if (obj instanceof Binding) {
-    return generateName(writer, obj)
-  }
-  compilerAssert(false, "Object not found", { obj })
+  compilerAssert(false, "Type not implemented", { obj })
 }
 const writeLlvmBytecodeFunction = (bytecodeWriter: LlvmWriter, func: CompiledFunction) => {
   log("\nWriting func", func.functionDefinition.debugName, "\n")
@@ -376,13 +397,13 @@ const writeLlvmBytecodeFunction = (bytecodeWriter: LlvmWriter, func: CompiledFun
     function: func,
     nameStack: [],
     valueStack: [],
-    currentBlockLabel: '<no name>'
+    currentBlockLabel: '<no name>',
+    blocks: []
   }
 
   const isMain = bytecodeWriter.globalCompilerState.entryFunction === func
   const name = isMain ? "main" : generateName(bytecodeWriter, func.binding)
   
-  // bytecodeWriter.outputWriter.write(`define ${getName(bytecodeWriter, func.returnType)} @${name}(i32 %a, i32 %b) {\n`)
   format(funcWriter, `define $ @$(`, func.returnType, name)
   func.argBindings.forEach((binding, i) => {
     if (i !== 0) format(funcWriter, ", ")

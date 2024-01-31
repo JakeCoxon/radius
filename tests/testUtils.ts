@@ -210,6 +210,7 @@ export const writeLlvmBytecodeFile = async (testObject: TestObject) => {
   } catch(ex) {
     // console.log(ex)
     logError(ex, testObject.logger)
+    throw ex
   }
   bytecodeWriter.end()
   testObject.writer.write("LLVm file")

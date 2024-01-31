@@ -952,12 +952,12 @@ export type LlvmFunctionWriter = {
   // constantSlots: number[]
   // nextConstantSlot: number
   // locals: { binding: Binding, slot: number, scopeIndex: number }[]
-  // blocks: { binding: Binding, slotIndex: number, patches: { location: number }[] }[],
+  blocks: { binding: Binding }[],
   // currentScopeIndex: number
   // nextLocalSlot: number,
   nameStack: string[],
   valueStack: string[],
-  currentBlockName: string
+  currentBlockLabel: string
 }
 export type LlvmWriter = {
   functions: LlvmFunctionWriter[]
