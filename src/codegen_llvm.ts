@@ -111,39 +111,86 @@ const astWriter: AstWriterTable<LlvmFunctionWriter> = {
   },
   number: (writer, ast) => {
     compilerAssert(ast.type === IntType || ast.type === FloatType || ast.type === DoubleType, "Expected number type got $type", { ast, type: ast.type })
-    const name = getCurrentName(writer)
+    const name = popNameStackOrGenerateNewName(writer)
     format(writer, `  $ = add $ 0, $ ; literal\n`, name, ast.type, String(ast.value))
     writer.valueStack.push(name)
   },
   bool: (writer, ast) => {
-    const name = getCurrentName(writer)
+    const name = popNameStackOrGenerateNewName(writer)
     format(writer, `  $ = add $ 0, $ ; literal\n`, name, ast.type, ast.value ? "1" : "0")
     writer.valueStack.push(name)
   },
   if: (writer, ast) => {
-    const outName = ast.type !== VoidType ? getCurrentName(writer) : undefined
+    const outName = ast.type !== VoidType ? popNameStackOrGenerateNewName(writer) : undefined
     const thenLabel = generateName(writer.writer, new Binding(`if_then`, VoidType))
     const endLabel = generateName(writer.writer, new Binding(`if_end`, VoidType))
     const elseLabel = ast.falseBody ? generateName(writer.writer, new Binding(`if_else`, VoidType)) : endLabel
     let thenVal: string | undefined = undefined, elseVal: string | undefined = undefined
+    let thenFinalLabel: string | undefined = undefined, elseFinalLabel: string | undefined = undefined
 
     format(writer, `  br i1 $, label %$, label %$\n\n`, ast.expr, thenLabel, elseLabel)
     format(writer, `$:\n`, thenLabel)
+    writer.currentBlockLabel = thenLabel
     writeExpr(writer, toStatements(ast.trueBody))
+    thenFinalLabel = writer.currentBlockLabel // Nested control flow have have changed current block
     if (outName) thenVal = writer.valueStack.pop()!
     format(writer, `  br label %$\n\n`, endLabel)
 
     if (ast.falseBody) {
       format(writer, `$:\n`, elseLabel)
+      writer.currentBlockLabel = elseLabel
       writeExpr(writer, toStatements(ast.falseBody))
+      elseFinalLabel = writer.currentBlockLabel // Nested control flow have have changed current block
       if (outName) elseVal = writer.valueStack.pop()!
       format(writer, `  br label %$\n\n`, endLabel)
     }
+
     format(writer, `$:\n`, endLabel)
+    writer.currentBlockLabel = endLabel
     if (outName) {
-      compilerAssert(thenVal && elseVal, "Expected 'then' and 'else' branch")
-      format(writer, `  $ = phi $ [ $, %$ ], [ $, %$ ]\n`, outName, ast.type, thenVal, thenLabel, elseVal, elseLabel)
+      compilerAssert(thenVal && elseVal && elseFinalLabel, "Expected 'then' and 'else' branch")
+      format(writer, `  $ = phi $ [ $, %$ ], [ $, %$ ]\n`, outName, ast.type, thenVal, thenFinalLabel, elseVal, elseFinalLabel)
     }
+  },
+  and: (writer, ast) => {
+    const outName = popNameStackOrGenerateNewName(writer)
+    const [a, b] = ast.args
+    const secondOperand = generateName(writer.writer, new Binding(`and_second_operand`, VoidType))
+    const resultFalse = generateName(writer.writer, new Binding(`and_result_false`, VoidType))
+    const resultLabel = generateName(writer.writer, new Binding(`and_result`, VoidType))
+    format(writer, `  br i1 $, label %$, label %$\n`, a, secondOperand, resultFalse)
+    format(writer, `$:\n`, secondOperand)
+    writer.currentBlockLabel = secondOperand
+    writeExpr(writer, b)
+    const secondOperandFinalName = writer.currentBlockLabel // Nested control flow have have changed current block
+    const bVal = writer.valueStack.pop()!
+    format(writer, `  br label %$\n`, resultLabel)
+    format(writer, `$:\n`, resultFalse)
+    format(writer, `  br label %$\n`, resultLabel)
+    format(writer, `$:\n`, resultLabel)
+    format(writer, `  $ = phi $ [ false, %$ ], [ $, %$ ]\n`, outName, ast.type, resultFalse, bVal, secondOperandFinalName)
+    writer.currentBlockLabel = resultLabel
+    writer.valueStack.push(outName)
+  },
+  or: (writer, ast) => {
+    const outName = popNameStackOrGenerateNewName(writer)
+    const [a, b] = ast.args
+    const secondOperand = generateName(writer.writer, new Binding(`or_second_operand`, VoidType))
+    const resultTrue = generateName(writer.writer, new Binding(`or_result_true`, VoidType))
+    const resultLabel = generateName(writer.writer, new Binding(`or_result`, VoidType))
+    format(writer, `  br i1 $, label %$, label %$\n`, a, resultTrue, secondOperand)
+    format(writer, `$:\n`, secondOperand)
+    writer.currentBlockLabel = secondOperand
+    writeExpr(writer, b)
+    const secondOperandFinalName = writer.currentBlockLabel // Nested control flow have have changed current block
+    const bVal = writer.valueStack.pop()!
+    format(writer, `  br label %$\n`, resultLabel)
+    format(writer, `$:\n`, resultTrue)
+    format(writer, `  br label %$\n`, resultLabel)
+    format(writer, `$:\n`, resultLabel)
+    format(writer, `  $ = phi $ [ true, %$ ], [ $, %$ ]\n`, outName, ast.type, resultTrue, bVal, secondOperandFinalName)
+    writer.currentBlockLabel = resultLabel
+    writer.valueStack.push(outName)
   },
   while: (writer, ast) => {
     compilerAssert(false, "Not implemented")
@@ -151,16 +198,10 @@ const astWriter: AstWriterTable<LlvmFunctionWriter> = {
   break: (writer, ast) => {
     compilerAssert(false, "Not implemented")
   },
-  and: (writer, ast) => {
-    compilerAssert(false, "Not implemented")
-  },
-  or: (writer, ast) => {
-    compilerAssert(false, "Not implemented")
-  },
   call: (writer, ast) => {
     if (ast.func.name === "print") {
       compilerAssert(ast.args.length === 1, "Print not implemented yet", { ast });
-      const name = getCurrentName(writer)
+      const name = popNameStackOrGenerateNewName(writer)
       const formatPtrName = `%${generateName(writer.writer, new Binding(`format_str_ptr`, VoidType))}`
       format(writer, "  $ = getelementptr inbounds [4 x i8], [4 x i8]* @format_string, i64 0, i64 0\n", formatPtrName)
       format(writer, "  $ = call i32 (i8*, ...) @printf(i8* $, $ $)\n", name, formatPtrName, ast.args[0].type, ast.args[0])
@@ -175,7 +216,7 @@ const astWriter: AstWriterTable<LlvmFunctionWriter> = {
   },
 
   usercall: (writer, ast) => {
-    const name = ast.type !== VoidType ? getCurrentName(writer) : undefined
+    const name = ast.type !== VoidType ? popNameStackOrGenerateNewName(writer) : undefined
 
     const argValues = ast.args.map(arg => {
       writeExpr(writer, arg); return writer.valueStack.pop()!
@@ -187,14 +228,14 @@ const astWriter: AstWriterTable<LlvmFunctionWriter> = {
     format(writer, `call $ @$(`, ast.type, ast.binding)
     ast.args.forEach((arg, i) => {
       if (i !== 0) format(writer, ", ")
-      format(writer, `$ $`, arg.type, argValues.pop()!)
+      format(writer, `$ $`, arg.type, argValues[i]!)
     })
     format(writer, `)\n`)
     if (name) writer.valueStack.push(name)
   },
   operator: (writer, ast) => {
     const [a, b] = ast.args
-    const name = getCurrentName(writer)
+    const name = popNameStackOrGenerateNewName(writer)
     compilerAssert(a.type === b.type, "Expected types to be equal", { a, b })
     const op = operatorMap[ast.operator]
     compilerAssert(op, "Expected op", { ast })
@@ -204,7 +245,7 @@ const astWriter: AstWriterTable<LlvmFunctionWriter> = {
   not: (writer, ast) => {
     const expr = ast.expr
     compilerAssert(expr.type === BoolType, "Expected bool")
-    const name = getCurrentName(writer)
+    const name = popNameStackOrGenerateNewName(writer)
     format(writer, `  $ = xor $ $, 1\n`, name, expr.type, expr)
     writer.valueStack.push(name)
   },
@@ -269,7 +310,7 @@ const format = (writer: LlvmFunctionWriter, format: string, ...args: (string | T
   })
   writer.writer.outputWriter.write(s)
 }
-const getCurrentName = (writer: LlvmFunctionWriter) => {
+const popNameStackOrGenerateNewName = (writer: LlvmFunctionWriter) => {
   return writer.nameStack.length ? writer.nameStack.pop()! : 
     `%${generateName(writer.writer, new Binding("", VoidType))}`
 }
@@ -335,6 +376,7 @@ const writeLlvmBytecodeFunction = (bytecodeWriter: LlvmWriter, func: CompiledFun
     function: func,
     nameStack: [],
     valueStack: [],
+    currentBlockLabel: '<no name>'
   }
 
   const isMain = bytecodeWriter.globalCompilerState.entryFunction === func
@@ -349,7 +391,7 @@ const writeLlvmBytecodeFunction = (bytecodeWriter: LlvmWriter, func: CompiledFun
   format(funcWriter, `) {\n`, func.returnType, name)
   writeExpr(funcWriter, func.body)
   if (func.returnType !== VoidType) {
-    compilerAssert(funcWriter.valueStack.length === 1, "Expected 1 value left")
+    compilerAssert(funcWriter.valueStack.length === 1, "Expected 1 value left", { valueStack: funcWriter.valueStack })
     const v = funcWriter.valueStack.pop()!
     format(funcWriter, `  ret $ $\n`, func.returnType, v)
   } else {

@@ -169,13 +169,48 @@ export const runCompilerTest = (
   return { prints, globalCompiler }
 }
 
+const logError = (ex: Error, logger: Logger) => {
+  if (ex instanceof Error) {
+    // if (ex.stack) logger.log(ex.stack)
+    logger.log(ex.toString())
+  }
+  if (ex instanceof CompilerError) {
+    const location = (ex.info as any).location as SourceLocation
+    if (location) {
+      const text = outputSourceLocation(location)
+      logger.log(text)
+    }
+
+    if ((ex.info as any)._userinfo) {
+      ;(ex.info as any)._userinfo.forEach((name) => {
+        const item = ex.info[name]
+        if (item && Object.getPrototypeOf(item) === TokenRoot) {
+          const text = outputSourceLocation(item.location)
+          logger.log(text)
+        }
+      })
+    }
+
+    logger.log('\nError info')
+    const o = Object.fromEntries(Object.entries(ex.info))
+    logger.log(o)
+    
+  }
+}
+
+
 export const writeLlvmBytecodeFile = async (testObject: TestObject) => {
   compilerAssert(testObject.globalCompiler, "Not compiled")
   const path = testObject.llvmPath
   if (existsSync(path)) unlinkSync(path)
   const file = Bun.file(path)
   const bytecodeWriter = file.writer()
-  writeLlvmBytecode(testObject.globalCompiler, bytecodeWriter)
+  try {
+    writeLlvmBytecode(testObject.globalCompiler, bytecodeWriter)
+  } catch(ex) {
+    // console.log(ex)
+    logError(ex, testObject.logger)
+  }
   bytecodeWriter.end()
   testObject.writer.write("LLVm file")
   testObject.writer.write(await file.text())

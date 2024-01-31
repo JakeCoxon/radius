@@ -957,6 +957,7 @@ export type LlvmFunctionWriter = {
   // nextLocalSlot: number,
   nameStack: string[],
   valueStack: string[],
+  currentBlockName: string
 }
 export type LlvmWriter = {
   functions: LlvmFunctionWriter[]
