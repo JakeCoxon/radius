@@ -177,8 +177,8 @@ export const writeLlvmBytecodeFile = async (testObject: TestObject) => {
   const bytecodeWriter = file.writer()
   writeLlvmBytecode(testObject.globalCompiler, bytecodeWriter)
   bytecodeWriter.end()
-  console.log("LLVm file")
-  console.log(await file.text())
+  testObject.writer.write("LLVm file")
+  testObject.writer.write(await file.text())
 }
 
 type TestObject = { 

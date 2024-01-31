@@ -36,3 +36,13 @@ fn main():
 
   foop := calculate_state(1, 0, 1)
   print(foop)
+
+  if 2 == 2:
+    asdfadf := 32 + 2 * 4 * 1
+    print(asdfadf)
+  else:
+    asdfadf_2 := 32 + 2 + 3124165
+    print(asdfadf_2)
+
+  asdasd := ifx 2 == 3: 1 else: 2
+  print(asdasd)

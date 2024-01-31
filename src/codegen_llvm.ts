@@ -1,5 +1,5 @@
 import { externals, mallocExternal, reallocExternal } from "./compiler_sugar";
-import { Ast, AstType, AstWriterTable, Binding, BindingAst, BoolType, CompiledFunction, ConcreteClassType, DoubleType, FileWriter, FloatType, GlobalCompilerState, IntType, ListTypeConstructor, LlvmFunctionWriter, LlvmWriter, NumberAst, ParameterizedType, PrimitiveType, RawPointerType, StringType, Type, TypeField, VoidType, compilerAssert, isAst, isType, textColors } from "./defs";
+import { Ast, AstType, AstWriterTable, Binding, BindingAst, BoolType, CompiledFunction, ConcreteClassType, DoubleType, FileWriter, FloatType, GlobalCompilerState, IntType, ListTypeConstructor, LlvmFunctionWriter, LlvmWriter, NumberAst, ParameterizedType, PrimitiveType, RawPointerType, StatementsAst, StringType, Type, TypeField, VoidType, compilerAssert, isAst, isType, textColors } from "./defs";
 
 // Some useful commands
 //
@@ -48,7 +48,10 @@ const constantTableByType = (writer: LlvmFunctionWriter, type: Type) => {
 const emitConstant = (writer: LlvmFunctionWriter, type: Type, value: number) => {
   compilerAssert(false, "Not implemented")
 }
-
+const toStatements = (ast: Ast) => {
+  if (ast instanceof StatementsAst) return ast
+  return new StatementsAst(ast.type, ast.location, [ast])
+}
 
 const astWriter: AstWriterTable<LlvmFunctionWriter> = {
   statements: (writer, ast) => {
@@ -118,7 +121,29 @@ const astWriter: AstWriterTable<LlvmFunctionWriter> = {
     writer.valueStack.push(name)
   },
   if: (writer, ast) => {
-    compilerAssert(false, "Not implemented")
+    const outName = ast.type !== VoidType ? getCurrentName(writer) : undefined
+    const thenLabel = generateName(writer.writer, new Binding(`if_then`, VoidType))
+    const endLabel = generateName(writer.writer, new Binding(`if_end`, VoidType))
+    const elseLabel = ast.falseBody ? generateName(writer.writer, new Binding(`if_else`, VoidType)) : endLabel
+    let thenVal: string | undefined = undefined, elseVal: string | undefined = undefined
+
+    format(writer, `  br i1 $, label %$, label %$\n\n`, ast.expr, thenLabel, elseLabel)
+    format(writer, `$:\n`, thenLabel)
+    writeExpr(writer, toStatements(ast.trueBody))
+    if (outName) thenVal = writer.valueStack.pop()!
+    format(writer, `  br label %$\n\n`, endLabel)
+
+    if (ast.falseBody) {
+      format(writer, `$:\n`, elseLabel)
+      writeExpr(writer, toStatements(ast.falseBody))
+      if (outName) elseVal = writer.valueStack.pop()!
+      format(writer, `  br label %$\n\n`, endLabel)
+    }
+    format(writer, `$:\n`, endLabel)
+    if (outName) {
+      compilerAssert(thenVal && elseVal, "Expected 'then' and 'else' branch")
+      format(writer, `  $ = phi $ [ $, %$ ], [ $, %$ ]\n`, outName, ast.type, thenVal, thenLabel, elseVal, elseLabel)
+    }
   },
   while: (writer, ast) => {
     compilerAssert(false, "Not implemented")
