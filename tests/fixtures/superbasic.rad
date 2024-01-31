@@ -1,3 +1,15 @@
+import compiler
+
+bsl :: compiler.operator_bitshift_left
+bsr :: compiler.operator_bitshift_right
+band :: compiler.operator_bitwise_and
+
+rule_num :: 32
+
+fn calculate_state(a: int, b: int, c: int) -> int:
+  index := bsl(a, 2) + bsl(b, 1) + c
+  band(bsr(rule_num, index), 1)
+
 fn foo(a: int, b: int) -> int:
   a * b * 2
 
@@ -8,3 +20,19 @@ fn main():
   z := x + y + 3 + foo(3, 4)
   print(z)
   print(2)
+
+  x *= 20
+  print(x)
+
+  foo := true
+  bar := foo == false
+  print(bar)
+
+  baz := y == 24
+  baz2 := y != 24
+  print(!baz2)
+  print(x <= 234)
+  print(x > 23124)
+
+  foop := calculate_state(1, 0, 1)
+  print(foop)

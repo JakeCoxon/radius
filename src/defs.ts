@@ -944,16 +944,17 @@ export type CodegenWriter = {
 
 export type LlvmFunctionWriter = {
   writer: LlvmWriter
-  argSlots: number
-  returnSlots: number
-  bytecode: number[]
-  constantsByType: Map<Type, Map<unknown, number>>
-  constantSlots: number[]
-  nextConstantSlot: number
-  locals: { binding: Binding, slot: number, scopeIndex: number }[]
-  blocks: { binding: Binding, slotIndex: number, patches: { location: number }[] }[],
-  currentScopeIndex: number
-  nextLocalSlot: number,
+  function: CompiledFunction,
+  // argSlots: number
+  // returnSlots: number
+  // bytecode: number[]
+  // constantsByType: Map<Type, Map<unknown, number>>
+  // constantSlots: number[]
+  // nextConstantSlot: number
+  // locals: { binding: Binding, slot: number, scopeIndex: number }[]
+  // blocks: { binding: Binding, slotIndex: number, patches: { location: number }[] }[],
+  // currentScopeIndex: number
+  // nextLocalSlot: number,
   nameStack: string[],
   valueStack: string[],
 }

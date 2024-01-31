@@ -15,9 +15,19 @@ const operatorMap: {[key: string]:string} = {
   "-": "sub",
   "*": "mul",
   "/": "div",
-  // "==": "Equal",
-  // ">": "Greater",
-  // "<": "Less",
+  "==": "icmp eq",
+  "!=": "icmp ne",
+
+  // Signed
+  ">": "icmp sgt",
+  "<": "icmp slt",
+  "<=": "icmp sle",
+  ">=": "icmp sge",
+
+  "&": "and",
+  "|": "or",
+  "<<": "shl",
+  ">>": "lshr", // Logical shift right
 };
 
 const log = (...args: any[]) => {
@@ -42,15 +52,16 @@ const emitConstant = (writer: LlvmFunctionWriter, type: Type, value: number) => 
 
 const astWriter: AstWriterTable<LlvmFunctionWriter> = {
   statements: (writer, ast) => {
-    writer.currentScopeIndex ++
     // TODO: Filter voids?
     ast.statements.forEach((expr, i) => {
       writer.writer.outputWriter.write("  ; Statement\n")
       writeExpr(writer, expr)
       writer.writer.outputWriter.write("\n")
       compilerAssert(writer.nameStack.length === 0, "Unexpected")
-      writer.valueStack.length = 0 // Ignore remaining values
-      
+      const toPop = i !== ast.statements.length - 1 || ast.type === VoidType
+      if (toPop) {
+        writer.valueStack.length = 0 // Ignore remaining values
+      }
     })
   },
   string: (writer, ast) => {
@@ -60,30 +71,51 @@ const astWriter: AstWriterTable<LlvmFunctionWriter> = {
     compilerAssert(false, "Not implemented")
   },
   binding: (writer, ast) => {
-    compilerAssert(ast.binding.type !== VoidType);
-    const name = generateName(writer.writer, ast.binding)
-    writer.valueStack.push(`%${name}`)
+    compilerAssert(ast.binding.type !== VoidType)
+    // ast.binding.
+    const isArg = !!writer.function.argBindings.find(x => x === ast.binding)
+    if (isArg) {
+      const name = generateName(writer.writer, ast.binding)
+      writer.valueStack.push(`%${name}`)
+      return
+    }
+
+    const name = `%${generateName(writer.writer, new Binding(`${ast.binding.name}.value`, VoidType))}`
+    const ptrName = `%${generateName(writer.writer, ast.binding)}`
+    format(writer, "  $ = load $, ptr $\n", name, ast.binding.type, ptrName)
+    writer.valueStack.push(name)
   },
   let: (writer, ast) => {
     // TODO: No value should zero initialize?
     compilerAssert(ast.value, "Not implemented", { ast })
-
-    const name = generateName(writer.writer, ast.binding)
-    writer.nameStack.push(`%${name}`)
     
+    const ptrName = `%${generateName(writer.writer, ast.binding)}`
+    format(writer, "  $ = alloca $\n", ptrName, ast.binding.type)
+
+    const name = `%${generateName(writer.writer, new Binding(`${ast.binding.name}.value`, VoidType))}`
+    writer.nameStack.push(name)
     writeExpr(writer, ast.value)
+
+    format(writer, "  store $ $, ptr $\n", ast.binding.type, name, ptrName)
   },
   set: (writer, ast) => {
-    compilerAssert(false, "Not implemented")
+    const name = `%${generateName(writer.writer, new Binding(`${ast.binding.name}.value`, VoidType))}`
+    writer.nameStack.push(name)
+    writeExpr(writer, ast.value)
+
+    const ptrName = `%${generateName(writer.writer, ast.binding)}`
+    format(writer, "  store $ $, ptr $\n", ast.binding.type, name, ptrName)
   },
   number: (writer, ast) => {
     compilerAssert(ast.type === IntType || ast.type === FloatType || ast.type === DoubleType, "Expected number type got $type", { ast, type: ast.type })
     const name = getCurrentName(writer)
-    format(writer, `  $ = add $ 0, $ ; literal\n`,name, ast.type, String(ast.value))
+    format(writer, `  $ = add $ 0, $ ; literal\n`, name, ast.type, String(ast.value))
     writer.valueStack.push(name)
   },
   bool: (writer, ast) => {
-    compilerAssert(false, "Not implemented")
+    const name = getCurrentName(writer)
+    format(writer, `  $ = add $ 0, $ ; literal\n`, name, ast.type, ast.value ? "1" : "0")
+    writer.valueStack.push(name)
   },
   if: (writer, ast) => {
     compilerAssert(false, "Not implemented")
@@ -132,16 +164,23 @@ const astWriter: AstWriterTable<LlvmFunctionWriter> = {
       if (i !== 0) format(writer, ", ")
       format(writer, `$ $`, arg.type, argValues.pop()!)
     })
-    
     format(writer, `)\n`)
     if (name) writer.valueStack.push(name)
   },
   operator: (writer, ast) => {
-    const [a, b] = ast.args;
+    const [a, b] = ast.args
     const name = getCurrentName(writer)
+    compilerAssert(a.type === b.type, "Expected types to be equal", { a, b })
     const op = operatorMap[ast.operator]
     compilerAssert(op, "Expected op", { ast })
-    format(writer, `  $ = $ $ $, $\n`, name, op, ast.type, a, b)
+    format(writer, `  $ = $ $ $, $\n`, name, op, a.type, a, b)
+    writer.valueStack.push(name)
+  },
+  not: (writer, ast) => {
+    const expr = ast.expr
+    compilerAssert(expr.type === BoolType, "Expected bool")
+    const name = getCurrentName(writer)
+    format(writer, `  $ = xor $ $, 1\n`, name, expr.type, expr)
     writer.valueStack.push(name)
   },
   defaultcons: (writer, ast) => {
@@ -175,9 +214,6 @@ const astWriter: AstWriterTable<LlvmFunctionWriter> = {
     compilerAssert(false, "Not implemented")
   },
   block: (writer, ast) => {
-    compilerAssert(false, "Not implemented")
-  },
-  not: (writer, ast) => {
     compilerAssert(false, "Not implemented")
   },
   return: (writer, ast) => {
@@ -249,7 +285,7 @@ const generateName = (writer: LlvmWriter, binding: Binding) => {
   if (writer.globalNames.get(binding)) {
     return writer.globalNames.get(binding)!
   }
-  let name = binding.name.replace(/[^a-zA-Z0-9]/g, ' ').trim().replace(/ +/g, '_')
+  let name = binding.name.replace(/[^a-zA-Z0-9\.]/g, ' ').trim().replace(/ +/g, '_')
 
   let newName = name; let index = 0
   while (!newName || writer.globalNameToBinding.get(newName)) { newName = `${name}_${index++}` }
@@ -271,16 +307,7 @@ const writeLlvmBytecodeFunction = (bytecodeWriter: LlvmWriter, func: CompiledFun
   log("\nWriting func", func.functionDefinition.debugName, "\n")
   const funcWriter: LlvmFunctionWriter = {
     writer: bytecodeWriter,
-    argSlots: 0,
-    returnSlots: 0,
-    bytecode: [],
-    constantsByType: new Map(),
-    constantSlots: [],
-    nextConstantSlot: 0,
-    blocks: [],
-    locals: [],
-    currentScopeIndex: 0,
-    nextLocalSlot: 0,
+    function: func,
     nameStack: [],
     valueStack: [],
   }

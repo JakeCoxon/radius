@@ -218,6 +218,10 @@ const writeOperator = (writer: CodegenFunctionWriter, op: string, type: Type) =>
     writeOperator(writer, ">", type);
     writeBytes(writer, OpCodes.NotI32);
     return;
+  } else if (op === "!=") {
+    writeOperator(writer, "==", type);
+    writeBytes(writer, OpCodes.NotI32);
+    return;
   } else if (op === "&") {
     writeBytes(writer, OpCodes.BitwiseAnd); return
   } else if (op === "|") {
