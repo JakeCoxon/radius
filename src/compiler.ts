@@ -47,7 +47,7 @@ export const BytecodeDefault: ParseTreeTable = {
 
   value:   (out, node) => pushBytecode(out, node.token, { type: "push", value: node.value }), 
   number:  (out, node) => pushBytecode(out, node.token, { type: "push", value: Number(node.token.value) }), 
-  string:  (out, node) => pushBytecode(out, node.token, { type: "push", value: node.token.value }), 
+  string:  (out, node) => pushBytecode(out, node.token, { type: "push", value: node.string }), 
   nil:     (out, node) => pushBytecode(out, node.token, { type: "push", value: null }), 
   boolean: (out, node) => pushBytecode(out, node.token, { type: "push", value: node.token.value !== 'false' }), 
   list:    (out, node) => (visitAll(out, node.exprs), pushBytecode(out, node.token, { type: 'list', count: node.exprs.length })),
@@ -244,7 +244,7 @@ export const BytecodeSecondOrder: ParseTreeTable = {
 
   value:    (out, node) => pushBytecode(out, node.token, { type: "push", value: node.value }), 
   number:   (out, node) => pushBytecode(out, node.token, { type: "numberast", value: node.token.value }),
-  string:   (out, node) => pushBytecode(out, node.token, { type: "stringast", value: node.token.value }),
+  string:   (out, node) => pushBytecode(out, node.token, { type: "stringast", value: node.string }),
   boolean:  (out, node) => pushBytecode(out, node.token, { type: "boolast", value: node.token.value !== 'false' }),
 
   operator: (out, node) => (visitAll(out, node.exprs), pushBytecode(out, node.token, { type: 'operatorast', name: node.token.value, count: node.exprs.length })),

@@ -116,7 +116,7 @@ export class ParseIdentifier extends ParseNodeType {   key = 'identifier' as con
 export class ParseSymbol extends ParseNodeType {       key = 'symbol' as const;       constructor(public token: Token) { super();} }
 export class ParseNil extends ParseNodeType {          key = 'nil' as const;          constructor(public token: Token) { super();} }
 export class ParseNumber extends ParseNodeType {       key = 'number' as const;       constructor(public token: Token) { super();} }
-export class ParseString extends ParseNodeType {       key = 'string' as const;       constructor(public token: Token) { super();} }
+export class ParseString extends ParseNodeType {       key = 'string' as const;       constructor(public token: Token, public string: string) { super();} }
 export class ParseBoolean extends ParseNodeType {      key = 'boolean' as const;      constructor(public token: Token) { super();} }
 export class ParseStatements extends ParseNodeType {   key = 'statements' as const;   constructor(public token: Token, public exprs: ParseNode[]) { super();} }
 export class ParseLet extends ParseNodeType {          key = 'let' as const;          constructor(public token: Token, public name: ParseIdentifier | ParseFreshIden, public type: ParseNode | null, public value: ParseNode | null) { super();} }
@@ -942,13 +942,16 @@ export type CodegenWriter = {
   nextGlobalSlot: number
 }
 
+export type LlvmResultValue = 
+  { register: string } | 
+  { pointer: string, type: Type }
 export type LlvmFunctionWriter = {
   writer: LlvmWriter
   function: CompiledFunction,
   // argSlots: number
   // returnSlots: number
   // bytecode: number[]
-  // constantsByType: Map<Type, Map<unknown, number>>
+  constantsByType: Map<Type, Map<unknown, number>>
   // constantSlots: number[]
   // nextConstantSlot: number
   // locals: { binding: Binding, slot: number, scopeIndex: number }[]
@@ -956,7 +959,7 @@ export type LlvmFunctionWriter = {
   // currentScopeIndex: number
   // nextLocalSlot: number,
   nameStack: string[],
-  valueStack: string[],
+  valueStack: LlvmResultValue[],
   currentBlockLabel: string
 }
 export type LlvmWriter = {
@@ -969,4 +972,6 @@ export type LlvmWriter = {
   globalNameToBinding: Map<string, Binding | Type>
   nextGlobalSlot: number,
   outputWriter: FileWriter,
+  outputStrings: string[],
+  outputHeaders: string[],
 }

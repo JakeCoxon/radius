@@ -505,7 +505,8 @@ const astWriter: AstWriterTable<CodegenFunctionWriter> = {
 
       if (ast.args[0].type === IntType || ast.args[0].type === BoolType) writeBytes(writer, OpCodes.ToStringI32);
       else if (ast.args[0].type === FloatType) writeBytes(writer, OpCodes.ToStringF32);
-      else if (ast.args[0].type === DoubleType) writeBytes(writer, OpCodes.ToStringI64);
+      else if (ast.args[0].type === DoubleType) writeBytes(writer, OpCodes.ToStringF64);
+      else if (ast.args[0].type === RawPointerType) writeBytes(writer, OpCodes.ToStringI64);
       else if (ast.args[0].type === StringType) {}
       else compilerAssert(false, `Not implemented`, { type: ast.args[0].type });
       writeBytes(writer, OpCodes.Print, 1);

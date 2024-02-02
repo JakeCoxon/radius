@@ -227,7 +227,7 @@ export const makeParser = (input: string, debugName: string) => {
     else if (match("{"))     return match("|") ? parseLambda() : throwExpectError("Not implemented")
     else if (match("block")) return new ParseBlock(previous, null, token?.value != ':' ? parseIdentifier() : null, parseColonBlockExpr('block'))
     else if (match("ifx"))   return parseIf(previous, true, "if condition")
-    else if (matchType("STRING")) return new ParseString(previous)
+    else if (matchType("STRING")) return new ParseString(previous, previous.value.slice(1, -1))
     else if (matchType("NUMBER")) return parseNumberLiteral();
     else if (matchType("SPECIALNUMBER")) return parseNumberLiteral();
     else if (prevSignificantNewlines && match("|")) return parseBracelessLambda();

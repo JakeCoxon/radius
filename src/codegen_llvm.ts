@@ -1,5 +1,5 @@
 import { externals, mallocExternal, reallocExternal } from "./compiler_sugar";
-import { Ast, AstType, AstWriterTable, Binding, BindingAst, BoolType, CompiledFunction, ConcreteClassType, DoubleType, FileWriter, FloatType, GlobalCompilerState, IntType, ListTypeConstructor, LlvmFunctionWriter, LlvmWriter, NumberAst, ParameterizedType, PrimitiveType, RawPointerType, StatementsAst, StringType, Type, TypeField, VoidType, compilerAssert, isAst, isType, textColors } from "./defs";
+import { Ast, AstType, AstWriterTable, Binding, BindingAst, BoolType, CompiledFunction, ConcreteClassType, DoubleType, FileWriter, FloatType, GlobalCompilerState, IntType, ListTypeConstructor, LlvmFunctionWriter, LlvmResultValue, LlvmWriter, NumberAst, ParameterizedType, PrimitiveType, RawPointerType, StatementsAst, StringType, Type, TypeField, ValueFieldAst, VoidType, compilerAssert, isAst, isType, textColors } from "./defs";
 
 // Some useful commands
 //
@@ -53,40 +53,78 @@ const toStatements = (ast: Ast) => {
   return new StatementsAst(ast.type, ast.location, [ast])
 }
 
-const astWriter: AstWriterTable<LlvmFunctionWriter> = {
+const toRegister = (writer: LlvmFunctionWriter, v: LlvmResultValue): string => {
+  if ('register' in v) return v.register
+  const name = `%${generateName(writer.writer, new Binding("", VoidType))}`
+  // compilerAssert(!('value' in v), "Not impl")
+  format(writer, "  $ = load $, ptr $\n", name, v.type, v.pointer)
+  return name
+}
+const toPointer = (writer: LlvmFunctionWriter, v: LlvmResultValue, type: Type): string => {
+  if ('pointer' in v) return v.pointer
+  const ptrName = `%${generateName(writer.writer, new Binding("", VoidType))}`
+  format(writer, "  $ = alloca $\n", ptrName, type)
+  format(writer, "  store $ $, ptr $\n", type, v.register, ptrName)
+  return ptrName
+}
+const getPointerName = (writer: LlvmFunctionWriter, type: Type) => {
+  if (type === RawPointerType) return 'ptr'
+  return `${getTypeName(writer.writer, type)}*`
+}
+
+type NodeInfo = {
+  memoryPointer: string | undefined
+}
+export type LlvmAstWriterTable = {
+  [A in Ast as A['key']]: (writer: LlvmFunctionWriter, ast: A, nodeInfo: NodeInfo) => void;
+}
+
+const astWriter: LlvmAstWriterTable = {
   statements: (writer, ast) => {
     // TODO: Filter voids?
     ast.statements.forEach((expr, i) => {
-      writer.writer.outputWriter.write("  ; Statement\n")
+      writer.writer.outputStrings.push("; Statement\n")
       writeExpr(writer, expr)
-      writer.writer.outputWriter.write("\n")
-      compilerAssert(writer.nameStack.length === 0, "Unexpected")
+      writer.writer.outputStrings.push("\n")
+      // compilerAssert(writer.nameStack.length === 0, "Unexpected name in stack", { nameStack: writer.nameStack })
       const toPop = i !== ast.statements.length - 1 || ast.type === VoidType
       if (toPop) {
-        writer.valueStack.length = 0 // Ignore remaining values
+        writer.valueStack.pop()
       }
     })
   },
   string: (writer, ast) => {
-    compilerAssert(false, "Not implemented")
+    const constantName = `@${generateName(writer.writer, new Binding("constant", VoidType))}`
+ 
+    const escaped = ast.value.replace(/["\\]|[\x00-\x1F\x80-\xFF]/g, (str) => {
+      return `\\${str.charCodeAt(0).toString(16)}`
+    })
+    const length = ast.value.length + 1 // add null terminator
+    writer.writer.outputHeaders.push(`${constantName} = private unnamed_addr constant [${length} x i8] c"${escaped}\\00"\n`)
+    const named = !!writer.nameStack.length
+    const name = popNameStackOrGenerateNewName(writer)
+    if (!named) format(writer, "  $ = alloca $\n", name, ast.type)
+    format(writer, `  store $ { i32 $, ptr $ }, ptr $\n`, ast.type, String(length - 1), constantName, name)
+    writer.valueStack.push({ pointer: name, type: ast.type })
   },
   cast: (writer, ast) => {
     compilerAssert(false, "Not implemented")
   },
   binding: (writer, ast) => {
     compilerAssert(ast.binding.type !== VoidType)
-    // ast.binding.
     const isArg = !!writer.function.argBindings.find(x => x === ast.binding)
     if (isArg) {
       const name = generateName(writer.writer, ast.binding)
-      writer.valueStack.push(`%${name}`)
+      writer.valueStack.push({ register: `%${name}` })
       return
     }
 
-    const name = `%${generateName(writer.writer, new Binding(`${ast.binding.name}.value`, VoidType))}`
+    const name = writer.nameStack.length ? writer.nameStack.pop()! : 
+      `%${generateName(writer.writer, new Binding(`${ast.binding.name}.value`, VoidType))}`
     const ptrName = `%${generateName(writer.writer, ast.binding)}`
-    format(writer, "  $ = load $, ptr $\n", name, ast.binding.type, ptrName)
-    writer.valueStack.push(name)
+    writer.valueStack.push({ pointer: ptrName, type: ast.type })
+    // format(writer, "  $ = load $, ptr $\n", name, ast.binding.type, ptrName)
+    // writer.valueStack.push(name)
   },
   let: (writer, ast) => {
     // TODO: No value should zero initialize?
@@ -95,11 +133,21 @@ const astWriter: AstWriterTable<LlvmFunctionWriter> = {
     const ptrName = `%${generateName(writer.writer, ast.binding)}`
     format(writer, "  $ = alloca $\n", ptrName, ast.binding.type)
 
-    const name = `%${generateName(writer.writer, new Binding(`${ast.binding.name}.value`, VoidType))}`
-    writer.nameStack.push(name)
+    writer.nameStack.push(ptrName)
     writeExpr(writer, ast.value)
+    console.log("After let", writer.valueStack)
+    const result = writer.valueStack.pop()!
+    if ('register' in result) {
+      if (result.register !== ptrName) {
+        format(writer, "  store $ $, ptr $\n", ast.binding.type, result.register, ptrName)
+      }
+    } else if (result.pointer !== ptrName) {
+      const structType = ast.binding.type
+      const temp = `%${generateName(writer.writer, new Binding("", VoidType))}`
+      format(writer, "  $ = load $, ptr $\n", temp, structType, result.pointer)
+      format(writer, "  store $ $, ptr $\n", structType, temp, ptrName)
+    }
 
-    format(writer, "  store $ $, ptr $\n", ast.binding.type, name, ptrName)
   },
   set: (writer, ast) => {
     const name = `%${generateName(writer.writer, new Binding(`${ast.binding.name}.value`, VoidType))}`
@@ -111,14 +159,23 @@ const astWriter: AstWriterTable<LlvmFunctionWriter> = {
   },
   number: (writer, ast) => {
     compilerAssert(ast.type === IntType || ast.type === FloatType || ast.type === DoubleType, "Expected number type got $type", { ast, type: ast.type })
-    const name = popNameStackOrGenerateNewName(writer)
-    format(writer, `  $ = add $ 0, $ ; literal\n`, name, ast.type, String(ast.value))
-    writer.valueStack.push(name)
+    const named = !!writer.nameStack.length
+    const ptrName = popNameStackOrGenerateNewName(writer)
+
+    const valueName = `%${generateName(writer.writer, new Binding("", VoidType))}`
+    format(writer, `  $ = add $ 0, $ ; literal\n`, valueName, ast.type, String(ast.value))
+    if (named) {
+      // format(writer, `  store $ $, ptr $\n`, ast.type, valueName, ptrName)
+      writer.valueStack.push({ pointer: ptrName, type: ast.type })
+    } else {
+      writer.valueStack.push({ register: valueName })
+    }
+
   },
   bool: (writer, ast) => {
     const name = popNameStackOrGenerateNewName(writer)
     format(writer, `  $ = add $ 0, $ ; literal\n`, name, ast.type, ast.value ? "1" : "0")
-    writer.valueStack.push(name)
+    writer.valueStack.push({ register: name })
   },
   if: (writer, ast) => {
     const outName = ast.type !== VoidType ? popNameStackOrGenerateNewName(writer) : undefined
@@ -133,7 +190,7 @@ const astWriter: AstWriterTable<LlvmFunctionWriter> = {
     writer.currentBlockLabel = thenLabel
     writeExpr(writer, toStatements(ast.trueBody))
     thenFinalLabel = writer.currentBlockLabel // Nested control flow have have changed current block
-    if (outName) thenVal = writer.valueStack.pop()!
+    if (outName) thenVal = toRegister(writer, writer.valueStack.pop()!)
     format(writer, `  br label %$\n\n`, endLabel)
 
     if (ast.falseBody) {
@@ -141,7 +198,7 @@ const astWriter: AstWriterTable<LlvmFunctionWriter> = {
       writer.currentBlockLabel = elseLabel
       writeExpr(writer, toStatements(ast.falseBody))
       elseFinalLabel = writer.currentBlockLabel // Nested control flow have have changed current block
-      if (outName) elseVal = writer.valueStack.pop()!
+      if (outName) elseVal = toRegister(writer, writer.valueStack.pop()!)
       format(writer, `  br label %$\n\n`, endLabel)
     }
 
@@ -163,14 +220,14 @@ const astWriter: AstWriterTable<LlvmFunctionWriter> = {
     writer.currentBlockLabel = secondOperand
     writeExpr(writer, b)
     const secondOperandFinalName = writer.currentBlockLabel // Nested control flow have have changed current block
-    const bVal = writer.valueStack.pop()!
+    const bVal = toRegister(writer, writer.valueStack.pop()!)
     format(writer, `  br label %$\n`, resultLabel)
     format(writer, `$:\n`, resultFalse)
     format(writer, `  br label %$\n`, resultLabel)
     format(writer, `$:\n`, resultLabel)
     format(writer, `  $ = phi $ [ false, %$ ], [ $, %$ ]\n`, outName, ast.type, resultFalse, bVal, secondOperandFinalName)
     writer.currentBlockLabel = resultLabel
-    writer.valueStack.push(outName)
+    writer.valueStack.push({ register: outName })
   },
   or: (writer, ast) => {
     const outName = popNameStackOrGenerateNewName(writer)
@@ -183,14 +240,14 @@ const astWriter: AstWriterTable<LlvmFunctionWriter> = {
     writer.currentBlockLabel = secondOperand
     writeExpr(writer, b)
     const secondOperandFinalName = writer.currentBlockLabel // Nested control flow have have changed current block
-    const bVal = writer.valueStack.pop()!
+    const bVal = toRegister(writer, writer.valueStack.pop()!)
     format(writer, `  br label %$\n`, resultLabel)
     format(writer, `$:\n`, resultTrue)
     format(writer, `  br label %$\n`, resultLabel)
     format(writer, `$:\n`, resultLabel)
     format(writer, `  $ = phi $ [ true, %$ ], [ $, %$ ]\n`, outName, ast.type, resultTrue, bVal, secondOperandFinalName)
     writer.currentBlockLabel = resultLabel
-    writer.valueStack.push(outName)
+    writer.valueStack.push({ register: outName })
   },
   while: (writer, ast) => {
     const loopCondition = generateName(writer.writer, new Binding(`while_condition`, VoidType))
@@ -201,7 +258,7 @@ const astWriter: AstWriterTable<LlvmFunctionWriter> = {
     format(writer, `$:\n`, loopCondition)
     writer.currentBlockLabel = loopCondition
     writeExpr(writer, ast.condition)
-    const aVal = writer.valueStack.pop()!
+    const aVal = toRegister(writer, writer.valueStack.pop()!)
     format(writer, `  br i1 $, label %$, label %$\n\n`, aVal, loopBody, loopEnd)
 
     format(writer, `$:\n`, loopBody)
@@ -230,12 +287,41 @@ const astWriter: AstWriterTable<LlvmFunctionWriter> = {
   call: (writer, ast) => {
     if (ast.func.name === "print") {
       compilerAssert(ast.args.length === 1, "Print not implemented yet", { ast });
-      const name = popNameStackOrGenerateNewName(writer)
-      const formatPtrName = `%${generateName(writer.writer, new Binding(`format_str_ptr`, VoidType))}`
-      format(writer, "  $ = getelementptr inbounds [4 x i8], [4 x i8]* @format_string, i64 0, i64 0\n", formatPtrName)
-      format(writer, "  $ = call i32 (i8*, ...) @printf(i8* $, $ $)\n", name, formatPtrName, ast.args[0].type, ast.args[0])
+      const named = !!writer.nameStack.length
+      const outName = named && popNameStackOrGenerateNewName(writer)
+      const name = `%${generateName(writer.writer, new Binding("", VoidType))}`
+      const formatPtrName = ast.args[0].type === IntType ? `@format_string_int` :
+        ast.args[0].type === FloatType ? `@format_string_float` :
+        ast.args[0].type === RawPointerType ? `@format_string_ptr` :
+        ast.args[0].type === StringType ? `@format_string_string` : undefined
+      compilerAssert(formatPtrName, "Not implemented for this type", { type: ast.args[0].type })
+      writeExpr(writer, ast.args[0])
+      const result = toRegister(writer, writer.valueStack.pop()!)
 
-      return;
+      if (ast.args[0].type === StringType) {
+        const fields = ast.args[0].type.typeInfo.fields
+
+        const loadField = (basePointer: string, structType: Type, field: TypeField) => {
+          const fieldType = field.fieldType
+          const loadFieldPtr = `%${generateName(writer.writer, new Binding("", VoidType))}`
+          const loadFieldVal = `%${generateName(writer.writer, new Binding("", VoidType))}`
+          format(writer, "  $ = getelementptr $, $ $, i32 0, i32 $\n", loadFieldPtr, structType, getPointerName(writer, structType), basePointer, String(field.index))
+          format(writer, "  $ = load $, $ $\n", loadFieldVal, fieldType, getPointerName(writer, fieldType), loadFieldPtr)
+          return `${getTypeName(writer.writer, field.fieldType)} ${loadFieldVal}`
+        }
+        const basePointer = `%${generateName(writer.writer, new Binding("", VoidType))}`
+        format(writer, "  $ = alloca $\n", basePointer, StringType)
+        format(writer, "  store $ $, ptr $\n", StringType, result, basePointer)
+        const lengthRegister = loadField(basePointer, StringType, fields.find(x => x.name === 'length')!)
+        const strPtrRegister = loadField(basePointer, StringType, fields.find(x => x.name === 'data')!)
+        format(writer, "  $ = call i32 (i8*, ...) @printf(ptr $, $, $)\n", name, formatPtrName, lengthRegister, strPtrRegister)
+      } else {
+        format(writer, "  $ = call i32 (i8*, ...) @printf(ptr $, $ $)\n", name, formatPtrName, ast.args[0].type, result)
+      }
+      if (outName) {
+        format(writer, "  ; write to $\n", outName)
+      }
+      return
     }
 
     compilerAssert(false, "Not implemented")
@@ -245,10 +331,12 @@ const astWriter: AstWriterTable<LlvmFunctionWriter> = {
   },
 
   usercall: (writer, ast) => {
-    const name = ast.type !== VoidType ? popNameStackOrGenerateNewName(writer) : undefined
+    const named = !!writer.nameStack.length
+    const ptrName = ast.type !== VoidType && named ? popNameStackOrGenerateNewName(writer) : undefined
+    const name = ast.type !== VoidType && `%${generateName(writer.writer, new Binding("", VoidType))}`
 
     const argValues = ast.args.map(arg => {
-      writeExpr(writer, arg); return writer.valueStack.pop()!
+      writeExpr(writer, arg); return toRegister(writer, writer.valueStack.pop()!)
     })
     
     if (name) { format(writer, `  $ = `, name) }
@@ -260,7 +348,7 @@ const astWriter: AstWriterTable<LlvmFunctionWriter> = {
       format(writer, `$ $`, arg.type, argValues[i]!)
     })
     format(writer, `)\n`)
-    if (name) writer.valueStack.push(name)
+    if (name) writer.valueStack.push({ register: name })
   },
   operator: (writer, ast) => {
     const [a, b] = ast.args
@@ -269,23 +357,84 @@ const astWriter: AstWriterTable<LlvmFunctionWriter> = {
     const op = operatorMap[ast.operator]
     compilerAssert(op, "Expected op", { ast })
     format(writer, `  $ = $ $ $, $\n`, name, op, a.type, a, b)
-    writer.valueStack.push(name)
+    writer.valueStack.push({ register: name })
   },
   not: (writer, ast) => {
     const expr = ast.expr
     compilerAssert(expr.type === BoolType, "Expected bool")
     const name = popNameStackOrGenerateNewName(writer)
     format(writer, `  $ = xor $ $, 1\n`, name, expr.type, expr)
-    writer.valueStack.push(name)
+    writer.valueStack.push({ register: name })
   },
   defaultcons: (writer, ast) => {
     compilerAssert(false, "Not implemented 'defaultcons'")
   },
   constructor: (writer, ast) => {
-    compilerAssert(false, "Not implemented 'constructor'")
+
+    // format(writer, "  ; string literal: $\n", ast.value)
+    // format(writer, "  $ = getelementptr [$ x i8], [$ x i8]* $, i64 0, i64 0\n", strPtr, String(length), String(length), constantName)
+    // format(writer, "  $ = getelementptr $, $* $, i32 0, i32 0\n", lengthFieldName, ast.type, ast.type, name)
+    // format(writer, "  store i32 $, i32* $\n", String(length - 1), lengthFieldName)
+    // format(writer, "  $ = getelementptr $, $* $, i32 0, i32 1\n", ptrFieldName, ast.type, ast.type, name)
+    // format(writer, "  store ptr $, ptr $\n", strPtr, ptrFieldName)
+
+    const named = !!writer.nameStack.length
+    const structPtr = popNameStackOrGenerateNewName(writer)
+    if (!named) format(writer, "  $ = alloca $\n", structPtr, ast.type)
+
+    ast.args.forEach((arg, index) => {
+      writeExpr(writer, arg)
+      const result = writer.valueStack.pop()!
+
+      const fieldPtr = `%${generateName(writer.writer, new Binding(``, VoidType))}`
+      const field = ast.type.typeInfo.fields[index]
+
+      format(writer, "  $ = getelementptr $, ptr $, i32 0, i32 $\n", fieldPtr, ast.type, structPtr, String(index))
+      const reg = toRegister(writer, result)
+      // if ('register' in result) {
+        format(writer, "  store $ $, $ $\n", field.fieldType, reg, getPointerName(writer, field.fieldType), fieldPtr)
+      // } else {
+      //   format(writer, "  ; store $ $, $ $\n", field.fieldType, result.pointer, getPointerName(writer, field.fieldType), fieldPtr)
+      //   // compilerAssert(false, "Not impl")
+      // }
+    })
+
+    writer.valueStack.push({ pointer: structPtr, type: ast.type })
+    // format(writer, "  $ = alloca $\n", name, ast.type)
+    
+
+    
+    // compilerAssert(false, "Not implemented 'constructor'")
   },
   valuefield: (writer, ast) => {
-    compilerAssert(false, "Not implemented 'valuefield'")
+
+    // const storeFieldVal = `%${generateName(writer.writer, new Binding("", VoidType))}`
+    // format(writer, "  $ = getelementptr $, $ $, i32 0, i32 $\n", loadFieldPtr, structType, getPointerName(writer, structType), result.pointer, String(field.index))
+    // format(writer, "  $ = load $, $ $\n", loadFieldVal, fieldType, getPointerName(writer, fieldType), loadFieldPtr)
+    const loadField = (base: LlvmResultValue, field: TypeField) => {
+      const fieldType = field.fieldType
+      
+      const loadFieldPtr = `%${generateName(writer.writer, new Binding("", VoidType))}`
+      const loadFieldVal = `%${generateName(writer.writer, new Binding("", VoidType))}`
+
+      if ('pointer' in base) {
+        format(writer, "  $ = getelementptr $, $ $, i32 0, i32 $\n", loadFieldPtr, field.sourceType, getPointerName(writer, field.sourceType), base.pointer, String(field.index))
+        format(writer, "  $ = load $, $ $\n", loadFieldVal, fieldType, getPointerName(writer, fieldType), loadFieldPtr)
+      } else {
+        format(writer, "  $ = extractvalue $ $, $\n", loadFieldVal, field.sourceType, base.register, String(field.index))
+      }
+      return { register: loadFieldVal }
+    }
+    writeExpr(writer, ast.left)
+    const leftResult = writer.valueStack.pop()!
+    // console.log(result)
+    const reg = ast.fieldPath.reduce((reg, field) => {
+      return loadField(leftResult, ast.fieldPath[0])
+    }, leftResult)
+
+    writer.valueStack.push(reg)
+
+    // compilerAssert(false, "Not implemented 'valuefield'")
   },
   field: (writer, ast) => {
     compilerAssert(false, "Not implemented 'field'")
@@ -328,11 +477,14 @@ const format = (writer: LlvmFunctionWriter, format: string, ...args: (string | T
     if (isAst(v)) {
       writeExpr(writer, v)
       compilerAssert(writer.valueStack.length, "Expected value")
-      return writer.valueStack.pop()!
+      const result = writer.valueStack.pop()!
+      return toRegister(writer, result)
+      // if ('register' in result) return result.register
+      // return result.pointer
     }
     return ''
   })
-  writer.writer.outputWriter.write(s)
+  writer.writer.outputStrings.push(s)
 }
 const popNameStackOrGenerateNewName = (writer: LlvmFunctionWriter) => {
   return writer.nameStack.length ? writer.nameStack.pop()! : 
@@ -349,7 +501,9 @@ export const writeLlvmBytecode = (globalCompilerState: GlobalCompilerState, outp
     globalNames: new Map(),
     globalNameToBinding: new Map(),
     nextGlobalSlot: 0,
-    outputWriter
+    outputHeaders: [],
+    outputStrings: [],
+    outputWriter,
   }
 
   bytecodeWriter.globalNames.set(VoidType, "void")
@@ -358,16 +512,27 @@ export const writeLlvmBytecode = (globalCompilerState: GlobalCompilerState, outp
   bytecodeWriter.globalNames.set(FloatType, "f32")
   bytecodeWriter.globalNames.set(RawPointerType, "ptr")
 
-  outputWriter.write("declare i32 @printf(i8*, ...)\n\n")
-  outputWriter.write(`@format_string = private unnamed_addr constant [4 x i8] c"%i\\0A\\00", align 1\n\n`)
+  bytecodeWriter.outputHeaders.push("declare i32 @printf(i8*, ...)\n\n")
+  bytecodeWriter.outputHeaders.push(`@format_string_int = private unnamed_addr constant [4 x i8] c"%i\\0A\\00", align 1\n`)
+  bytecodeWriter.outputHeaders.push(`@format_string_float = private unnamed_addr constant [4 x i8] c"%f\\0A\\00", align 1\n`)
+  bytecodeWriter.outputHeaders.push(`@format_string_ptr = private unnamed_addr constant [4 x i8] c"%p\\0A\\00", align 1\n`)
+  bytecodeWriter.outputHeaders.push(`@format_string_string = private unnamed_addr constant [6 x i8] c"%.*s\\0A\\00", align 1\n`)
+  bytecodeWriter.outputHeaders.push(`\n`)
 
   Array.from(globalCompilerState.compiledFunctions.values()).map(func => {
     const funcWriter = writeLlvmBytecodeFunction(bytecodeWriter, func)
     return funcWriter
   })
 
-  log('\n\n', bytecodeWriter.typeSizes)
-  
+  bytecodeWriter.outputHeaders.forEach(str => {
+    outputWriter.write(str)
+  })
+  outputWriter.write("\n\n")
+
+  bytecodeWriter.outputStrings.forEach(str => {
+    outputWriter.write(str)
+  })
+
   return bytecodeWriter
 }
 
@@ -375,7 +540,7 @@ const generateName = (writer: LlvmWriter, binding: Binding) => {
   if (writer.globalNames.get(binding)) {
     return writer.globalNames.get(binding)!
   }
-  let name = binding.name.replace(/[^a-zA-Z0-9\.]/g, ' ').trim().replace(/ +/g, '_')
+  let name = binding.name.replace(/[^a-zA-Z0-9_\.]/g, ' ').trim().replace(/ +/g, '_')
 
   let newName = name; let index = 0
   while (!newName || writer.globalNameToBinding.get(newName)) { newName = `${name}_${index++}` }
@@ -388,7 +553,17 @@ const getTypeName = (writer: LlvmWriter, obj: Type): string => {
   if (writer.globalNames.get(obj)) {
     return writer.globalNames.get(obj)!
   }
-  compilerAssert(false, "Type not implemented", { obj })
+  const name = `%struct.${generateName(writer, new Binding(obj.shortName, VoidType))}`
+  writer.globalNames.set(obj, name)
+  writer.outputHeaders.push(`${name} = type { `)
+  obj.typeInfo.fields.forEach((field, i) => {
+    if (i !== 0) writer.outputHeaders.push(', ')
+    writer.outputHeaders.push(getTypeName(writer, field.fieldType))
+  })
+  writer.outputHeaders.push(` }\n`)
+
+  return name
+  // compilerAssert(false, "Type not implemented", { obj })
 }
 const writeLlvmBytecodeFunction = (bytecodeWriter: LlvmWriter, func: CompiledFunction) => {
   log("\nWriting func", func.functionDefinition.debugName, "\n")
@@ -398,7 +573,8 @@ const writeLlvmBytecodeFunction = (bytecodeWriter: LlvmWriter, func: CompiledFun
     nameStack: [],
     valueStack: [],
     currentBlockLabel: '<no name>',
-    blocks: []
+    blocks: [],
+    constantsByType: new Map(),
   }
 
   const isMain = bytecodeWriter.globalCompilerState.entryFunction === func
@@ -413,12 +589,12 @@ const writeLlvmBytecodeFunction = (bytecodeWriter: LlvmWriter, func: CompiledFun
   writeExpr(funcWriter, func.body)
   if (func.returnType !== VoidType) {
     compilerAssert(funcWriter.valueStack.length === 1, "Expected 1 value left", { valueStack: funcWriter.valueStack })
-    const v = funcWriter.valueStack.pop()!
+    const v = toRegister(funcWriter, funcWriter.valueStack.pop()!)
     format(funcWriter, `  ret $ $\n`, func.returnType, v)
   } else {
     format(funcWriter, `  ret void\n`)
   }
-  bytecodeWriter.outputWriter.write(`}\n\n`)
+  bytecodeWriter.outputStrings.push(`}\n\n`)
 
   return funcWriter
 };
