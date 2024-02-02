@@ -35,9 +35,16 @@ fn main():
 
   # bar := Bar(1, 2)
   foo := 1
-  bar := "my string"
+  bar2 := "my string"
+
+  asd := bar(2, 3)
 
   print("asd")
+
+  i := 0
+  while i < 10:
+    print("OK")
+    # i += 1
   # print(bar.x)
   # print(bar.y)
   # foobar(bar)
@@ -99,15 +106,15 @@ fn main():
   # print(x <= 234)
   # print(x > 23124)
 
-  # foop := calculate_state(1, 0, 1)
+  foop := calculate_state(1, 0, 1)
   # print(foop)
 
-  # if 2 == 2:
-  #   asdfadf := 32 + 2 * 4 * 1
-  #   print(asdfadf)
-  # else:
-  #   asdfadf_2 := 32 + 2 + 3124165
-  #   print(asdfadf_2)
+  if 2 == 2:
+    asdfadf := 32 + 2 * 4 * 1
+    print(asdfadf)
+  else:
+    asdfadf_2 := 32 + 2 + 3124165
+    print(asdfadf_2)
 
-  # asdasd := ifx 2 == 3: 1 else: 2
+  asdasd := ifx 2 == 3: 1 else: 2
   # print(asdasd)
