@@ -34,9 +34,11 @@ const log = (...args: any[]) => {
   if ((globalThis as any).logger) (globalThis as any).logger.log(...args)
 }
 
-const writeExpr = (writer: LlvmFunctionWriter, ast: Ast) => {
+const writeExpr = (writer: LlvmFunctionWriter, ast: Ast, opts?: Partial<NodeInfo>) => {
   compilerAssert(astWriter[ast.key], `Not implemented ast writer '${ast.key}'`)
-  astWriter[ast.key](writer, ast as any);
+  const nodeInfo: NodeInfo = { memoryPointer: undefined }
+  Object.assign(nodeInfo, opts)
+  astWriter[ast.key](writer, ast as any, nodeInfo);
 };
 
 const constantTableByType = (writer: LlvmFunctionWriter, type: Type) => {
@@ -80,11 +82,12 @@ export type LlvmAstWriterTable = {
 }
 
 const astWriter: LlvmAstWriterTable = {
-  statements: (writer, ast) => {
+  statements: (writer, ast, nodeInfo) => {
     // TODO: Filter voids?
     ast.statements.forEach((expr, i) => {
       writer.writer.outputStrings.push("; Statement\n")
-      writeExpr(writer, expr)
+      const n = i === ast.statements.length - 1 ? nodeInfo : {}
+      writeExpr(writer, expr, n)
       writer.writer.outputStrings.push("\n")
       // compilerAssert(writer.nameStack.length === 0, "Unexpected name in stack", { nameStack: writer.nameStack })
       const toPop = i !== ast.statements.length - 1 || ast.type === VoidType
@@ -93,7 +96,7 @@ const astWriter: LlvmAstWriterTable = {
       }
     })
   },
-  string: (writer, ast) => {
+  string: (writer, ast, nodeInfo) => {
     const constantName = `@${generateName(writer.writer, new Binding("constant", VoidType))}`
  
     const escaped = ast.value.replace(/["\\]|[\x00-\x1F\x80-\xFF]/g, (str) => {
@@ -101,26 +104,31 @@ const astWriter: LlvmAstWriterTable = {
     })
     const length = ast.value.length + 1 // add null terminator
     writer.writer.outputHeaders.push(`${constantName} = private unnamed_addr constant [${length} x i8] c"${escaped}\\00"\n`)
-    const named = !!writer.nameStack.length
-    const name = popNameStackOrGenerateNewName(writer)
-    if (!named) format(writer, "  $ = alloca $\n", name, ast.type)
+    // const named = !!writer.nameStack.length
+    const name = nodeInfo.memoryPointer ?? `%${generateName(writer.writer, new Binding("", VoidType))}`
+    format(writer, "  $ = alloca $\n", name, ast.type)
     format(writer, `  store $ { i32 $, ptr $ }, ptr $\n`, ast.type, String(length - 1), constantName, name)
     writer.valueStack.push({ pointer: name, type: ast.type })
   },
   cast: (writer, ast) => {
     compilerAssert(false, "Not implemented")
   },
-  binding: (writer, ast) => {
+  binding: (writer, ast, nodeInfo) => {
     compilerAssert(ast.binding.type !== VoidType)
     const isArg = !!writer.function.argBindings.find(x => x === ast.binding)
+
+    if (nodeInfo.memoryPointer) {
+      format(writer, "  $ = alloca $\n", nodeInfo.memoryPointer, ast.binding.type)
+    }
+    
     if (isArg) {
       const name = generateName(writer.writer, ast.binding)
       writer.valueStack.push({ register: `%${name}` })
       return
     }
 
-    const name = writer.nameStack.length ? writer.nameStack.pop()! : 
-      `%${generateName(writer.writer, new Binding(`${ast.binding.name}.value`, VoidType))}`
+    // const ptrName = nodeInfo.memoryPointer ??
+    //   `%${generateName(writer.writer, new Binding(`${ast.binding.name}.value`, VoidType))}`
     const ptrName = `%${generateName(writer.writer, ast.binding)}`
     writer.valueStack.push({ pointer: ptrName, type: ast.type })
     // format(writer, "  $ = load $, ptr $\n", name, ast.binding.type, ptrName)
@@ -131,10 +139,10 @@ const astWriter: LlvmAstWriterTable = {
     compilerAssert(ast.value, "Not implemented", { ast })
     
     const ptrName = `%${generateName(writer.writer, ast.binding)}`
-    format(writer, "  $ = alloca $\n", ptrName, ast.binding.type)
+    // format(writer, "  $ = alloca $\n", ptrName, ast.binding.type)
 
-    writer.nameStack.push(ptrName)
-    writeExpr(writer, ast.value)
+    // writer.nameStack.push(ptrName)
+    writeExpr(writer, ast.value, { memoryPointer: ptrName })
     console.log("After let", writer.valueStack)
     const result = writer.valueStack.pop()!
     if ('register' in result) {
@@ -151,22 +159,24 @@ const astWriter: LlvmAstWriterTable = {
   },
   set: (writer, ast) => {
     const name = `%${generateName(writer.writer, new Binding(`${ast.binding.name}.value`, VoidType))}`
-    writer.nameStack.push(name)
     writeExpr(writer, ast.value)
 
     const ptrName = `%${generateName(writer.writer, ast.binding)}`
     format(writer, "  store $ $, ptr $\n", ast.binding.type, name, ptrName)
   },
-  number: (writer, ast) => {
+  number: (writer, ast, nodeInfo) => {
     compilerAssert(ast.type === IntType || ast.type === FloatType || ast.type === DoubleType, "Expected number type got $type", { ast, type: ast.type })
-    const named = !!writer.nameStack.length
-    const ptrName = popNameStackOrGenerateNewName(writer)
+    // const ptrName = popNameStackOrGenerateNewName(writer)
+
+    if (nodeInfo.memoryPointer) {
+      format(writer, "  $ = alloca $\n", nodeInfo.memoryPointer, ast.type)
+    }
 
     const valueName = `%${generateName(writer.writer, new Binding("", VoidType))}`
     format(writer, `  $ = add $ 0, $ ; literal\n`, valueName, ast.type, String(ast.value))
-    if (named) {
-      // format(writer, `  store $ $, ptr $\n`, ast.type, valueName, ptrName)
-      writer.valueStack.push({ pointer: ptrName, type: ast.type })
+    if (nodeInfo.memoryPointer) {
+      format(writer, `  store $ $, ptr $\n`, ast.type, valueName, nodeInfo.memoryPointer)
+      writer.valueStack.push({ pointer: nodeInfo.memoryPointer, type: ast.type })
     } else {
       writer.valueStack.push({ register: valueName })
     }
@@ -330,10 +340,14 @@ const astWriter: LlvmAstWriterTable = {
     compilerAssert(false, "Not implemented")
   },
 
-  usercall: (writer, ast) => {
+  usercall: (writer, ast, nodeInfo) => {
     const named = !!writer.nameStack.length
-    const ptrName = ast.type !== VoidType && named ? popNameStackOrGenerateNewName(writer) : undefined
+    // const ptrName = ast.type !== VoidType && named ? popNameStackOrGenerateNewName(writer) : undefined
     const name = ast.type !== VoidType && `%${generateName(writer.writer, new Binding("", VoidType))}`
+
+    if (nodeInfo.memoryPointer) {
+      format(writer, "  $ = alloca $\n", nodeInfo.memoryPointer, ast.type)
+    }
 
     const argValues = ast.args.map(arg => {
       writeExpr(writer, arg); return toRegister(writer, writer.valueStack.pop()!)
@@ -369,7 +383,7 @@ const astWriter: LlvmAstWriterTable = {
   defaultcons: (writer, ast) => {
     compilerAssert(false, "Not implemented 'defaultcons'")
   },
-  constructor: (writer, ast) => {
+  constructor: (writer, ast, nodeInfo) => {
 
     // format(writer, "  ; string literal: $\n", ast.value)
     // format(writer, "  $ = getelementptr [$ x i8], [$ x i8]* $, i64 0, i64 0\n", strPtr, String(length), String(length), constantName)
@@ -378,9 +392,14 @@ const astWriter: LlvmAstWriterTable = {
     // format(writer, "  $ = getelementptr $, $* $, i32 0, i32 1\n", ptrFieldName, ast.type, ast.type, name)
     // format(writer, "  store ptr $, ptr $\n", strPtr, ptrFieldName)
 
-    const named = !!writer.nameStack.length
-    const structPtr = popNameStackOrGenerateNewName(writer)
-    if (!named) format(writer, "  $ = alloca $\n", structPtr, ast.type)
+    // const named = !!writer.nameStack.length
+
+    console.log("constructor", nodeInfo)
+
+    const structPtr = nodeInfo.memoryPointer ?? `%${generateName(writer.writer, new Binding("", VoidType))}`
+    format(writer, "  $ = alloca $\n", structPtr, ast.type)
+
+    // if (!named) format(writer, "  $ = alloca $\n", structPtr, ast.type)
 
     ast.args.forEach((arg, index) => {
       writeExpr(writer, arg)
