@@ -33,21 +33,25 @@ type Bar @struct:
 
 fn main():
 
-  bar := Bar(1, 2)
-  print(bar.x)
-  print(bar.y)
-  foobar(bar)
-  asdasd := createbar(3, 2)
-  print(asdasd.x)
+  # bar := Bar(1, 2)
+  foo := 1
+  bar := "my string"
 
-  foo := "Hello"
-  x := foo
+  print("asd")
+  # print(bar.x)
+  # print(bar.y)
+  # foobar(bar)
+  # asdasd := createbar(3, 2)
+  # print(asdasd.x)
+
+  # foo := "Hello"
+  # x := foo
   
 
-  print(x)
-  foop(x)
-  print(x.data)
-  print(x.length)
+  # print(x)
+  # foop(x)
+  # print(x.data)
+  # print(x.length)
 
   # print("Foo")
   # y := 0
