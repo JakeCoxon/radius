@@ -50,12 +50,12 @@ fn main():
   print(x.length)
 
   # print("Foo")
-  # y := 0
-  # i := 0
-  # while i < 100:
-  #   y = (y + 1) * 23
-  #   i += 1
-  # print(y)
+  y := 0
+  i := 0
+  while i < 100:
+    y = (y + 1) * 23
+    i += 1
+  print(y)
   
   # x := 2 == 2 and 1 == 2
   # print(bar(2, 3))

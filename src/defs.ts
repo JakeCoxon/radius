@@ -942,9 +942,7 @@ export type CodegenWriter = {
   nextGlobalSlot: number
 }
 
-export type LlvmResultValue = 
-  { register: string } | 
-  { pointer: string, type: Type }
+
 export type LlvmFunctionWriter = {
   writer: LlvmWriter
   function: CompiledFunction,
@@ -958,9 +956,10 @@ export type LlvmFunctionWriter = {
   blocks: { binding: Binding }[],
   // currentScopeIndex: number
   // nextLocalSlot: number,
-  nameStack: string[],
-  valueStack: LlvmResultValue[],
-  currentBlockLabel: string
+  currentBlockLabel: Binding,
+  currentOutput: string[],
+  outputFunctionBody: string[]
+  outputFunctionHeaders: string[]
 }
 export type LlvmWriter = {
   functions: LlvmFunctionWriter[]
