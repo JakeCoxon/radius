@@ -35,18 +35,16 @@ const log = (...args: any[]) => {
 }
 
 const writeExpr = (writer: LlvmFunctionWriter, ast: Ast, opts?: Partial<NodeInfo>) => {
-  compilerAssert(false, `Not implemented`)
+  compilerAssert(false, `Not implemented 'writeExpr'`)
   // compilerAssert(astWriter[ast.key], `Not implemented ast writer '${ast.key}'`)
   // const nodeInfo: NodeInfo = { memoryPointer: undefined }
   // Object.assign(nodeInfo, opts)
   // astWriter[ast.key](writer, ast as any, nodeInfo);
 };
 
-const visitAst = (writer: LlvmFunctionWriter, ast: Ast, opts?: Partial<NodeInfo>): NodeResult => {
+const visitAst = (writer: LlvmFunctionWriter, ast: Ast): NodeResult => {
   compilerAssert(astWriter[ast.key], `Not implemented ast writer '${ast.key}'`)
-  const nodeInfo: NodeInfo = { memoryPointer: undefined }
-  Object.assign(nodeInfo, opts)
-  return astWriter[ast.key](writer, ast as any, nodeInfo);
+  return astWriter[ast.key](writer, ast as any);
 };
 
 const constantTableByType = (writer: LlvmFunctionWriter, type: Type) => {
@@ -85,7 +83,7 @@ const getPointerName = (writer: LlvmFunctionWriter, type: Type) => {
 type NodeInfo = {
   memoryPointer: string | undefined
 }
-class RawNode  { key = 'RawNode';   constructor(public string: string, public args: (string | Type | RegisterResult | RegisterRef | Binding)[] = []) {} }
+class RawNode  { key = 'RawNode';   constructor(public string: string, public args: (string | number | Type | RegisterResult | RegisterRef | Binding)[] = []) {} }
 class StoreNode      { key = 'StoreNode';      constructor(public binding: Binding, public expr: RegisterResult) {} }
 class LoadNode       { key = 'LoadNode';       constructor(public register: Binding, public pointer: Binding, public expr: Node | null = null) {} }
 class StatementsNode { key = 'StatementsNode'; constructor(public statements: Node[]) {} }
@@ -97,12 +95,13 @@ class LabelBlockNode { key = 'LabelBlockNode'; constructor(public label: Binding
 class ResultRefNode { key = 'ResultRefNode'; constructor(public expr: RegisterResult, public ref: RegisterRef) {} }
 class BlockRefNode { key = 'BlockRefNode'; constructor(public ref: RegisterRef, public expr: Node | null = null) {} }
 class BranchCondition { key = 'BranchCondition'; constructor(public condition: RegisterResult, public trueLabel: Binding, public falseLabel: Binding) {} }
+class GetElementPointer { key = 'GetElementPointer'; constructor(public register: Binding, public type: Type, public pointer: Binding, public index: number) {} }
 
 class PointerResult { constructor(public pointer: Binding, public expr: Node | null = null) {} }
 class RegisterResult { constructor(public register: Binding, public expr: Node | null = null) {} }
 class VoidResult { constructor(public expr: Node | null = null) {} }
 
-type Node =  StoreNode | LoadNode | StatementsNode | CallNode | AllocaNode | RawNode | MultiNode | CopyNode | ResultRefNode | BlockRefNode | BranchCondition
+type Node =  StoreNode | LoadNode | StatementsNode | CallNode | AllocaNode | RawNode | MultiNode | CopyNode | ResultRefNode | BlockRefNode | BranchCondition | GetElementPointer
 type NodeResult = PointerResult | RegisterResult | VoidResult
 
 type RegisterRef = { current: Binding }
@@ -117,7 +116,7 @@ const toRegisterNode = (node: NodeResult): RegisterResult => {
 }
 
 export type LlvmAstWriterTable = {
-  [A in Ast as A['key']]: (writer: LlvmFunctionWriter, ast: A, nodeInfo: NodeInfo) => NodeResult;
+  [A in Ast as A['key']]: (writer: LlvmFunctionWriter, ast: A) => NodeResult;
 }
 
 const astWriterOld: unknown = {
@@ -530,7 +529,7 @@ const forwardResult = (res: NodeResult, expr: Node) => {
   else return new VoidResult(expr)
 }
 const astWriter: LlvmAstWriterTable = {
-  statements: (writer, ast, nodeInfo) => {
+  statements: (writer, ast) => {
     // TODO: Filter voids?
     const args: Node[] = []
     let res: NodeResult = null as any
@@ -542,7 +541,7 @@ const astWriter: LlvmAstWriterTable = {
     })
     return forwardResult(res, new StatementsNode(args))
   },
-  string: (writer, ast, nodeInfo) => {
+  string: (writer, ast) => {
     const constantName = generateName(writer.writer, new Binding("constant", VoidType), true)
  
     const escaped = ast.value.replace(/["\\]|[\x00-\x1F\x80-\xFF]/g, (str) => {
@@ -558,22 +557,19 @@ const astWriter: LlvmAstWriterTable = {
         [ast.type, String(length - 1), constantName, binding]))
     
   },
-  binding: (writer, ast, nodeInfo) => {
+  binding: (writer, ast) => {
     compilerAssert(ast.binding.type !== VoidType)
     const isArg = !!writer.function.argBindings.find(x => x === ast.binding)
 
     if (isArg) { return new RegisterResult(ast.binding) }
-    const binding = new Binding("", ast.binding.type)
-    return new RegisterResult(binding, new LoadNode(binding, ast.binding, null))
+    // const ptr = new Binding("", ast.binding.type)
+    return new PointerResult(ast.binding)
+    // return new PointerResult(ptr, new LoadNode(ptr, ast.binding, null))
   },
   let: (writer, ast) => {
     // TODO: No value should zero initialize?
     compilerAssert(ast.value, "Not implemented", { ast })
     
-    // const ptrName = `%${generateName(writer.writer, ast.binding)}`
-    // format(writer, "  $ = alloca $\n", ptrName, ast.binding.type)
-
-    // writer.nameStack.push(ptrName)
     const value = visitAst(writer, ast.value)
     if (value instanceof RegisterResult) {
       visitNode(writer, new AllocaNode(ast.binding, null))
@@ -584,57 +580,23 @@ const astWriter: LlvmAstWriterTable = {
     } else {
       compilerAssert(false, "Not impl", { value })
     }
- 
-    // console.log("After let", writer.valueStack)
-    // const result = writer.valueStack.pop()!
-    // if ('register' in result) {
-    //   if (result.register !== ptrName) {
-    //     format(writer, "  store $ $, ptr $\n", ast.binding.type, result.register, ptrName)
-    //   }
-    // } else if (result.pointer !== ptrName) {
-    //   const structType = ast.binding.type
-    //   const temp = `%${generateName(writer.writer, new Binding("", VoidType))}`
-    //   format(writer, "  $ = load $, ptr $\n", temp, structType, result.pointer)
-    //   format(writer, "  store $ $, ptr $\n", structType, temp, ptrName)
-    // }
-
   },
   set: (writer, ast) => {
-    compilerAssert(false, "Not impl")
-    // const name = `%${generateName(writer.writer, new Binding(`${ast.binding.name}.value`, VoidType))}`
-    // writeExpr(writer, ast.value)
-
-    // const ptrName = `%${generateName(writer.writer, ast.binding)}`
-    // format(writer, "  store $ $, ptr $\n", ast.binding.type, name, ptrName)
+    const value = toRegisterNode(visitAst(writer, ast.value))
+    return new VoidResult(new StoreNode(ast.binding, value))
   },
-  number: (writer, ast, nodeInfo) => {
+  number: (writer, ast) => {
     compilerAssert(ast.type === IntType || ast.type === FloatType || ast.type === DoubleType, "Expected number type got $type", { ast, type: ast.type })
-    // const ptrName = popNameStackOrGenerateNewName(writer)
-
     const binding = new Binding("", ast.type)
     const number = new RawNode(`  $ = add $ 0, $ ; number literal\n`, 
       [binding, ast.type, String(ast.value)])
     return new RegisterResult(binding, number)
-     // if (nodeInfo.memoryPointer) {
-    //   format(writer, "  $ = alloca $\n", nodeInfo.memoryPointer, ast.type)
-    // }
-
-    // const valueName = `%${generateName(writer.writer, new Binding("", VoidType))}`
-    // format(writer, `  $ = add $ 0, $ ; literal\n`, valueName, ast.type, String(ast.value))
-    // if (nodeInfo.memoryPointer) {
-    //   format(writer, `  store $ $, ptr $\n`, ast.type, valueName, nodeInfo.memoryPointer)
-    //   writer.valueStack.push({ pointer: nodeInfo.memoryPointer, type: ast.type })
-    // } else {
-    //   writer.valueStack.push({ register: valueName })
-    // }
-
   },
   bool: (writer, ast) => {
-    // const name = popNameStackOrGenerateNewName(writer)
-    // format(writer, `  $ = add $ 0, $ ; literal\n`, name, ast.type, ast.value ? "1" : "0")
-    // writer.valueStack.push({ register: name })
-    const binding = new Binding("", VoidType)
-    return new RegisterResult(binding, new RawNode(`  $ = add $ 0, $ ; bool literal`, [binding]))
+    const binding = new Binding("", ast.type)
+    return new RegisterResult(binding, 
+      new RawNode(`  $ = add $ 0, $ ; bool literal\n`, 
+        [binding, binding.type, ast.value ? 1 : 0]))
 
   },
   if: (writer, ast) => {
@@ -788,7 +750,14 @@ const astWriter: LlvmAstWriterTable = {
   },
   call: (writer, ast) => {
     if (ast.func.name === "print") {
-      const format = new RegisterResult(globals.format_string_float)
+      const formatType = 
+        ast.args[0].type === IntType ? globals.format_string_int :
+        ast.args[0].type === FloatType ? globals.format_string_float :
+        ast.args[0].type === RawPointerType ? globals.format_string_ptr :
+        ast.args[0].type === StringType ? globals.format_string_string : undefined
+      compilerAssert(formatType, "Not implemented for this type", { type: ast.args[0].type })
+      
+      const format = new RegisterResult(formatType)
       const value = toRegisterNode(visitAst(writer, ast.args[0]))
       return new VoidResult(new CallNode(null, VoidType, globals.printf, [format, value]))
       
@@ -801,7 +770,6 @@ const astWriter: LlvmAstWriterTable = {
       //   ast.args[0].type === FloatType ? `@format_string_float` :
       //   ast.args[0].type === RawPointerType ? `@format_string_ptr` :
       //   ast.args[0].type === StringType ? `@format_string_string` : undefined
-      // compilerAssert(formatPtrName, "Not implemented for this type", { type: ast.args[0].type })
       // writeExpr(writer, ast.args[0])
       // const result = toRegister(writer, writer.valueStack.pop()!)
 
@@ -831,153 +799,78 @@ const astWriter: LlvmAstWriterTable = {
       // return
     }
 
-    compilerAssert(false, "Not implemented")
+    compilerAssert(false, "Not implemented call")
   },
   list: (writer, ast) => {
-    compilerAssert(false, "Not implemented")
+    compilerAssert(false, "Not implemented 'list'")
   },
 
-  usercall: (writer, ast, nodeInfo) => {
-    // const registers = ast.args.map(x => new Register())
-    // return new StatementsNode([
-    //   ...ast.args.map(x => visitAst(writer, x)),
-    //   new RawNode("user call " +  ast.binding.name)
-    // ])
-
+  usercall: (writer, ast) => {
     const args = ast.args.map(x => toRegisterNode(visitAst(writer, x)))
     const binding = new Binding("", VoidType)
     const call = new CallNode(binding, ast.type, ast.binding, args)
     if (ast.type === VoidType) return new VoidResult(call)
     return new RegisterResult(binding, call)
-
-    
-
-    // // compilerAssert(false, "Not implemented")
-    // const named = !!writer.nameStack.length
-    // // const ptrName = ast.type !== VoidType && named ? popNameStackOrGenerateNewName(writer) : undefined
-    // const name = ast.type !== VoidType && `%${generateName(writer.writer, new Binding("", VoidType))}`
-
-    // if (nodeInfo.memoryPointer) {
-    //   format(writer, "  $ = alloca $\n", nodeInfo.memoryPointer, ast.type)
-    // }
-
-    // const argValues = ast.args.map(arg => {
-    //   writeExpr(writer, arg); return toRegister(writer, writer.valueStack.pop()!)
-    // })
-    
-    // if (name) { format(writer, `  $ = `, name) }
-    // else { format(writer, `  `) }
-    
-    // format(writer, `call $ @$(`, ast.type, ast.binding)
-    // ast.args.forEach((arg, i) => {
-    //   if (i !== 0) format(writer, ", ")
-    //   format(writer, `$ $`, arg.type, argValues[i]!)
-    // })
-    // format(writer, `)\n`)
-    // if (name) writer.valueStack.push({ register: name })
   },
   operator: (writer, ast) => {
     const [a, b] = ast.args
     compilerAssert(a.type === b.type, "Expected types to be equal", { a, b })
     const op = operatorMap[ast.operator]
     compilerAssert(op, "Expected op", { ast })
-    // format(writer, `  $ = $ $ $, $\n`, name, op, a.type, a, b)
-    // toRegisterNode(visitAst(writer, x))
 
     const binding = new Binding("", ast.type)
     return new RegisterResult(binding, new RawNode(`  $ = $ $ $, $\n`, 
       [binding, op, a.type, toRegisterNode(visitAst(writer, a)), toRegisterNode(visitAst(writer, b))]))
-    
-    // compilerAssert(false, "Not implemented")
-    // const name = popNameStackOrGenerateNewName(writer)
-    // // const op = operatorMap[ast.operator]
-    // format(writer, `  $ = $ $ $, $\n`, name, op, a.type, a, b)
-    // writer.valueStack.push({ register: name })
   },
   not: (writer, ast) => {
-    compilerAssert(false, "Not implemented")
     const expr = ast.expr
-    compilerAssert(expr.type === BoolType, "Expected bool")
-    const name = popNameStackOrGenerateNewName(writer)
-    format(writer, `  $ = xor $ $, 1\n`, name, expr.type, expr)
-    writer.valueStack.push({ register: name })
+    const binding = new Binding("", ast.type)
+    return new RegisterResult(binding, new RawNode(`  $ = xor $ $, 1\n`, 
+      [binding, expr.type, toRegisterNode(visitAst(writer, expr))]))
   },
   defaultcons: (writer, ast) => {
     compilerAssert(false, "Not implemented 'defaultcons'")
   },
-  constructor: (writer, ast, nodeInfo) => {
-    compilerAssert(false, "Not implemented")
+  constructor: (writer, ast) => {
 
-    // format(writer, "  ; string literal: $\n", ast.value)
-    // format(writer, "  $ = getelementptr [$ x i8], [$ x i8]* $, i64 0, i64 0\n", strPtr, String(length), String(length), constantName)
-    // format(writer, "  $ = getelementptr $, $* $, i32 0, i32 0\n", lengthFieldName, ast.type, ast.type, name)
-    // format(writer, "  store i32 $, i32* $\n", String(length - 1), lengthFieldName)
-    // format(writer, "  $ = getelementptr $, $* $, i32 0, i32 1\n", ptrFieldName, ast.type, ast.type, name)
-    // format(writer, "  store ptr $, ptr $\n", strPtr, ptrFieldName)
+    const structPtr = new Binding("", ast.type)
+    visitNode(writer, new AllocaNode(structPtr, null))
 
-    // const named = !!writer.nameStack.length
-
-    console.log("constructor", nodeInfo)
-
-    const structPtr = nodeInfo.memoryPointer ?? `%${generateName(writer.writer, new Binding("", VoidType))}`
-    format(writer, "  $ = alloca $\n", structPtr, ast.type)
-
-    // if (!named) format(writer, "  $ = alloca $\n", structPtr, ast.type)
-
-    ast.args.forEach((arg, index) => {
-      writeExpr(writer, arg)
-      const result = writer.valueStack.pop()!
-
-      const fieldPtr = `%${generateName(writer.writer, new Binding(``, VoidType))}`
+    const statements = ast.args.map((arg, index) => {
       const field = ast.type.typeInfo.fields[index]
+      const fieldPtr = new Binding("", field.fieldType)
 
-      format(writer, "  $ = getelementptr $, ptr $, i32 0, i32 $\n", fieldPtr, ast.type, structPtr, String(index))
-      const reg = toRegister(writer, result)
-      // if ('register' in result) {
-        format(writer, "  store $ $, $ $\n", field.fieldType, reg, getPointerName(writer, field.fieldType), fieldPtr)
-      // } else {
-      //   format(writer, "  ; store $ $, $ $\n", field.fieldType, result.pointer, getPointerName(writer, field.fieldType), fieldPtr)
-      //   // compilerAssert(false, "Not impl")
-      // }
+      const gep = new GetElementPointer(fieldPtr, ast.type, structPtr, index)
+      const nodeResult = toRegisterNode(visitAst(writer, arg))
+      const newNode = new MultiNode([nodeResult.expr!, gep])
+      return new StoreNode(fieldPtr, new RegisterResult(nodeResult.register, newNode))
     })
 
-    writer.valueStack.push({ pointer: structPtr, type: ast.type })
-    // format(writer, "  $ = alloca $\n", name, ast.type)
-    
-
-    
-    // compilerAssert(false, "Not implemented 'constructor'")
+    return new PointerResult(structPtr, new StatementsNode(statements))
   },
   valuefield: (writer, ast) => {
-    compilerAssert(false, "Not implemented")
 
-    // const storeFieldVal = `%${generateName(writer.writer, new Binding("", VoidType))}`
-    // format(writer, "  $ = getelementptr $, $ $, i32 0, i32 $\n", loadFieldPtr, structType, getPointerName(writer, structType), result.pointer, String(field.index))
-    // format(writer, "  $ = load $, $ $\n", loadFieldVal, fieldType, getPointerName(writer, fieldType), loadFieldPtr)
-    const loadField = (base: LlvmResultValue, field: TypeField) => {
+    const loadField = (left: NodeResult, field: TypeField): NodeResult => {
       const fieldType = field.fieldType
-      
-      const loadFieldPtr = `%${generateName(writer.writer, new Binding("", VoidType))}`
-      const loadFieldVal = `%${generateName(writer.writer, new Binding("", VoidType))}`
+      const loadFieldPtr = new Binding("", RawPointerType)
+      const loadFieldVal = new Binding("", fieldType)
 
-      if ('pointer' in base) {
-        format(writer, "  $ = getelementptr $, $ $, i32 0, i32 $\n", loadFieldPtr, field.sourceType, getPointerName(writer, field.sourceType), base.pointer, String(field.index))
-        format(writer, "  $ = load $, $ $\n", loadFieldVal, fieldType, getPointerName(writer, fieldType), loadFieldPtr)
-      } else {
-        format(writer, "  $ = extractvalue $ $, $\n", loadFieldVal, field.sourceType, base.register, String(field.index))
+      if (left instanceof RegisterResult) {
+        return new RegisterResult(loadFieldVal, 
+          new RawNode(`  $ = extractvalue $ $, $\n`, 
+            [loadFieldVal, field.sourceType, left, String(field.index)]))
+      } else if (left instanceof PointerResult) {
+        return new PointerResult(loadFieldPtr, new GetElementPointer(
+          loadFieldPtr, field.sourceType, left.pointer, field.index))
       }
-      return { register: loadFieldVal }
+      compilerAssert(false, "invalid loadField")
     }
-    writeExpr(writer, ast.left)
-    const leftResult = writer.valueStack.pop()!
-    // console.log(result)
+    const leftResult = visitAst(writer, ast.left)
     const reg = ast.fieldPath.reduce((reg, field) => {
-      return loadField(leftResult, ast.fieldPath[0])
+      return loadField(reg, ast.fieldPath[0])
     }, leftResult)
 
-    writer.valueStack.push(reg)
-
-    // compilerAssert(false, "Not implemented 'valuefield'")
+    return reg
   },
   cast: (writer, ast) => {
     compilerAssert(false, "Not implemented 'cast'")
@@ -1010,7 +903,7 @@ const astWriter: LlvmAstWriterTable = {
     compilerAssert(false, "Not implemented 'address'")
   },
   void: (writer, ast) => {
-    compilerAssert(false, "Not implemented")
+    compilerAssert(false, "Not implemented 'void'")
   }
 };
 
@@ -1030,41 +923,24 @@ const visitNode = (writer: LlvmFunctionWriter, node: Node) => {
     node.statements.forEach(x => { visitNode(writer, x) })
     return
   } 
-  // if (node instanceof RawRegisterNode) {
-  //   const mapped = node.args.map(x => {
-  //     if (isRegisterNode(x as unknown as Node)) {
-  //       visitNode(writer, x as Node)
-  //       return (x as RegisterOutNode).register!
-  //     }
-  //     return x as (string | Binding | Type)
-  //   })
-  //   format(writer, `  %$ = ${node.string}\n`, node.register, ...mapped)
-  //   return
-  // }
 
   if (node instanceof LoadNode) {
     if (node.expr) visitNode(writer, node.expr)
     format(writer, `  $ = load $, ptr $\n`, node.register, node.pointer.type, node.pointer)
     return
   }
+  if (node instanceof GetElementPointer) {
+    format(writer, "  $ = getelementptr $, ptr $, i32 0, i32 $\n", node.register, node.type, node.pointer, String(node.index))
+    return
+  }
   if (node instanceof StoreNode) {
-    console.log("Store", node.expr)
     visitNodeResult(writer, node.expr)
-    // const x = toRegisterNode(node.expr)
-    // format(writer, `  %$ = alloca $\n`, node.binding, node.binding?.type)
     format(writer, "  store $ $, ptr $\n", node.binding?.type, node.expr.register, node.binding)
-
-    // format(writer, `  ; store in $\n`, node.binding)
     return
   }
   if (node instanceof AllocaNode) {
-    console.log("Store", node.expr)
-    // const x = toRegisterNode(node.expr)
     format(writer, `  $ = alloca $\n`, node.pointer, node.pointer.type)
     if (node.expr) visitNode(writer, node.expr)
-    // format(writer, "  store $ %$, ptr %$\n", node.binding?.type, node.expr.register, node.binding)
-
-    // format(writer, `  ; store in $\n`, node.binding)
     return
   }
   if (node instanceof RawNode) {
@@ -1085,10 +961,8 @@ const visitNode = (writer: LlvmFunctionWriter, node: Node) => {
   if (node instanceof CopyNode) {
     if (node.expr) visitNode(writer, node.expr)
     const temp = new Binding("", node.source.type)
-    // format(writer, "  ; copy\n")
     format(writer, "  $ = load $, ptr $\n", temp, node.source.type, node.pointer)
     format(writer, "  store $ $, ptr $\n", node.source.type, temp, node.source)
-    // format(writer, `${node.string}`, ...node.args as any[])
     return
   }
   if (node instanceof ResultRefNode) {
@@ -1101,21 +975,13 @@ const visitNode = (writer: LlvmFunctionWriter, node: Node) => {
     return
   }
   if (node instanceof LabelBlockNode) {
-
-    // format(writer, "  ; copy\n")
     format(writer, "$:\n", generateName(writer.writer, node.label).substring(1))
     writer.currentBlockLabel = node.label
     node.statements.forEach(x => visitNode(writer, x))
-    // format(writer, "  %$ = load $, ptr %$\n", temp, node.source.type, node.pointer)
-    // format(writer, "  store $ %$, ptr %$\n", node.source.type, temp, node.source)
-    // format(writer, `${node.string}`, ...node.args as any[])
     return
   }
   if (node instanceof CallNode) {
-    // console.log("Store", node.expr)
     node.args.forEach(x => visitNodeResult(writer, x))
-    // format(writer, `  %$ = @$\n`, node.register, node.binding)
-
     
     if (node.returnType !== VoidType && node.register) { format(writer, `  $ = `, node.register) }
     else { format(writer, `  `) }
@@ -1126,9 +992,6 @@ const visitNode = (writer: LlvmFunctionWriter, node: Node) => {
       format(writer, `$ $`, arg.register!.type, arg.register!)
     })
     format(writer, `)\n`)
-    // if (name) writer.valueStack.push({ register: name })
-
-    // format(writer, `  ; store in $\n`, node.binding)
     return
   }
 
@@ -1136,25 +999,18 @@ const visitNode = (writer: LlvmFunctionWriter, node: Node) => {
   format(writer, `  not implemented ${(node as any).key}\n`)
 }
 
-const format = (writer: LlvmFunctionWriter, format: string, ...args: (string | Type | Ast | Binding | RegisterRef)[]) => {
+const format = (writer: LlvmFunctionWriter, format: string, ...args: (string | number | Type | Ast | Binding | RegisterRef)[]) => {
   let i = 0
   const s = format.replace(/\$/g, (x) => {
     const v = args[i++]
     
     if (typeof v === 'string') return v
+    if (typeof v === 'number') return String(v)
     if (isType(v)) return getTypeName(writer.writer, v)
     if (v instanceof Binding) { return generateName(writer.writer, v) }
-    if ('current' in v) return generateName(writer.writer, v.current)
-    // if (isAst(v)) {
-    //   compilerAssert(false, "not impl")
-      // writeExpr(writer, v)
-      // compilerAssert(writer.valueStack.length, "Expected value")
-      // const result = writer.valueStack.pop()!
-      // return toRegister(writer, result)
-      // if ('register' in result) return result.register
-      // return result.pointer
-    // }
-    return ''
+    if (v && typeof v === 'object' && 'current' in v) return generateName(writer.writer, v.current)
+
+    compilerAssert(false, "Invalid for format", { v, str: String(v) })
   })
   writer.currentOutput.push(s)
 }
@@ -1254,9 +1110,7 @@ const getTypeName = (writer: LlvmWriter, obj: Type): string => {
     writer.outputHeaders.push(getTypeName(writer, field.fieldType))
   })
   writer.outputHeaders.push(` }\n`)
-
   return name
-  // compilerAssert(false, "Type not implemented", { obj })
 }
 const writeLlvmBytecodeFunction = (bytecodeWriter: LlvmWriter, func: CompiledFunction) => {
   log("\nWriting func", func.functionDefinition.debugName, "\n")
@@ -1291,9 +1145,9 @@ const writeLlvmBytecodeFunction = (bytecodeWriter: LlvmWriter, func: CompiledFun
 
   visitNodeResult(funcWriter, result)
   if (func.returnType !== VoidType) {
-    // compilerAssert(funcWriter.valueStack.length === 1, "Expected 1 value left", { valueStack: funcWriter.valueStack })
-    // const v = toRegister(funcWriter, funcWriter.valueStack.pop()!)
+    compilerAssert(result instanceof RegisterResult, "Not implemented yet")
     const node = toRegisterNode(result)
+    // visitNode(writer, node.expr!)
     format(funcWriter, `  ret $ $\n`, func.returnType, node.register!)
   } else {
     format(funcWriter, `  ret void\n`)

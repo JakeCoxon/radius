@@ -13,7 +13,7 @@ fn calculate_state(a: int, b: int, c: int) -> int:
 fn foo(a: int, b: int) -> int:
   a * b * 2
 
-fn bar(a: int, b: int) -> int:
+fn barfoo(a: int, b: int) -> int:
   a >= 2 and (b == 3 or b == 4)
 
 fn foop(str: string):
@@ -33,40 +33,44 @@ type Bar @struct:
 
 fn main():
 
-  # bar := Bar(1, 2)
+  bar := Bar(1, 2)
   foo := 1
   bar2 := "my string"
 
-  asd := bar(2, 3)
+  asd := barfoo(2, 3)
 
   print("asd")
+  asdgf := !true
 
-  i := 0
-  while i < 10:
-    print("OK")
-    # i += 1
-  # print(bar.x)
-  # print(bar.y)
+  asdgf = 1 > 2
+  asdgf = !asdgf
+
+  # i := 0
+  # while i < 10:
+  #   print("OK")
+  # i += 1
+  print(bar.x)
+  print(bar.y)
   # foobar(bar)
   # asdasd := createbar(3, 2)
   # print(asdasd.x)
 
-  # foo := "Hello"
-  # x := foo
+  fooasd := "Hello"
+  x := fooasd
   
 
   # print(x)
-  # foop(x)
+  foop(x)
   # print(x.data)
   # print(x.length)
 
   # print("Foo")
-  # y := 0
-  # i := 0
-  # while i < 100:
-  #   y = (y + 1) * 23
-  #   i += 1
-  # print(y)
+  y := 0
+  i := 0
+  while i < 100:
+    y = (y + 1) * 23
+    i += 1
+  print(y)
   
   # x := 2 == 2 and 1 == 2
   # print(bar(2, 3))
