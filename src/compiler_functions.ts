@@ -333,13 +333,22 @@ export function createCallAstFromValue(location: SourceLocation, value: unknown,
       return (
         TaskDef(compileAndExecuteFunctionHeaderTask, call)
         .chainFn((task, arg) => { 
+          const ctx = (task._context as TaskContext)
+          compilerAssert(!ctx.globalCompiler.externalDefinitions.find(x => x.name === name.token.value))
+          const paramHash = hashValues(call.result.concreteTypes)
+          const binding = externals[name.token.value] ? externals[name.token.value].binding : new Binding(name.token.value, FunctionType)
+          ctx.globalCompiler.externalDefinitions.push({ name: name.token.value, binding, paramHash, paramTypes: call.result.concreteTypes, returnType: call.result.returnType })
           compilerAssert(call.result.returnType, "Expected return type got $returnType", { returnType: call.result.returnType })
           const mappedArgs = args.map((ast, i) => {
             propagateLiteralType(call.result.concreteTypes[i], ast)
             compilerAssert(func.params[i].storage !== 'ref', "Not implemented")
             return ast
           })
-          return Task.of(new CallAst(call.result.returnType, location, externals[name.token.value], mappedArgs))
+          if (externals[name.token.value]) {
+            return Task.of(new CallAst(call.result.returnType, location, externals[name.token.value], mappedArgs))
+          } else {
+            return Task.of(new UserCallAst(call.result.returnType, location, binding, mappedArgs))
+          }
         })
       )
     }

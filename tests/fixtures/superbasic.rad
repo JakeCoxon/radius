@@ -43,6 +43,7 @@ fn main():
   foo := "Hello"
   x := foo
   
+  print(malloc(100))
 
   print(x)
   foop(x)

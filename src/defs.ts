@@ -558,7 +558,7 @@ export const createScope = (obj: object, parentScope: Scope | undefined) =>
   }) as Scope;
 
 export class ExternalFunction {
-  constructor(public name: string, public returnType: Type, public func: Function) {}
+  constructor(public name: string, public binding: Binding, public returnType: Type, public func: Function) {}
   [Inspect.custom](depth: any, options: any, inspect: any) {
     return options.stylize(`[ExternalFunction ${this.name}]`, 'special');
   }
@@ -782,7 +782,15 @@ export type GlobalCompilerState = {
   logger: Logger,
   typeTable: TypeTable,
   globalLets: LetAst[],
-  entryFunction: CompiledFunction | undefined
+  entryFunction: CompiledFunction | undefined,
+  externalDefinitions: ExternalDefinition[]
+}
+export type ExternalDefinition = {
+  name: string, // Should be unique
+  binding: Binding,
+  paramHash: string
+  paramTypes: Type[]
+  returnType: Type
 }
 
 export interface ParsedModule {
@@ -820,6 +828,7 @@ export const createDefaultGlobalCompiler = () => {
     typeTable: new TypeTable(),
     logger: null!,
     entryFunction: undefined, // Inserted later
+    externalDefinitions: []
   }
   return globalCompiler
 }
@@ -973,4 +982,7 @@ export type LlvmWriter = {
   outputWriter: FileWriter,
   outputStrings: string[],
   outputHeaders: string[],
+  
+  writer: LlvmWriter // weirdness for formatting
+  currentOutput: string[]
 }

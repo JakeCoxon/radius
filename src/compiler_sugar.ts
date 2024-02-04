@@ -1,6 +1,6 @@
 import { BytecodeSecondOrder, getOperatorTable, propagatedLiteralAst, visitParseNode } from "./compiler"
 import { insertFunctionDefinition } from "./compiler_functions"
-import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter } from "./defs"
+import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding } from "./defs"
 import { Task } from "./tasks"
 
 export const forLoopSugar = (out: BytecodeWriter, node: ParseFor) => {
@@ -149,7 +149,7 @@ const insertMetaObjectPairwiseOperator = (compiledClass: CompiledClass, operator
   compiledClass.metaobject[operatorName] = operatorFunc
 }
 
-export const VecTypeMetaClass = new ExternalFunction('VecType', VoidType, (compiledClass: CompiledClass) => {
+export const VecTypeMetaClass = new ExternalFunction('VecType', new Binding("VecType", VoidType), VoidType, (compiledClass: CompiledClass) => {
   insertMetaObjectPairwiseOperator(compiledClass, "add", "+")
   insertMetaObjectPairwiseOperator(compiledClass, "sub", "-")
   insertMetaObjectPairwiseOperator(compiledClass, "mul", "*")
@@ -181,38 +181,46 @@ export const defaultMetaFunction = (subCompilerState: SubCompilerState, compiled
   Object.assign(compiledClass.metaobject, { iterate, subscript, set_subscript, constructor })
 }
 
-export const mallocExternal = new ExternalFunction('malloc', VoidType, (ast: Ast) => { compilerAssert(false, "Implemented elsewhere") })
-export const reallocExternal = new ExternalFunction('realloc', VoidType, (ast: Ast) => { compilerAssert(false, "Implemented elsewhere") })
-export const freeExternal = new ExternalFunction('free', VoidType, (ast: Ast) => { compilerAssert(false, "Implemented elsewhere") })
-
 // Order index is external index in VM
 export const externals: {[key:string]: ExternalFunction} = {
-  begin_app: new ExternalFunction('begin_app', VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
-  end_app: new ExternalFunction('end_app', VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
-  window_open: new ExternalFunction('window_open', VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
-  render_app: new ExternalFunction('render_app', VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
-  frame_ticks: new ExternalFunction('frame_ticks', VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
-  set_pixel: new ExternalFunction('set_pixel', VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
-  fill_rect: new ExternalFunction('fill_rect', VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
-  get_pixel: new ExternalFunction('get_pixel', VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
-  delay: new ExternalFunction('delay', VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
-  copy_pixels: new ExternalFunction('copy_pixels', VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
+  print:       new ExternalFunction('print',       new Binding('print',       FunctionType), VoidType, (...args) => { compilerAssert(false, "Implemented elsewhere") }),
+  // malloc:      new ExternalFunction('malloc',      new Binding('malloc',      FunctionType), VoidType, (ast: Ast) => { compilerAssert(false, "Implemented elsewhere") }),
+  // realloc:     new ExternalFunction('realloc',     new Binding('realloc',     FunctionType), VoidType, (ast: Ast) => { compilerAssert(false, "Implemented elsewhere") }),
+  // free:        new ExternalFunction('free',        new Binding('free',        FunctionType), VoidType, (ast: Ast) => { compilerAssert(false, "Implemented elsewhere") }),
+  begin_app:   new ExternalFunction('begin_app',   new Binding('begin_app',   FunctionType), VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
+  end_app:     new ExternalFunction('end_app',     new Binding('end_app',     FunctionType), VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
+  window_open: new ExternalFunction('window_open', new Binding('window_open', FunctionType), VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
+  render_app:  new ExternalFunction('render_app',  new Binding('render_app',  FunctionType), VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
+  frame_ticks: new ExternalFunction('frame_ticks', new Binding('frame_ticks', FunctionType), VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
+  set_pixel:   new ExternalFunction('set_pixel',   new Binding('set_pixel',   FunctionType), VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
+  fill_rect:   new ExternalFunction('fill_rect',   new Binding('fill_rect',   FunctionType), VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
+  get_pixel:   new ExternalFunction('get_pixel',   new Binding('get_pixel',   FunctionType), VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
+  delay:       new ExternalFunction('delay',       new Binding('delay',       FunctionType), VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
+  copy_pixels: new ExternalFunction('copy_pixels', new Binding('copy_pixels', FunctionType), VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
 }
 
 export const malloc = new CompilerFunction('malloc', (location: SourceLocation, typeArgs: unknown[], args: Ast[]) => {
-  compilerAssert(args.length === 1 && args[0].type === IntType, "Expected int argument")
-  return new CallAst(RawPointerType, location, mallocExternal, args)
+  propagatedLiteralAst(args[0])
+  compilerAssert(args.length === 1 && args[0].type === IntType, "Expected int argument", { args })
+  return new CallAst(RawPointerType, location, externals.malloc, args)
 })
 
 export const realloc = new CompilerFunction('realloc', (location: SourceLocation, typeArgs: unknown[], args: Ast[]) => {
   compilerAssert(args.length === 2 && args[0].type === RawPointerType && args[1].type === IntType, "Expected rawptr, int argument")
-  return new CallAst(RawPointerType, location, reallocExternal, args)
+  return new CallAst(RawPointerType, location, externals.realloc, args)
 })
 
 export const free = new CompilerFunction('free', (location: SourceLocation, typeArgs: unknown[], args: Ast[]) => {
   compilerAssert(args.length === 1 && args[0].type === RawPointerType , "Expected rawptr argument")
-  return new CallAst(RawPointerType, location, freeExternal, args)
+  return new CallAst(RawPointerType, location, externals.free, args)
 })
+
+export const print = new CompilerFunction('print', (location: SourceLocation, typeArgs: unknown[], args: Ast[]) => {
+  compilerAssert(args.length === 1 && args[0].type !== VoidType , "Expected non void argument")
+  return new CallAst(VoidType, location, externals.print, args)
+})
+
+
 
 export const unsafe_subscript = new CompilerFunction('unsafe_subscript', (location: SourceLocation, typeArgs: unknown[], args: Ast[]) => {
   const [left, right] = args
@@ -286,6 +294,8 @@ fn iterate!(f, T)(list: List!T) @inline @method:
 # This is needed for expansion operator
 fn length!(T)(list: List!T) @inline @method:
   list.length
+
+fn malloc(size: int) -> compiler.rawptr @external
 
 `
 }

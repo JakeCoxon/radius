@@ -1,10 +1,10 @@
 import { existsSync, unlinkSync, readFileSync } from 'node:fs'
 import { programEntryTask } from '../src/compiler'
-import { BoolType, Closure, CompilerError, DoubleType, ExternalFunction, FloatType, GlobalCompilerState, IntType, Scope, StringType, SubCompilerState, TaskContext, VoidType, compilerAssert, createDefaultGlobalCompiler, createScope, expectMap, BuiltinTypes, ModuleLoader, SourceLocation, textColors, outputSourceLocation, TokenRoot, ParseImport, createAnonymousToken, Logger } from "../src/defs"; // prettier-ignore
+import { BoolType, Closure, CompilerError, DoubleType, ExternalFunction, FloatType, GlobalCompilerState, IntType, Scope, StringType, SubCompilerState, TaskContext, VoidType, compilerAssert, createDefaultGlobalCompiler, createScope, expectMap, BuiltinTypes, ModuleLoader, SourceLocation, textColors, outputSourceLocation, TokenRoot, ParseImport, createAnonymousToken, Logger, Binding, FunctionType } from "../src/defs"; // prettier-ignore
 import { makeParser } from '../src/parser'
 import { Queue, TaskDef, stepQueue, withContext } from '../src//tasks'
 import { expect } from 'bun:test'
-import { VecTypeMetaClass, preloadModuleText } from '../src/compiler_sugar'
+import { VecTypeMetaClass, externals, preloadModuleText, print } from '../src/compiler_sugar'
 import { writeFinalBytecode } from '../src/codegen'
 import { FileSink } from 'bun';
 import { writeLlvmBytecode } from '../src/codegen_llvm';
@@ -77,12 +77,8 @@ export const runCompilerTest = (
     {
       ...BuiltinTypes,
       compfoo: { _function: (a, b) => 65 + a + b },
-      print: new ExternalFunction('print', VoidType, (...args) => {
-        logger.log('print called', ...args)
-        prints.push(...args)
-        return args[0]
-      }),
-      static_print: new ExternalFunction('static_print', VoidType, (...args) => {
+      print: print,
+      static_print: new ExternalFunction('static_print', new Binding('static_print', FunctionType), VoidType, (...args) => {
         logger.log('static_print called', ...args)
         prints.push(...args)
         return args[0]
@@ -124,7 +120,7 @@ export const runCompilerTest = (
       writer.write('\n\n')
     })
 
-    writeBytecodeFile()
+    // writeBytecodeFile()
   } catch (ex) {
     gotError = true
 

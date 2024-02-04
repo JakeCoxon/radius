@@ -1,4 +1,4 @@
-import { externals, mallocExternal, reallocExternal } from "./compiler_sugar";
+import { externals } from "./compiler_sugar";
 import { Ast, AstType, AstWriterTable, Binding, BindingAst, BoolType, CodegenFunctionWriter, CodegenWriter, CompiledFunction, ConcreteClassType, DoubleType, FileWriter, FloatType, GlobalCompilerState, IntType, ListTypeConstructor, ParameterizedType, PrimitiveType, RawPointerType, StringType, Type, TypeField, VoidType, compilerAssert, textColors } from "./defs";
 
 const OpCodes = {
@@ -515,7 +515,7 @@ const astWriter: AstWriterTable<CodegenFunctionWriter> = {
       return;
     }
 
-    if (ast.func === mallocExternal) {
+    if (ast.func === externals.malloc) {
       compilerAssert(ast.args.length == 1 && ast.args[0].type === IntType, "Expected int arg", { ast })
       emitConstant(writer, RawPointerType, 0)
       writeExpr(writer, ast.args[0])
@@ -524,7 +524,7 @@ const astWriter: AstWriterTable<CodegenFunctionWriter> = {
       writer.nextLocalSlot += slotSize(writer, ast.type) // Pointer size
       return
     }
-    if (ast.func === reallocExternal) {
+    if (ast.func === externals.realloc) {
       compilerAssert(ast.args.length == 2 && ast.args[0].type === RawPointerType && ast.args[1].type === IntType, "Expected int arg", { ast })
       writeExpr(writer, ast.args[0])
       writeExpr(writer, ast.args[1])
