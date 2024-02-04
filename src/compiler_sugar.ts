@@ -185,6 +185,7 @@ export const defaultMetaFunction = (subCompilerState: SubCompilerState, compiled
 export const externals: {[key:string]: ExternalFunction} = {
   print:       new ExternalFunction('print',       new Binding('print',       FunctionType), VoidType, (...args) => { compilerAssert(false, "Implemented elsewhere") }),
   // malloc:      new ExternalFunction('malloc',      new Binding('malloc',      FunctionType), VoidType, (ast: Ast) => { compilerAssert(false, "Implemented elsewhere") }),
+  sizeof:      new ExternalFunction('sizeof',      new Binding('sizeof',      FunctionType), VoidType, (ast: Ast) => { compilerAssert(false, "Implemented elsewhere") }),
   // realloc:     new ExternalFunction('realloc',     new Binding('realloc',     FunctionType), VoidType, (ast: Ast) => { compilerAssert(false, "Implemented elsewhere") }),
   // free:        new ExternalFunction('free',        new Binding('free',        FunctionType), VoidType, (ast: Ast) => { compilerAssert(false, "Implemented elsewhere") }),
   begin_app:   new ExternalFunction('begin_app',   new Binding('begin_app',   FunctionType), VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
@@ -202,22 +203,22 @@ export const externals: {[key:string]: ExternalFunction} = {
 export const malloc = new CompilerFunction('malloc', (location: SourceLocation, typeArgs: unknown[], args: Ast[]) => {
   propagatedLiteralAst(args[0])
   compilerAssert(args.length === 1 && args[0].type === IntType, "Expected int argument", { args })
-  return new CallAst(RawPointerType, location, externals.malloc, args)
+  return new CallAst(RawPointerType, location, externals.malloc, args, [])
 })
 
 export const realloc = new CompilerFunction('realloc', (location: SourceLocation, typeArgs: unknown[], args: Ast[]) => {
   compilerAssert(args.length === 2 && args[0].type === RawPointerType && args[1].type === IntType, "Expected rawptr, int argument")
-  return new CallAst(RawPointerType, location, externals.realloc, args)
+  return new CallAst(RawPointerType, location, externals.realloc, args, [])
 })
 
 export const free = new CompilerFunction('free', (location: SourceLocation, typeArgs: unknown[], args: Ast[]) => {
   compilerAssert(args.length === 1 && args[0].type === RawPointerType , "Expected rawptr argument")
-  return new CallAst(RawPointerType, location, externals.free, args)
+  return new CallAst(RawPointerType, location, externals.free, args, [])
 })
 
 export const print = new CompilerFunction('print', (location: SourceLocation, typeArgs: unknown[], args: Ast[]) => {
   compilerAssert(args.length === 1 && args[0].type !== VoidType , "Expected non void argument")
-  return new CallAst(VoidType, location, externals.print, args)
+  return new CallAst(VoidType, location, externals.print, args, [])
 })
 
 

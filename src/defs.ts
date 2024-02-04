@@ -393,7 +393,7 @@ export class SetAst extends AstRoot {           key = 'set' as const;           
 export class OperatorAst extends AstRoot {      key = 'operator' as const;       constructor(public type: Type, public location: SourceLocation, public operator: string, public args: Ast[]) { super() } }
 export class IfAst extends AstRoot {            key = 'if' as const;             constructor(public type: Type, public location: SourceLocation, public expr: Ast, public trueBody: Ast, public falseBody: Ast | null) { super() } }
 export class ListAst extends AstRoot {          key = 'list' as const;           constructor(public type: Type, public location: SourceLocation, public args: Ast[]) { super() } }
-export class CallAst extends AstRoot {          key = 'call' as const;           constructor(public type: Type, public location: SourceLocation, public func: ExternalFunction, public args: Ast[]) { super() } }
+export class CallAst extends AstRoot {          key = 'call' as const;           constructor(public type: Type, public location: SourceLocation, public func: ExternalFunction, public args: Ast[], public typeArgs: unknown[]) { super() } }
 export class UserCallAst extends AstRoot {      key = 'usercall' as const;       constructor(public type: Type, public location: SourceLocation, public binding: Binding, public args: Ast[]) { super() } }
 export class AndAst extends AstRoot {           key = 'and' as const;            constructor(public type: Type, public location: SourceLocation, public args: Ast[]) { super() } }
 export class OrAst extends AstRoot {            key = 'or' as const;             constructor(public type: Type, public location: SourceLocation, public args: Ast[]) { super() } }
@@ -982,7 +982,8 @@ export type LlvmWriter = {
   outputWriter: FileWriter,
   outputStrings: string[],
   outputHeaders: string[],
-  
+  mallocBinding: Binding,
+
   writer: LlvmWriter // weirdness for formatting
   currentOutput: string[]
 }

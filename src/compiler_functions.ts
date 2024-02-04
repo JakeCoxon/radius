@@ -316,7 +316,7 @@ export function createCallAstFromValue(location: SourceLocation, value: unknown,
 
   if (value instanceof ExternalFunction) {
     args.forEach((ast, i) => { propagateLiteralType(ast.type, ast) })
-    return Task.of(new CallAst(value.returnType, location, value, args))
+    return Task.of(new CallAst(value.returnType, location, value, args, []))
   }
   if (value instanceof CompilerFunction) {
     return Task.of(value.func(location, typeArgs, args))
@@ -345,7 +345,7 @@ export function createCallAstFromValue(location: SourceLocation, value: unknown,
             return ast
           })
           if (externals[name.token.value]) {
-            return Task.of(new CallAst(call.result.returnType, location, externals[name.token.value], mappedArgs))
+            return Task.of(new CallAst(call.result.returnType, location, externals[name.token.value], mappedArgs, []))
           } else {
             return Task.of(new UserCallAst(call.result.returnType, location, binding, mappedArgs))
           }
