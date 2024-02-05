@@ -85,9 +85,10 @@ const allocaHelper = (writer: LlvmFunctionWriter, pointer: Pointer, overrideType
   return pointer
 }
 const getElementPointer = (writer: LlvmFunctionWriter, pointer: Pointer, fieldPath: TypeField[]) => {
-  const loadFieldPtr = createPointer("", VoidType)
-  const indicesStr = fieldPath.reduce((reg, field, i) => {
-    return `${i == 0 ? '' : ', '}i32 ${field.index}`
+  const outType = fieldPath[fieldPath.length - 1].fieldType
+  const loadFieldPtr = createPointer("", outType)
+  const indicesStr = fieldPath.reduce((acc, field, i) => {
+    return `${acc}${i == 0 ? '' : ', '}i32 ${field.index}`
   }, "")
 
   const sourceDataType = getDataTypeName(writer.writer, fieldPath[0].sourceType)
@@ -123,7 +124,7 @@ const astWriter: LlvmAstWriterTable = {
       const line = expr.location.source?.input.split("\n").find((x, i) => i + 1 === expr.location.line)
       if (line) {
         writer.currentOutput.push(`; ${expr.location.line} | ${line.trim()}\n`)
-      } else writer.currentOutput.push(`; statement\n`)
+      } else writer.currentOutput.push(`; ${expr.key}\n`)
       result = writeExpr(writer, expr)
       writer.currentOutput.push("\n")
     })
@@ -455,17 +456,18 @@ const astWriter: LlvmAstWriterTable = {
     return null
   },
   deref: (writer, ast) => {
+    // TODO: These are the same as value and setvalue. we can merge them
     const reg = toRegister(writer, writeExpr(writer, ast.left))
-    const pointer = createPointer("", ast.type)
-    format(writer, "  $ = getelementptr $, $ $, i32 0\n", pointer, ast.type, 'ptr', reg)
-    return { pointer }
+    const leftPtr = reg as unknown as Pointer // reinterpret reg as a pointer
+    const fieldPtr = getElementPointer(writer, leftPtr, ast.fieldPath)
+    return { pointer: fieldPtr }
   },
   setderef: (writer, ast) => {
     const reg = toRegister(writer, writeExpr(writer, ast.left))
+    const leftPtr = reg as unknown as Pointer // reinterpret reg as a pointer
+    const fieldPtr = getElementPointer(writer, leftPtr, ast.fieldPath)
     const value = toRegister(writer, writeExpr(writer, ast.value))
-    const pointer = createPointer("", ast.value.type)
-    format(writer, "  $ = getelementptr $, $ $, i32 0\n", pointer, ast.value.type, 'ptr', reg)
-    format(writer, "  store $ $, $ $\n", ast.value.type, value, 'ptr', pointer)
+    format(writer, "  store $ $, $ $\n", ast.value.type, value, 'ptr', fieldPtr)
     return null
   },
   return: (writer, ast) => {
@@ -475,7 +477,7 @@ const astWriter: LlvmAstWriterTable = {
     return null
   },
   address: (writer, ast) => {
-    compilerAssert(false, "Not implemented 'address'")
+    return { register: ast.binding as Register }
   },
   void: (writer, ast) => {
     return null
@@ -651,7 +653,8 @@ const writeLlvmBytecodeFunction = (bytecodeWriter: LlvmWriter, func: CompiledFun
 
   func.argBindings.forEach((binding, i) => {
     if (i !== 0) format(funcWriter, ", ")
-    format(funcWriter, `$ $`, binding.type, binding)
+    const storageType = binding.storage === 'ref' ? RawPointerType : binding.type
+    format(funcWriter, `$ $`, storageType, binding)
   })
   format(funcWriter, `) {\n`, func.returnType, name)
 

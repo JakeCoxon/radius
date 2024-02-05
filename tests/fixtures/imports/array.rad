@@ -18,12 +18,12 @@ fn append!(T)(array: ref Array!T, element: T) @method:
   if array.size == array.capacity:
     array.capacity = 16 if array.capacity == 0
     array.capacity *= 2
-    array.data = compiler.realloc(array.data, array.capacity)
+    array.data = realloc(array.data, array.capacity)
   compiler.unsafe_set_subscript(array.data, array.size, element)
   array.size += 1
 
 fn array_free!(T)(array: ref Array!T):
-  compiler.free(array.data)
+  free(array.data)
   array.data = 0 as rawptr
   array.size = 0
   array.capacity = 0

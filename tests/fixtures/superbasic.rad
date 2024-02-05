@@ -41,41 +41,49 @@ type Baz:
   x : int
   y : int
 
+fn my_bar(bar: ref Bar):
+  bar.x = 200
+
 fn main():
 
   bar := Bar(1, 2)
-  print(bar.x)
-  print(bar.y)
-  foobar(bar)
-  asdasd := createbar(3, 2)
-  print(asdasd.x)
-  bar.x = 10
+  my_bar(bar)
+
   print(bar.x)
 
-  Bar(1, 2).x = 2
+  # print(bar.x)
+  # print(bar.y)
+  # foobar(bar)
+  # asdasd := createbar(3, 2)
+  # print(asdasd.x)
+  # bar.x = 10
+  # print(bar.x)
+
+  # Bar(1, 2).x = 2
 
   arr := array_create!int(100)
-  # arr.append(3)
+  arr.append(3)
+  print(arr[100])
 
-  foo := "Hello"
-  x := foo
+  # foo := "Hello"
+  # x := foo
 
-  baz := Baz(1, 2)
-  print(baz)
-  baz.y = 200
+  # baz := Baz(1, 2)
+  # print(baz)
+  # baz.y = 200
 
-  my_ptr := malloc(10000)
-  my_int1 := compiler.unsafe_subscript!int(my_ptr, 0)
-  compiler.unsafe_set_subscript(my_ptr, 1, 2)
-  compiler.unsafe_set_subscript(my_ptr, 2, 25)
-  compiler.unsafe_set_subscript(my_ptr, 3, 30)
-  my_int2 := compiler.unsafe_subscript!int(my_ptr, 1)
-  my_int3 := compiler.unsafe_subscript!int(my_ptr, 2)
-  my_int4 := compiler.unsafe_subscript!int(my_ptr, 3)
-  print(my_int1)
-  print(my_int2)
-  print(my_int3)
-  print(my_int4)
+  # my_ptr := malloc(10000)
+  # my_int1 := compiler.unsafe_subscript!int(my_ptr, 0)
+  # compiler.unsafe_set_subscript(my_ptr, 1, 2)
+  # compiler.unsafe_set_subscript(my_ptr, 2, 25)
+  # compiler.unsafe_set_subscript(my_ptr, 3, 30)
+  # my_int2 := compiler.unsafe_subscript!int(my_ptr, 1)
+  # my_int3 := compiler.unsafe_subscript!int(my_ptr, 2)
+  # my_int4 := compiler.unsafe_subscript!int(my_ptr, 3)
+  # print(my_int1)
+  # print(my_int2)
+  # print(my_int3)
+  # print(my_int4)
   
   # print(baz.y)
   # print(baz.x)

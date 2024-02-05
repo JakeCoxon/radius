@@ -181,13 +181,22 @@ export const defaultMetaFunction = (subCompilerState: SubCompilerState, compiled
   Object.assign(compiledClass.metaobject, { iterate, subscript, set_subscript, constructor })
 }
 
+export const externalBuiltinBindings: {[key:string]: Binding} = {
+  print: new Binding('print', FunctionType),
+  malloc: new Binding('malloc', FunctionType),
+  realloc: new Binding('realloc', FunctionType),
+  free: new Binding('free', FunctionType),
+  sizeof: new Binding('sizeof', FunctionType),
+}
+
+
 // Order index is external index in VM
 export const externals: {[key:string]: ExternalFunction} = {
-  print:       new ExternalFunction('print',       new Binding('print',       FunctionType), VoidType, (...args) => { compilerAssert(false, "Implemented elsewhere") }),
-  // malloc:      new ExternalFunction('malloc',      new Binding('malloc',      FunctionType), VoidType, (ast: Ast) => { compilerAssert(false, "Implemented elsewhere") }),
-  sizeof:      new ExternalFunction('sizeof',      new Binding('sizeof',      FunctionType), VoidType, (ast: Ast) => { compilerAssert(false, "Implemented elsewhere") }),
-  // realloc:     new ExternalFunction('realloc',     new Binding('realloc',     FunctionType), VoidType, (ast: Ast) => { compilerAssert(false, "Implemented elsewhere") }),
-  // free:        new ExternalFunction('free',        new Binding('free',        FunctionType), VoidType, (ast: Ast) => { compilerAssert(false, "Implemented elsewhere") }),
+  print:       new ExternalFunction('print',       externalBuiltinBindings.print, VoidType, (...args) => { compilerAssert(false, "Implemented elsewhere") }),
+  // malloc:      new ExternalFunction('malloc',      externalBuiltinBindings.malloc, VoidType, (ast: Ast) => { compilerAssert(false, "Implemented elsewhere") }),
+  sizeof:      new ExternalFunction('sizeof',      externalBuiltinBindings.sizeof, VoidType, (ast: Ast) => { compilerAssert(false, "Implemented elsewhere") }),
+  // realloc:     new ExternalFunction('realloc',     externalBuiltinBindings.realloc, VoidType, (ast: Ast) => { compilerAssert(false, "Implemented elsewhere") }),
+  // free:        new ExternalFunction('free',        externalBuiltinBindings.free, VoidType, (ast: Ast) => { compilerAssert(false, "Implemented elsewhere") }),
   begin_app:   new ExternalFunction('begin_app',   new Binding('begin_app',   FunctionType), VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
   end_app:     new ExternalFunction('end_app',     new Binding('end_app',     FunctionType), VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
   window_open: new ExternalFunction('window_open', new Binding('window_open', FunctionType), VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
@@ -199,6 +208,7 @@ export const externals: {[key:string]: ExternalFunction} = {
   delay:       new ExternalFunction('delay',       new Binding('delay',       FunctionType), VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
   copy_pixels: new ExternalFunction('copy_pixels', new Binding('copy_pixels', FunctionType), VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
 }
+
 
 export const malloc = new CompilerFunction('malloc', (location: SourceLocation, typeArgs: unknown[], args: Ast[]) => {
   propagatedLiteralAst(args[0])
@@ -274,9 +284,9 @@ export const operator_bitwise_or = new CompilerFunction('operator_bitwise_or', (
 
 export const createCompilerModuleTask = (ctx: TaskContext): Task<Module, CompilerError> => {
   const moduleScope = createScope({}, undefined)
-  Object.assign(moduleScope, { malloc, realloc, free, unsafe_subscript, unsafe_set_subscript, 
-    operator_bitshift_left, operator_bitshift_right, operator_bitwise_and, operator_bitwise_or,
-    rawptr: RawPointerType })
+  Object.assign(moduleScope, { 
+    unsafe_subscript, unsafe_set_subscript, operator_bitshift_left, operator_bitshift_right,
+    operator_bitwise_and, operator_bitwise_or, rawptr: RawPointerType })
   const subCompilerState = pushSubCompilerState(ctx, { debugName: `compiler module`, lexicalParent: undefined, scope: moduleScope })
   const module = new Module('compiler', subCompilerState, null!)
   return Task.of(module)
@@ -297,6 +307,8 @@ fn length!(T)(list: List!T) @inline @method:
   list.length
 
 fn malloc(size: int) -> compiler.rawptr @external
+fn realloc(ptr: compiler.rawptr, new_size: int) -> compiler.rawptr @external
+fn free(ptr: compiler.rawptr) @external
 
 `
 }
