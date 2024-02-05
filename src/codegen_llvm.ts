@@ -1,5 +1,5 @@
 import { externals } from "./compiler_sugar";
-import { Ast, AstType, AstWriterTable, Binding, BindingAst, BoolType, CallAst, CompiledFunction, ConcreteClassType, DoubleType, FileWriter, FloatType, FunctionType, GlobalCompilerState, IntType, ListTypeConstructor, LlvmFunctionWriter, LlvmWriter, NumberAst, ParameterizedType, Pointer, PrimitiveType, RawPointerType, Register, SourceLocation, StatementsAst, StringType, Type, TypeField, UserCallAst, ValueFieldAst, VoidType, compilerAssert, isAst, isType, textColors } from "./defs";
+import { Ast, AstType, AstWriterTable, Binding, BindingAst, BoolType, CallAst, CompiledFunction, ConcreteClassType, ConstructorAst, DefaultConsAst, DoubleType, FileWriter, FloatType, FunctionType, GlobalCompilerState, IntType, ListTypeConstructor, LlvmFunctionWriter, LlvmWriter, NumberAst, ParameterizedType, Pointer, PrimitiveType, RawPointerType, Register, SourceLocation, StatementsAst, StringType, Type, TypeField, UserCallAst, ValueFieldAst, VoidType, compilerAssert, isAst, isType, textColors } from "./defs";
 
 // Some useful commands
 //
@@ -120,7 +120,10 @@ const astWriter: LlvmAstWriterTable = {
     // TODO: Filter voids?
     let result: LlvmResultValue = undefined!
     ast.statements.forEach((expr, i) => {
-      writer.currentOutput.push("; Statement\n")
+      const line = expr.location.source?.input.split("\n").find((x, i) => i + 1 === expr.location.line)
+      if (line) {
+        writer.currentOutput.push(`; ${expr.location.line} | ${line.trim()}\n`)
+      } else writer.currentOutput.push(`; statement\n`)
       result = writeExpr(writer, expr)
       writer.currentOutput.push("\n")
     })
@@ -159,8 +162,13 @@ const astWriter: LlvmAstWriterTable = {
     return null
   },
   number: (writer, ast) => {
-    compilerAssert(ast.type === IntType || ast.type === FloatType || ast.type === DoubleType, "Expected number type got $type", { ast, type: ast.type })
     const valueName = createRegister("", ast.type)
+    if (ast.type === RawPointerType) {
+      compilerAssert(ast.value === 0, "Only null pointer allowed")
+      format(writer, `  $ = bitcast ptr null to ptr; literal null\n`, valueName)
+      return { register: valueName }
+    }
+    compilerAssert(ast.type === IntType || ast.type === FloatType || ast.type === DoubleType, "Expected number type got $type", { ast, type: ast.type })
     format(writer, `  $ = add $ 0, $ ; literal\n`, valueName, ast.type, ast.value)
     return { register: valueName }
   },
@@ -420,23 +428,45 @@ const astWriter: LlvmAstWriterTable = {
     format(writer, `  $ = ${op}\n`, register, input)
     return { register }
   },
-  list: (writer, ast) => {
-    compilerAssert(false, "Not implemented 'list'")
-  },
   defaultcons: (writer, ast) => {
-    compilerAssert(false, "Not implemented 'defaultcons'")
+    if (ast.type === IntType || ast.type === FloatType || ast.type === DoubleType || ast.type === RawPointerType) {
+      return writeExpr(writer, new NumberAst(ast.type, ast.location, 0))
+    }
+    const fields = ast.type.typeInfo.fields.map(x => new DefaultConsAst(x.fieldType, ast.location))
+    return writeExpr(writer, new ConstructorAst(ast.type, ast.location, fields))
+  },
+  list: (writer, ast) => {
+    compilerAssert(false, "Not implemented 'list'", { ast })
   },
   subscript: (writer, ast) => {
-    compilerAssert(false, "Not implemented 'subscript'")
+    const reg = toRegister(writer, writeExpr(writer, ast.left))
+    const index = toRegister(writer, writeExpr(writer, ast.right))
+    const pointer = createPointer("", ast.type)
+    format(writer, "  $ = getelementptr $, $ $, i32 $\n", pointer, ast.type, 'ptr', reg, index)
+    return { pointer }
   },
   setsubscript: (writer, ast) => {
-    compilerAssert(false, "Not implemented 'setsubscript'")
+    const reg = toRegister(writer, writeExpr(writer, ast.left))
+    const index = toRegister(writer, writeExpr(writer, ast.right))
+    const value = toRegister(writer, writeExpr(writer, ast.value))
+    const pointer = createPointer("", ast.value.type)
+    format(writer, "  $ = getelementptr $, $ $, i32 $\n", pointer, ast.value.type, 'ptr', reg, index)
+    format(writer, "  store $ $, $ $\n", ast.value.type, value, 'ptr', pointer)
+    return null
   },
   deref: (writer, ast) => {
-    compilerAssert(false, "Not implemented 'deref'")
+    const reg = toRegister(writer, writeExpr(writer, ast.left))
+    const pointer = createPointer("", ast.type)
+    format(writer, "  $ = getelementptr $, $ $, i32 0\n", pointer, ast.type, 'ptr', reg)
+    return { pointer }
   },
   setderef: (writer, ast) => {
-    compilerAssert(false, "Not implemented 'setderef'")
+    const reg = toRegister(writer, writeExpr(writer, ast.left))
+    const value = toRegister(writer, writeExpr(writer, ast.value))
+    const pointer = createPointer("", ast.value.type)
+    format(writer, "  $ = getelementptr $, $ $, i32 0\n", pointer, ast.value.type, 'ptr', reg)
+    format(writer, "  store $ $, $ $\n", ast.value.type, value, 'ptr', pointer)
+    return null
   },
   return: (writer, ast) => {
     if (!ast.expr) { format(writer, "  ret void\n"); return null }

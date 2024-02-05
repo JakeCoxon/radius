@@ -339,10 +339,11 @@ export function createCallAstFromValue(location: SourceLocation, value: unknown,
         TaskDef(compileAndExecuteFunctionHeaderTask, call)
         .chainFn((task, arg) => { 
           const ctx = (task._context as TaskContext)
-          compilerAssert(!ctx.globalCompiler.externalDefinitions.find(x => x.name === name.token.value))
+          const existing = ctx.globalCompiler.externalDefinitions.find(x => x.name === name.token.value)
           const paramHash = hashValues(call.result.concreteTypes)
-          const binding = externals[name.token.value] ? externals[name.token.value].binding : new Binding(name.token.value, FunctionType)
-          ctx.globalCompiler.externalDefinitions.push({ name: name.token.value, binding, paramHash, paramTypes: call.result.concreteTypes, returnType: call.result.returnType })
+          compilerAssert(!existing || existing.paramHash === paramHash, "Function exists with different param hash", { existing })
+          const binding = existing?.binding ?? (externals[name.token.value] ? externals[name.token.value].binding : new Binding(name.token.value, FunctionType))
+          if (!existing) ctx.globalCompiler.externalDefinitions.push({ name: name.token.value, binding, paramHash, paramTypes: call.result.concreteTypes, returnType: call.result.returnType })
           compilerAssert(call.result.returnType, "Expected return type got $returnType", { returnType: call.result.returnType })
           const mappedArgs = args.map((ast, i) => {
             propagateLiteralType(call.result.concreteTypes[i], ast)

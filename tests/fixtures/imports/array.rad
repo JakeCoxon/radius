@@ -9,7 +9,7 @@ type Array!(T) @struct:
 
 fn array_create!(T)(initial_size: int) -> Array!T:
   array: Array!T
-  array.data = compiler.malloc(initial_size)
+  array.data = malloc(initial_size)
   array.size = initial_size
   array.capacity = initial_size
   array

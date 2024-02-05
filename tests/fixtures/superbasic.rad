@@ -1,4 +1,5 @@
 import compiler
+import array for Array, array_create
 
 bsl :: compiler.operator_bitshift_left
 bsr :: compiler.operator_bitshift_right
@@ -53,30 +54,46 @@ fn main():
 
   Bar(1, 2).x = 2
 
+  arr := array_create!int(100)
+  # arr.append(3)
+
   foo := "Hello"
   x := foo
 
   baz := Baz(1, 2)
   print(baz)
   baz.y = 200
+
+  my_ptr := malloc(10000)
+  my_int1 := compiler.unsafe_subscript!int(my_ptr, 0)
+  compiler.unsafe_set_subscript(my_ptr, 1, 2)
+  compiler.unsafe_set_subscript(my_ptr, 2, 25)
+  compiler.unsafe_set_subscript(my_ptr, 3, 30)
+  my_int2 := compiler.unsafe_subscript!int(my_ptr, 1)
+  my_int3 := compiler.unsafe_subscript!int(my_ptr, 2)
+  my_int4 := compiler.unsafe_subscript!int(my_ptr, 3)
+  print(my_int1)
+  print(my_int2)
+  print(my_int3)
+  print(my_int4)
   
-  print(baz.y)
-  print(baz.x)
+  # print(baz.y)
+  # print(baz.x)
 
-  print(x)
-  foop(x)
-  print(x.data)
-  print(x.length)
+  # print(x)
+  # foop(x)
+  # print(x.data)
+  # print(x.length)
 
-  print(do_thing())
+  # print(do_thing())
 
-  # print("Foo")
-  y := 0
-  i := 0
-  while i < 100:
-    y = (y + 1) * 23
-    i += 1
-  print(y)
+  # # print("Foo")
+  # y := 0
+  # i := 0
+  # while i < 100:
+  #   y = (y + 1) * 23
+  #   i += 1
+  # print(y)
   
   # x := 2 == 2 and 1 == 2
   # print(bar(2, 3))
