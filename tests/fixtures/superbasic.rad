@@ -1,15 +1,6 @@
 import compiler
+import range for Range
 import array for Array, array_create
-
-bsl :: compiler.operator_bitshift_left
-bsr :: compiler.operator_bitshift_right
-band :: compiler.operator_bitwise_and
-
-rule_num :: 32
-
-fn calculate_state(a: int, b: int, c: int) -> int:
-  index := bsl(a, 2) + bsl(b, 1) + c
-  band(bsr(rule_num, index), 1)
 
 fn foo(a: int, b: int) -> int:
   a * b * 2
@@ -61,9 +52,9 @@ fn main():
 
   # Bar(1, 2).x = 2
 
-  arr := array_create!int(100)
-  arr.append(3)
-  print(arr[100])
+  # arr := array_create!int(100)
+  # arr.append(3)
+  # print(arr[100])
 
   # foo := "Hello"
   # x := foo
@@ -153,3 +144,45 @@ fn main():
 
   # asdasd := ifx 2 == 3: 1 else: 2
   # print(asdasd)
+
+
+  scale :: 2
+  num_cells :: 21
+
+  cells := array_create!int(num_cells)
+  next_cells := array_create!int(num_cells)
+
+  cells[:] = 0 ...
+  cells[num_cells / 2] = 1
+
+  print(cells.data)
+  print(next_cells.data)
+
+  for i in Range(0, 10):
+    for x in Range(1, num_cells - 1):
+      next_cells[x] = calculate_state(
+        cells[x - 1], cells[x], cells[x + 1])
+
+    # for x in Range(0, num_cells):
+    #   c := ifx next_cells[x] == 1: 0xffffffff else: 0
+    #   print(c)
+    # fill_rect(scale * x, 240 - scale, scale, scale, c)
+
+    swap := cells
+    cells = next_cells
+    next_cells = swap
+
+  # print(next_cells[:]) ...
+  print(cells[:]) ...
+
+
+# https://mathworld.wolfram.com/ElementaryCellularAutomaton.html
+rule_num :: 126
+
+bsl :: compiler.operator_bitshift_left
+bsr :: compiler.operator_bitshift_right
+band :: compiler.operator_bitwise_and
+
+fn calculate_state(a: int, b: int, c: int) -> int:
+  index := bsl(a, 2) + bsl(b, 1) + c
+  band(bsr(rule_num, index), 1)

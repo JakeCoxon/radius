@@ -785,6 +785,9 @@ const instructions: InstructionMapping = {
         .chainFn((task, value) => { vm.stack.push(value); return Task.success() })
       )
     }
+    if (isType(expr)) {
+      if (name === 'sizeof') { vm.stack.push(expr.typeInfo.sizeof); return }
+    }
     compilerAssert(false, "Not implemented", { expr, name })
   },
   subscript: (vm, { }) => {

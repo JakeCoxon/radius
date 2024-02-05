@@ -1,4 +1,4 @@
-type Range:
+type Range @struct:
   start: int
   end: int
   __iterate :: range_iterate

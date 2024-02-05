@@ -1,5 +1,5 @@
 import { externals } from "./compiler_sugar";
-import { Ast, AstType, AstWriterTable, Binding, BindingAst, BoolType, CallAst, CompiledFunction, ConcreteClassType, ConstructorAst, DefaultConsAst, DoubleType, FileWriter, FloatType, FunctionType, GlobalCompilerState, IntType, ListTypeConstructor, LlvmFunctionWriter, LlvmWriter, NumberAst, ParameterizedType, Pointer, PrimitiveType, RawPointerType, Register, SourceLocation, StatementsAst, StringType, Type, TypeField, UserCallAst, ValueFieldAst, VoidType, compilerAssert, isAst, isType, textColors } from "./defs";
+import { Ast, AstType, AstWriterTable, Binding, BindingAst, BlockAst, BoolType, CallAst, CompiledFunction, ConcreteClassType, ConstructorAst, DefaultConsAst, DoubleType, FileWriter, FloatType, FunctionType, GlobalCompilerState, IntType, ListTypeConstructor, LlvmFunctionWriter, LlvmWriter, NumberAst, ParameterizedType, Pointer, PrimitiveType, RawPointerType, Register, SourceLocation, StatementsAst, StringType, Type, TypeField, UserCallAst, ValueFieldAst, VoidType, compilerAssert, isAst, isType, textColors } from "./defs";
 
 // Some useful commands
 //
@@ -14,7 +14,7 @@ const operatorMap: {[key: string]:string} = {
   "+": "add",
   "-": "sub",
   "*": "mul",
-  "/": "div",
+  "/": "sdiv",
   "==": "icmp eq",
   "!=": "icmp ne",
 
@@ -36,7 +36,17 @@ const log = (...args: any[]) => {
 
 const writeExpr = (writer: LlvmFunctionWriter, ast: Ast) => {
   compilerAssert(astWriter[ast.key], `Not implemented ast writer '${ast.key}'`)
-  return astWriter[ast.key](writer, ast as any)
+  const toPrint = !(ast instanceof StatementsAst || ast instanceof BlockAst) && writer.printNextStatement
+  if (toPrint) {
+    writer.printNextStatement = false
+    const line = ast.location.source?.input.split("\n").find((x, i) => i + 1 === ast.location.line)
+    if (line) {
+      format(writer, "; $ | ($) $\n", ast.location.line, ast.key, line.trim())
+    } else format(writer, `; $\n`, ast.key)
+  }
+  const result = astWriter[ast.key](writer, ast as any)
+  if (toPrint) format(writer, "\n")
+  return result
 };
 
 const toStatements = (ast: Ast) => {
@@ -121,12 +131,8 @@ const astWriter: LlvmAstWriterTable = {
     // TODO: Filter voids?
     let result: LlvmResultValue = undefined!
     ast.statements.forEach((expr, i) => {
-      const line = expr.location.source?.input.split("\n").find((x, i) => i + 1 === expr.location.line)
-      if (line) {
-        writer.currentOutput.push(`; ${expr.location.line} | ${line.trim()}\n`)
-      } else writer.currentOutput.push(`; ${expr.key}\n`)
+      writer.printNextStatement = true
       result = writeExpr(writer, expr)
-      writer.currentOutput.push("\n")
     })
     return result
   },
@@ -638,6 +644,7 @@ const writeLlvmBytecodeFunction = (bytecodeWriter: LlvmWriter, func: CompiledFun
     outputFunctionBody: [],
     outputFunctionHeaders: [],
     currentOutput: null!,
+    printNextStatement: false
   }
 
   const isMain = bytecodeWriter.globalCompilerState.entryFunction === func

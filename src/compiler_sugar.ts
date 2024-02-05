@@ -309,6 +309,7 @@ fn length!(T)(list: List!T) @inline @method:
 fn malloc(size: int) -> compiler.rawptr @external
 fn realloc(ptr: compiler.rawptr, new_size: int) -> compiler.rawptr @external
 fn free(ptr: compiler.rawptr) @external
+fn sizeof!(T)() @external
 
 `
 }

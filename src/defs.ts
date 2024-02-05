@@ -469,7 +469,8 @@ export const hashValues = (values: unknown[]) => {
 export interface TypeInfo {
   fields: TypeField[]
   metaobject: UnknownObject
-  isReferenceType: boolean
+  isReferenceType: boolean,
+  sizeof: number
 }
 export class TypeRoot {}
 export class PrimitiveType extends TypeRoot {
@@ -570,19 +571,19 @@ export class CompilerFunction {
   }
 }
 
-export const VoidType =         new PrimitiveType("void",          { fields: [], metaobject: Object.create(null), isReferenceType: false })
-export const IntType =          new PrimitiveType("int",           { fields: [], metaobject: Object.create(null), isReferenceType: false })
-export const IntLiteralType =   new PrimitiveType("int_literal",   { fields: [], metaobject: Object.create(null), isReferenceType: false })
-export const FloatLiteralType = new PrimitiveType("float_literal", { fields: [], metaobject: Object.create(null), isReferenceType: false })
-export const BoolType =         new PrimitiveType("bool",          { fields: [], metaobject: Object.create(null), isReferenceType: false })
-export const FloatType =        new PrimitiveType("float",         { fields: [], metaobject: Object.create(null), isReferenceType: false })
-export const DoubleType =       new PrimitiveType("double",        { fields: [], metaobject: Object.create(null), isReferenceType: false })
-export const FunctionType =     new PrimitiveType("function",      { fields: [], metaobject: Object.create(null), isReferenceType: false })
-export const RawPointerType =   new PrimitiveType("rawptr",        { fields: [], metaobject: Object.create(null), isReferenceType: false })
-export const AstType =          new PrimitiveType("ast",           { fields: [], metaobject: Object.create(null), isReferenceType: false })
+export const VoidType =         new PrimitiveType("void",          { sizeof: 0, fields: [], metaobject: Object.create(null), isReferenceType: false })
+export const IntType =          new PrimitiveType("int",           { sizeof: 4, fields: [], metaobject: Object.create(null), isReferenceType: false })
+export const IntLiteralType =   new PrimitiveType("int_literal",   { sizeof: 4, fields: [], metaobject: Object.create(null), isReferenceType: false })
+export const FloatLiteralType = new PrimitiveType("float_literal", { sizeof: 4, fields: [], metaobject: Object.create(null), isReferenceType: false })
+export const BoolType =         new PrimitiveType("bool",          { sizeof: 1, fields: [], metaobject: Object.create(null), isReferenceType: false })
+export const FloatType =        new PrimitiveType("float",         { sizeof: 4, fields: [], metaobject: Object.create(null), isReferenceType: false })
+export const DoubleType =       new PrimitiveType("double",        { sizeof: 8, fields: [], metaobject: Object.create(null), isReferenceType: false })
+export const FunctionType =     new PrimitiveType("function",      { sizeof: 0, fields: [], metaobject: Object.create(null), isReferenceType: false })
+export const RawPointerType =   new PrimitiveType("rawptr",        { sizeof: 8, fields: [], metaobject: Object.create(null), isReferenceType: false })
+export const AstType =          new PrimitiveType("ast",           { sizeof: 0, fields: [], metaobject: Object.create(null), isReferenceType: false })
 
 export const StringType = (() => {
-  const type = new PrimitiveType("string", { fields: [], metaobject: Object.create(null), isReferenceType: false })
+  const type = new PrimitiveType("string", { sizeof: 0, fields: [], metaobject: Object.create(null), isReferenceType: false })
   type.typeInfo.fields.push(new TypeField(SourceLocation.anon, "length", type, 0, IntType))
   type.typeInfo.fields.push(new TypeField(SourceLocation.anon, "data", type, 1, RawPointerType))
   return type;
@@ -590,14 +591,14 @@ export const StringType = (() => {
 
 export const ListTypeConstructor: ExternalTypeConstructor = new ExternalTypeConstructor("List", (argTypes) => {
   compilerAssert(argTypes.length === 1, "Expected one type arg", { argTypes })
-  const type = new ParameterizedType(ListTypeConstructor, argTypes, { fields: [], metaobject: Object.create(null), isReferenceType: false });
+  const type = new ParameterizedType(ListTypeConstructor, argTypes, { sizeof: 0, fields: [], metaobject: Object.create(null), isReferenceType: false });
   type.typeInfo.fields.push(new TypeField(SourceLocation.anon, "length", type, 0, IntType))
   type.typeInfo.fields.push(new TypeField(SourceLocation.anon, "capacity", type, 1, IntType))
   type.typeInfo.fields.push(new TypeField(SourceLocation.anon, "data", type, 2, RawPointerType))
   return type;
 })
 export const TupleTypeConstructor: ExternalTypeConstructor = new ExternalTypeConstructor("Tuple", (argTypes) => {
-  const type = new ParameterizedType(TupleTypeConstructor, argTypes, { fields: [], metaobject: Object.create(null), isReferenceType: false });
+  const type = new ParameterizedType(TupleTypeConstructor, argTypes, { sizeof: 0, fields: [], metaobject: Object.create(null), isReferenceType: false });
   // TODO: Add getter for length
   // type.typeInfo.fields.push(new TypeField(SourceLocation.anon, "length", type, 0, IntType))
   argTypes.forEach((argType, i) => {
@@ -972,6 +973,7 @@ export type LlvmFunctionWriter = {
   currentOutput: string[],
   outputFunctionBody: string[]
   outputFunctionHeaders: string[],
+  printNextStatement: boolean
 }
 export type LlvmWriter = {
   functions: LlvmFunctionWriter[]
