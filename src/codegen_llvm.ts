@@ -87,6 +87,16 @@ const allocaHelper = (writer: LlvmFunctionWriter, pointer: Pointer, overrideType
   writer.currentOutput = writer.outputFunctionBody
   return pointer
 }
+const getElementPointer = (writer: LlvmFunctionWriter, pointer: Pointer, fieldPath: TypeField[]) => {
+  const loadFieldPtr = createPointer("", VoidType)
+  const indicesStr = fieldPath.reduce((reg, field, i) => {
+    return `${i == 0 ? '' : ', '}i32 ${field.index}`
+  }, "")
+
+  const sourceDataType = getDataTypeName(writer.writer, fieldPath[0].sourceType)
+  format(writer, "  $ = getelementptr $, $ $, i32 0, $\n", loadFieldPtr, sourceDataType, 'ptr', pointer, indicesStr)
+  return loadFieldPtr
+}
 const loadFieldHelper = (writer: LlvmFunctionWriter, leftResult: LlvmResultValue, fieldPath: TypeField[]) => {
   const loadField = (base: LlvmResultValue, field: TypeField): RegisterResult => {
     compilerAssert(base, "")
@@ -129,9 +139,6 @@ const astWriter: LlvmAstWriterTable = {
     const pointer = allocaHelper(writer, createPointer("", ast.type))
     format(writer, `  store $ { i32 $, ptr $ }, ptr $\n`, ast.type, String(length - 1), constantName, pointer)
     return { pointer }
-  },
-  cast: (writer, ast) => {
-    compilerAssert(false, "Not implemented")
   },
   binding: (writer, ast) => {
     compilerAssert(ast.binding.type !== VoidType)
@@ -304,9 +311,6 @@ const astWriter: LlvmAstWriterTable = {
 
     compilerAssert(false, "External call not implemented", { ast })
   },
-  list: (writer, ast) => {
-    compilerAssert(false, "Not implemented")
-  },
 
   usercall: (writer, ast) => {
     const name = ast.type !== VoidType && createRegister("", VoidType)
@@ -340,9 +344,6 @@ const astWriter: LlvmAstWriterTable = {
     const name = createRegister("", VoidType)
     format(writer, `  $ = xor $ $, 1\n`, name, expr.type, expr)
     return { register: name }
-  },
-  defaultcons: (writer, ast) => {
-    compilerAssert(false, "Not implemented 'defaultcons'")
   },
   constructor: (writer, ast) => {
     if (ast.type.typeInfo.isReferenceType) {
@@ -394,10 +395,30 @@ const astWriter: LlvmAstWriterTable = {
     return { register: reg }
   },
   setvaluefield: (writer, ast) => {
-    compilerAssert(false, "Not implemented 'setvaluefield'")
+    const res = writeExpr(writer, ast.left)
+    compilerAssert(res && 'pointer' in res, "Expected pointer") // ast.left is binding so should always be a pointer
+    const fieldPtr = getElementPointer(writer, res.pointer, ast.fieldPath)
+    const finalField = ast.fieldPath[ast.fieldPath.length - 1]
+    const valueReg = toRegister(writer, writeExpr(writer, ast.value))
+    format(writer, "  store $ $, $ $\n", finalField.fieldType, valueReg, 'ptr', fieldPtr)
+    return null
   },
   setfield: (writer, ast) => {
-    compilerAssert(false, "Not implemented 'setfield'")
+    const reg = toRegister(writer, writeExpr(writer, ast.left))
+    const leftPtr = reg as unknown as Pointer // reinterpret reg as a pointer
+    const fieldPtr = getElementPointer(writer, leftPtr, [ast.field])
+    const valueReg = toRegister(writer, writeExpr(writer, ast.value))
+    format(writer, "  store $ $, $ $\n", ast.field.fieldType, valueReg, 'ptr', fieldPtr)
+    return null
+  },
+  cast: (writer, ast) => {
+    compilerAssert(false, "Not implemented")
+  },
+  list: (writer, ast) => {
+    compilerAssert(false, "Not implemented")
+  },
+  defaultcons: (writer, ast) => {
+    compilerAssert(false, "Not implemented 'defaultcons'")
   },
   subscript: (writer, ast) => {
     compilerAssert(false, "Not implemented 'subscript'")

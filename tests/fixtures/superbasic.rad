@@ -31,6 +31,10 @@ type Bar @struct:
   x : int
   y : int 
 
+type Baz:
+  x : int
+  y : int
+
 fn main():
 
   bar := Bar(1, 2)
@@ -39,11 +43,20 @@ fn main():
   foobar(bar)
   asdasd := createbar(3, 2)
   print(asdasd.x)
+  bar.x = 10
+  print(bar.x)
+
+  Bar(1, 2).x = 2
 
   foo := "Hello"
   x := foo
+
+  baz := Baz(1, 2)
+  print(baz)
+  baz.y = 200
   
-  print(malloc(100))
+  print(baz.y)
+  print(baz.x)
 
   print(x)
   foop(x)

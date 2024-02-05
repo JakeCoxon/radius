@@ -852,10 +852,18 @@ const instructions: InstructionMapping = {
     compilerAssert(field.fieldType === value.type, "Type $type does not match field $name type of $fieldType on object $objType", { name, objType: left.type, type: value.type, fieldType: field.fieldType })
     if (left instanceof DerefAst && !left.type.typeInfo.isReferenceType) {
     vm.stack.push(new SetDerefAst(VoidType, vm.location, left.left, [...left.fieldPath, field], value))
-    } else if (left instanceof BindingAst && !left.type.typeInfo.isReferenceType) {
-      vm.stack.push(new SetValueFieldAst(VoidType, vm.location, left, [field], value))
     } else if (left instanceof ValueFieldAst && !left.type.typeInfo.isReferenceType) {
       vm.stack.push(new SetValueFieldAst(VoidType, vm.location, left.left, [...left.fieldPath, field], value))
+    } else if (left instanceof BindingAst && !left.type.typeInfo.isReferenceType) {
+      vm.stack.push(new SetValueFieldAst(VoidType, vm.location, left, [field], value))
+    } else if (!left.type.typeInfo.isReferenceType) {
+      const newBinding = new Binding("", left.type)
+      const newBindingAst = new BindingAst(left.type, vm.location, newBinding)
+      const stmts = createStatements(vm.location, [
+        new LetAst(VoidType, vm.location, newBinding, left),
+        new SetValueFieldAst(VoidType, vm.location, newBindingAst, [field], value)
+      ])
+      vm.stack.push(stmts)
     } else vm.stack.push(new SetFieldAst(VoidType, vm.location, left, field, value))
   },
   subscriptast: (vm, {}) => {
