@@ -1,5 +1,5 @@
 import { externals } from "./compiler_sugar";
-import { Ast, AstType, AstWriterTable, Binding, BindingAst, BoolType, CallAst, CompiledFunction, ConcreteClassType, DoubleType, FileWriter, FloatType, FunctionType, GlobalCompilerState, IntType, ListTypeConstructor, LlvmFunctionWriter, LlvmWriter, NumberAst, ParameterizedType, PrimitiveType, RawPointerType, SourceLocation, StatementsAst, StringType, Type, TypeField, UserCallAst, ValueFieldAst, VoidType, compilerAssert, isAst, isType, textColors } from "./defs";
+import { Ast, AstType, AstWriterTable, Binding, BindingAst, BoolType, CallAst, CompiledFunction, ConcreteClassType, DoubleType, FileWriter, FloatType, FunctionType, GlobalCompilerState, IntType, ListTypeConstructor, LlvmFunctionWriter, LlvmWriter, NumberAst, ParameterizedType, Pointer, PrimitiveType, RawPointerType, Register, SourceLocation, StatementsAst, StringType, Type, TypeField, UserCallAst, ValueFieldAst, VoidType, compilerAssert, isAst, isType, textColors } from "./defs";
 
 // Some useful commands
 //
@@ -60,9 +60,6 @@ const getPointerName = (writer: LlvmFunctionWriter, type: Type) => {
 type RegisterResult = { register: Register }
 type PointerResult = { pointer: Pointer }
 export type LlvmResultValue = RegisterResult | PointerResult | null
-
-type Pointer = Binding & {_type: 'pointer'}
-type Register = Binding & {_type: 'register'}
 
 const createPointer = (name: string, type: Type) => new Binding(name, type) as Pointer
 const createRegister = (name: string, type: Type) => new Binding(name, type) as Register
@@ -163,8 +160,7 @@ const astWriter: LlvmAstWriterTable = {
   },
   number: (writer, ast) => {
     compilerAssert(ast.type === IntType || ast.type === FloatType || ast.type === DoubleType, "Expected number type got $type", { ast, type: ast.type })
-    const ptrName = createPointer("", VoidType)
-    const valueName = createRegister("", VoidType)
+    const valueName = createRegister("", ast.type)
     format(writer, `  $ = add $ 0, $ ; literal\n`, valueName, ast.type, ast.value)
     return { register: valueName }
   },
@@ -412,10 +408,20 @@ const astWriter: LlvmAstWriterTable = {
     return null
   },
   cast: (writer, ast) => {
-    compilerAssert(false, "Not implemented")
+    const op = (() => {
+      if (ast.expr.type === IntType && ast.type === FloatType) return 'sitofp i32 $ to float' 
+      if (ast.expr.type === IntType && ast.type === DoubleType) return 'sitofp i32 $ to double'
+      if (ast.expr.type === FloatType && ast.type === IntType) return 'fptosi float $ to i32'
+      if (ast.expr.type === DoubleType && ast.type === IntType) return 'fptosi double $ to i32'
+      compilerAssert(false, "Invalid cast conversion")
+    })()
+    const register = createRegister("", ast.type)
+    const input = toRegister(writer, writeExpr(writer, ast.expr))
+    format(writer, `  $ = ${op}\n`, register, input)
+    return { register }
   },
   list: (writer, ast) => {
-    compilerAssert(false, "Not implemented")
+    compilerAssert(false, "Not implemented 'list'")
   },
   defaultcons: (writer, ast) => {
     compilerAssert(false, "Not implemented 'defaultcons'")
@@ -433,7 +439,10 @@ const astWriter: LlvmAstWriterTable = {
     compilerAssert(false, "Not implemented 'setderef'")
   },
   return: (writer, ast) => {
-    compilerAssert(false, "Not implemented 'return'")
+    if (!ast.expr) { format(writer, "  ret void\n"); return null }
+    const reg = toRegister(writer, writeExpr(writer, ast.expr))
+    format(writer, "  ret $ $\n", reg.type, reg)
+    return null
   },
   address: (writer, ast) => {
     compilerAssert(false, "Not implemented 'address'")
@@ -596,7 +605,7 @@ const writeLlvmBytecodeFunction = (bytecodeWriter: LlvmWriter, func: CompiledFun
     constantsByType: new Map(),
     outputFunctionBody: [],
     outputFunctionHeaders: [],
-    currentOutput: null!
+    currentOutput: null!,
   }
 
   const isMain = bytecodeWriter.globalCompilerState.entryFunction === func

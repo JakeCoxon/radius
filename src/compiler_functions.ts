@@ -180,7 +180,12 @@ export function functionTemplateTypeCheckAndCompileTask(ctx: TaskContext, { func
 
       const id = func.compiledFunctions.length;
       const binding = new Binding(`${func.debugName} compiled ${id}`, FunctionType);
-      const returnType = ast.type;
+      let returnType = ast.type
+      // TODO: Proper checking here
+      if (returnType === VoidType && result.returnType !== VoidType) {
+        compilerAssert(false, "Invalid return type got $got expected $expected", { got: ast.type, expected: result.returnType })
+      }
+      
       const compiledFunction = new CompiledFunction(
           binding, func, returnType, result.concreteTypes, ast, argBindings, typeArgs, typeParamHash);
       ctx.globalCompiler.compiledFunctions.set(binding, compiledFunction);

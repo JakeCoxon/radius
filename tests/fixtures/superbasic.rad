@@ -27,6 +27,11 @@ fn foobar(b: Bar):
 fn createbar(x: int, y: int):
   Bar(x, y)
 
+fn do_thing() -> int:
+  if 1 == 1:
+    return 5454
+  4343
+
 type Bar @struct:
   x : int
   y : int 
@@ -62,6 +67,8 @@ fn main():
   foop(x)
   print(x.data)
   print(x.length)
+
+  print(do_thing())
 
   # print("Foo")
   y := 0

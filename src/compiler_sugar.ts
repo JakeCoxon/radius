@@ -217,7 +217,7 @@ export const free = new CompilerFunction('free', (location: SourceLocation, type
 })
 
 export const print = new CompilerFunction('print', (location: SourceLocation, typeArgs: unknown[], args: Ast[]) => {
-  compilerAssert(args.length === 1 && args[0].type !== VoidType , "Expected non void argument")
+  compilerAssert(args.length === 1 && args[0].type !== VoidType , "Expected non void argument", { args })
   return new CallAst(VoidType, location, externals.print, args, [])
 })
 

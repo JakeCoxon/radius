@@ -952,6 +952,9 @@ export type CodegenWriter = {
 }
 
 
+export type Pointer = Binding & {_type: 'pointer'}
+export type Register = Binding & {_type: 'register'}
+
 export type LlvmFunctionWriter = {
   writer: LlvmWriter
   function: CompiledFunction,
@@ -968,7 +971,7 @@ export type LlvmFunctionWriter = {
   currentBlockLabel: Binding,
   currentOutput: string[],
   outputFunctionBody: string[]
-  outputFunctionHeaders: string[]
+  outputFunctionHeaders: string[],
 }
 export type LlvmWriter = {
   functions: LlvmFunctionWriter[]
