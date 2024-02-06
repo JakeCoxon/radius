@@ -1,6 +1,6 @@
 import { BytecodeSecondOrder, getOperatorTable, propagatedLiteralAst, visitParseNode } from "./compiler"
 import { insertFunctionDefinition } from "./compiler_functions"
-import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding } from "./defs"
+import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType } from "./defs"
 import { Task } from "./tasks"
 
 export const forLoopSugar = (out: BytecodeWriter, node: ParseFor) => {
@@ -183,6 +183,7 @@ export const defaultMetaFunction = (subCompilerState: SubCompilerState, compiled
 
 export const externalBuiltinBindings: {[key:string]: Binding} = {
   print: new Binding('print', FunctionType),
+  printf: new Binding('printf', FunctionType),
   malloc: new Binding('malloc', FunctionType),
   realloc: new Binding('realloc', FunctionType),
   free: new Binding('free', FunctionType),
@@ -193,6 +194,7 @@ export const externalBuiltinBindings: {[key:string]: Binding} = {
 // Order index is external index in VM
 export const externals: {[key:string]: ExternalFunction} = {
   print:       new ExternalFunction('print',       externalBuiltinBindings.print, VoidType, (...args) => { compilerAssert(false, "Implemented elsewhere") }),
+  printf:      new ExternalFunction('printf',      externalBuiltinBindings.printf, VoidType, (...args) => { compilerAssert(false, "Implemented elsewhere") }),
   // malloc:      new ExternalFunction('malloc',      externalBuiltinBindings.malloc, VoidType, (ast: Ast) => { compilerAssert(false, "Implemented elsewhere") }),
   sizeof:      new ExternalFunction('sizeof',      externalBuiltinBindings.sizeof, VoidType, (ast: Ast) => { compilerAssert(false, "Implemented elsewhere") }),
   // realloc:     new ExternalFunction('realloc',     externalBuiltinBindings.realloc, VoidType, (ast: Ast) => { compilerAssert(false, "Implemented elsewhere") }),
@@ -227,8 +229,54 @@ export const free = new CompilerFunction('free', (location: SourceLocation, type
 })
 
 export const print = new CompilerFunction('print', (location: SourceLocation, typeArgs: unknown[], args: Ast[]) => {
-  compilerAssert(args.length === 1 && args[0].type !== VoidType , "Expected non void argument", { args })
-  return new CallAst(VoidType, location, externals.print, args, [])
+  // compilerAssert(args.length === 1 && args[0].type !== VoidType , "Expected non void argument", { args })
+  const stmts: Ast[] = []
+  let formatStr = ''
+  const printfArgs: Ast[] = []
+
+  const fieldHelper = (binding: Binding, name: string) => {
+    const field = binding.type.typeInfo.fields.find(x => x.name === name)!
+    return new ValueFieldAst(field.fieldType, location, new BindingAst(binding.type, location, binding), [field])
+  }
+  const formats = new Map()
+  formats.set(IntType, '%i')
+  formats.set(RawPointerType, '%p')
+  formats.set(FloatType, '%f')
+  formats.set(DoubleType, '%f')
+
+  args.forEach((arg, i) => {
+    if (i !== 0) formatStr += ' '
+    if (arg.type === StringType) {
+      const binding = new Binding("", StringType)
+      stmts.push(new LetAst(VoidType, location, binding, arg))
+      const lengthGetter = fieldHelper(binding, 'length')
+      const dataGetter = fieldHelper(binding, 'data')
+      formatStr += '%.*s'
+      printfArgs.push(lengthGetter, dataGetter)
+    } else if (formats.has(arg.type)) {
+      printfArgs.push(arg)
+      formatStr += formats.get(arg.type)
+    } else if (arg.type.typeInfo.fields.length && !arg.type.typeInfo.isReferenceType) {
+      const binding = new Binding("", arg.type)
+      stmts.push(new LetAst(VoidType, location, binding, arg))
+      formatStr += `[${arg.type.shortName} `
+      const fieldsToPrint = binding.type.typeInfo.fields.filter(x => formats.has(x.fieldType))
+      fieldsToPrint.forEach((field, j) => {
+        if (j !== 0) formatStr += ', '
+        const getter = fieldHelper(binding, field.name)
+        formatStr += `${field.name}=`
+        formatStr += formats.get(field.fieldType)
+        printfArgs.push(getter)
+      })
+      formatStr += ']'
+    }
+  })
+  formatStr += '\n'
+  const formatBinding = new Binding("", StringType)
+  stmts.unshift(new LetAst(VoidType, location, formatBinding, new StringAst(StringType, location, formatStr)))
+  printfArgs.unshift(fieldHelper(formatBinding, 'data'))
+  stmts.push(new CallAst(VoidType, location, externals.printf, printfArgs, []))
+  return createStatements(location, stmts)
 })
 
 

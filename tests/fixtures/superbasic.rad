@@ -149,14 +149,16 @@ fn main():
   scale :: 2
   num_cells :: 21
 
+  print("Starting", "something", "else")
+
   cells := array_create!int(num_cells)
   next_cells := array_create!int(num_cells)
 
   cells[:] = 0 ...
   cells[num_cells / 2] = 1
 
-  print(cells.data)
-  print(next_cells.data)
+  print(cells)
+  print(next_cells)
 
   for i in Range(0, 10):
     for x in Range(1, num_cells - 1):

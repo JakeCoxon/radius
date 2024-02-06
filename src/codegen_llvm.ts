@@ -14,7 +14,7 @@ const operatorMap: {[key: string]:string} = {
   "+": "add",
   "-": "sub",
   "*": "mul",
-  "/": "sdiv",
+  "/": "sdiv", // signed
   "==": "icmp eq",
   "!=": "icmp ne",
 
@@ -139,7 +139,7 @@ const astWriter: LlvmAstWriterTable = {
   string: (writer, ast) => {
     const constantName = generateName(writer.writer, new Binding("constant", VoidType), true)
     const escaped = ast.value.replace(/["\\]|[\x00-\x1F\x80-\xFF]/g, (str) => {
-      return `\\${str.charCodeAt(0).toString(16)}`
+      return `\\${str.charCodeAt(0).toString(16).padStart(2, '0')}`
     })
     const length = ast.value.length + 1 // add null terminator
     writer.writer.outputHeaders.push(`${constantName} = private unnamed_addr constant [${length} x i8] c"${escaped}\\00"\n`)
@@ -286,27 +286,14 @@ const astWriter: LlvmAstWriterTable = {
     return null
   },
   call: (writer, ast) => {
-    if (ast.func === externals.print) {
-      compilerAssert(ast.args.length === 1, "Print not implemented yet", { ast });
+    if (ast.func === externals.printf) {
       const name = createRegister("", VoidType)
-      const argName = toRegister(writer, writeExpr(writer, ast.args[0]))
-
-      if (ast.args[0].type === StringType) {
-        const fields = ast.args[0].type.typeInfo.fields
-        const basePointer = allocaHelper(writer, createPointer("", StringType))
-        format(writer, "  store $ $, ptr $\n", StringType, argName, basePointer)
-        const lengthRegister = loadFieldHelper(writer, { pointer: basePointer }, [fields.find(x => x.name === 'length')!])!
-        const strPtrRegister = loadFieldHelper(writer, { pointer: basePointer }, [fields.find(x => x.name === 'data')!])!
-        format(writer, "  $ = call i32 (i8*, ...) @printf(ptr $, $ $, $ $)\n", name, globals.format_string_string, lengthRegister.type, lengthRegister, strPtrRegister.type, strPtrRegister)
-        return { register: name }
-      }
-
-      const storageType = getStorageType(ast.args[0].type)
-      const formatPtrName = storageType === IntType ? globals.format_string_int :
-        storageType === FloatType ? globals.format_string_float :
-        storageType === RawPointerType ? globals.format_string_ptr : undefined
-      compilerAssert(formatPtrName, "Not implemented for this type", { storageType })
-      format(writer, "  $ = call i32 (i8*, ...) @printf(ptr $, $ $)\n", name, formatPtrName, storageType, argName)
+      const argsString = ast.args.map((arg, i) => {
+        const reg = toRegister(writer, writeExpr(writer, arg))
+        return `${getTypeName(writer.writer, arg.type)} ${generateName(writer.writer, reg)}`
+      }).join(", ")
+      
+      format(writer, "  $ = call i32 (i8*, ...) @printf($)\n", name, argsString)
       return { register: name }
     }
 
@@ -512,10 +499,6 @@ const format = (writer: Writable, format: string, ...args: (string | number | Ty
 
 const globals = {
   printf: new Binding("printf", FunctionType),
-  format_string_int: new Binding("format_string_int", RawPointerType),
-  format_string_float: new Binding("format_string_float", RawPointerType),
-  format_string_ptr: new Binding("format_string_ptr", RawPointerType),
-  format_string_string: new Binding("format_string_string", RawPointerType),
 }
 
 export const writeLlvmBytecode = (globalCompilerState: GlobalCompilerState, outputWriter: FileWriter) => {
@@ -565,16 +548,8 @@ export const writeLlvmBytecode = (globalCompilerState: GlobalCompilerState, outp
     format(bytecodeWriter, "declare $ $($)\n", external.returnType, external.binding, args)
   })
 
-  insertGlobal(globals.format_string_int, "@format_string_int")
-  insertGlobal(globals.format_string_float, "@format_string_float")
-  insertGlobal(globals.format_string_ptr, "@format_string_ptr")
-  insertGlobal(globals.format_string_string, "@format_string_string")
 
   bytecodeWriter.outputHeaders.push("declare i32 @printf(i8*, ...)\n\n")
-  bytecodeWriter.outputHeaders.push(`@format_string_int = private unnamed_addr constant [4 x i8] c"%i\\0A\\00", align 1\n`)
-  bytecodeWriter.outputHeaders.push(`@format_string_float = private unnamed_addr constant [4 x i8] c"%f\\0A\\00", align 1\n`)
-  bytecodeWriter.outputHeaders.push(`@format_string_ptr = private unnamed_addr constant [4 x i8] c"%p\\0A\\00", align 1\n`)
-  bytecodeWriter.outputHeaders.push(`@format_string_string = private unnamed_addr constant [6 x i8] c"%.*s\\0A\\00", align 1\n`)
   bytecodeWriter.outputHeaders.push(`\n`)
 
   Array.from(globalCompilerState.compiledFunctions.values()).map(func => {
@@ -671,7 +646,9 @@ const writeLlvmBytecodeFunction = (bytecodeWriter: LlvmWriter, func: CompiledFun
   }
   bytecodeWriter.outputStrings.push(...funcWriter.outputFunctionBody)
 
-  if (func.returnType !== VoidType) {
+  if (isMain) { // hardcode for now
+    format(funcWriter, `  ret i32 0\n`)
+  } else if (func.returnType !== VoidType) {
     const v = toRegister(funcWriter, result)
     format(funcWriter, `  ret $ $\n`, func.returnType, v)
   } else {

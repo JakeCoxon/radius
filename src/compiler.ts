@@ -1175,7 +1175,7 @@ export function compileClassTask(ctx: TaskContext, { classDef, typeArgs }: { cla
           classDef.location, debugName,
           binding, classDef, null!, body, [], typeArgs, typeParamHash)
 
-      const typeInfo: TypeInfo = { fields: compiledClass.fields, metaobject: compiledClass.metaobject, isReferenceType: true }
+      const typeInfo: TypeInfo = { sizeof: 0, fields: compiledClass.fields, metaobject: compiledClass.metaobject, isReferenceType: true }
       let type: Type
       if (classDef.typeArgs.length === 0) { 
         type = new ConcreteClassType(compiledClass, typeInfo)
@@ -1472,7 +1472,7 @@ export const programEntryTask = (ctx: TaskContext, entryModule: ParsedModule, ro
       const id = func.compiledFunctions.length
       const binding = new Binding(`${func.debugName} compiled ${id}`, FunctionType)
       const compiledFunction = new CompiledFunction(
-          binding, func, VoidType, [], ast, [], [], 0)
+          binding, func, IntType, [], ast, [], [], 0)
       ctx.globalCompiler.compiledFunctions.set(binding, compiledFunction)
       func.compiledFunctions.push(compiledFunction)
       ctx.globalCompiler.entryFunction = compiledFunction
