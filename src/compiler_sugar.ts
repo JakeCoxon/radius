@@ -190,43 +190,16 @@ export const externalBuiltinBindings: {[key:string]: Binding} = {
   sizeof: new Binding('sizeof', FunctionType),
 }
 
-
-// Order index is external index in VM
+// Order index is external index in VM 
+// TODO: Fix all this
 export const externals: {[key:string]: ExternalFunction} = {
-  print:       new ExternalFunction('print',       externalBuiltinBindings.print, VoidType, (...args) => { compilerAssert(false, "Implemented elsewhere") }),
+  // print:       new ExternalFunction('print',       externalBuiltinBindings.print, VoidType, (...args) => { compilerAssert(false, "Implemented elsewhere") }),
   printf:      new ExternalFunction('printf',      externalBuiltinBindings.printf, VoidType, (...args) => { compilerAssert(false, "Implemented elsewhere") }),
-  // malloc:      new ExternalFunction('malloc',      externalBuiltinBindings.malloc, VoidType, (ast: Ast) => { compilerAssert(false, "Implemented elsewhere") }),
+  // // malloc:      new ExternalFunction('malloc',      externalBuiltinBindings.malloc, VoidType, (ast: Ast) => { compilerAssert(false, "Implemented elsewhere") }),
   sizeof:      new ExternalFunction('sizeof',      externalBuiltinBindings.sizeof, VoidType, (ast: Ast) => { compilerAssert(false, "Implemented elsewhere") }),
-  // realloc:     new ExternalFunction('realloc',     externalBuiltinBindings.realloc, VoidType, (ast: Ast) => { compilerAssert(false, "Implemented elsewhere") }),
-  // free:        new ExternalFunction('free',        externalBuiltinBindings.free, VoidType, (ast: Ast) => { compilerAssert(false, "Implemented elsewhere") }),
-  begin_app:   new ExternalFunction('begin_app',   new Binding('begin_app',   FunctionType), VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
-  end_app:     new ExternalFunction('end_app',     new Binding('end_app',     FunctionType), VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
-  window_open: new ExternalFunction('window_open', new Binding('window_open', FunctionType), VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
-  render_app:  new ExternalFunction('render_app',  new Binding('render_app',  FunctionType), VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
-  frame_ticks: new ExternalFunction('frame_ticks', new Binding('frame_ticks', FunctionType), VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
-  set_pixel:   new ExternalFunction('set_pixel',   new Binding('set_pixel',   FunctionType), VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
-  fill_rect:   new ExternalFunction('fill_rect',   new Binding('fill_rect',   FunctionType), VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
-  get_pixel:   new ExternalFunction('get_pixel',   new Binding('get_pixel',   FunctionType), VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
-  delay:       new ExternalFunction('delay',       new Binding('delay',       FunctionType), VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
-  copy_pixels: new ExternalFunction('copy_pixels', new Binding('copy_pixels', FunctionType), VoidType, (ast) => { compilerAssert(false, "Implemented elsewhere") }),
+  // // realloc:     new ExternalFunction('realloc',     externalBuiltinBindings.realloc, VoidType, (ast: Ast) => { compilerAssert(false, "Implemented elsewhere") }),
+  // // free:        new ExternalFunction('free',        externalBuiltinBindings.free, VoidType, (ast: Ast) => { compilerAssert(false, "Implemented elsewhere") }),
 }
-
-
-export const malloc = new CompilerFunction('malloc', (location: SourceLocation, typeArgs: unknown[], args: Ast[]) => {
-  propagatedLiteralAst(args[0])
-  compilerAssert(args.length === 1 && args[0].type === IntType, "Expected int argument", { args })
-  return new CallAst(RawPointerType, location, externals.malloc, args, [])
-})
-
-export const realloc = new CompilerFunction('realloc', (location: SourceLocation, typeArgs: unknown[], args: Ast[]) => {
-  compilerAssert(args.length === 2 && args[0].type === RawPointerType && args[1].type === IntType, "Expected rawptr, int argument")
-  return new CallAst(RawPointerType, location, externals.realloc, args, [])
-})
-
-export const free = new CompilerFunction('free', (location: SourceLocation, typeArgs: unknown[], args: Ast[]) => {
-  compilerAssert(args.length === 1 && args[0].type === RawPointerType , "Expected rawptr argument")
-  return new CallAst(RawPointerType, location, externals.free, args, [])
-})
 
 export const print = new CompilerFunction('print', (location: SourceLocation, typeArgs: unknown[], args: Ast[]) => {
   // compilerAssert(args.length === 1 && args[0].type !== VoidType , "Expected non void argument", { args })
@@ -259,7 +232,7 @@ export const print = new CompilerFunction('print', (location: SourceLocation, ty
     } else if (arg.type.typeInfo.fields.length && !arg.type.typeInfo.isReferenceType) {
       const binding = new Binding("", arg.type)
       stmts.push(new LetAst(VoidType, location, binding, arg))
-      formatStr += `[${arg.type.shortName} `
+      formatStr += `${arg.type.shortName}(`
       const fieldsToPrint = binding.type.typeInfo.fields.filter(x => formats.has(x.fieldType))
       fieldsToPrint.forEach((field, j) => {
         if (j !== 0) formatStr += ', '
@@ -268,7 +241,7 @@ export const print = new CompilerFunction('print', (location: SourceLocation, ty
         formatStr += formats.get(field.fieldType)
         printfArgs.push(getter)
       })
-      formatStr += ']'
+      formatStr += ')'
     }
   })
   formatStr += '\n'

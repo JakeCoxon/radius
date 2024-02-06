@@ -18,6 +18,23 @@ test('superbasic', async () => {
   }
 })
 
+test('cells2', async () => {
+  const testObject = createTest({ 
+    moduleName: 'cells2',
+    inputPath: `${import.meta.dir}/fixtures/cells2.rad`,
+    outputPath: `${import.meta.dir}/output/cells2.txt`,
+    rawPath: `${import.meta.dir}/output/cells2.raw`,
+    llvmPath: `${import.meta.dir}/output/cells2.ll` })
+  try {
+    const input = await Bun.file(testObject.inputPath).text()
+    runCompilerTest(input, { testObject })
+    await writeLlvmBytecodeFile(testObject)
+    // await runVm({ testObject })
+  } finally {
+    testObject.close()
+  }
+})
+
 test('basic', async () => {
   const testObject = createTest({ 
     moduleName: 'basic',
