@@ -1,6 +1,6 @@
 import { existsSync, unlinkSync, readFileSync } from 'node:fs'
-import { programEntryTask } from '../src/compiler'
-import { BoolType, Closure, CompilerError, DoubleType, ExternalFunction, FloatType, GlobalCompilerState, IntType, Scope, StringType, SubCompilerState, TaskContext, VoidType, compilerAssert, createDefaultGlobalCompiler, createScope, expectMap, BuiltinTypes, ModuleLoader, SourceLocation, textColors, outputSourceLocation, TokenRoot, ParseImport, createAnonymousToken, Logger, Binding, FunctionType } from "../src/defs"; // prettier-ignore
+import { generateCompileCommands, programEntryTask } from '../src/compiler'
+import { BoolType, Closure, CompilerError, DoubleType, ExternalFunction, FloatType, GlobalCompilerState, IntType, Scope, StringType, SubCompilerState, TaskContext, VoidType, compilerAssert, createDefaultGlobalCompiler, createScope, expectMap, BuiltinTypes, ModuleLoader, SourceLocation, textColors, outputSourceLocation, TokenRoot, ParseImport, createAnonymousToken, Logger, Binding, FunctionType, GlobalExternalCompilerOptions } from "../src/defs"; // prettier-ignore
 import { makeParser } from '../src/parser'
 import { Queue, TaskDef, stepQueue, withContext } from '../src//tasks'
 import { expect } from 'bun:test'
@@ -109,6 +109,12 @@ export const runCompilerTest = (
     bytecodeWriter.end()
   }
 
+  globalCompiler.externalCompilerOptions.buildName = testObject.moduleName
+  globalCompiler.externalCompilerOptions.llPath = testObject.llPath
+  globalCompiler.externalCompilerOptions.assemblyPath = testObject.assemblyPath
+  globalCompiler.externalCompilerOptions.nativePath = testObject.nativePath
+
+  globalCompiler.externalCompilerOptions.globalOptions = testObject.globalOptions
 
   try {
     runTestInner(queue, input, `${testObject.moduleName}.rad`, globalCompiler, rootScope)
@@ -197,7 +203,7 @@ const logError = (ex: Error, logger: Logger) => {
 
 export const writeLlvmBytecodeFile = async (testObject: TestObject) => {
   compilerAssert(testObject.globalCompiler, "Not compiled")
-  const path = testObject.llvmPath
+  const path = testObject.llPath
   if (existsSync(path)) unlinkSync(path)
   const file = Bun.file(path)
   const bytecodeWriter = file.writer()
@@ -214,11 +220,14 @@ export const writeLlvmBytecodeFile = async (testObject: TestObject) => {
 }
 
 type TestObject = { 
+  globalOptions: GlobalExternalCompilerOptions,
   moduleName: string
   outputPath: string
   inputPath: string
   rawPath: string
-  llvmPath: string
+  assemblyPath: string,
+  nativePath: string,
+  llPath: string
   logger: Logger
   writer: FileSink,
   globalCompiler?: GlobalCompilerState,
@@ -226,7 +235,18 @@ type TestObject = {
   prints: unknown[]
   close: () => void
 }
-export const createTest = ({ moduleName, inputPath, outputPath, rawPath, llvmPath } : { moduleName: string, inputPath: string, outputPath: string, rawPath: string, llvmPath: string }) => {
+export const createTest = ({ 
+    moduleName, inputPath, globalOptions } : { 
+        globalOptions: GlobalExternalCompilerOptions,
+        moduleName: string,
+        inputPath: string,
+      }) => {
+  const outputPath = `${globalOptions.outputDir}${moduleName}.txt`
+  const rawPath = `${globalOptions.outputDir}${moduleName}.raw`
+  const llPath = `${globalOptions.outputDir}${moduleName}.ll`
+  const assemblyPath = `${globalOptions.outputDir}${moduleName}.s`
+  const nativePath = `${globalOptions.outputDir}${moduleName}.native`
+
   if (existsSync(outputPath)) unlinkSync(outputPath)
   const file = Bun.file(outputPath)
   const writer = file.writer()
@@ -258,7 +278,12 @@ export const createTest = ({ moduleName, inputPath, outputPath, rawPath, llvmPat
     writer.end()
   }
 
-  return <TestObject>{ moduleName, fail: false, inputPath, rawPath, outputPath, llvmPath, logger, writer, close, prints: [] }
+  return <TestObject>{ moduleName, fail: false, nativePath, assemblyPath, inputPath, globalOptions, rawPath, outputPath, llPath, logger, writer, close, prints: [] }
+}
+
+export const printCompileCommands = (testObject: TestObject) => {
+  const cmds = generateCompileCommands(testObject.globalCompiler!)
+  console.log(`${cmds.compile} && ${cmds.link} && ${cmds.nativePath}`)
 }
 
 export const runVm = async ({ testObject}: { testObject: TestObject }) => {

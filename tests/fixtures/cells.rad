@@ -1,7 +1,7 @@
 import compiler
 import range for Range
 import array for Array, array_create
-import gui for begin_app, end_app, window_open, render_app, frame_ticks, set_pixel, get_pixel, fill_rect, delay, copy_pixels
+import graphics for begin_app, end_app, window_open, render_app, frame_ticks, set_pixel, get_pixel, fill_rect, delay, copy_pixels
 
 fn main():
 

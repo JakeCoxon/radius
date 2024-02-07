@@ -558,6 +558,11 @@ export const createScope = (obj: object, parentScope: Scope | undefined) =>
     ...obj
   }) as Scope;
 
+export type FunctionCallContext = {
+  compilerState: SubCompilerState
+  location: SourceLocation,
+}
+
 export class ExternalFunction {
   constructor(public name: string, public binding: Binding, public returnType: Type, public func: Function) {}
   [Inspect.custom](depth: any, options: any, inspect: any) {
@@ -784,7 +789,25 @@ export type GlobalCompilerState = {
   typeTable: TypeTable,
   globalLets: LetAst[],
   entryFunction: CompiledFunction | undefined,
-  externalDefinitions: ExternalDefinition[]
+  externalDefinitions: ExternalDefinition[],
+  externalCompilerOptions: ExternalCompilerOptions
+}
+export type ExternalCompilerOptions = {
+  buildName: string
+  compilationUnits: string[],
+  libraries: string[],
+  globalOptions: GlobalExternalCompilerOptions,
+  llPath: string,
+  assemblyPath: string,
+  nativePath: string
+}
+
+// Options that can be shared between multiple compilations
+export type GlobalExternalCompilerOptions = {
+  libraryDirs: string[]
+  outputDir: string
+  llcPath: string
+  clangPath: string
 }
 export type ExternalDefinition = {
   name: string, // Should be unique
@@ -829,7 +852,17 @@ export const createDefaultGlobalCompiler = () => {
     typeTable: new TypeTable(),
     logger: null!,
     entryFunction: undefined, // Inserted later
-    externalDefinitions: []
+    externalDefinitions: [],
+    externalCompilerOptions: {
+      globalOptions: {
+        libraryDirs: [],
+        llcPath: '',
+        outputDir: ''
+      },
+      buildName: "", 
+      compilationUnits: [], 
+      libraries: []
+    }
   }
   return globalCompiler
 }

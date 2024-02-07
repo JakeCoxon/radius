@@ -1,4 +1,4 @@
-import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol, ScopeParentSymbol, isPlainObject, ParseLet, ParseList, ParseExpand, ParseBlock, findLabelByBinding, ParseSubscript, ParseNumber, ParseQuote, ParseWhile, ParseOperator, ParseBytecode, ParseOpEq, ParseSet, ParseFreshIden, UnknownObject, ParseNote, DefaultConsAst, RawPointerType, ValueFieldAst, SetValueFieldAst, FloatLiteralType, IntLiteralType, CompilerFunction, DerefAst, SetDerefAst, ParseSlice } from "./defs";
+import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol, ScopeParentSymbol, isPlainObject, ParseLet, ParseList, ParseExpand, ParseBlock, findLabelByBinding, ParseSubscript, ParseNumber, ParseQuote, ParseWhile, ParseOperator, ParseBytecode, ParseOpEq, ParseSet, ParseFreshIden, UnknownObject, ParseNote, DefaultConsAst, RawPointerType, ValueFieldAst, SetValueFieldAst, FloatLiteralType, IntLiteralType, CompilerFunction, DerefAst, SetDerefAst, ParseSlice, FunctionCallContext } from "./defs";
 import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, functionCompileTimeCompileTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall } from "./compiler_functions";
 import { Event, Task, TaskDef, Unit, isTask, isTaskResult, withContext } from "./tasks";
 import { createCompilerModuleTask, defaultMetaFunction, expandLoopSugar, foldSugar, forExprSugar, forLoopSugar, listComprehensionSugar, sliceSugar, whileExprSugar } from "./compiler_sugar";
@@ -110,7 +110,7 @@ export const BytecodeDefault: ParseTreeTable = {
       return;
     }
     if (node.left instanceof ParseField) {
-      compilerAssert(false, "Call with field not implemented yet")
+      compilerAssert(false, "Call with field not implemented yet", { node })
       return;
     }
     compilerAssert(false, "Call with non-identifier not implemented yet", { left: node.left})
@@ -660,7 +660,11 @@ function resolveScope(ctx: TaskContext, scope: Scope, name: string): Task<unknow
 
 function callFunctionFromValueTask(ctx: TaskContext, vm: Vm, func: unknown, typeArgs: unknown[], values: Ast[]): Task<Unit, CompilerError> {
   if (func instanceof ExternalFunction) {
-    const functionResult = func.func(...values);
+    const callContext: FunctionCallContext = { 
+      compilerState: ctx.subCompilerState,
+      location: vm.location
+    }
+    const functionResult = func.func(callContext, ...values);
     vm.stack.push(functionResult);
     return Task.success();
   }
@@ -1398,6 +1402,28 @@ export const importModule = (ctx: TaskContext, importNode: ParseImport, rootScop
   )
 }
 
+export const topLevelComptimeTask = (ctx: TaskContext, expr: ParseNode, moduleScope: Scope) => {
+  const out: BytecodeWriter = {
+    bytecode: { code: [], locations: [] },
+    instructionTable: BytecodeDefault,
+    globalCompilerState: ctx.globalCompiler,
+    state: { labelBlock: null, expansion: null }
+  }
+  visitParseNode(out, expr)
+  pushGeneratedBytecode(out, { type: "halt" })
+
+  ctx.globalCompiler.logger.log(textColors.cyan("Compiled top level comptime"))
+  ctx.globalCompiler.logger.log(bytecodeToString(out.bytecode))
+  ctx.globalCompiler.logger.log("")
+
+  const subCompilerState = pushSubCompilerState(ctx, { debugName: 'top level comptime', lexicalParent: ctx.subCompilerState, scope: ctx.subCompilerState.scope })
+
+  return (
+    TaskDef(createBytecodeVmAndExecuteTask, subCompilerState, out.bytecode, moduleScope)
+  );
+
+}
+
 export const runTopLevelTask = (ctx: TaskContext, stmts: ParseStatements, rootScope: Scope, moduleScope: Scope) => {
   const tasks: Task<unknown, CompilerError>[] = []
 
@@ -1428,6 +1454,8 @@ export const runTopLevelTask = (ctx: TaskContext, stmts: ParseStatements, rootSc
       tasks.push(TaskDef(topLevelFunctionDefinitionTask, node.functionDecl, moduleScope ));
     } else if (node.key === 'class') {
       tasks.push(TaskDef(topLevelClassDefinitionTask, node.classDecl, moduleScope ));
+    } else if (node.key === 'comptime') {
+      tasks.push(TaskDef(topLevelComptimeTask, node.expr, moduleScope ));
     } else {
       compilerAssert(false, `Not supported at top level $key`, { key: node.key })
     }
@@ -1481,4 +1509,21 @@ export const programEntryTask = (ctx: TaskContext, entryModule: ParsedModule, ro
     })
   )
   
+}
+
+export const generateCompileCommands = (globalCompiler: GlobalCompilerState) => {
+  const opts = globalCompiler.externalCompilerOptions
+  const globalOptions = opts.globalOptions
+  const libs = opts.libraries.map(x => `-l${x}`).join(" ")
+  const addLibraryDirs = globalOptions.libraryDirs.map(x => `-L${x}`).join(" ")
+  const llcPath = globalOptions.llcPath
+  const llPath = opts.llPath
+  const nativePath = opts.nativePath
+  const assemblyPath = opts.assemblyPath
+  const clang = globalOptions.clangPath
+  return {
+    compile: `${llcPath} ${llPath} -O1 -o ${assemblyPath}`,
+    link: `${clang} ${assemblyPath} -o ${nativePath} ${addLibraryDirs} ${libs}`,
+    nativePath
+  }
 }

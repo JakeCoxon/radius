@@ -1,9 +1,18 @@
 import { test, expect, describe } from 'bun:test'
-import { createModuleLoader, createTest, runCompilerTest, runVm, writeLlvmBytecodeFile } from './testUtils'
+import { createModuleLoader, createTest, printCompileCommands, runCompilerTest, runVm, writeLlvmBytecodeFile } from './testUtils'
+import { GlobalExternalCompilerOptions } from '../src/defs'
+
+const globalOptions: GlobalExternalCompilerOptions = {
+  libraryDirs: [`${import.meta.dir}/../libs/`, `/opt/homebrew/lib/`],
+  outputDir: `${import.meta.dir}/output/`,
+  llcPath: `/opt/homebrew/opt/llvm/bin/llc`,
+  clangPath: `/usr/bin/clang`
+}
 
 test('superbasic', async () => {
   const testObject = createTest({ 
     moduleName: 'superbasic',
+    globalOptions,
     inputPath: `${import.meta.dir}/fixtures/superbasic.rad`,
     outputPath: `${import.meta.dir}/output/superbasic.txt`,
     rawPath: `${import.meta.dir}/output/superbasic.raw`,
@@ -12,6 +21,7 @@ test('superbasic', async () => {
     const input = await Bun.file(testObject.inputPath).text()
     runCompilerTest(input, { testObject })
     await writeLlvmBytecodeFile(testObject)
+    printCompileCommands(testObject)
     // await runVm({ testObject })
   } finally {
     testObject.close()
@@ -21,6 +31,7 @@ test('superbasic', async () => {
 test('cells2', async () => {
   const testObject = createTest({ 
     moduleName: 'cells2',
+    globalOptions,
     inputPath: `${import.meta.dir}/fixtures/cells2.rad`,
     outputPath: `${import.meta.dir}/output/cells2.txt`,
     rawPath: `${import.meta.dir}/output/cells2.raw`,
@@ -29,6 +40,7 @@ test('cells2', async () => {
     const input = await Bun.file(testObject.inputPath).text()
     runCompilerTest(input, { testObject })
     await writeLlvmBytecodeFile(testObject)
+    printCompileCommands(testObject)
     // await runVm({ testObject })
   } finally {
     testObject.close()

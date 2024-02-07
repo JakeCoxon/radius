@@ -1,6 +1,6 @@
 import { BytecodeSecondOrder, getOperatorTable, propagatedLiteralAst, visitParseNode } from "./compiler"
 import { insertFunctionDefinition } from "./compiler_functions"
-import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType } from "./defs"
+import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, FunctionCallContext } from "./defs"
 import { Task } from "./tasks"
 
 export const forLoopSugar = (out: BytecodeWriter, node: ParseFor) => {
@@ -303,11 +303,16 @@ export const operator_bitwise_or = new CompilerFunction('operator_bitwise_or', (
   return new OperatorAst(IntType, location, "|", [a, b])
 })
 
+const add_external_library = new ExternalFunction("add_external_library", new Binding("", FunctionType), VoidType, (ctx: FunctionCallContext, library: unknown) => {
+  compilerAssert(typeof library == 'string', "Expected string")
+  ctx.compilerState.globalCompiler.externalCompilerOptions.libraries.push(library)
+})
+
 export const createCompilerModuleTask = (ctx: TaskContext): Task<Module, CompilerError> => {
   const moduleScope = createScope({}, undefined)
   Object.assign(moduleScope, { 
     unsafe_subscript, unsafe_set_subscript, operator_bitshift_left, operator_bitshift_right,
-    operator_bitwise_and, operator_bitwise_or, rawptr: RawPointerType })
+    operator_bitwise_and, operator_bitwise_or, rawptr: RawPointerType, add_external_library })
   const subCompilerState = pushSubCompilerState(ctx, { debugName: `compiler module`, lexicalParent: undefined, scope: moduleScope })
   const module = new Module('compiler', subCompilerState, null!)
   return Task.of(module)
