@@ -44,6 +44,13 @@ fn main():
 
   print("Hello", bar)
 
+  f := 1.0
+  g := 3.2 + f
+  print(g * 12.2)
+
+  h : double = 3.4124
+  print(h * 2.23 * 2)
+
   # print(bar.x)
   # print(bar.y)
   # foobar(bar)

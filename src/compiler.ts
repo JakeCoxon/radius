@@ -558,9 +558,11 @@ type TypeCheckConfig = { a: TypeCheckVar, b: TypeCheckVar, inferType: Type | nul
 
 const normalizeNumberOperatorType = (from: TypeCheckVar, to: TypeCheckVar) => {
   if (from.type === IntLiteralType && to.type === FloatType) from.type = FloatType
+  else if (from.type === IntLiteralType && to.type === DoubleType) from.type = DoubleType
   else if (from.type === IntLiteralType && to.type === FloatLiteralType) from.type = FloatLiteralType
   else if (from.type === IntLiteralType && to.type === IntType) from.type = IntType
   else if (from.type === FloatLiteralType && to.type === FloatType) from.type = FloatType
+  else if (from.type === FloatLiteralType && to.type === DoubleType) from.type = DoubleType
 }
 const numberOperatorTypeToConcrete = (from: TypeCheckVar) => {
   if (from.type === IntLiteralType) from.type = IntType

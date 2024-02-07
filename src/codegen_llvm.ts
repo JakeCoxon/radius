@@ -10,7 +10,7 @@ import { Ast, AstType, AstWriterTable, Binding, BindingAst, BlockAst, BoolType, 
 //   NAME=generated; /opt/homebrew/opt/llvm/bin/opt -O3 -S $NAME.ll -o $NAME.opt.ll
 //
 
-const operatorMap: {[key: string]:string} = {
+const operatorMapInt: {[key: string]:string} = {
   "+": "add",
   "-": "sub",
   "*": "mul",
@@ -23,7 +23,25 @@ const operatorMap: {[key: string]:string} = {
   "<": "icmp slt",
   "<=": "icmp sle",
   ">=": "icmp sge",
+}
 
+const operatorMapFloat: {[key: string]:string} = {
+  "+": "fadd",
+  "-": "fsub",
+  "*": "fmul",
+  "/": "fdiv",
+
+  // https://llvm.org/docs/LangRef.html#fcmp-instruction
+  // O means ordered
+  "==": "fcmp oeq",
+  "!=": "fcmp one",
+  ">": "fcmp ogt",
+  "<": "fcmp olt",
+  "<=": "fcmp ole",
+  ">=": "fcmp oge",
+}
+
+const operatorMapLogical: {[key: string]:string} = {
   "&": "and",
   "|": "or",
   "<<": "shl",
@@ -176,7 +194,14 @@ const astWriter: LlvmAstWriterTable = {
       return { register: valueName }
     }
     compilerAssert(ast.type === IntType || ast.type === FloatType || ast.type === DoubleType, "Expected number type got $type", { ast, type: ast.type })
-    format(writer, `  $ = add $ 0, $ ; literal\n`, valueName, ast.type, ast.value)
+    
+    if (ast.type === FloatType) {
+      format(writer, `  $ = fadd $ 0.0, $ ; literal $\n`, valueName, ast.type, floatToLlvmHex(ast.value), ast.value)
+    } else if (ast.type === DoubleType) {
+      format(writer, `  $ = fadd $ 0.0, $ ; literal $\n`, valueName, ast.type, doubleToLlvmHex(ast.value), ast.value)
+    } else {
+      format(writer, `  $ = add $ 0, $ ; literal\n`, valueName, ast.type, ast.value)
+    }
     return { register: valueName }
   },
   bool: (writer, ast) => {
@@ -331,8 +356,10 @@ const astWriter: LlvmAstWriterTable = {
     const [a, b] = ast.args
     const name = createRegister("", VoidType)
     compilerAssert(a.type === b.type, "Expected types to be equal", { a, b })
-    const op = operatorMap[ast.operator]
-    compilerAssert(op, "Expected op", { ast })
+    const op = a.type === IntType ? operatorMapInt[ast.operator] : 
+      a.type === FloatType || a.type === DoubleType ? operatorMapFloat[ast.operator] : 
+      a.type === BoolType ? operatorMapLogical[ast.operator] : undefined
+    compilerAssert(op, "Expected op for type $type", { ast, type: a.type })
     format(writer, `  $ = $ $ $, $\n`, name, op, a.type, a, b)
     return { register: name }
   },
@@ -658,3 +685,38 @@ const writeLlvmBytecodeFunction = (bytecodeWriter: LlvmWriter, func: CompiledFun
 
   return funcWriter
 };
+
+
+const numberToDoubleBitString = (f: number) => {
+  const buffer = new ArrayBuffer(8)
+  const floatView = new Float64Array(buffer)
+  floatView[0] = f
+  const intView = new DataView(buffer)
+  const intBitsLow = intView.getUint32(0, true) // true for little-endian, lower part
+  const intBitsHigh = intView.getUint32(4, true) // true for little-endian, higher part
+  return (intBitsHigh.toString(2).padStart(32, '0') + intBitsLow.toString(2).padStart(32, '0'))
+}
+
+const bitStringToFloat = (bitString: string) => {
+  // LLVM has some weird behaviour where a float constant is 
+  // written in 64 bit but the exponent is rounded to 23 bits
+  // otherwise it won't compile. Easiest way is string maniupulations
+
+  // So it looks like
+  //  1 bit sign | 11 bit mantissa | 23 bit exponent | 29 bit zeros
+  
+  // Testcases
+  // 0.001 => 0x3F50624DE0000000
+  // 3.14159 => 0x400921FA00000000
+
+  const cap = 1 + 11 + 23
+  if (bitString[cap] === '1') {
+    const rounded = parseInt(bitString.substring(0, cap), 2) + 1
+    return rounded.toString(2).padStart(cap, '0').padEnd(64, '0')
+  }
+  return bitString.substring(0, cap).padEnd(64, '0')
+}
+
+const bitsToHex = (bits: string) => `0x${parseInt(bits, 2).toString(16).padStart(16, '0').toUpperCase()}`
+const doubleToLlvmHex = (f: number) => bitsToHex(numberToDoubleBitString(f))
+const floatToLlvmHex = (f: number) => bitsToHex(bitStringToFloat(numberToDoubleBitString(f)))
