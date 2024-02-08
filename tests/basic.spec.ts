@@ -6,7 +6,11 @@ const globalOptions: GlobalExternalCompilerOptions = {
   libraryDirs: [`${import.meta.dir}/../libs/`, `/opt/homebrew/lib/`],
   outputDir: `${import.meta.dir}/output/`,
   llcPath: `/opt/homebrew/opt/llvm/bin/llc`,
-  clangPath: `/usr/bin/clang`
+  clangPath: `/usr/bin/clang`,
+  importPaths: [
+    `${import.meta.dir}/../libs/`,
+    `${import.meta.dir}/fixtures/imports/`
+  ]
 }
 
 test('superbasic', async () => {
@@ -14,15 +18,12 @@ test('superbasic', async () => {
     moduleName: 'superbasic',
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/superbasic.rad`,
-    outputPath: `${import.meta.dir}/output/superbasic.txt`,
-    rawPath: `${import.meta.dir}/output/superbasic.raw`,
-    llvmPath: `${import.meta.dir}/output/superbasic.ll` })
+  })
   try {
     const input = await Bun.file(testObject.inputPath).text()
     runCompilerTest(input, { testObject })
     await writeLlvmBytecodeFile(testObject)
     printCompileCommands(testObject)
-    // await runVm({ testObject })
   } finally {
     testObject.close()
   }
@@ -32,16 +33,29 @@ test('cells2', async () => {
   const testObject = createTest({ 
     moduleName: 'cells2',
     globalOptions,
-    inputPath: `${import.meta.dir}/fixtures/cells2.rad`,
-    outputPath: `${import.meta.dir}/output/cells2.txt`,
-    rawPath: `${import.meta.dir}/output/cells2.raw`,
-    llvmPath: `${import.meta.dir}/output/cells2.ll` })
+    inputPath: `${import.meta.dir}/fixtures/cells2.rad`
+  })
   try {
     const input = await Bun.file(testObject.inputPath).text()
     runCompilerTest(input, { testObject })
     await writeLlvmBytecodeFile(testObject)
     printCompileCommands(testObject)
-    // await runVm({ testObject })
+  } finally {
+    testObject.close()
+  }
+})
+
+test('graphicsdemo', async () => {
+  const testObject = createTest({ 
+    moduleName: 'graphicsdemo',
+    globalOptions,
+    inputPath: `${import.meta.dir}/fixtures/graphicsdemo.rad`
+  })
+  try {
+    const input = await Bun.file(testObject.inputPath).text()
+    runCompilerTest(input, { testObject })
+    await writeLlvmBytecodeFile(testObject)
+    printCompileCommands(testObject)
   } finally {
     testObject.close()
   }

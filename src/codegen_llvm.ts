@@ -18,6 +18,12 @@ const operatorMapInt: {[key: string]:string} = {
   "==": "icmp eq",
   "!=": "icmp ne",
 
+  "<<": "shl",
+  ">>": "lshr", // Logical shift right
+
+  "&": "and",
+  "|": "or",
+
   // Signed
   ">": "icmp sgt",
   "<": "icmp slt",
@@ -44,8 +50,6 @@ const operatorMapFloat: {[key: string]:string} = {
 const operatorMapLogical: {[key: string]:string} = {
   "&": "and",
   "|": "or",
-  "<<": "shl",
-  ">>": "lshr", // Logical shift right
 };
 
 const log = (...args: any[]) => {
@@ -359,7 +363,7 @@ const astWriter: LlvmAstWriterTable = {
     const op = a.type === IntType ? operatorMapInt[ast.operator] : 
       a.type === FloatType || a.type === DoubleType ? operatorMapFloat[ast.operator] : 
       a.type === BoolType ? operatorMapLogical[ast.operator] : undefined
-    compilerAssert(op, "Expected op for type $type", { ast, type: a.type })
+    compilerAssert(op, "Expected op $op, for type $type", { ast, op: ast.operator, type: a.type })
     format(writer, `  $ = $ $ $, $\n`, name, op, a.type, a, b)
     return { register: name }
   },

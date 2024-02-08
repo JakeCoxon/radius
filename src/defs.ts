@@ -808,6 +808,7 @@ export type GlobalExternalCompilerOptions = {
   outputDir: string
   llcPath: string
   clangPath: string
+  importPaths: string[]
 }
 export type ExternalDefinition = {
   name: string, // Should be unique

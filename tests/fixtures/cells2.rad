@@ -1,7 +1,7 @@
 import compiler
 import range for Range
 import array for Array, array_create
-import graphics for begin_app, end_app, window_open, render_app, frame_ticks, set_pixel, get_pixel, fill_rect, delay, copy_pixels
+import graphics for begin_app, end_app, window_open, render_app, frame_ticks, set_pixel, get_pixel, fill_rect, delay, copy_pixels, save, restore, set_fill_color, fill_rectangle, rotate, translate
 
 # https://mathworld.wolfram.com/ElementaryCellularAutomaton.html
 rule_num :: 126
@@ -27,7 +27,8 @@ fn main():
   cells[:] = 0 ...
   cells[num_cells / 2] = 1
 
-  fill_rect(0, 0, 320, 240, 0)
+  set_fill_color(0, 0, 0, 1)
+  fill_rectangle(0, 0, 320, 240)
 
   while window_open():
 
@@ -38,8 +39,12 @@ fn main():
         cells[x - 1], cells[x], cells[x + 1])
 
     for x in Range(0, num_cells):
-      c := ifx next_cells[x] == 1: 0xffffffff else: 0
-      fill_rect(scale * x, 240 - scale, scale, scale, c)
+      if next_cells[x] == 1: 
+        set_fill_color(1, 1, 1, 1)
+      else:
+        set_fill_color(0, 0, 0, 1)
+      
+      fill_rectangle(scale * float(x), 240 - scale, scale, scale)
 
     swap := cells
     cells = next_cells

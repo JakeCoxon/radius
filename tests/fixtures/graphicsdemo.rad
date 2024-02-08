@@ -1,0 +1,35 @@
+import range for Range
+import graphics for begin_app, end_app, window_open, render_app, frame_ticks, delay, copy_pixels, save, restore, set_fill_color, fill_rectangle, rotate, translate, rotate_at_origin, get_mouse
+
+fn main():
+
+  begin_app()
+
+  while window_open():
+
+    save()
+
+    set_fill_color(0, 0, 0, 1)
+    fill_rectangle(0, 0, 320, 240)
+
+    time := float(frame_ticks()) * 0.001
+    pos := get_mouse()
+
+    block:
+      save()
+
+      rotate_at_origin(time, 100, 100)
+      
+      set_fill_color(1, 0, 0, 1)
+      fill_rectangle(10, 10, 100, 40)
+
+      restore()
+
+    set_fill_color(0, 1, 0, 1)
+    fill_rectangle(pos.x, pos.y, 30, 30)
+
+    restore()
+
+    render_app()
+
+  end_app()

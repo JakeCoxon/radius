@@ -1,0 +1,44 @@
+import vec for vec2
+
+fn begin_app() @external
+fn end_app() @external
+fn window_open() -> bool @external
+fn render_app() @external
+fn frame_ticks() -> int @external
+# fn set_pixel(x: int, y: int, color: int) @external
+# fn get_pixel(x: int, y: int) -> int @external
+# fn fill_rect(x: int, y: int, w: int, h: int, color: int) @external
+fn delay(milliseconds: int) @external
+fn copy_pixels(source_x: int, source_y: int, w: int, h: int, dest_x: int, dest_y: int) @external
+
+fn begin_path() @external
+fn close_path() @external
+
+fn get_mouse_x() -> int @external
+fn get_mouse_y() -> int @external
+
+fn get_mouse() -> vec2:
+  vec2(float(get_mouse_x()), float(get_mouse_y()))
+
+fn save() @external
+fn restore() @external
+fn set_fill_color(r: float, g: float, b: float, a: float) @external
+fn fill_rectangle(x: float, y: float, w: float, h: float) @external
+fn translate(x: float, y: float) @external
+fn rotate(angle_radians: float) @external
+fn move_to(x: float, y: float) @external
+fn line_to(x: float, y: float) @external
+fn fill() @external
+
+fn rotate_at_origin(angle_radians: float, x: float, y: float):
+  translate(x, y)
+  rotate(angle_radians)
+  translate(-1 * x, -1 * y)
+
+# TODO: Fix calling this directly
+add_external_library :: compiler.add_external_library
+
+comptime:
+  add_external_library("graphicslib")
+  add_external_library("SDL2")
+  add_external_library("c++")

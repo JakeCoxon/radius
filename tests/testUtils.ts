@@ -1,4 +1,4 @@
-import { existsSync, unlinkSync, readFileSync } from 'node:fs'
+import { existsSync, unlinkSync, readFileSync, readdirSync } from 'node:fs'
 import { generateCompileCommands, programEntryTask } from '../src/compiler'
 import { BoolType, Closure, CompilerError, DoubleType, ExternalFunction, FloatType, GlobalCompilerState, IntType, Scope, StringType, SubCompilerState, TaskContext, VoidType, compilerAssert, createDefaultGlobalCompiler, createScope, expectMap, BuiltinTypes, ModuleLoader, SourceLocation, textColors, outputSourceLocation, TokenRoot, ParseImport, createAnonymousToken, Logger, Binding, FunctionType, GlobalExternalCompilerOptions } from "../src/defs"; // prettier-ignore
 import { makeParser } from '../src/parser'
@@ -8,6 +8,7 @@ import { VecTypeMetaClass, externals, preloadModuleText, print } from '../src/co
 import { writeFinalBytecode } from '../src/codegen'
 import { FileSink } from 'bun';
 import { writeLlvmBytecode } from '../src/codegen_llvm';
+import { basename, extname, normalize } from 'node:path';
 
 const runTestInner = (
   queue: Queue,
@@ -46,14 +47,25 @@ const runTestInner = (
   compilerAssert(root._success, 'Expected success', { root })
 }
 
-export const createModuleLoader = (basepath: string) => {
+export const createModuleLoader = (importPaths: string[]) => {
+
+  const filesByName: {[key:string]: string} = {}
+  importPaths.forEach(importPath => {
+    const files = readdirSync(importPath).filter(x => extname(x) === '.rad')
+    files.forEach(file => {
+      const name = basename(file, extname(file))
+      if (filesByName[name]) return
+      filesByName[name] = normalize(`${importPath}${file}`)
+    })
+  })
+  
   return <ModuleLoader>{
     cache: {},
     loadModule: (module) => {
       if (module === '_preload') return makeParser(preloadModuleText(), '_preload')
-      const path = `${basepath}${module}.rad`
-      const input = readFileSync(path, 'utf-8')
-      return makeParser(input, path)
+      compilerAssert(filesByName[module], "No module found $module", { module, importPaths })
+      const input = readFileSync(filesByName[module], 'utf-8')
+      return makeParser(input, filesByName[module])
     },
   }
 }
@@ -93,7 +105,7 @@ export const runCompilerTest = (
 
   const globalCompiler = createDefaultGlobalCompiler()
   globalCompiler.logger = logger
-  globalCompiler.moduleLoader = moduleLoader || createModuleLoader(`${import.meta.dir}/fixtures/imports/`)
+  globalCompiler.moduleLoader = moduleLoader || createModuleLoader(testObject.globalOptions.importPaths)
 
   testObject.globalCompiler = globalCompiler
 

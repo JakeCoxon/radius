@@ -374,7 +374,10 @@ export const stepQueue = (queue: Queue) => {
     onComplete(queue, task)
     if (task._dependant) {
       // if (task._dependant instanceof ParallelTask) debugger
-      if (task._dependant._state === 'completed') throw new Error("Already completed")
+      if (task._dependant._state === 'completed' && !task._dependant._failure) {
+        console.log("Dependant task", task._dependant)
+        throw new Error("Already completed") // Not entirely sure when this occurs
+      }
       queue.list.push(task._dependant);
     }
   }

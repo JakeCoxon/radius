@@ -704,7 +704,10 @@ function callFunctionFromValueTask(ctx: TaskContext, vm: Vm, func: unknown, type
 }
 
 const unknownToAst = (location: SourceLocation, value: unknown) => {
-  if (typeof value === 'number') return new NumberAst(IntType, location, value);
+  if (typeof value === 'number') {
+    const type = Math.floor(value) === value ? IntLiteralType : FloatLiteralType
+    return new NumberAst(type, location, value)
+  }
   if (isAst(value)) return value;
   if (value === null) return new VoidAst(VoidType, location);
   if (value instanceof Binding) return new BindingAst(value.type, location, value);
