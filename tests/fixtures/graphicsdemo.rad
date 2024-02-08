@@ -14,6 +14,7 @@ fn main():
 
     time := float(frame_ticks()) * 0.001
     pos := get_mouse()
+    x := sinf(time * 2) * 100 + 150
 
     block:
       save()
@@ -26,7 +27,7 @@ fn main():
       restore()
 
     set_fill_color(0, 1, 0, 1)
-    fill_rectangle(pos.x, pos.y, 30, 30)
+    fill_rectangle(x, pos.y, 30, 30)
 
     restore()
 

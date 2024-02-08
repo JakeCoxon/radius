@@ -446,6 +446,8 @@ const astWriter: LlvmAstWriterTable = {
       if (ast.expr.type === IntType && ast.type === DoubleType) return 'sitofp i32 $ to double'
       if (ast.expr.type === FloatType && ast.type === IntType) return 'fptosi float $ to i32'
       if (ast.expr.type === DoubleType && ast.type === IntType) return 'fptosi double $ to i32'
+      if (ast.expr.type === DoubleType && ast.type === FloatType) return 'fptrunc double $ to float'
+      if (ast.expr.type === FloatType && ast.type === DoubleType) return 'fpext float $ to double'
       compilerAssert(false, "Invalid cast conversion")
     })()
     const register = createRegister("", ast.type)

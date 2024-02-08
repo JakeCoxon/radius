@@ -337,5 +337,17 @@ fn realloc(ptr: compiler.rawptr, new_size: int) -> compiler.rawptr @external
 fn free(ptr: compiler.rawptr) @external
 fn sizeof!(T)() @external
 
+fn sin(t: double) -> double @external
+fn cos(t: double) -> double @external
+fn sinf(t: float) -> float:
+  float(sin(double(t)))
+fn cosf(t: float) -> float:
+  float(cos(double(t)))
+
+fn min!(T)(a: T, b: T) -> T:
+  ifx a <= b: a else: b
+fn max!(T)(a: T, b: T) -> T:
+  ifx a >= b: a else: b
+
 `
 }
