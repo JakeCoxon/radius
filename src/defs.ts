@@ -790,7 +790,8 @@ export type GlobalCompilerState = {
   globalLets: LetAst[],
   entryFunction: CompiledFunction | undefined,
   externalDefinitions: ExternalDefinition[],
-  externalCompilerOptions: ExternalCompilerOptions
+  externalCompilerOptions: ExternalCompilerOptions,
+  rootScope: Scope
 }
 export type ExternalCompilerOptions = {
   buildName: string
@@ -854,16 +855,22 @@ export const createDefaultGlobalCompiler = () => {
     logger: null!,
     entryFunction: undefined, // Inserted later
     externalDefinitions: [],
+    rootScope: null!,
     externalCompilerOptions: {
       globalOptions: {
         libraryDirs: [],
         llcPath: '',
-        outputDir: ''
+        outputDir: '',
+        clangPath: '',
+        importPaths: []
       },
       buildName: "", 
       compilationUnits: [], 
-      libraries: []
-    }
+      libraries: [],
+      assemblyPath: '',
+      llPath: '',
+      nativePath: ''
+    },
   }
   return globalCompiler
 }

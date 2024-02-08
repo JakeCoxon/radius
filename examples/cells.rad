@@ -1,7 +1,7 @@
 import compiler
 import range for Range
 import array for Array, array_create
-import graphics for begin_app, end_app, window_open, render_app, frame_ticks, set_pixel, get_pixel, fill_rect, delay, copy_pixels, save, restore, set_fill_color, fill_rectangle, rotate, translate
+import graphics for begin_app, end_app, window_open, render_app, frame_ticks, delay, copy_pixels, save, restore, set_fill_color, fill_rectangle, rotate, translate
 
 # https://mathworld.wolfram.com/ElementaryCellularAutomaton.html
 rule_num :: 126
