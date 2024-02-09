@@ -5,8 +5,8 @@ fn main():
   for x in lst:
     print(x)
 
-  lst.append!int(4)
-  lst.append!int(5)
+  lst.append(4)
+  lst.append(5)
 
   for x in lst:
     print(x)

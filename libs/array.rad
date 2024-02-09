@@ -42,5 +42,5 @@ fn array_subscript!(T)(array: Array!T, index: int) -> T @inline:
 fn array_set_subscript!(T)(array: Array!T, index: int, value: T) @inline:
   compiler.unsafe_set_subscript!T(array.data, index, value)
 
-fn length!(T)(array: ref Array!T) @method:
+fn length!(T)(array: ref Array!T) -> int @method:
   array.size

@@ -456,11 +456,12 @@ const getUniqueId = (obj: any) => {
   obj[UNIQUE_ID] = uniqueId++
   return obj[UNIQUE_ID];
 }
-export const hashValues = (values: unknown[], info) => {
+export const hashValues = (values: unknown[], info={}) => {
   return values.map(value => {
     if (typeof value === 'number') return value
     if (value instanceof PrimitiveType) return `$${value.typeName}`
     if (value instanceof ConcreteClassType) return getUniqueId(value)
+    if (value instanceof ClassDefinition) return getUniqueId(value)
     if (value instanceof FunctionDefinition) return getUniqueId(value)
     if (value instanceof Closure) return getUniqueId(value)
     compilerAssert(false, "Cannot hash value", { value, ...info })
@@ -577,6 +578,7 @@ export class CompilerFunction {
   }
 }
 
+export const NeverType =        new PrimitiveType("never",         { sizeof: 0, fields: [], metaobject: Object.create(null), isReferenceType: false })
 export const VoidType =         new PrimitiveType("void",          { sizeof: 0, fields: [], metaobject: Object.create(null), isReferenceType: false })
 export const IntType =          new PrimitiveType("int",           { sizeof: 4, fields: [], metaobject: Object.create(null), isReferenceType: false })
 export const IntLiteralType =   new PrimitiveType("int_literal",   { sizeof: 4, fields: [], metaobject: Object.create(null), isReferenceType: false })
@@ -648,12 +650,12 @@ class TypeTable {
 
 // Don't use directly, use type table to see if types are equal
 const typesEqual = (t1: unknown, t2: any): boolean => {
+  if (Object.getPrototypeOf(t1) !== Object.getPrototypeOf(t2)) return false;
   if (t1 instanceof ExternalTypeConstructor) return t1 === t2;
   if (!isType(t1)) {
     return hashValues([t1]) === hashValues([t2])
   }
   compilerAssert(t1 && t2, "Unexpected", { t1, t2 })
-  if (Object.getPrototypeOf(t1) !== Object.getPrototypeOf(t2)) return false;
   if (t1 instanceof PrimitiveType) return t1 == t2;
   if (t1 instanceof ConcreteClassType) return t1.compiledClass == t2.compiledClass;
   if (t1 instanceof ParameterizedType) {

@@ -1,6 +1,6 @@
 import { BytecodeDefault, BytecodeSecondOrder, compileClassTask, compileFunctionPrototype, createBytecodeVmAndExecuteTask, propagateLiteralType, propagatedLiteralAst, pushBytecode, pushGeneratedBytecode, visitParseNode } from "./compiler";
 import { externals } from "./compiler_sugar";
-import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, ExternalFunction, CallAst, IntType, Closure, UserCallAst, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition, ParseCall, TypeVariable, TypeMatcher, typeMatcherEquals, SourceLocation, ExternalTypeConstructor, ScopeParentSymbol, SubCompilerState, CompilerFunction, IntLiteralType, FloatLiteralType, FloatType, RawPointerType, AddressAst, BindingAst, UnknownObject } from "./defs";
+import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, ExternalFunction, CallAst, IntType, Closure, UserCallAst, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition, ParseCall, TypeVariable, TypeMatcher, typeMatcherEquals, SourceLocation, ExternalTypeConstructor, ScopeParentSymbol, SubCompilerState, CompilerFunction, IntLiteralType, FloatLiteralType, FloatType, RawPointerType, AddressAst, BindingAst, UnknownObject, NeverType } from "./defs";
 import { Task, TaskDef, Unit } from "./tasks";
 
 
@@ -160,13 +160,17 @@ export function functionTemplateTypeCheckAndCompileTask(ctx: TaskContext, { func
     const binding = new Binding(name.token.value, result.concreteTypes[i]);
     binding.storage = storage
     binding.definitionCompiler = subCompilerState
-    templateScope[name.token.value] = binding;
-    argBindings.push(binding);
+    templateScope[name.token.value] = binding
+    argBindings.push(binding)
   });
   
   func.typeParams.forEach((typeParam, i) => {
     compilerAssert(typeParam instanceof ParseIdentifier, "Not implemented")
-    templateScope[typeParam.token.value] = typeArgs[i];
+    const name = typeParam.token.value
+    if (result.substitutions[name] === undefined) {
+      compilerAssert(typeArgs[i] !== undefined, "Expected type arg")
+      templateScope[name] = typeArgs[i]
+    } else templateScope[name] = result.substitutions[name]
   });
 
   return (
@@ -180,9 +184,12 @@ export function functionTemplateTypeCheckAndCompileTask(ctx: TaskContext, { func
 
       const id = func.compiledFunctions.length;
       const binding = new Binding(`${func.debugName} compiled ${id}`, FunctionType);
-      let returnType = ast.type
+      let returnType = result.returnType
       // TODO: Proper checking here
-      if (returnType === VoidType && result.returnType !== VoidType) {
+      if (returnType === VoidType) {
+        // compilerAssert(ast instanceof StatementsAst)
+        // ast.type = VoidType
+      } else if (ast.type !== NeverType && ast.type !== result.returnType) {
         compilerAssert(false, "Invalid return type got $got expected $expected", { got: ast.type, expected: result.returnType })
       }
       

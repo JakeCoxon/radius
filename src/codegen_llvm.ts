@@ -1,5 +1,5 @@
 import { externals } from "./compiler_sugar";
-import { Ast, AstType, AstWriterTable, Binding, BindingAst, BlockAst, BoolType, CallAst, CompiledFunction, ConcreteClassType, ConstructorAst, DefaultConsAst, DoubleType, FileWriter, FloatType, FunctionType, GlobalCompilerState, IntType, ListTypeConstructor, LlvmFunctionWriter, LlvmWriter, NumberAst, ParameterizedType, Pointer, PrimitiveType, RawPointerType, Register, SourceLocation, StatementsAst, StringType, Type, TypeField, UserCallAst, ValueFieldAst, VoidType, compilerAssert, isAst, isType, textColors } from "./defs";
+import { Ast, AstType, AstWriterTable, Binding, BindingAst, BlockAst, BoolType, CallAst, CompiledFunction, ConcreteClassType, ConstructorAst, DefaultConsAst, DoubleType, FileWriter, FloatType, FunctionType, GlobalCompilerState, IntType, ListTypeConstructor, LlvmFunctionWriter, LlvmWriter, NeverType, NumberAst, ParameterizedType, Pointer, PrimitiveType, RawPointerType, Register, SourceLocation, StatementsAst, StringType, Type, TypeField, UserCallAst, ValueFieldAst, VoidType, compilerAssert, isAst, isType, textColors } from "./defs";
 
 // Some useful commands
 //
@@ -77,7 +77,7 @@ const toStatements = (ast: Ast) => {
 }
 
 const toRegister = (writer: LlvmFunctionWriter, v: LlvmResultValue): Register => {
-  compilerAssert(v, "Result was a void")
+  compilerAssert(v, "Result was a void when trying to convert to register")
   if ('register' in v) return v.register
   const name = createRegister("", VoidType)
   // if (v.pointer.type === VoidType) compilerAssert(false, "")
@@ -682,8 +682,11 @@ const writeLlvmBytecodeFunction = (bytecodeWriter: LlvmWriter, func: CompiledFun
   if (isMain) { // hardcode for now
     format(funcWriter, `  ret i32 0\n`)
   } else if (func.returnType !== VoidType) {
-    const v = toRegister(funcWriter, result)
-    format(funcWriter, `  ret $ $\n`, func.returnType, v)
+    // If there is a never type there is no implicit return
+    if (func.body.type !== NeverType) {
+      const v = toRegister(funcWriter, result)
+      format(funcWriter, `  ret $ $\n`, func.returnType, v)
+    }
   } else {
     format(funcWriter, `  ret void\n`)
   }
