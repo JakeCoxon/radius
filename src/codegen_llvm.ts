@@ -79,7 +79,7 @@ const toStatements = (ast: Ast) => {
 const toRegister = (writer: LlvmFunctionWriter, v: LlvmResultValue): Register => {
   compilerAssert(v, "Result was a void when trying to convert to register")
   if ('register' in v) return v.register
-  const name = createRegister("", VoidType)
+  const name = createRegister("", v.pointer.type)
   // if (v.pointer.type === VoidType) compilerAssert(false, "")
   format(writer, "  $ = load $, ptr $\n", name, v.pointer.type, v.pointer)
   return name
@@ -116,15 +116,15 @@ const allocaHelper = (writer: LlvmFunctionWriter, pointer: Pointer, overrideType
   writer.currentOutput = writer.outputFunctionBody
   return pointer
 }
-const getElementPointer = (writer: LlvmFunctionWriter, pointer: Pointer, fieldPath: TypeField[]) => {
-  const outType = fieldPath[fieldPath.length - 1].fieldType
-  const loadFieldPtr = createPointer("", outType)
+const getElementPointer = (writer: LlvmFunctionWriter, pointer: Pointer, resultType: Type, fieldPath: TypeField[]) => {
+  compilerAssert(pointer.type !== VoidType)
+  const loadFieldPtr = createPointer("", resultType)
   const indicesStr = fieldPath.reduce((acc, field, i) => {
-    return `${acc}${i == 0 ? '' : ', '}i32 ${field.index}`
-  }, "")
+    return `${acc}, i32 ${field.index}`
+  }, "i32 0")
 
-  const sourceDataType = getDataTypeName(writer.writer, fieldPath[0].sourceType)
-  format(writer, "  $ = getelementptr $, $ $, i32 0, $\n", loadFieldPtr, sourceDataType, 'ptr', pointer, indicesStr)
+  const sourceDataType = getDataTypeName(writer.writer, pointer.type)
+  format(writer, "  $ = getelementptr $, $ $, $\n", loadFieldPtr, sourceDataType, 'ptr', pointer, indicesStr)
   return loadFieldPtr
 }
 const loadFieldHelper = (writer: LlvmFunctionWriter, leftResult: LlvmResultValue, fieldPath: TypeField[]) => {
@@ -166,13 +166,11 @@ const astWriter: LlvmAstWriterTable = {
     const length = ast.value.length + 1 // add null terminator
     writer.writer.outputHeaders.push(`${constantName} = private unnamed_addr constant [${length} x i8] c"${escaped}\\00"\n`)
     const pointer = allocaHelper(writer, createPointer("", ast.type))
-    format(writer, `  store $ { i32 $, ptr $ }, ptr $\n`, ast.type, String(length - 1), constantName, pointer)
+    format(writer, `  store $ { i32 $, ptr $ }, ptr $\n`, ast.type, length - 1, constantName, pointer)
     return { pointer }
   },
   binding: (writer, ast) => {
     compilerAssert(ast.binding.type !== VoidType)
-    const isArg = !!writer.function.argBindings.find(x => x === ast.binding)
-    if (isArg) return { register: ast.binding as Register }
     return { pointer: ast.binding as Pointer }
   },
   let: (writer, ast) => {
@@ -425,9 +423,9 @@ const astWriter: LlvmAstWriterTable = {
   },
   setvaluefield: (writer, ast) => {
     const res = writeExpr(writer, ast.left)
-    compilerAssert(res && 'pointer' in res, "Expected pointer") // ast.left is binding so should always be a pointer
-    const fieldPtr = getElementPointer(writer, res.pointer, ast.fieldPath)
+    compilerAssert(res && 'pointer' in res, "Expected pointer", { left: ast.left, res }) // ast.left is binding so should always be a pointer
     const finalField = ast.fieldPath[ast.fieldPath.length - 1]
+    const fieldPtr = getElementPointer(writer, res.pointer, res.pointer.type, ast.fieldPath)
     const valueReg = toRegister(writer, writeExpr(writer, ast.value))
     format(writer, "  store $ $, $ $\n", finalField.fieldType, valueReg, 'ptr', fieldPtr)
     return null
@@ -435,7 +433,7 @@ const astWriter: LlvmAstWriterTable = {
   setfield: (writer, ast) => {
     const reg = toRegister(writer, writeExpr(writer, ast.left))
     const leftPtr = reg as unknown as Pointer // reinterpret reg as a pointer
-    const fieldPtr = getElementPointer(writer, leftPtr, [ast.field])
+    const fieldPtr = getElementPointer(writer, leftPtr, leftPtr.type, [ast.field])
     const valueReg = toRegister(writer, writeExpr(writer, ast.value))
     format(writer, "  store $ $, $ $\n", ast.field.fieldType, valueReg, 'ptr', fieldPtr)
     return null
@@ -483,15 +481,17 @@ const astWriter: LlvmAstWriterTable = {
   },
   deref: (writer, ast) => {
     // TODO: These are the same as value and setvalue. we can merge them
-    const reg = toRegister(writer, writeExpr(writer, ast.left))
-    const leftPtr = reg as unknown as Pointer // reinterpret reg as a pointer
-    const fieldPtr = getElementPointer(writer, leftPtr, ast.fieldPath)
+    const res = writeExpr(writer, ast.left)
+    compilerAssert(res && 'pointer' in res, "Expected pointer")
+    const leftPtr = res.pointer
+    compilerAssert(leftPtr.type !== VoidType, "", { leftPtr, left: ast.left })
+    const fieldPtr = getElementPointer(writer, leftPtr, ast.type, ast.fieldPath)
     return { pointer: fieldPtr }
   },
   setderef: (writer, ast) => {
-    const reg = toRegister(writer, writeExpr(writer, ast.left))
-    const leftPtr = reg as unknown as Pointer // reinterpret reg as a pointer
-    const fieldPtr = getElementPointer(writer, leftPtr, ast.fieldPath)
+    const res = writeExpr(writer, ast.left)
+    compilerAssert(res && 'pointer' in res, "Expected pointer")
+    const fieldPtr = getElementPointer(writer, res.pointer, ast.value.type, ast.fieldPath)
     const value = toRegister(writer, writeExpr(writer, ast.value))
     format(writer, "  store $ $, $ $\n", ast.value.type, value, 'ptr', fieldPtr)
     return null
@@ -669,7 +669,15 @@ const writeLlvmBytecodeFunction = (bytecodeWriter: LlvmWriter, func: CompiledFun
   func.argBindings.forEach((binding, i) => {
     if (i !== 0) format(funcWriter, ", ")
     const storageType = binding.storage === 'ref' ? RawPointerType : binding.type
-    format(funcWriter, `$ $`, storageType, binding)
+    generateName(bytecodeWriter, binding)
+  
+    const argValueBinding = new Binding(binding.name, binding.type)
+    format(funcWriter, `$ $`, storageType, argValueBinding)
+    
+    allocaHelper(funcWriter, binding as Pointer)
+    funcWriter.currentOutput = funcWriter.outputFunctionHeaders
+    format(funcWriter, "  store $ $, $ $\n", storageType, argValueBinding, 'ptr', binding)
+    funcWriter.currentOutput = bytecodeWriter.outputStrings
   })
   format(funcWriter, `) {\n`, func.returnType, name)
 

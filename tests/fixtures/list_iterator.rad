@@ -10,7 +10,5 @@ fn main():
     print(lst[i])
     i += 1
 
-  f :: |x| print(x)
-
   for x in lst:
     print(x)
