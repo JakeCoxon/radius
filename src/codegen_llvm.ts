@@ -171,6 +171,12 @@ const astWriter: LlvmAstWriterTable = {
   },
   binding: (writer, ast) => {
     compilerAssert(ast.binding.type !== VoidType)
+    if (ast.binding.storage === 'ref') {
+      // Ref params are alloca as pointers themselves so we need to load them first (should get optimised away)
+      const pointer = createPointer("", ast.binding.type)
+      format(writer, `  $ = load ptr, ptr $\n`, pointer, ast.binding)
+      return { pointer }
+    }
     return { pointer: ast.binding as Pointer }
   },
   let: (writer, ast) => {
