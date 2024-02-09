@@ -32,10 +32,10 @@ class BuildObject {
 }
 
 const logger = {
-  logs: [],
+  logs: [] as unknown[],
   print: false,
   debugWriter: null as FileSink | null,
-  log: (...args) => {
+  log: (...args: unknown[]) => {
     if (logger.print) console.log(...args)
     if (logger.debugWriter) writeToFile(logger.debugWriter, ...args)
     logger.logs.push(args)
@@ -107,7 +107,7 @@ const runCompiler = async (inputPath: string) => {
   const queue = new Queue()
 
   try {
-    runModuleInner(queue, build.input, `${build.moduleName}.rad`, build.globalCompiler, build.rootScope)
+    runModuleInner(queue, build.input, `${build.moduleName}.rad`, build.globalCompiler)
   } catch (ex) {
     logger.print = true
     handleError(build, ex)
@@ -119,7 +119,7 @@ const runCompiler = async (inputPath: string) => {
   if (logger.debugWriter) logger.debugWriter.end()
 }
 
-const handleError = (build: BuildObject, ex) => {
+const handleError = (build: BuildObject, ex: Error) => {
   build.gotError = true
 
   if (ex instanceof Error) {
@@ -138,8 +138,8 @@ const handleError = (build: BuildObject, ex) => {
     }
 
     if ((ex.info as any)._userinfo) {
-      ;(ex.info as any)._userinfo.forEach((name) => {
-        const item = ex.info[name]
+      ;(ex.info as any)._userinfo.forEach((name: string) => {
+        const item = (ex.info as any)[name]
         if (item && Object.getPrototypeOf(item) === TokenRoot) {
           const text = outputSourceLocation(item.location)
           logger.log(text)
@@ -161,17 +161,16 @@ const runModuleInner = (
   input: string,
   filepath: string,
   globalCompiler: GlobalCompilerState,
-  rootScope: Scope
 ) => {
   const parser = makeParser(input, filepath)
 
   const subCompilerState = new SubCompilerState('testmodule')
-  const moduleScope = createScope({ ...rootScope }, undefined)
+  const moduleScope = createScope({ ...globalCompiler.rootScope }, undefined)
   subCompilerState.scope = moduleScope
   subCompilerState.globalCompiler = globalCompiler
   subCompilerState.moduleCompiler = subCompilerState
 
-  const root = TaskDef(programEntryTask, parser, rootScope)
+  const root = TaskDef(programEntryTask, parser)
     .wrap(withContext({ globalCompiler, subCompilerState } as TaskContext))
   queue.enqueue(root)
 

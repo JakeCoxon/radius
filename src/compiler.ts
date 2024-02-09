@@ -1,7 +1,7 @@
 import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol, ScopeParentSymbol, isPlainObject, ParseLet, ParseList, ParseExpand, ParseBlock, findLabelByBinding, ParseSubscript, ParseNumber, ParseQuote, ParseWhile, ParseOperator, ParseBytecode, ParseOpEq, ParseSet, ParseFreshIden, UnknownObject, ParseNote, DefaultConsAst, RawPointerType, ValueFieldAst, SetValueFieldAst, FloatLiteralType, IntLiteralType, CompilerFunction, DerefAst, SetDerefAst, ParseSlice, FunctionCallContext } from "./defs";
 import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, functionCompileTimeCompileTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall } from "./compiler_functions";
 import { Event, Task, TaskDef, Unit, isTask, isTaskResult, withContext } from "./tasks";
-import { createCompilerModuleTask, defaultMetaFunction, expandLoopSugar, foldSugar, forExprSugar, forLoopSugar, listComprehensionSugar, sliceSugar, whileExprSugar } from "./compiler_sugar";
+import { createCompilerModuleTask, createListConstructor, defaultMetaFunction, expandLoopSugar, foldSugar, forExprSugar, forLoopSugar, listComprehensionSugar, sliceSugar, whileExprSugar } from "./compiler_sugar";
 
 export const pushBytecode = <T extends BytecodeInstr>(out: BytecodeWriter, token: Token, instr: T) => {
   out.bytecode.locations.push(token.location);
@@ -644,7 +644,7 @@ const letLocalAst = (vm: Vm, name: string, type: Type | null, value: Ast | null)
   return new LetAst(VoidType, vm.location, binding, value);
 }
 
-function resolveScope(ctx: TaskContext, scope: Scope, name: string): Task<unknown, CompilerError> {
+export function resolveScope(ctx: TaskContext, scope: Scope, name: string): Task<unknown, CompilerError> {
   let checkScope: Scope | undefined = scope;
   while (checkScope) {
     if (checkScope[name] !== undefined) return Task.of(checkScope[name])
@@ -745,11 +745,9 @@ const instructions: InstructionMapping = {
     vm.stack.push(new IfAst(resultType, vm.location, cond, trueBody, falseBody))
   },
   listast: (vm, { count }) => {
-    const values = expectAsts(popValues(vm, count));
+    const values = expectAsts(popValues(vm, count))
     const elementType = getCommonType(values.map(x => x.type))
-    const type = createParameterizedExternalType(vm.context.globalCompiler, ListTypeConstructor, [elementType]);
-    values.forEach((ast) => propagateLiteralType(elementType, ast))
-    vm.stack.push(new ListAst(type, vm.location, values))
+    return createListConstructor(vm, elementType, values)
   },
   callast: (vm, { name, count, tcount, method }) => {
     const args = popValues(vm, count)
@@ -1156,7 +1154,7 @@ export function compileClassTask(ctx: TaskContext, { classDef, typeArgs }: { cla
     compileFunctionPrototype(ctx, classDef.templatePrototype);
   }
 
-  const typeParamHash = hashValues(typeArgs)
+  const typeParamHash = hashValues(typeArgs, { classDef })
   const existing = classDef.compiledClasses.find(compiledClass => {
     if (compiledClass.typeArgHash === typeParamHash) {
       if (compiledClass.typeArguments.every((x, i) => x === typeArgs[i])) return true
@@ -1357,9 +1355,10 @@ const topLevelLet = (ctx: TaskContext, expr: ParseLet, moduleScope: Scope) => {
   );
 }
 
-export const loadModule = (ctx: TaskContext, location: SourceLocation, moduleName: string, rootScope: Scope): Task<Module, CompilerError> => {
+export const loadModule = (ctx: TaskContext, location: SourceLocation, moduleName: string): Task<Module, CompilerError> => {
   const loader = ctx.globalCompiler.moduleLoader
   if (loader.cache[moduleName]) return Task.of(loader.cache[moduleName])
+  const rootScope = ctx.globalCompiler.rootScope
   const parsedModule = loader.loadModule(moduleName)
   const moduleScope = createScope({ ...rootScope }, undefined)
 
@@ -1367,7 +1366,7 @@ export const loadModule = (ctx: TaskContext, location: SourceLocation, moduleNam
   ;(subCompilerState as any).location = location
 
   return (
-    TaskDef(runTopLevelTask, parsedModule.rootNode, rootScope, moduleScope)
+    TaskDef(runTopLevelTask, parsedModule.rootNode, moduleScope)
     .chainFn((task, _) => {
       const module = new Module(moduleName, subCompilerState, parsedModule)
       loader.cache[moduleName] = module
@@ -1376,7 +1375,7 @@ export const loadModule = (ctx: TaskContext, location: SourceLocation, moduleNam
   )
 }
 
-export const importModule = (ctx: TaskContext, importNode: ParseImport, rootScope: Scope, existingScope: Scope) => {
+export const importModule = (ctx: TaskContext, importNode: ParseImport, existingScope: Scope) => {
   const moduleName = importNode.module.token.value
   const loader = ctx.globalCompiler.moduleLoader
 
@@ -1399,7 +1398,7 @@ export const importModule = (ctx: TaskContext, importNode: ParseImport, rootScop
     return Task.concurrency(tasks)
   }
   return (
-    TaskDef(loadModule, importNode.token.location, moduleName, rootScope)
+    TaskDef(loadModule, importNode.token.location, moduleName)
     .chainFn((task, module) => {
       ctx.subCompilerState = loader.cache[moduleName].compilerState
       return expandIntoScope(module)
@@ -1429,7 +1428,7 @@ export const topLevelComptimeTask = (ctx: TaskContext, expr: ParseNode, moduleSc
 
 }
 
-export const runTopLevelTask = (ctx: TaskContext, stmts: ParseStatements, rootScope: Scope, moduleScope: Scope) => {
+export const runTopLevelTask = (ctx: TaskContext, stmts: ParseStatements, moduleScope: Scope) => {
   const tasks: Task<unknown, CompilerError>[] = []
 
   const copyEverythingIntoScope = (module: Module) => {
@@ -1450,7 +1449,7 @@ export const runTopLevelTask = (ctx: TaskContext, stmts: ParseStatements, rootSc
   
   stmts.exprs.forEach(node => {
     if (node.key === 'import') {
-      tasks.push(TaskDef(importModule, node, rootScope, moduleScope));
+      tasks.push(TaskDef(importModule, node, moduleScope));
     } else if (node.key === 'letconst') {
       tasks.push(TaskDef(topLevelLetConst, node, moduleScope));
     } else if (node.key === 'let') {
@@ -1469,16 +1468,16 @@ export const runTopLevelTask = (ctx: TaskContext, stmts: ParseStatements, rootSc
   return Task.concurrency(tasks);
 }
 
-export const programEntryTask = (ctx: TaskContext, entryModule: ParsedModule, rootScope: Scope): Task<unknown, CompilerError> => {
+export const programEntryTask = (ctx: TaskContext, entryModule: ParsedModule): Task<unknown, CompilerError> => {
   const moduleScope = ctx.subCompilerState.scope
   return (
     TaskDef(createCompilerModuleTask)
     .chainFn((task, compilerModule) => {
       ctx.globalCompiler.moduleLoader.cache['compiler'] = compilerModule
-      return TaskDef(loadModule, SourceLocation.anon, '_preload', rootScope)
+      return TaskDef(loadModule, SourceLocation.anon, '_preload')
     })
     .chainFn(() => {
-      return TaskDef(runTopLevelTask, entryModule.rootNode, rootScope, moduleScope)
+      return TaskDef(runTopLevelTask, entryModule.rootNode, moduleScope)
     })
     .chainFn((task, arg) => {
       const func = expectMap(moduleScope, 'main', 'No main function found')

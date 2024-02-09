@@ -1,7 +1,7 @@
-import { BytecodeSecondOrder, getOperatorTable, propagatedLiteralAst, visitParseNode } from "./compiler"
-import { insertFunctionDefinition } from "./compiler_functions"
-import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, FunctionCallContext } from "./defs"
-import { Task } from "./tasks"
+import { BytecodeSecondOrder, getOperatorTable, loadModule, propagatedLiteralAst, pushBytecode, resolveScope, visitParseNode } from "./compiler"
+import { createCallAstFromValueAndPushValue, createMethodCall, insertFunctionDefinition } from "./compiler_functions"
+import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, FunctionCallContext, Vm, expectAst, NumberAst, Type } from "./defs"
+import { Task, TaskDef } from "./tasks"
 
 export const forLoopSugar = (out: BytecodeWriter, node: ParseFor) => {
   const fnParams: ParserFunctionParameter[] = [{ name: node.identifier, storage: null, type: null }]
@@ -181,6 +181,48 @@ export const defaultMetaFunction = (subCompilerState: SubCompilerState, compiled
   Object.assign(compiledClass.metaobject, { iterate, subscript, set_subscript, constructor })
 }
 
+export const createListConstructor = (vm: Vm, elementType: Type, values: Ast[]) => {
+
+  // TODO: Prefer to do some bytecode manipulations here instead?
+
+  let module: Module
+  let array: Ast
+  let binding: Binding
+  const callArray: Ast[] = []
+  return (
+    TaskDef(loadModule, vm.location, 'array')
+    .chainFn((task, module_) => {
+      module = module_
+      return TaskDef(resolveScope, module.compilerState.scope, 'array_create')
+    })
+    .chainFn((task, func: Closure) => {
+      return createCallAstFromValueAndPushValue(vm, func, [elementType], [new NumberAst(IntType, vm.location, 0)])
+    })
+    .chainFn((task, _) => {
+      array = expectAst(vm.stack.pop())
+      binding = new Binding("", array.type)
+      
+      const calls = values.map(ast => {
+        return (
+          createMethodCall(vm, new BindingAst(binding.type, vm.location, binding), 'append', [elementType], [ast])
+          .chainFn((task, _) => { const ast = expectAst(vm.stack.pop()); callArray.push(ast); return Task.success() })
+        )
+      })
+      const reducedTasks = calls.reduce((acc, nextTask) => acc.chainFn((task, _) => nextTask))
+      return reducedTasks
+    })
+    .chainFn((task, _) => {
+      const stmts = createStatements(vm.location, [
+        new LetAst(VoidType, vm.location, binding, array),
+        ...callArray,
+        new BindingAst(binding.type, vm.location, binding)
+      ])
+      vm.stack.push(stmts)
+      return Task.success()
+    })
+  )
+}
+
 export const externalBuiltinBindings: {[key:string]: Binding} = {
   print: new Binding('print', FunctionType),
   printf: new Binding('printf', FunctionType),
@@ -194,7 +236,7 @@ export const externalBuiltinBindings: {[key:string]: Binding} = {
 // TODO: Fix all this
 export const externals: {[key:string]: ExternalFunction} = {
   // print:       new ExternalFunction('print',       externalBuiltinBindings.print, VoidType, (...args) => { compilerAssert(false, "Implemented elsewhere") }),
-  printf:      new ExternalFunction('printf',      externalBuiltinBindings.printf, VoidType, (...args) => { compilerAssert(false, "Implemented elsewhere") }),
+  printf:      new ExternalFunction('printf',      externalBuiltinBindings.printf, VoidType, (...args: unknown[]) => { compilerAssert(false, "Implemented elsewhere") }),
   // // malloc:      new ExternalFunction('malloc',      externalBuiltinBindings.malloc, VoidType, (ast: Ast) => { compilerAssert(false, "Implemented elsewhere") }),
   sizeof:      new ExternalFunction('sizeof',      externalBuiltinBindings.sizeof, VoidType, (ast: Ast) => { compilerAssert(false, "Implemented elsewhere") }),
   // // realloc:     new ExternalFunction('realloc',     externalBuiltinBindings.realloc, VoidType, (ast: Ast) => { compilerAssert(false, "Implemented elsewhere") }),

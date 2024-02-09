@@ -1,4 +1,4 @@
-type Thing:
+type Thing @struct:
   x : int
   y : int
 

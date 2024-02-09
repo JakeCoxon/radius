@@ -456,13 +456,14 @@ const getUniqueId = (obj: any) => {
   obj[UNIQUE_ID] = uniqueId++
   return obj[UNIQUE_ID];
 }
-export const hashValues = (values: unknown[]) => {
+export const hashValues = (values: unknown[], info) => {
   return values.map(value => {
-    if (value instanceof PrimitiveType) return `$${value.typeName}`
     if (typeof value === 'number') return value
+    if (value instanceof PrimitiveType) return `$${value.typeName}`
+    if (value instanceof ConcreteClassType) return getUniqueId(value)
     if (value instanceof FunctionDefinition) return getUniqueId(value)
     if (value instanceof Closure) return getUniqueId(value)
-    compilerAssert(false, "Cannot hash value", { value })
+    compilerAssert(false, "Cannot hash value", { value, ...info })
   }).join("__")
 }
 

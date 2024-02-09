@@ -15,17 +15,16 @@ const runTestInner = (
   input: string,
   filepath: string,
   globalCompiler: GlobalCompilerState,
-  rootScope: Scope
 ) => {
   const parser = makeParser(input, filepath)
 
   const subCompilerState = new SubCompilerState('testmodule')
-  const moduleScope = createScope({ ...rootScope }, undefined)
+  const moduleScope = createScope({ ...globalCompiler.rootScope }, undefined)
   subCompilerState.scope = moduleScope
   subCompilerState.globalCompiler = globalCompiler
   subCompilerState.moduleCompiler = subCompilerState
 
-  const root = TaskDef(programEntryTask, parser, rootScope)
+  const root = TaskDef(programEntryTask, parser)
     .wrap(withContext({ globalCompiler, subCompilerState } as TaskContext))
   queue.enqueue(root)
 
@@ -88,9 +87,9 @@ export const runCompilerTest = (
   const rootScope: Scope = createScope(
     {
       ...BuiltinTypes,
-      compfoo: { _function: (a, b) => 65 + a + b },
+      compfoo: { _function: (a: number, b: number) => 65 + a + b },
       print: print,
-      static_print: new ExternalFunction('static_print', new Binding('static_print', FunctionType), VoidType, (...args) => {
+      static_print: new ExternalFunction('static_print', new Binding('static_print', FunctionType), VoidType, (...args: unknown[]) => {
         logger.log('static_print called', ...args)
         prints.push(...args)
         return args[0]
@@ -106,6 +105,7 @@ export const runCompilerTest = (
   const globalCompiler = createDefaultGlobalCompiler()
   globalCompiler.logger = logger
   globalCompiler.moduleLoader = moduleLoader || createModuleLoader(testObject.globalOptions.importPaths)
+  globalCompiler.rootScope = rootScope
 
   testObject.globalCompiler = globalCompiler
 
@@ -129,7 +129,7 @@ export const runCompilerTest = (
   globalCompiler.externalCompilerOptions.globalOptions = testObject.globalOptions
 
   try {
-    runTestInner(queue, input, `${testObject.moduleName}.rad`, globalCompiler, rootScope)
+    runTestInner(queue, input, `${testObject.moduleName}.rad`, globalCompiler)
 
     globalCompiler.compiledFunctions.forEach((func) => {
       writer.write(func.functionDefinition.debugName)
@@ -158,7 +158,7 @@ export const runCompilerTest = (
       }
 
       if ((ex.info as any)._userinfo) {
-        ;(ex.info as any)._userinfo.forEach((name) => {
+        ;(ex.info as any)._userinfo.forEach((name: string) => {
           const item = ex.info[name]
           if (item && Object.getPrototypeOf(item) === TokenRoot) {
             const text = outputSourceLocation(item.location)
@@ -196,8 +196,8 @@ const logError = (ex: Error, logger: Logger) => {
     }
 
     if ((ex.info as any)._userinfo) {
-      ;(ex.info as any)._userinfo.forEach((name) => {
-        const item = ex.info[name]
+      ;(ex.info as any)._userinfo.forEach((name: string) => {
+        const item = (ex.info as any)[name]
         if (item && Object.getPrototypeOf(item) === TokenRoot) {
           const text = outputSourceLocation(item.location)
           logger.log(text)
