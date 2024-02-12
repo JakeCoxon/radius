@@ -56,7 +56,7 @@ export type Token = { value: string, type: string, location: SourceLocation }
 
 export const TokenRoot = {
   [Inspect.custom](depth: any, options: any, inspect: any) {
-    return options.stylize(`[Token ${this.value}]`, 'string');
+    return options.stylize(`[Token ${this.value.replace(/\n/g, '\\n')}]`, 'string');
   }
 }
 export const createToken = (source: Source, value: any, type = "NONE"): Token => Object.assign(Object.create(TokenRoot), { value, type, location: new SourceLocation(0, 0, source) });

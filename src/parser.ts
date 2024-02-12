@@ -1,133 +1,137 @@
 import { ParseAnd, ParseNode, ParseBreak, ParseCall, ParseCast, ParseCompTime, ParseContinue, ParseDict, ParseExpand, ParseField, ParseFor, ParseForExpr, ParseIf, ParseLet, ParseLetConst, ParseList, ParseListComp, ParseMeta, ParseNot, ParseNumber, ParseOpEq, ParseOperator, ParseOr, ParseReturn, ParseSet, ParseStatements, ParseString, ParseIdentifier, ParseWhile, ParseWhileExpr, ParserFunctionDecl, Token, compilerAssert, ParsePostCall, ParseSymbol, ParseNote, ParseSlice, ParseSubscript, ParserClassDecl, ParseClass, ParseFunction, createToken, ParseBoolean, ParseElse, ParseMetaIf, ParseMetaFor, ParseBlock, ParseImport, ParsedModule, Source, ParseMetaWhile, ParseTuple, ParseImportName, ParseFold, ParserFunctionParameter } from "./defs";
 
-type LexerState = { significantNewlines: boolean; parenStack: string[] };
+const regexes = {
+  KEYWORD:
+    /^(?:and|as\!|as|break|class|continue|comptime|def|defn|elif|else|fn|for|if|ifx|in|lambda|meta|null|or|pass|return|try|while|with|type|interface|import|block|fold|ref)(?=\W)/, // note (?=\W)
+  IDENTIFIER: /^[a-zA-Z_][a-zA-Z_0-9-]*/,
+  STRING: /^(?:"(?:[^"\\]|\\.)*")/,
+  SPECIALNUMBER: /^0o[0-7]+|^0x[0-9a-fA-F_]+|^0b[01_]+/,
+  NUMBER: /^-?(0|[1-9][0-9_]*)(\.[0-9_]+)?(?:[eE][+-]?[0-9]+)?/,
+  COMMENT: /^#[^\n]+/,
+  OPENPAREN: /^(?:[\[\{\(]|%{)/,
+  CLOSEPAREN: /^[\]\}\)]/,
+  PUNCTUATION: /^(?:==|!=|:=|<=|>=|\+=|\-=|\*=|\/=|::|->|\|\>|\.\.\.|[@!:,=<>\-+\.*\/'\|])/,
+  NEWLINE: /^\n/,
+  WHITESPACE: /^[ ]+/ // Not newline
+}
 
-function* tokenize(source: Source, state: LexerState): Generator<Token> {
-  const regexes = {
-    KEYWORD:
-      /^(?:and|as\!|as|break|class|continue|comptime|def|defn|elif|else|fn|for|if|ifx|in|lambda|meta|null|or|pass|return|try|while|with|type|interface|import|block|fold|ref)(?=\W)/, // note (?=\W)
-    IDENTIFIER: /^[a-zA-Z_][a-zA-Z_0-9-]*/,
-    STRING: /^(?:"(?:[^"\\]|\\.)*")/,
-    SPECIALNUMBER: /^0o[0-7]+|^0x[0-9a-fA-F_]+|^0b[01_]+/,
-    NUMBER: /^-?(0|[1-9][0-9_]*)(\.[0-9_]+)?(?:[eE][+-]?[0-9]+)?/,
-    COMMENT: /^#.+(?=\n)/,
-    OPENPAREN: /^(?:[\[\{\(]|%{)/,
-    CLOSEPAREN: /^[\]\}\)]/,
-    PUNCTUATION: /^(?:==|!=|:=|<=|>=|\+=|\-=|\*=|\/=|::|->|\|\>|\.\.\.|[@!:,=<>\-+\.*\/'\|])/,
-    NEWLINE: /^\n/,
-    WHITESPACE: /^[ ]+/ // Not newline
-  };
-
-  const tokens: Token[] = [];
+const tokenize = (source: Source) => {
+  let remain = source.input
+  const tokens: Token[] = []
   source.tokens = tokens
-  const indents = [0];
 
-  let lineNumber = 1;
-  let lineStart = 0;
-  let charIndex = 0;
-  let prevCharIndex = 0;
+  let lineNumber = 1
+  let lineStart = 0
+  let charIndex = 0
+  let prevCharIndex = 0
 
-  let match: RegExpExecArray | null;
-
-  const matchAndTrimLine = (regex: RegExp) => {
-    if ((match = regex.exec(remain))) {
-      remain = remain.substring(match[0].length);
-      prevCharIndex = charIndex;
-      charIndex += match[0].length;
-      return true;
-    }
-  };
-  const pushToken = (type: string, value: string = match![0]) => {
-    // (state as any).remain = remain; // debug
-    const token = createToken(source, value, type)
-    token.location.column = charIndex - lineStart;
-    token.location.line = lineNumber;
-    tokens.push(token);
-    return token;
-  };
-
-  // First is line by line
-  let remain = source.input;
-  while (remain.length > 0) {
-    if (matchAndTrimLine(regexes.NEWLINE)) {
-      yield pushToken("NEWLINE");
-      lineNumber++;
-      lineStart = charIndex;
-      continue;
-    }
-
-    let matchIndent = remain.length > 0 && matchAndTrimLine(/^ */);
-    if (state.significantNewlines && remain[0] === "\n") continue
-    
-    if (matchIndent) {
-      const numSpaces = match![0].length ?? 0;
-
-      if (numSpaces > indents[indents.length - 1]) {
-        indents.push(numSpaces);
-        yield pushToken("INDENT");
-      }
-      while (numSpaces < indents[indents.length - 1]) {
-        indents.pop();
-        yield pushToken("DEDENT");
-        yield pushToken("NEWLINE");
-      }
-    }
-
-    // Tokens after the indentation, or within a grouped expression
-    while (remain.length > 0 && (!state.significantNewlines || remain[0] !== "\n")) {
-      let matchType = (() => {
+  let match: RegExpExecArray | null
+  
+  const getToken = () => {
+    while (remain.length > 0) {
+      const matchType = (() => {
         for (const [type, regex] of Object.entries(regexes)) {
-          if (matchAndTrimLine(regex)) return type;
+          if ((match = regex.exec(remain))) {
+            remain = remain.substring(match[0].length);
+            prevCharIndex = charIndex;
+            charIndex += match[0].length;
+            return type
+          }
         }
-      })();
+      })()
 
       if (!matchType) {
+        const char = remain[0]
         const errline = source.input.substring(lineStart, source.input.indexOf("\n", lineStart));
         const repeat = " ".repeat(charIndex - lineStart);
-        const message = `Unable to tokenize line ${lineNumber} \n${errline}\n${repeat}^-- here`;
+        const message = `Unable to tokenize line ${lineNumber}. Character was '${char}' \n${errline}\n${repeat}^-- here`;
         throw new Error(message);
       }
-      if (matchType === "NEWLINE") { lineNumber++; lineStart = charIndex; } // prettier-ignore
-      else if (matchType === "WHITESPACE" || matchType === "COMMENT") undefined;
-      else yield pushToken(matchType);
+      const token = createToken(source, match![0], matchType)
+      token.location.column = prevCharIndex - lineStart
+      token.location.line = lineNumber
+      if (matchType === "NEWLINE") { lineNumber++; lineStart = charIndex; }
+      else if (matchType === "WHITESPACE" || matchType === "COMMENT") continue
+      return token
     }
   }
+  return { getToken }
 
-  while (indents.length > 1) {
-    yield pushToken("NEWLINE", "");
-    yield pushToken("DEDENT", "");
-    indents.pop();
-  }
-  yield pushToken("NEWLINE", "");
 }
 
 const makeAdvancedLexer = (source: Source) => {
-  const state = { significantNewlines: true, parenStack: [] as string[] };
-  const generator = tokenize(source, state);
+  const state = { significantNewlines: true };
+  const tokenizer = tokenize(source);
   let tokens: Token[] = [];
-  let previous: Token;
-  const getToken = () => {
-    const gen = generator.next();
-    const token = gen.value;
+  let previous: Token
 
-    if (token?.value === "|") {
-      if (state.parenStack.at(-1) === "|") state.parenStack.pop();
-      else if (previous?.value === "{") {
-        state.parenStack[state.parenStack.length - 1] = "{|";
-        state.parenStack.push(token.value);
-      }
-    }
-    if (token?.type === "OPENPAREN") state.parenStack.push(token.value);
-    else if (token?.type === "CLOSEPAREN") state.parenStack.pop();
-    const last = state.parenStack.at(-1);
-    state.significantNewlines = last === undefined || last === "{|";
+  let lineStart = true
+  const indents = [0]
+  const parenStack = [] as string[]
 
-    if (token) tokens.push(token);
-    previous = token;
-    return token;
+  const createTokenWithLocation = (type: string, value: string = "", line: number, column: number) => {
+    const token = createToken(source, value, type)
+    Object.assign(token.location, { line, column })
+    return token
   };
-  return { source, tokens, state, getToken };
-};
+
+  function *advancedGenerator(): Generator<Token, undefined> {
+    while (true) {
+      let token = tokenizer.getToken()
+      if (!token) break
+
+      if (token.type === "NEWLINE") {
+        if (state.significantNewlines) yield token
+        lineStart = true
+        continue
+      }
+
+      if (state.significantNewlines && lineStart) {
+        const numSpaces = token.location.column
+
+        if (numSpaces > indents[indents.length - 1]) {
+          indents.push(numSpaces);
+          yield createTokenWithLocation("INDENT", '', token.location.line, token.location.column)
+        }
+        while (numSpaces < indents[indents.length - 1]) {
+          indents.pop();
+          yield createTokenWithLocation("DEDENT", '', token.location.line, token.location.column)
+          yield createTokenWithLocation("NEWLINE", '', token.location.line, token.location.column)
+        }
+      }
+
+      lineStart = false
+
+      if (token.value === "|") {
+        if (parenStack.at(-1) === "|") parenStack.pop()
+        else if (previous?.value === "{") {
+          parenStack[parenStack.length - 1] = "{|"
+          parenStack.push(token.value)
+        }
+      }
+      if (token.type === "OPENPAREN") parenStack.push(token.value)
+      else if (token.type === "CLOSEPAREN") parenStack.pop()
+      const topParen = parenStack.at(-1)
+      state.significantNewlines = topParen === undefined || topParen === "{|"
+      tokens.push(token);
+      yield token
+    }
+
+    while (indents.length > 1) {
+      yield createTokenWithLocation("NEWLINE", "", previous.location.line, previous.location.column)
+      yield createTokenWithLocation("DEDENT", "", previous.location.line, previous.location.column)
+      indents.pop()
+    }
+    yield createTokenWithLocation("NEWLINE", "", previous.location.line, previous.location.column)
+  }
+  const gen = advancedGenerator()
+  const getToken = () => {
+    const token = gen.next().value
+    previous = token!
+    return token
+  }
+  return { source, tokens, state, getToken }
+}
 
 export const tokenString = (token: Token) => token.value;
 

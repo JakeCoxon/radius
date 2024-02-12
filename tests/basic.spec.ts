@@ -801,3 +801,18 @@ test('ops', async () => {
     testObject.close()
   }
 })
+
+test('parser', async () => {
+  const testObject = createTest({ 
+    moduleName: 'parser',
+    globalOptions,
+    inputPath: `${import.meta.dir}/fixtures/parser.rad`,
+  })
+  try {
+    const input = await Bun.file(testObject.inputPath).text()
+    runCompilerTest(input, { testObject })
+    await writeLlvmBytecodeFile(testObject)
+  } finally {
+    testObject.close()
+  }
+})

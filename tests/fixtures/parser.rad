@@ -1,0 +1,38 @@
+type Person:
+  name : string
+  age : int
+
+type MyVec @struct:
+  x : int
+  y : int
+
+fn foo(tup: (int, float, Person, MyVec)):
+  print(tup._1 + int(tup._2) + tup._3.age + tup._4.x + tup._4.y)
+
+fn modify_tuple(tup: (int, float, Person, MyVec)):
+  tup._3.age = 31
+  tup._4.x = 12
+  tup._4.y = 10
+
+fn main():
+
+  new_vec := MyVec(30, 40)
+  new_person := Person("Another Person", 100)
+
+  tup := (23, float(67), new_person, new_vec)
+
+  foo(tup)
+
+  list := [MyVec(30, 40), MyVec(1, 2), MyVec(3, 6)]
+
+  x := list[0].x + list[1].y
+  print(x)
+
+  list2 := [
+    Person("Person1", 101), 
+    Person("Person2", 102), 
+    Person("Person3", 103)]
+
+  print(list2[0].age)
+
+  # hello
