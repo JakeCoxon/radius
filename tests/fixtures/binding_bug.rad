@@ -1,0 +1,6 @@
+import vec for vec2
+
+fn main():
+
+  pos := vec2(0.0, 0.0)
+  pos = pos + vec2(0.0, 0.1)

@@ -128,24 +128,35 @@ export const listComprehensionSugar = (out: BytecodeWriter, node: ParseListComp)
 const insertMetaObjectPairwiseOperator = (compiledClass: CompiledClass, operatorName: string, operatorSymbol: string) => {
   const operatorFunc = new CompilerFunction(operatorName, (ctx, typeArgs, args) => {
     const [a, b] = args
+    const bindingAstA = new BindingAst(a.type, ctx.location, new Binding("", a.type))
+    const bindingAstB = new BindingAst(b.type, ctx.location, new Binding("", b.type))
+    const lets = [
+      new LetAst(VoidType, ctx.location, bindingAstA.binding, a),
+      new LetAst(VoidType, ctx.location, bindingAstB.binding, b)]
     if (b.type instanceof ParameterizedType && b.type.typeConstructor === TupleTypeConstructor) {
       compilerAssert(b.type.args.length === compiledClass.fields.length, `Expected tuple of size ${compiledClass.fields.length}, got ${b.type.args.length}`, { type: b.type })
       const constructorArgs = compiledClass.fields.map((field, i) => {
         const otherField = b.type.typeInfo.fields.find(x => x.name === `_${i+1}`)
         compilerAssert(otherField?.fieldType === field.fieldType, `Expected type of tuple field ${i+1} to be $fieldType got $otherFieldType`, { fieldType: field.fieldType, otherFieldType: otherField?.fieldType })
         return getOperatorTable()[operatorSymbol].func(ctx, 
-          new FieldAst(field.fieldType, ctx.location, a, field),
-          new FieldAst(otherField.fieldType, ctx.location, b, otherField))
+          new FieldAst(field.fieldType,      ctx.location, bindingAstA, field),
+          new FieldAst(otherField.fieldType, ctx.location, bindingAstB, otherField))
       })
-      return new ConstructorAst(compiledClass.type, ctx.location, constructorArgs)
+      return createStatements(ctx.location, [
+        ...lets,
+        new ConstructorAst(compiledClass.type, ctx.location, constructorArgs)
+      ])
     }
     compilerAssert(b.type === a.type, "Expected vec or tuple. got $type", { type: b.type })
     const constructorArgs = compiledClass.fields.map(field => 
       getOperatorTable()[operatorSymbol].func(ctx, 
-        new FieldAst(field.fieldType, ctx.location, a, field),
-        new FieldAst(field.fieldType, ctx.location, b, field))
+        new FieldAst(field.fieldType, ctx.location, bindingAstA, field),
+        new FieldAst(field.fieldType, ctx.location, bindingAstB, field))
     )
-    return new ConstructorAst(compiledClass.type, ctx.location, constructorArgs)
+    return createStatements(ctx.location, [
+      ...lets,
+      new ConstructorAst(compiledClass.type, ctx.location, constructorArgs)
+    ])
   })
   compiledClass.metaobject[operatorName] = operatorFunc
 }
@@ -288,6 +299,9 @@ export const print = new CompilerFunction('print', (ctx, typeArgs: unknown[], ar
       const dataGetter = fieldHelper(binding, 'data')
       formatStr += '%.*s'
       printfArgs.push(lengthGetter, dataGetter)
+    } else if (arg.type === BoolType) {
+      printfArgs.push(arg)
+      formatStr += '%i'
     } else if (formats.has(arg.type)) {
       printfArgs.push(arg)
       formatStr += formats.get(arg.type)
@@ -363,9 +377,9 @@ export const operator_bitwise_or = new CompilerFunction('operator_bitwise_or', (
   return new OperatorAst(IntType, ctx.location, "|", [a, b])
 })
 
-const add_external_library = new ExternalFunction("add_external_library", new Binding("", FunctionType), VoidType, (ctx: CompilerFunctionCallContext, library: unknown) => {
-  compilerAssert(typeof library == 'string', "Expected string")
-  ctx.compilerState.globalCompiler.externalCompilerOptions.libraries.push(library)
+const add_external_library = new ExternalFunction("add_external_library", VoidType, (ctx: CompilerFunctionCallContext, args) => {
+  compilerAssert(typeof args[0] == 'string', "Expected string")
+  ctx.compilerState.globalCompiler.externalCompilerOptions.libraries.push(args[0])
 })
 
 export const createCompilerModuleTask = (ctx: TaskContext): Task<Module, CompilerError> => {

@@ -1,19 +1,75 @@
 import range for Range
-import graphics for begin_app, end_app, window_open, render_app, frame_ticks, delay, copy_pixels, save, restore, set_fill_color, fill_rectangle, rotate, translate, rotate_at_origin, get_mouse
+import vec for vec2
+import graphics for begin_app, end_app, window_open, render_app, frame_ticks, delay, copy_pixels, save, restore, set_fill_color, fill_rectangle, rotate, translate, rotate_at_origin, get_mouse, get_key_down
+
+# https://fossies.org/linux/SDL2/include/SDL_scancode.h
+
+type Entity:
+  pos: vec2
+  size: vec2
+  velocity: vec2
+  on_ground: bool
 
 fn main():
 
   begin_app()
 
+  player := Entity(
+    vec2(100.0, 100.0), 
+    vec2(20.0, 25.0),
+    vec2(0.0, 0.0),  # TODO: Fix literals here
+    false)
+
+  jump_velocity_x := 0.0
+  
   while window_open():
 
+    player.on_ground = (player.pos.y >= 240 - player.size.y)
+
+    if player.on_ground:
+      player.velocity.y = 0.0
+      if get_key_down(26):
+        jump_velocity_x = player.velocity.x
+        player.velocity.y = -3.0
+        player.on_ground = false
+    else:
+      player.velocity.y += 0.1
+    player.pos += player.velocity
+
+    press_x := int(get_key_down(7)) - int(get_key_down(4))
+    # press_y := int(get_key_down(22)) - int(get_key_down(26))
+
+    if player.on_ground:
+      if press_x == 0:
+        player.velocity.x *= 0.8
+      elif press_x > 0:
+        player.velocity.x = min(player.velocity.x + 1, 5.0)
+      elif press_x < 0:
+        player.velocity.x = max(player.velocity.x - 1, -5.0)
+    else:
+      if press_x == 0:
+        player.velocity.x = player.velocity.x
+      elif press_x > 0:
+        player.velocity.x += 0.1
+        player.velocity.x = min(player.velocity.x, jump_velocity_x + 2)
+        player.velocity.x = min(player.velocity.x, 5.0)
+      elif press_x < 0:
+        player.velocity.x -= 0.1
+        player.velocity.x = max(player.velocity.x, jump_velocity_x - 2)
+        player.velocity.x = max(player.velocity.x, -5.0)
+
+
     save()
+
+    time := float(frame_ticks()) * 0.001
+    pos := get_mouse()
 
     set_fill_color(0, 0, 0, 1)
     fill_rectangle(0, 0, 320, 240)
 
-    time := float(frame_ticks()) * 0.001
-    pos := get_mouse()
+    set_fill_color(1, 0, 0, 1)
+    fill_rectangle(player.pos.x, player.pos.y, player.size.x, player.size.y)
+
     x := sinf(time * 2) * 100 + 150
 
     block:

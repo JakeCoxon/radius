@@ -86,6 +86,7 @@ const toRegister = (writer: LlvmFunctionWriter, v: LlvmResultValue): Register =>
 }
 const getPointerName = (writer: LlvmFunctionWriter, type: Type) => {
   if (type === RawPointerType) return 'ptr'
+  if (type.typeInfo.isReferenceType) return 'ptr'
   return `${getTypeName(writer.writer, type)}*`
 }
 
@@ -453,6 +454,8 @@ const astWriter: LlvmAstWriterTable = {
       if (ast.expr.type === DoubleType && ast.type === IntType) return 'fptosi double $ to i32'
       if (ast.expr.type === DoubleType && ast.type === FloatType) return 'fptrunc double $ to float'
       if (ast.expr.type === FloatType && ast.type === DoubleType) return 'fpext float $ to double'
+      if (ast.expr.type === BoolType && ast.type === IntType) return 'zext i1 $ to i32'
+      if (ast.expr.type === IntType && ast.type === BoolType) return 'trunc i32 $ to i1'
       compilerAssert(false, "Invalid cast conversion")
     })()
     const register = createRegister("", ast.type)

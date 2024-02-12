@@ -663,7 +663,7 @@ export function resolveScope(ctx: TaskContext, scope: Scope, name: string): Task
 function callFunctionFromValueTask(ctx: TaskContext, vm: Vm, func: unknown, typeArgs: unknown[], values: unknown[]): Task<Unit, CompilerError> {
   if (func instanceof ExternalFunction) {
     const fnctx: CompilerFunctionCallContext = { location: vm.location, compilerState: ctx.subCompilerState }
-    const functionResult = func.func(fnctx, expectAsts(values))
+    const functionResult = func.func(fnctx, values)
     vm.stack.push(functionResult)
     return Task.success()
   }

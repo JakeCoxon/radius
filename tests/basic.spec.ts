@@ -817,3 +817,18 @@ test('parser', async () => {
     testObject.close()
   }
 })
+
+test('binding_bug', async () => {
+  const testObject = createTest({ 
+    moduleName: 'binding_bug',
+    globalOptions,
+    inputPath: `${import.meta.dir}/fixtures/binding_bug.rad`,
+  })
+  try {
+    const input = await Bun.file(testObject.inputPath).text()
+    runCompilerTest(input, { testObject })
+    await writeLlvmBytecodeFile(testObject)
+  } finally {
+    testObject.close()
+  }
+})

@@ -4,7 +4,7 @@ import { BoolType, Closure, CompilerError, DoubleType, ExternalFunction, FloatTy
 import { makeParser } from '../src/parser'
 import { Queue, TaskDef, stepQueue, withContext } from '../src//tasks'
 import { expect } from 'bun:test'
-import { VecTypeMetaClass, externals, preloadModuleText, print } from '../src/compiler_sugar'
+import { VecTypeMetaClass, preloadModuleText, print } from '../src/compiler_sugar'
 import { writeFinalBytecode } from '../src/codegen'
 import { FileSink } from 'bun';
 import { writeLlvmBytecode } from '../src/codegen_llvm';
@@ -254,6 +254,7 @@ const executeLlvmCompiler = async (build: BuildObject) => {
 }
 
 export const executeNativeExecutable = async (testObject: TestObject) => {
+  if (testObject.fail) return
   const build = new BuildObject(testObject.moduleName, testObject.inputPath, testObject.globalOptions, testObject.globalCompiler!, '', '')
   await executeLlvmCompiler(build)
   await execPromise(testObject.nativePath).then(out => {

@@ -348,8 +348,7 @@ export function createCallAstFromValue(ctx: CompilerFunctionCallContext, value: 
           const existing = ctx.globalCompiler.externalDefinitions.find(x => x.name === name.token.value)
           const paramHash = hashValues(call.result.concreteTypes)
           compilerAssert(!existing || existing.paramHash === paramHash, "Function exists with different param hash", { existing })
-          const binding = existing?.binding ?? externalBuiltinBindings[name.token.value];
-          compilerAssert(binding)
+          const binding = existing?.binding ?? externalBuiltinBindings[name.token.value] ?? new Binding(name.token.value, FunctionType)
 
           if (!existing) ctx.globalCompiler.externalDefinitions.push({ name: name.token.value, binding, paramHash, paramTypes: call.result.concreteTypes, returnType: call.result.returnType })
           compilerAssert(call.result.returnType, "Expected return type got $returnType", { returnType: call.result.returnType })

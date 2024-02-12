@@ -1,0 +1,45 @@
+import vec for vec3
+
+type mat3:
+  m11: float
+  m12: float
+  m13: float
+  m21: float
+  m22: float
+  m23: float
+  m31: float
+  m32: float
+  m33: float
+
+type mat4:
+  m11: float
+  m12: float
+  m13: float
+  m14: float
+  m21: float
+  m22: float
+  m23: float
+  m24: float
+  m31: float
+  m32: float
+  m33: float
+  m34: float
+  m41: float
+  m42: float
+  m43: float
+  m44: float
+
+fn mul_mat3_vec3(m: mat3, v: vec3):
+  result: vec3
+  result.x = m.m11 * v.x + m.m12 * v.y + m.m13 * v.z
+  result.y = m.m21 * v.x + m.m22 * v.y + m.m23 * v.z
+  result.z = m.m31 * v.x + m.m32 * v.y + m.m33 * v.z
+  result
+
+fn mul_mat4_vec4(m: mat4, v: vec4):
+  result: vec4
+  result.x = m.m11 * v.x + m.m12 * v.y + m.m13 * v.z + m.m14 * v.w
+  result.y = m.m21 * v.x + m.m22 * v.y + m.m23 * v.z + m.m24 * v.w
+  result.z = m.m31 * v.x + m.m32 * v.y + m.m33 * v.z + m.m34 * v.w
+  result.w = m.m41 * v.x + m.m42 * v.y + m.m43 * v.z + m.m44 * v.w
+  result
