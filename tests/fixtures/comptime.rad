@@ -2,13 +2,13 @@ foo2 :: foo + 3
 foo :: thing4(5)
 
 
-fn thing(x: int):
+fn thing(x: int) -> int:
   print("thing")
   print(x)
   print(x + 32)
   x + 32
 
-fn thing4(x: int):
+fn thing4(x: int) -> int:
   print(x)
   return x + 2
 

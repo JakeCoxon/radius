@@ -14,6 +14,3 @@ fn main():
   m := (min(fold(1000), lst1[:]) ...)
 
   #b := (fold(1) + x * x for x in lst1)
-
-
-fn min(a: int, b: int) @inline: ifx a < b: a else: b

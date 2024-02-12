@@ -460,6 +460,7 @@ export const hashValues = (values: unknown[], info={}) => {
   return values.map(value => {
     if (typeof value === 'number') return value
     if (value instanceof PrimitiveType) return `$${value.typeName}`
+    if (value instanceof ParameterizedType) return getUniqueId(value)
     if (value instanceof ConcreteClassType) return getUniqueId(value)
     if (value instanceof ClassDefinition) return getUniqueId(value)
     if (value instanceof FunctionDefinition) return getUniqueId(value)

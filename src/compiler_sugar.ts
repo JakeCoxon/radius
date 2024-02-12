@@ -386,9 +386,9 @@ fn sinf(t: float) -> float:
 fn cosf(t: float) -> float:
   float(cos(double(t)))
 
-fn min!(T)(a: T, b: T) -> T:
+fn min!(T)(a: T, b: T) -> T @inline:
   ifx a <= b: a else: b
-fn max!(T)(a: T, b: T) -> T:
+fn max!(T)(a: T, b: T) -> T @inline:
   ifx a >= b: a else: b
 
 `

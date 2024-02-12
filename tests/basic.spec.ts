@@ -188,7 +188,7 @@ test('comptime', async () => {
     const input = await Bun.file(testObject.inputPath).text()
     runCompilerTest(input, { testObject })
     await writeLlvmBytecodeFile(testObject)
-    expect(testObject.prints).toEqual([5, '"thing"', 12, 44, 1850, '"thing"', 12, 44, 44, '"thing"', 12, 44])
+    expect(testObject.prints).toEqual([5, 'thing', 12, 44, 1850, 'thing', 12, 44, 44, 'thing', 12, 44])
   } finally {
     testObject.close()
   }

@@ -2,7 +2,7 @@ import compiler
 
 fn main():
   a := 32
-  ptr := compiler.malloc(a)
+  ptr := malloc(a)
   f := compiler.unsafe_subscript!int(ptr, 2)
   print(f + 1)
 

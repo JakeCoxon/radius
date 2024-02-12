@@ -108,6 +108,7 @@ function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, args, typ
           const matches = typeMatcherEquals(type, args[i].type, result.substitutions)
           compilerAssert(matches, "Type check failed. Expected $expected got $got", { expected: type, got: args[i].type })
         } else if (type instanceof TypeVariable) {
+          result.substitutions[type.name] = givenType
         } else {
           compilerAssert(isType(type), "Expected type got $type", { type });
           compilerAssert(givenType === type, "Argument $name of type $value does not match $expected", { name: func.params[i].name.token, value: args[i].type, expected: type })
@@ -168,7 +169,7 @@ export function functionTemplateTypeCheckAndCompileTask(ctx: TaskContext, { func
     compilerAssert(typeParam instanceof ParseIdentifier, "Not implemented")
     const name = typeParam.token.value
     if (result.substitutions[name] === undefined) {
-      compilerAssert(typeArgs[i] !== undefined, "Expected type arg")
+      compilerAssert(typeArgs[i] !== undefined, "Expected type arg", { substitutions: result.substitutions })
       templateScope[name] = typeArgs[i]
     } else templateScope[name] = result.substitutions[name]
   });

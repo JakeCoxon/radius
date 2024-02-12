@@ -3,11 +3,11 @@ foo2 :: foo + 3
 foo :: thing4(5)
 
 
-fn thing(x: int):
+fn thing(x: int) -> int:
   print(x + 32)
   32
 
-fn thing4(x: int):
+fn thing4(x: int) -> int:
   return x + 2
 
 fn fam!(T)(a: int):
