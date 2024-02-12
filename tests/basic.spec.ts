@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'bun:test'
-import { createModuleLoader, createTest, printCompileCommands, runCompilerTest, runVm, writeLlvmBytecodeFile } from './testUtils'
+import { createModuleLoader, createTest, executeNativeExecutable, printCompileCommands, runCompilerTest, runVm, writeLlvmBytecodeFile } from './testUtils'
 import { GlobalExternalCompilerOptions } from '../src/defs'
 
 const globalOptions: GlobalExternalCompilerOptions = {
@@ -23,6 +23,7 @@ test('superbasic', async () => {
     const input = await Bun.file(testObject.inputPath).text()
     runCompilerTest(input, { testObject })
     await writeLlvmBytecodeFile(testObject)
+    await executeNativeExecutable(testObject)
   } finally {
     testObject.close()
   }

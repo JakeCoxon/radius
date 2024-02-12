@@ -393,7 +393,7 @@ export class SetAst extends AstRoot {           key = 'set' as const;           
 export class OperatorAst extends AstRoot {      key = 'operator' as const;       constructor(public type: Type, public location: SourceLocation, public operator: string, public args: Ast[]) { super() } }
 export class IfAst extends AstRoot {            key = 'if' as const;             constructor(public type: Type, public location: SourceLocation, public expr: Ast, public trueBody: Ast, public falseBody: Ast | null) { super() } }
 export class ListAst extends AstRoot {          key = 'list' as const;           constructor(public type: Type, public location: SourceLocation, public args: Ast[]) { super() } }
-export class CallAst extends AstRoot {          key = 'call' as const;           constructor(public type: Type, public location: SourceLocation, public func: ExternalFunction, public args: Ast[], public typeArgs: unknown[]) { super() } }
+export class CallAst extends AstRoot {          key = 'call' as const;           constructor(public type: Type, public location: SourceLocation, public binding: Binding, public args: Ast[], public typeArgs: unknown[]) { super() } }
 export class UserCallAst extends AstRoot {      key = 'usercall' as const;       constructor(public type: Type, public location: SourceLocation, public binding: Binding, public args: Ast[]) { super() } }
 export class AndAst extends AstRoot {           key = 'and' as const;            constructor(public type: Type, public location: SourceLocation, public args: Ast[]) { super() } }
 export class OrAst extends AstRoot {            key = 'or' as const;             constructor(public type: Type, public location: SourceLocation, public args: Ast[]) { super() } }
@@ -561,19 +561,19 @@ export const createScope = (obj: object, parentScope: Scope | undefined) =>
     ...obj
   }) as Scope;
 
-export type FunctionCallContext = {
+export type CompilerFunctionCallContext = {
   compilerState: SubCompilerState
   location: SourceLocation,
 }
 
 export class ExternalFunction {
-  constructor(public name: string, public binding: Binding, public returnType: Type, public func: Function) {}
+  constructor(public name: string, public returnType: Type, public func: (ctx: CompilerFunctionCallContext, values: unknown[]) => unknown) {}
   [Inspect.custom](depth: any, options: any, inspect: any) {
     return options.stylize(`[ExternalFunction ${this.name}]`, 'special');
   }
 }
 export class CompilerFunction {
-  constructor(public name: string, public func: Function) {}
+  constructor(public name: string, public func: (ctx: CompilerFunctionCallContext, typeArgs: unknown[], args: Ast[]) => Ast) {}
   [Inspect.custom](depth: any, options: any, inspect: any) {
     return options.stylize(`[CompilerFunction ${this.name}]`, 'special');
   }
@@ -1036,4 +1036,16 @@ export type LlvmWriter = {
 
   writer: LlvmWriter // weirdness for formatting
   currentOutput: string[]
+}
+
+export class BuildObject {
+  constructor(
+    public moduleName: string,
+    public inputPath: string,
+    public globalOptions: GlobalExternalCompilerOptions,
+    public globalCompiler: GlobalCompilerState,
+    public input: string,
+    public debugOutputPath: string,
+    public gotError = false
+  ) {}
 }

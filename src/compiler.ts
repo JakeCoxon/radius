@@ -1,4 +1,4 @@
-import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol, ScopeParentSymbol, isPlainObject, ParseLet, ParseList, ParseExpand, ParseBlock, findLabelByBinding, ParseSubscript, ParseNumber, ParseQuote, ParseWhile, ParseOperator, ParseBytecode, ParseOpEq, ParseSet, ParseFreshIden, UnknownObject, ParseNote, DefaultConsAst, RawPointerType, ValueFieldAst, SetValueFieldAst, FloatLiteralType, IntLiteralType, CompilerFunction, DerefAst, SetDerefAst, ParseSlice, FunctionCallContext, NeverType } from "./defs";
+import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol, ScopeParentSymbol, isPlainObject, ParseLet, ParseList, ParseExpand, ParseBlock, findLabelByBinding, ParseSubscript, ParseNumber, ParseQuote, ParseWhile, ParseOperator, ParseBytecode, ParseOpEq, ParseSet, ParseFreshIden, UnknownObject, ParseNote, DefaultConsAst, RawPointerType, ValueFieldAst, SetValueFieldAst, FloatLiteralType, IntLiteralType, CompilerFunction, DerefAst, SetDerefAst, ParseSlice, CompilerFunctionCallContext, NeverType } from "./defs";
 import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, functionCompileTimeCompileTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall } from "./compiler_functions";
 import { Event, Task, TaskDef, Unit, isTask, isTaskResult, withContext } from "./tasks";
 import { createCompilerModuleTask, createListConstructor, defaultMetaFunction, expandLoopSugar, foldSugar, forExprSugar, forLoopSugar, listComprehensionSugar, print, sliceSugar, whileExprSugar } from "./compiler_sugar";
@@ -530,25 +530,25 @@ const popStack = (vm: Vm) => {
 };
 
 
-const operators: {[key:string]: { op: string, typeCheck: unknown, comptime: (a: number, b: number) => unknown, func: (location: SourceLocation, a: Ast, b: Ast) => Ast }} = {};
+const operators: {[key:string]: { op: string, typeCheck: unknown, comptime: (a: number, b: number) => unknown, func: (ctx: CompilerFunctionCallContext, a: Ast, b: Ast) => Ast }} = {};
 
 export const getOperatorTable = () => operators
 
 const createOperator = (op: string, operatorName: string, typeCheck: (config: TypeCheckConfig) => void, comptime: (a: number, b: number) => unknown) => {
   operators[op] = { 
     op, typeCheck, comptime,
-    func: (location: SourceLocation, a: Ast, b: Ast) => {
+    func: (ctx: CompilerFunctionCallContext, a: Ast, b: Ast) => {
       const metafunc = a.type.typeInfo.metaobject[operatorName]
       if (metafunc) {
         compilerAssert(metafunc instanceof CompilerFunction, "Not implemented yet", { metafunc })
-        return metafunc.func(location, a, b)
+        return metafunc.func(ctx, [], [a, b])
       }
       const typeCheckConfig: TypeCheckConfig = { a: { type: a.type }, b: { type: b.type }, inferType: null }
       typeCheck(typeCheckConfig)
       compilerAssert(typeCheckConfig.inferType, "Expected infer type", { type: typeCheckConfig.inferType })
       if (typeCheckConfig.a.type !== a.type) propagateLiteralType(typeCheckConfig.a.type, a)
       if (typeCheckConfig.b.type !== b.type) propagateLiteralType(typeCheckConfig.b.type, b)
-      return new OperatorAst(typeCheckConfig.inferType, location, op, [a, b])
+      return new OperatorAst(typeCheckConfig.inferType, ctx.location, op, [a, b])
     }
   }
 }
@@ -662,17 +662,15 @@ export function resolveScope(ctx: TaskContext, scope: Scope, name: string): Task
 
 function callFunctionFromValueTask(ctx: TaskContext, vm: Vm, func: unknown, typeArgs: unknown[], values: unknown[]): Task<Unit, CompilerError> {
   if (func instanceof ExternalFunction) {
-    const callContext: FunctionCallContext = { 
-      compilerState: ctx.subCompilerState,
-      location: vm.location
-    }
-    const functionResult = func.func(callContext, ...values)
+    const fnctx: CompilerFunctionCallContext = { location: vm.location, compilerState: ctx.subCompilerState }
+    const functionResult = func.func(fnctx, expectAsts(values))
     vm.stack.push(functionResult)
     return Task.success()
   }
   if (func instanceof CompilerFunction) {
     if (func === print) {
-      (ctx.globalCompiler.rootScope['static_print'] as ExternalFunction).func(...values)
+      const fnctx: CompilerFunctionCallContext = { location: vm.location, compilerState: ctx.subCompilerState} 
+      ;(ctx.globalCompiler.rootScope['static_print'] as ExternalFunction).func(fnctx, values)
       vm.stack.push(null)
       return Task.success()
     }
@@ -835,7 +833,8 @@ const instructions: InstructionMapping = {
   operatorast: (vm, { name, count }) => {
     const values = expectAsts(popValues(vm, count));
     compilerAssert(operators[name], "Unexpected operator $name", { name, values })
-    vm.stack.push(operators[name].func(vm.location, values[0], values[1]))
+    const ctx: CompilerFunctionCallContext = { location: vm.location, compilerState: vm.context.subCompilerState }
+    vm.stack.push(operators[name].func(ctx, values[0], values[1]))
   },
   notast: (vm, {}) => {
     let expr = expectAst(popStack(vm));
@@ -1217,7 +1216,8 @@ export function compileClassTask(ctx: TaskContext, { classDef, typeArgs }: { cla
           TaskDef(resolveScope, classDef.parentScope, classDef.metaClass.token.value)
           .chainFn((task, func) => {
             if (func instanceof ExternalFunction) {
-              func.func(compiledClass);
+              const fnctx: CompilerFunctionCallContext = { location: SourceLocation.anon, compilerState: ctx.subCompilerState}
+              func.func(fnctx, [compiledClass])
             } else compilerAssert(false, "Not implemented yet", { func })
             defaultMetaFunction(subCompilerState, compiledClass, definitionScope, templateScope)
             return Task.of(returnType)
@@ -1489,7 +1489,8 @@ export const programEntryTask = (ctx: TaskContext, entryModule: ParsedModule): T
     })
     .chainFn((task, arg) => {
       const func = expectMap(moduleScope, 'main', 'No main function found')
-      return createCallAstFromValue(SourceLocation.anon, func, [], [])
+      const fnctx: CompilerFunctionCallContext = { location: SourceLocation.anon, compilerState: ctx.subCompilerState }
+      return createCallAstFromValue(fnctx, func, [], [])
     })
     .chainFn((task, callAst: Ast) => {
       const decl: ParserFunctionDecl = {

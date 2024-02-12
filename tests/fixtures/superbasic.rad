@@ -40,7 +40,10 @@ fn main():
   bar := Bar(1, 2)
   my_bar(bar)
 
-  print(bar.x)
+  if false:
+    exit(1)
+
+  compiler.assert(bar.x == 200)
 
   print("Hello", bar)
 
@@ -49,7 +52,8 @@ fn main():
   print(g * 12.2)
 
   h : double = 3.4124
-  print(h * 2.23 * 2)
+  v := h * 2.23 * 2
+  compiler.assert(int(v) == 15)
 
   # print(bar.x)
   # print(bar.y)

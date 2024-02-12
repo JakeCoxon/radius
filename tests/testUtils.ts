@@ -1,6 +1,6 @@
 import { existsSync, unlinkSync, readFileSync, readdirSync } from 'node:fs'
 import { generateCompileCommands, programEntryTask } from '../src/compiler'
-import { BoolType, Closure, CompilerError, DoubleType, ExternalFunction, FloatType, GlobalCompilerState, IntType, Scope, StringType, SubCompilerState, TaskContext, VoidType, compilerAssert, createDefaultGlobalCompiler, createScope, expectMap, BuiltinTypes, ModuleLoader, SourceLocation, textColors, outputSourceLocation, TokenRoot, ParseImport, createAnonymousToken, Logger, Binding, FunctionType, GlobalExternalCompilerOptions } from "../src/defs"; // prettier-ignore
+import { BoolType, Closure, CompilerError, DoubleType, ExternalFunction, FloatType, GlobalCompilerState, IntType, Scope, StringType, SubCompilerState, TaskContext, VoidType, compilerAssert, createDefaultGlobalCompiler, createScope, expectMap, BuiltinTypes, ModuleLoader, SourceLocation, textColors, outputSourceLocation, TokenRoot, ParseImport, createAnonymousToken, Logger, Binding, FunctionType, GlobalExternalCompilerOptions, BuildObject } from "../src/defs"; // prettier-ignore
 import { makeParser } from '../src/parser'
 import { Queue, TaskDef, stepQueue, withContext } from '../src//tasks'
 import { expect } from 'bun:test'
@@ -9,6 +9,7 @@ import { writeFinalBytecode } from '../src/codegen'
 import { FileSink } from 'bun';
 import { writeLlvmBytecode } from '../src/codegen_llvm';
 import { basename, extname, normalize } from 'node:path';
+import { exec } from 'node:child_process';
 
 const runTestInner = (
   queue: Queue,
@@ -89,7 +90,7 @@ export const runCompilerTest = (
       ...BuiltinTypes,
       compfoo: { _function: (a: number, b: number) => 65 + a + b },
       print: print,
-      static_print: new ExternalFunction('static_print', new Binding('static_print', FunctionType), VoidType, (...args: unknown[]) => {
+      static_print: new ExternalFunction('static_print', VoidType, (ctx, args: unknown[]) => {
         logger.log('static_print called', ...args)
         prints.push(...args)
         return args[0]
@@ -229,6 +230,35 @@ export const writeLlvmBytecodeFile = async (testObject: TestObject) => {
   bytecodeWriter.end()
   testObject.writer.write("LLVm file")
   testObject.writer.write(await file.text())
+}
+
+
+const execPromise = (command: string) => {
+  return new Promise<string>((resolve, reject) => {
+    exec(command, (err, out) => { 
+      if (err) {
+        console.log(out)
+        reject(err)
+      } else resolve(out)
+    })
+  })
+}
+
+
+const executeLlvmCompiler = async (build: BuildObject) => {
+  compilerAssert(build.globalCompiler, "Not compiled")
+  const cmds = generateCompileCommands(build.globalCompiler!)
+  await execPromise(cmds.compile)
+  await execPromise(cmds.link)
+  console.log(`Built native executable\n${build.globalCompiler.externalCompilerOptions.nativePath}`)
+}
+
+export const executeNativeExecutable = async (testObject: TestObject) => {
+  const build = new BuildObject(testObject.moduleName, testObject.inputPath, testObject.globalOptions, testObject.globalCompiler!, '', '')
+  await executeLlvmCompiler(build)
+  await execPromise(testObject.nativePath).then(out => {
+    console.log(out)
+  })
 }
 
 type TestObject = { 

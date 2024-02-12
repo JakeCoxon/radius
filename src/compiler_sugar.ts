@@ -1,6 +1,6 @@
 import { BytecodeSecondOrder, getOperatorTable, loadModule, propagatedLiteralAst, pushBytecode, resolveScope, visitParseNode } from "./compiler"
 import { createCallAstFromValueAndPushValue, createMethodCall, insertFunctionDefinition } from "./compiler_functions"
-import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, FunctionCallContext, Vm, expectAst, NumberAst, Type } from "./defs"
+import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, UserCallAst, hashValues, NeverType, IfAst, BoolType, VoidAst } from "./defs"
 import { Task, TaskDef } from "./tasks"
 
 export const forLoopSugar = (out: BytecodeWriter, node: ParseFor) => {
@@ -126,30 +126,33 @@ export const listComprehensionSugar = (out: BytecodeWriter, node: ParseListComp)
 }
 
 const insertMetaObjectPairwiseOperator = (compiledClass: CompiledClass, operatorName: string, operatorSymbol: string) => {
-  const operatorFunc = new CompilerFunction(operatorName, (location: SourceLocation, a: Ast, b: Ast) => {
+  const operatorFunc = new CompilerFunction(operatorName, (ctx, typeArgs, args) => {
+    const [a, b] = args
     if (b.type instanceof ParameterizedType && b.type.typeConstructor === TupleTypeConstructor) {
       compilerAssert(b.type.args.length === compiledClass.fields.length, `Expected tuple of size ${compiledClass.fields.length}, got ${b.type.args.length}`, { type: b.type })
       const constructorArgs = compiledClass.fields.map((field, i) => {
         const otherField = b.type.typeInfo.fields.find(x => x.name === `_${i+1}`)
         compilerAssert(otherField?.fieldType === field.fieldType, `Expected type of tuple field ${i+1} to be $fieldType got $otherFieldType`, { fieldType: field.fieldType, otherFieldType: otherField?.fieldType })
-        return getOperatorTable()[operatorSymbol].func(location, 
-          new FieldAst(field.fieldType, location, a, field),
-          new FieldAst(otherField.fieldType, location, b, otherField))
+        return getOperatorTable()[operatorSymbol].func(ctx, 
+          new FieldAst(field.fieldType, ctx.location, a, field),
+          new FieldAst(otherField.fieldType, ctx.location, b, otherField))
       })
-      return new ConstructorAst(compiledClass.type, location, constructorArgs)
+      return new ConstructorAst(compiledClass.type, ctx.location, constructorArgs)
     }
     compilerAssert(b.type === a.type, "Expected vec or tuple. got $type", { type: b.type })
     const constructorArgs = compiledClass.fields.map(field => 
-      getOperatorTable()[operatorSymbol].func(location, 
-        new FieldAst(field.fieldType, location, a, field),
-        new FieldAst(field.fieldType, location, b, field))
+      getOperatorTable()[operatorSymbol].func(ctx, 
+        new FieldAst(field.fieldType, ctx.location, a, field),
+        new FieldAst(field.fieldType, ctx.location, b, field))
     )
-    return new ConstructorAst(compiledClass.type, location, constructorArgs)
+    return new ConstructorAst(compiledClass.type, ctx.location, constructorArgs)
   })
   compiledClass.metaobject[operatorName] = operatorFunc
 }
 
-export const VecTypeMetaClass = new ExternalFunction('VecType', new Binding("VecType", VoidType), VoidType, (compiledClass: CompiledClass) => {
+export const VecTypeMetaClass = new ExternalFunction('VecType', VoidType, (ctx, args) => {
+  const compiledClass = args[0]
+  compilerAssert(compiledClass instanceof CompiledClass)
   insertMetaObjectPairwiseOperator(compiledClass, "add", "+")
   insertMetaObjectPairwiseOperator(compiledClass, "sub", "-")
   insertMetaObjectPairwiseOperator(compiledClass, "mul", "*")
@@ -230,20 +233,37 @@ export const externalBuiltinBindings: {[key:string]: Binding} = {
   realloc: new Binding('realloc', FunctionType),
   free: new Binding('free', FunctionType),
   sizeof: new Binding('sizeof', FunctionType),
+  exit: new Binding('exit', FunctionType),
 }
 
-// Order index is external index in VM 
-// TODO: Fix all this
-export const externals: {[key:string]: ExternalFunction} = {
-  // print:       new ExternalFunction('print',       externalBuiltinBindings.print, VoidType, (...args) => { compilerAssert(false, "Implemented elsewhere") }),
-  printf:      new ExternalFunction('printf',      externalBuiltinBindings.printf, VoidType, (...args: unknown[]) => { compilerAssert(false, "Implemented elsewhere") }),
-  // // malloc:      new ExternalFunction('malloc',      externalBuiltinBindings.malloc, VoidType, (ast: Ast) => { compilerAssert(false, "Implemented elsewhere") }),
-  sizeof:      new ExternalFunction('sizeof',      externalBuiltinBindings.sizeof, VoidType, (ast: Ast) => { compilerAssert(false, "Implemented elsewhere") }),
-  // // realloc:     new ExternalFunction('realloc',     externalBuiltinBindings.realloc, VoidType, (ast: Ast) => { compilerAssert(false, "Implemented elsewhere") }),
-  // // free:        new ExternalFunction('free',        externalBuiltinBindings.free, VoidType, (ast: Ast) => { compilerAssert(false, "Implemented elsewhere") }),
-}
+export const assert = new CompilerFunction('assert', (ctx, typeArgs: unknown[], args: Ast[]) => {
+  const op = args[0]
+  compilerAssert(op.type == BoolType, "Expected bool")
+  compilerAssert(op instanceof OperatorAst, "Expected operator")
+  const location = ctx.location
+  const globalCompiler = ctx.compilerState.globalCompiler
 
-export const print = new CompilerFunction('print', (location: SourceLocation, typeArgs: unknown[], args: Ast[]) => {
+  // TODO: Make this better
+  const name = 'exit'
+  const existing = globalCompiler.externalDefinitions.find(x => x.name === name)
+  const concreteTypes = [IntType]
+  const paramHash = hashValues(concreteTypes)
+  compilerAssert(!existing || existing.paramHash === paramHash, "Function exists with different param hash", { existing })
+  const binding = externalBuiltinBindings.exit
+  if (!existing) globalCompiler.externalDefinitions.push({ name: name, binding, paramHash, paramTypes: concreteTypes, returnType: NeverType })
+
+  return createStatements(location, [
+    new IfAst(VoidType, location, args[0], new VoidAst(VoidType, location), 
+      createStatements(location, [
+        print.func(ctx, [], [new StringAst(StringType, location, 'Expected'), op.args[0], new StringAst(StringType, location, op.operator), op.args[1]]),
+        new UserCallAst(VoidType, location, externalBuiltinBindings.exit, [new NumberAst(IntType, location, 1)])
+      ])
+    )
+  ])
+})
+
+export const print = new CompilerFunction('print', (ctx, typeArgs: unknown[], args: Ast[]) => {
+  const location = ctx.location
   // compilerAssert(args.length === 1 && args[0].type !== VoidType , "Expected non void argument", { args })
   const stmts: Ast[] = []
   let formatStr = ''
@@ -290,62 +310,60 @@ export const print = new CompilerFunction('print', (location: SourceLocation, ty
   const formatBinding = new Binding("", StringType)
   stmts.unshift(new LetAst(VoidType, location, formatBinding, new StringAst(StringType, location, formatStr)))
   printfArgs.unshift(fieldHelper(formatBinding, 'data'))
-  stmts.push(new CallAst(VoidType, location, externals.printf, printfArgs, []))
+  stmts.push(new CallAst(VoidType, location, externalBuiltinBindings.printf, printfArgs, []))
   return createStatements(location, stmts)
 })
 
-
-
-export const unsafe_subscript = new CompilerFunction('unsafe_subscript', (location: SourceLocation, typeArgs: unknown[], args: Ast[]) => {
+export const unsafe_subscript = new CompilerFunction('unsafe_subscript', (ctx, typeArgs: unknown[], args: Ast[]) => {
   const [left, right] = args
   propagatedLiteralAst(right)
   compilerAssert(right && right.type === IntType, "Expected int type", { right })
   compilerAssert(left && left.type === RawPointerType, "Expected rawptr", { left })
   const type = expectType(typeArgs[0])
-  return new SubscriptAst(type, location, left, propagatedLiteralAst(right))
+  return new SubscriptAst(type, ctx.location, left, propagatedLiteralAst(right))
 })
-export const unsafe_set_subscript = new CompilerFunction('unsafe_set_subscript', (location: SourceLocation, typeArgs: unknown[], args: Ast[]) => {
+export const unsafe_set_subscript = new CompilerFunction('unsafe_set_subscript', (ctx, typeArgs: unknown[], args: Ast[]) => {
   const [left, right, value] = args
   propagatedLiteralAst(right)
   compilerAssert(right && right.type === IntType, "Expected int type", { right })
   compilerAssert(left && left.type === RawPointerType, "Expected rawptr", { left })
   compilerAssert(value, "Expected value", { value })
-  return new SetSubscriptAst(VoidType, location, left, propagatedLiteralAst(right), propagatedLiteralAst(value))
+  return new SetSubscriptAst(VoidType, ctx.location, left, propagatedLiteralAst(right), propagatedLiteralAst(value))
 })
-export const operator_bitshift_left = new CompilerFunction('operator_bitshift_left', (location: SourceLocation, typeArgs: unknown[], args: Ast[]) => {
+export const operator_bitshift_left = new CompilerFunction('operator_bitshift_left', (ctx, typeArgs: unknown[], args: Ast[]) => {
   const [a, b] = args
   propagatedLiteralAst(a)
   propagatedLiteralAst(b)
   compilerAssert(a && a.type === IntType, "Expected int type", { a })
   compilerAssert(b && b.type === IntType, "Expected int type", { b })
-  return new OperatorAst(IntType, location, "<<", [a, b])
+  return new OperatorAst(IntType, ctx.location, "<<", [a, b])
 })
-export const operator_bitshift_right = new CompilerFunction('operator_bitshift_right', (location: SourceLocation, typeArgs: unknown[], args: Ast[]) => {
+export const operator_bitshift_right = new CompilerFunction('operator_bitshift_right', (ctx, typeArgs: unknown[], args: Ast[]) => {
   const [a, b] = args
   propagatedLiteralAst(a)
   propagatedLiteralAst(b)
   compilerAssert(a && a.type === IntType, "Expected int type", { a })
   compilerAssert(b && b.type === IntType, "Expected int type", { b })
-  return new OperatorAst(IntType, location, ">>", [a, b])
+  return new OperatorAst(IntType, ctx.location, ">>", [a, b])
 })
-export const operator_bitwise_and = new CompilerFunction('operator_bitwise_and', (location: SourceLocation, typeArgs: unknown[], args: Ast[]) => {
+export const operator_bitwise_and = new CompilerFunction('operator_bitwise_and', (ctx, typeArgs: unknown[], args: Ast[]) => {
   const [a, b] = args
   propagatedLiteralAst(a)
   propagatedLiteralAst(b)
   compilerAssert(a && a.type === IntType, "Expected int type", { a })
   compilerAssert(b && b.type === IntType, "Expected int type", { b })
-  return new OperatorAst(IntType, location, "&", [a, b])
+  return new OperatorAst(IntType, ctx.location, "&", [a, b])
 })
-export const operator_bitwise_or = new CompilerFunction('operator_bitwise_or', (location: SourceLocation, typeArgs: unknown[], args: Ast[]) => {
+export const operator_bitwise_or = new CompilerFunction('operator_bitwise_or', (ctx, typeArgs: unknown[], args: Ast[]) => {
   const [a, b] = args
   propagatedLiteralAst(a)
   propagatedLiteralAst(b)
   compilerAssert(a && a.type === IntType, "Expected int type", { a })
   compilerAssert(b && b.type === IntType, "Expected int type", { b })
-  return new OperatorAst(IntType, location, "|", [a, b])
+  return new OperatorAst(IntType, ctx.location, "|", [a, b])
 })
 
-const add_external_library = new ExternalFunction("add_external_library", new Binding("", FunctionType), VoidType, (ctx: FunctionCallContext, library: unknown) => {
+const add_external_library = new ExternalFunction("add_external_library", new Binding("", FunctionType), VoidType, (ctx: CompilerFunctionCallContext, library: unknown) => {
   compilerAssert(typeof library == 'string', "Expected string")
   ctx.compilerState.globalCompiler.externalCompilerOptions.libraries.push(library)
 })
@@ -354,7 +372,7 @@ export const createCompilerModuleTask = (ctx: TaskContext): Task<Module, Compile
   const moduleScope = createScope({}, undefined)
   Object.assign(moduleScope, { 
     unsafe_subscript, unsafe_set_subscript, operator_bitshift_left, operator_bitshift_right,
-    operator_bitwise_and, operator_bitwise_or, rawptr: RawPointerType, add_external_library })
+    operator_bitwise_and, operator_bitwise_or, rawptr: RawPointerType, add_external_library, assert })
   const subCompilerState = pushSubCompilerState(ctx, { debugName: `compiler module`, lexicalParent: undefined, scope: moduleScope })
   const module = new Module('compiler', subCompilerState, null!)
   return Task.of(module)
@@ -390,6 +408,8 @@ fn min!(T)(a: T, b: T) -> T @inline:
   ifx a <= b: a else: b
 fn max!(T)(a: T, b: T) -> T @inline:
   ifx a >= b: a else: b
+
+fn exit(status: int) @external
 
 `
 }

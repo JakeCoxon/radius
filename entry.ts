@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync } from "fs";
-import { CompilerError, ModuleLoader, compilerAssert, createDefaultGlobalCompiler, createScope, BuiltinTypes, Scope, GlobalExternalCompilerOptions, outputSourceLocation, SourceLocation, GlobalCompilerState, SubCompilerState, TaskContext, TokenRoot } from "./src/defs";
+import { CompilerError, ModuleLoader, compilerAssert, createDefaultGlobalCompiler, createScope, BuiltinTypes, Scope, GlobalExternalCompilerOptions, outputSourceLocation, SourceLocation, GlobalCompilerState, SubCompilerState, TaskContext, TokenRoot, BuildObject } from "./src/defs";
 import { makeParser } from "./src/parser";
 import { VecTypeMetaClass, preloadModuleText, print } from "./src/compiler_sugar";
 import { extname, basename, normalize, dirname } from "path";
@@ -17,18 +17,6 @@ const globalOptions: GlobalExternalCompilerOptions = {
   importPaths: [
     `${import.meta.dir}/libs/`,
   ]
-}
-
-class BuildObject {
-  constructor(
-    public moduleName: string,
-    public inputPath: string,
-    public globalOptions: GlobalExternalCompilerOptions,
-    public globalCompiler: GlobalCompilerState,
-    public input: string,
-    public debugOutputPath: string,
-    public gotError = false
-  ) {}
 }
 
 const logger = {

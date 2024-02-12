@@ -1,4 +1,4 @@
-import { externals } from "./compiler_sugar";
+import { externalBuiltinBindings } from "./compiler_sugar";
 import { Ast, AstType, AstWriterTable, Binding, BindingAst, BlockAst, BoolType, CallAst, CompiledFunction, ConcreteClassType, ConstructorAst, DefaultConsAst, DoubleType, FileWriter, FloatType, FunctionType, GlobalCompilerState, IntType, ListTypeConstructor, LlvmFunctionWriter, LlvmWriter, NeverType, NumberAst, ParameterizedType, Pointer, PrimitiveType, RawPointerType, Register, SourceLocation, StatementsAst, StringType, Type, TypeField, UserCallAst, ValueFieldAst, VoidType, compilerAssert, isAst, isType, textColors } from "./defs";
 
 // Some useful commands
@@ -319,7 +319,8 @@ const astWriter: LlvmAstWriterTable = {
     return null
   },
   call: (writer, ast) => {
-    if (ast.func === externals.printf) {
+
+    if (ast.binding === externalBuiltinBindings.printf) {
       const name = createRegister("", VoidType)
       const argsString = ast.args.map((arg, i) => {
         const reg = toRegister(writer, writeExpr(writer, arg))
@@ -330,7 +331,7 @@ const astWriter: LlvmAstWriterTable = {
       return { register: name }
     }
 
-    if (ast.func === externals.sizeof) {
+    if (ast.binding === externalBuiltinBindings.sizeof) {
       compilerAssert(isType(ast.typeArgs[0]), "Expected type")
       const dataType = getDataTypeName(writer.writer, ast.typeArgs[0])
       const ptr = createRegister("", VoidType)
@@ -384,7 +385,7 @@ const astWriter: LlvmAstWriterTable = {
       const structPtrPtr = allocaHelper(writer, createPointer("", RawPointerType))
       const dataType = getDataTypeName(writer.writer, ast.type)
 
-      const size = new CallAst(IntType, SourceLocation.anon, externals.sizeof, [], [ast.type])
+      const size = new CallAst(IntType, SourceLocation.anon, externalBuiltinBindings.sizeof, [], [ast.type])
       const mallocCall = new UserCallAst(RawPointerType, SourceLocation.anon, writer.writer.mallocBinding, [size])
       const structMallocPtr = toRegister(writer, writeExpr(writer, mallocCall))
 
@@ -536,10 +537,6 @@ const format = (writer: Writable, format: string, ...args: (string | number | Ty
   writer.currentOutput.push(s)
 }
 
-const globals = {
-  printf: new Binding("printf", FunctionType),
-}
-
 export const writeLlvmBytecode = (globalCompilerState: GlobalCompilerState, outputWriter: FileWriter) => {
   const bytecodeWriter: LlvmWriter = {
     functions: [],
@@ -570,7 +567,7 @@ export const writeLlvmBytecode = (globalCompilerState: GlobalCompilerState, outp
   insertGlobal(FloatType, "float")
   insertGlobal(DoubleType, "double")
   insertGlobal(RawPointerType, "ptr")
-  insertGlobal(globals.printf, "@printf")
+  insertGlobal(externalBuiltinBindings.printf, "@printf")
 
   let malloc = globalCompilerState.externalDefinitions.find(x => x.name === 'malloc')
   if (malloc) bytecodeWriter.mallocBinding = malloc.binding

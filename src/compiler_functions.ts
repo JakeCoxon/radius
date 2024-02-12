@@ -1,6 +1,6 @@
 import { BytecodeDefault, BytecodeSecondOrder, compileClassTask, compileFunctionPrototype, createBytecodeVmAndExecuteTask, propagateLiteralType, propagatedLiteralAst, pushBytecode, pushGeneratedBytecode, visitParseNode } from "./compiler";
-import { externals } from "./compiler_sugar";
-import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, ExternalFunction, CallAst, IntType, Closure, UserCallAst, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition, ParseCall, TypeVariable, TypeMatcher, typeMatcherEquals, SourceLocation, ExternalTypeConstructor, ScopeParentSymbol, SubCompilerState, CompilerFunction, IntLiteralType, FloatLiteralType, FloatType, RawPointerType, AddressAst, BindingAst, UnknownObject, NeverType } from "./defs";
+import { externalBuiltinBindings } from "./compiler_sugar";
+import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, CallAst, IntType, Closure, UserCallAst, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition, ParseCall, TypeVariable, TypeMatcher, typeMatcherEquals, SourceLocation, ExternalTypeConstructor, ScopeParentSymbol, SubCompilerState, CompilerFunction, IntLiteralType, FloatLiteralType, FloatType, RawPointerType, AddressAst, BindingAst, UnknownObject, NeverType, CompilerFunctionCallContext } from "./defs";
 import { Task, TaskDef, Unit } from "./tasks";
 
 
@@ -303,13 +303,15 @@ export function functionCompileTimeCompileTask(ctx: TaskContext, { vm, func, typ
 };
 
 export function createCallAstFromValueAndPushValue(vm: Vm, value: unknown, typeArgs: unknown[], args: Ast[]): Task<Unit, CompilerError> {
+  const ctx: CompilerFunctionCallContext = { location: vm.location, compilerState: vm.context.subCompilerState }
   return (
-    createCallAstFromValue(vm.location, value, typeArgs, args)
+    createCallAstFromValue(ctx, value, typeArgs, args)
     .chainFn((task, ast) => {vm.stack.push(ast); return Task.success() })
   )
 }
 
-export function createCallAstFromValue(location: SourceLocation, value: unknown, typeArgs: unknown[], args: Ast[]): Task<Ast, CompilerError> {
+export function createCallAstFromValue(ctx: CompilerFunctionCallContext, value: unknown, typeArgs: unknown[], args: Ast[]): Task<Ast, CompilerError> {
+  const location = ctx.location 
   if (value instanceof PrimitiveType) {
     compilerAssert(args.length === 1 && typeArgs.length === 0, "Expected 1 arg got $count", { count: args.length })
     const ast = propagatedLiteralAst(args[0])
@@ -322,17 +324,13 @@ export function createCallAstFromValue(location: SourceLocation, value: unknown,
       TaskDef(compileClassTask, { classDef: value, typeArgs }).
       chainFn((task, clssType) => {
         const constructor = expectMap(clssType.typeInfo.metaobject, 'constructor', "Expected constructor in metaobject for object $obj", { obj: value })
-        return createCallAstFromValue(location, constructor, [], args)
+        return createCallAstFromValue(ctx, constructor, [], args)
       })
     )
   }
 
-  if (value instanceof ExternalFunction) {
-    args.forEach((ast, i) => { propagateLiteralType(ast.type, ast) })
-    return Task.of(new CallAst(value.returnType, location, value, args, []))
-  }
   if (value instanceof CompilerFunction) {
-    return Task.of(value.func(location, typeArgs, args))
+    return Task.of(value.func(ctx, typeArgs, args))
   }
 
   if (value instanceof Closure) {
@@ -350,7 +348,9 @@ export function createCallAstFromValue(location: SourceLocation, value: unknown,
           const existing = ctx.globalCompiler.externalDefinitions.find(x => x.name === name.token.value)
           const paramHash = hashValues(call.result.concreteTypes)
           compilerAssert(!existing || existing.paramHash === paramHash, "Function exists with different param hash", { existing })
-          const binding = existing?.binding ?? (externals[name.token.value] ? externals[name.token.value].binding : new Binding(name.token.value, FunctionType))
+          const binding = existing?.binding ?? externalBuiltinBindings[name.token.value];
+          compilerAssert(binding)
+
           if (!existing) ctx.globalCompiler.externalDefinitions.push({ name: name.token.value, binding, paramHash, paramTypes: call.result.concreteTypes, returnType: call.result.returnType })
           compilerAssert(call.result.returnType, "Expected return type got $returnType", { returnType: call.result.returnType })
           const mappedArgs = args.map((ast, i) => {
@@ -358,11 +358,7 @@ export function createCallAstFromValue(location: SourceLocation, value: unknown,
             compilerAssert(func.params[i].storage !== 'ref', "Not implemented")
             return ast
           })
-          if (externals[name.token.value]) {
-            return Task.of(new CallAst(call.result.returnType, location, externals[name.token.value], mappedArgs, []))
-          } else {
-            return Task.of(new UserCallAst(call.result.returnType, location, binding, mappedArgs))
-          }
+          return Task.of(new UserCallAst(call.result.returnType, location, binding, mappedArgs))
         })
       )
     }
