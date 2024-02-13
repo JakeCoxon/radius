@@ -292,7 +292,10 @@ export const print = new CompilerFunction('print', (ctx, typeArgs: unknown[], ar
 
   args.forEach((arg, i) => {
     if (i !== 0) formatStr += ' '
-    if (arg.type === StringType) {
+    if (arg.type === StringType && arg instanceof StringAst) {
+      // Constant strings
+      formatStr += arg.value
+    } else if (arg.type === StringType) {
       const binding = new Binding("", StringType)
       stmts.push(new LetAst(VoidType, location, binding, arg))
       const lengthGetter = fieldHelper(binding, 'length')
