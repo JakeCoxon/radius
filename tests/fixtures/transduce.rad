@@ -1,4 +1,4 @@
-import compiler for assert
+import compiler for get_current_loop, assert
 
 fn compose3(a, b, c) -> any:
   {|x| a(b(c(x)))}
@@ -10,34 +10,52 @@ fn transduce!(trx, reducer)(iterable) @inline:
   final_reducer :: trx(reducer)
   acc := final_reducer.a()
   for x in iterable:
-    acc = final_reducer.c(acc, x)
-  final_reducer.b(acc)
-
-fn transduce_s!(trx, reducer, iterable)() -> any @inline:
-  final_reducer :: trx(reducer)
-  acc := final_reducer.a()
-  for x in iterable:
-    acc = final_reducer.c(acc, x)
+    loop :: get_current_loop()
+    acc = final_reducer.c(acc, x, loop)
   final_reducer.b(acc)
 
 fn map(mapping) -> any:
   {|next| %{
     a = next.a,
     b = next.b,
-    c = {|acc, x| next.c(acc, mapping(x))}
+    c = {|acc, x, loop| next.c(acc, mapping(x), loop)}
   } }
+
+fn take_while(predicate) -> any:
+  {|next| %{
+    a = next.a,
+    b = next.b,
+    c = {|acc, x, loop| 
+      if !predicate(x):
+        break loop
+      next.c(acc, x, loop)
+    } } }
+
+fn drop_while(predicate) -> any:
+  {|next| %{
+    a = {|| (next.a(), false)},
+    b = {|acc| next.b(acc._1)},
+    c = {|acc, x, loop| 
+      (ifx acc._2 or !predicate(x):
+        (next.c(acc._1, x, loop), true)
+      else:
+        acc)
+    } } }
 
 fn filter(predicate) -> any:
   {|next| %{
     a = next.a,
     b = next.b,
-    c = {|acc, x| ifx predicate(x): next.c(acc, x) else: acc}
-  } }
+    c = {|acc, x, loop| 
+      if !predicate(x):
+        continue loop
+      next.c(acc, x, loop)
+    } } }
 
 fn sum() -> any: 
   %{a = {|| 0},
     b = {|acc| acc},
-    c = {|acc, x| acc + x} }
+    c = {|acc, x, loop| acc + x} }
 
 fn main():
   trx :: compose3(
@@ -55,3 +73,9 @@ fn main():
 
   sum_result3 := [list... | trx |> sum()] # 6 + 7
   assert(sum_result3 == 13)
+
+  sum_result4 := [list... | take_while {|x| x < 4} |> sum()] # 1 + 2 + 3
+  assert(sum_result4 == 6)
+
+  sum_result5 := [list... | drop_while {|x| x < 4} |> sum()] # 4 + 5 + 6 +7
+  assert(sum_result5 == 22)
