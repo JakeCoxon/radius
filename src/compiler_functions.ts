@@ -1,6 +1,6 @@
 import { BytecodeDefault, BytecodeSecondOrder, compileClassTask, compileFunctionPrototype, createBytecodeVmAndExecuteTask, propagateLiteralType, propagatedLiteralAst, pushBytecode, pushGeneratedBytecode, visitParseNode } from "./compiler";
 import { externalBuiltinBindings } from "./compiler_sugar";
-import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, CallAst, IntType, Closure, UserCallAst, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition, ParseCall, TypeVariable, TypeMatcher, typeMatcherEquals, SourceLocation, ExternalTypeConstructor, ScopeParentSymbol, SubCompilerState, CompilerFunction, IntLiteralType, FloatLiteralType, FloatType, RawPointerType, AddressAst, BindingAst, UnknownObject, NeverType, CompilerFunctionCallContext } from "./defs";
+import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, CallAst, IntType, Closure, UserCallAst, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition, ParseCall, TypeVariable, TypeMatcher, typeMatcherEquals, SourceLocation, ExternalTypeConstructor, ScopeParentSymbol, SubCompilerState, CompilerFunction, IntLiteralType, FloatLiteralType, FloatType, RawPointerType, AddressAst, BindingAst, UnknownObject, NeverType, CompilerFunctionCallContext, CompileTimeObjectType, CompTimeObjAst } from "./defs";
 import { Task, TaskDef, Unit } from "./tasks";
 
 
@@ -239,12 +239,16 @@ function functionInlineTask(ctx: TaskContext, { location, func, typeArgs, args, 
   func.params.forEach(({ name, type, storage }, i) => {
     compilerAssert(concreteTypes[i], `Expected type`, { args, concreteTypes })
     compilerAssert(concreteTypes[i] !== IntLiteralType)
+    if (args[i] instanceof CompTimeObjAst) { // Special case compile time objects
+      templateScope[name.token.value] = args[i]
+      return
+    }
     const binding = new Binding(name.token.value, concreteTypes[i])
     binding.storage = storage // is this right for inline?
-    binding.definitionCompiler = inlineInto;
-    templateScope[name.token.value] = binding;
+    binding.definitionCompiler = inlineInto
+    templateScope[name.token.value] = binding
     statements.push(new LetAst(VoidType, location, binding, propagatedLiteralAst(args[i])))
-    argBindings.push(binding);
+    argBindings.push(binding)
   });
   
   func.typeParams.forEach((typeParam, i) => {

@@ -1,0 +1,24 @@
+import compiler for get_current_loop, assert, ctobj
+
+fn do_something_with_loop(loop: ctobj, x: int) @inline:
+  if x == 10:
+    break loop
+
+fn do_something_else_with_loop(loop: ctobj, x: int) @inline:
+  if x == 3:
+    continue loop
+
+fn main():
+
+  i := 0
+  iterations := 0
+  while i < 100000:
+    i += 1
+
+    loop :: get_current_loop()
+    do_something_with_loop(loop, i)
+    do_something_else_with_loop(loop, i)
+
+    iterations += 1
+    
+  assert(iterations == 8)

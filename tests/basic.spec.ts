@@ -531,6 +531,7 @@ test('transduce', async () => {
     const input = await Bun.file(testObject.inputPath).text()
     runCompilerTest(input, { testObject })
     await writeLlvmBytecodeFile(testObject)
+    await executeNativeExecutable(testObject)
   } finally {
     testObject.close()
   }
@@ -828,6 +829,22 @@ test('binding_bug', async () => {
     const input = await Bun.file(testObject.inputPath).text()
     runCompilerTest(input, { testObject })
     await writeLlvmBytecodeFile(testObject)
+  } finally {
+    testObject.close()
+  }
+})
+
+test('current_loop', async () => {
+  const testObject = createTest({ 
+    moduleName: 'current_loop',
+    globalOptions,
+    inputPath: `${import.meta.dir}/fixtures/current_loop.rad`,
+  })
+  try {
+    const input = await Bun.file(testObject.inputPath).text()
+    runCompilerTest(input, { testObject })
+    await writeLlvmBytecodeFile(testObject)
+    await executeNativeExecutable(testObject)
   } finally {
     testObject.close()
   }

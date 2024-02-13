@@ -476,6 +476,11 @@ export const makeParser = (input: string, debugName: string) => {
     if (!match("with")) return trailingNewline(new ParseBreak(breakToken, iden, null))
     return trailingNewline(new ParseBreak(breakToken, iden, parseExpr()))
   }
+  const parseContinue = (continueToken: Token) => {
+    if (matchType("NEWLINE")) return new ParseContinue(continueToken, null)
+    const iden = parseIdentifier()
+    return trailingNewline(new ParseContinue(continueToken, iden))
+  }
 
   const parseStatement = (): ParseNode => {
     if (match("fn"))            return parseFunctionDef();
@@ -485,7 +490,7 @@ export const makeParser = (input: string, debugName: string) => {
     else if (match("comptime")) return new ParseCompTime(previous, parseColonBlock("comptime"));
     else if (match("return"))   return new ParseReturn(previous, parseOptionalExpr());
     else if (match("break"))    return parseBreak(previous);
-    else if (match("continue")) return new ParseContinue(previous, parseOptionalExpr());
+    else if (match("continue")) return parseContinue(previous);
     else if (match("for"))      return parseForStatement();
     else if (match("meta"))     return parseMetaStatement(previous)
     else if (match("import"))   return parseImport(previous)

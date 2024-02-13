@@ -140,7 +140,7 @@ export class ParseFunction extends ParseNodeType {     key = 'function' as const
 export class ParseClass extends ParseNodeType {        key = 'class' as const;        constructor(public token: Token, public classDecl: ParserClassDecl) { super();} }
 export class ParseReturn extends ParseNodeType {       key = 'return' as const;       constructor(public token: Token, public expr: ParseNode | null) { super();} }
 export class ParseBreak extends ParseNodeType {        key = 'break' as const;        constructor(public token: Token, public name: ParseIdentifier | null, public expr: ParseNode | null) { super();} }
-export class ParseContinue extends ParseNodeType {     key = 'continue' as const;     constructor(public token: Token, public expr: ParseNode | null) { super();} }
+export class ParseContinue extends ParseNodeType {     key = 'continue' as const;     constructor(public token: Token, public name: ParseIdentifier | null) { super();} }
 export class ParseFor extends ParseNodeType {          key = 'for' as const;          constructor(public token: Token, public identifier: ParseIdentifier, public expr: ParseNode, public body: ParseNode) { super();} }
 export class ParseCast extends ParseNodeType {         key = 'cast' as const;         constructor(public token: Token, public expr: ParseNode, public as: ParseNode) { super();} }
 export class ParseOpEq extends ParseNodeType {         key = 'opeq' as const;         constructor(public token: Token, public left: ParseNode, public right: ParseNode) { super();} }
@@ -218,8 +218,7 @@ export type BytecodeInstr =
   { type: 'toast' } |
   { type: 'whileast' } |
   { type: 'returnast', r: boolean } |
-  { type: 'breakast', n: boolean, v: boolean } |
-  { type: 'continueast', v: boolean } |
+  { type: 'breakast', v: boolean, named: boolean, breakType: BreakType } |
   { type: 'listast', count: number } |
   { type: 'andast', count: number } |
   { type: 'orast', count: number } |
@@ -416,11 +415,12 @@ export class DefaultConsAst extends AstRoot {   key = 'defaultcons' as const;   
 export class AddressAst extends AstRoot {       key = 'address' as const;        constructor(public type: Type, public location: SourceLocation, public binding: Binding) { super() } }
 export class DerefAst extends AstRoot {         key = 'deref' as const;          constructor(public type: Type, public location: SourceLocation, public left: BindingAst, public fieldPath: TypeField[]) { super() } }
 export class SetDerefAst extends AstRoot {      key = 'setderef' as const;       constructor(public type: Type, public location: SourceLocation, public left: BindingAst, public fieldPath: TypeField[], public value: Ast) { super() } }
+export class CompTimeObjAst extends AstRoot {   key = 'comptimeobj' as const;    constructor(public type: Type, public location: SourceLocation, public value: unknown) { super() } }
 
 export type Ast = NumberAst | LetAst | SetAst | OperatorAst | IfAst | ListAst | CallAst | AndAst | UserCallAst |
   OrAst | StatementsAst | WhileAst | ReturnAst | SetFieldAst | VoidAst | CastAst | SubscriptAst | ConstructorAst |
   BindingAst | StringAst | NotAst | FieldAst | BlockAst | BreakAst | BoolAst | CastAst | DefaultConsAst | ValueFieldAst |
-  SetValueFieldAst | SetSubscriptAst | AddressAst | DerefAst | SetDerefAst
+  SetValueFieldAst | SetSubscriptAst | AddressAst | DerefAst | SetDerefAst | CompTimeObjAst
 export const isAst = (value: unknown): value is Ast => value instanceof AstRoot;
 
 export class Tuple {
@@ -590,6 +590,7 @@ export const DoubleType =       new PrimitiveType("double",        { sizeof: 8, 
 export const FunctionType =     new PrimitiveType("function",      { sizeof: 0, fields: [], metaobject: Object.create(null), isReferenceType: false })
 export const RawPointerType =   new PrimitiveType("rawptr",        { sizeof: 8, fields: [], metaobject: Object.create(null), isReferenceType: false })
 export const AstType =          new PrimitiveType("ast",           { sizeof: 0, fields: [], metaobject: Object.create(null), isReferenceType: false })
+export const CompileTimeObjectType = new PrimitiveType("ctobj",    { sizeof: 0, fields: [], metaobject: Object.create(null), isReferenceType: false })
 
 export const StringType = (() => {
   const type = new PrimitiveType("string", { sizeof: 0, fields: [], metaobject: Object.create(null), isReferenceType: false })
@@ -760,6 +761,10 @@ export class LabelBlock {
     public name: string | null,
     public breakType: BreakType | null,
     public binding: Binding | null) {}
+}
+
+export class LoopObject {
+  constructor(public continueBlock: LabelBlock, public breakBlock: LabelBlock) {}
 }
 
 export const findLabelBlockByType = (labelBlock: LabelBlock | null, breakType: BreakType | null) => {

@@ -1,4 +1,4 @@
-import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol, ScopeParentSymbol, isPlainObject, ParseLet, ParseList, ParseExpand, ParseBlock, findLabelByBinding, ParseSubscript, ParseNumber, ParseQuote, ParseWhile, ParseOperator, ParseBytecode, ParseOpEq, ParseSet, ParseFreshIden, UnknownObject, ParseNote, DefaultConsAst, RawPointerType, ValueFieldAst, SetValueFieldAst, FloatLiteralType, IntLiteralType, CompilerFunction, DerefAst, SetDerefAst, ParseSlice, CompilerFunctionCallContext, NeverType } from "./defs";
+import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol, ScopeParentSymbol, isPlainObject, ParseLet, ParseList, ParseExpand, ParseBlock, findLabelByBinding, ParseSubscript, ParseNumber, ParseQuote, ParseWhile, ParseOperator, ParseBytecode, ParseOpEq, ParseSet, ParseFreshIden, UnknownObject, ParseNote, DefaultConsAst, RawPointerType, ValueFieldAst, SetValueFieldAst, FloatLiteralType, IntLiteralType, CompilerFunction, DerefAst, SetDerefAst, ParseSlice, CompilerFunctionCallContext, NeverType, LoopObject, CompTimeObjAst, CompileTimeObjectType } from "./defs";
 import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, functionCompileTimeCompileTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall } from "./compiler_functions";
 import { Event, Task, TaskDef, Unit, isTask, isTaskResult, withContext } from "./tasks";
 import { createCompilerModuleTask, createListConstructor, defaultMetaFunction, expandLoopSugar, foldSugar, forExprSugar, forLoopSugar, listComprehensionSugar, print, sliceSugar, whileExprSugar } from "./compiler_sugar";
@@ -299,11 +299,11 @@ export const BytecodeSecondOrder: ParseTreeTable = {
   break: (out, node) => {
     if (node.name) writeMeta(out, node.name);
     if (node.expr) visitParseNode(out, node.expr);
-    pushBytecode(out, node.token, { type: 'breakast', n: !!node.name, v: !!node.expr })
+    pushBytecode(out, node.token, { type: 'breakast', named: !!node.name, v: !!node.expr, breakType: 'break' })
   },
   continue: (out, node) => {
-    if (node.expr) visitParseNode(out, node.expr);
-    pushBytecode(out, node.token, { type: 'continueast', v: !!node.expr })
+    if (node.name) writeMeta(out, node.name)
+    pushBytecode(out, node.token, { type: 'breakast', named: !!node.name, v: false, breakType: 'continue'})
   },
   field: (out, node) => {
     visitParseNode(out, node.expr)
@@ -717,6 +717,7 @@ const unknownToAst = (location: SourceLocation, value: unknown) => {
   if (isAst(value)) return value;
   if (value === null) return new VoidAst(VoidType, location);
   if (value instanceof Binding) return new BindingAst(value.type, location, value);
+  if (value instanceof LoopObject) return new CompTimeObjAst(CompileTimeObjectType, location, value)
   compilerAssert(false, "Type is not convertable to an AST: $value", { value })
 }
 
@@ -908,9 +909,18 @@ const instructions: InstructionMapping = {
   },
   list: (vm, { count }) => vm.stack.push(popValues(vm, count)),
   
-  breakast: (vm, { v, n }) => {
+  breakast: (vm, { v, named, breakType }) => {
     const expr = v ? propagatedLiteralAst(expectAst(popStack(vm))) : null
-    const name = n ? popStack(vm) : null
+    const name = named ? popStack(vm) : null
+    if (name && name instanceof CompTimeObjAst) { // It's possible to directly pass a loop object to break from
+      // TODO: Kinda sucks to have to unwrap the comptimeobj
+      const loop = name.value
+      compilerAssert(loop instanceof LoopObject, "Expected loop object")
+      const block = breakType === 'break' ? loop.breakBlock : loop.continueBlock
+      compilerAssert(block.binding, "Expected binding")
+      vm.stack.push(new BreakAst(NeverType, vm.location, block.binding, expr))
+      return
+    }
     compilerAssert(!name || name instanceof Binding, "Expected binding", { name })
     let block: LabelBlock
     if (name) {
@@ -919,14 +929,10 @@ const instructions: InstructionMapping = {
         if (block.type) compilerAssert(block.type === expr.type, "Block type is already inferred to be $blockType but got an expression of type $exprType", { blockType: block.type, exprType: expr.type })
         block.type = expr.type
       }
-    } else block = findLabelBlockByType(vm.context.subCompilerState.labelBlock, 'break');
-    vm.stack.push(new BreakAst(NeverType, vm.location, block.binding!, expr))
+    } else block = findLabelBlockByType(vm.context.subCompilerState.labelBlock, breakType);
+    compilerAssert(block.binding, "Expected binding")
+    vm.stack.push(new BreakAst(NeverType, vm.location, block.binding, expr))
   },
-  continueast: (vm, { v }) => {
-    const block = findLabelBlockByType(vm.context.subCompilerState.labelBlock, 'continue');
-    vm.stack.push(new BreakAst(NeverType, vm.location, block.binding!, v ? expectAst(popStack(vm)) : null))
-  },
-
   bindingast: (vm, { name }) => {
     return (
       TaskDef(resolveScope, vm.scope, name)
@@ -934,6 +940,7 @@ const instructions: InstructionMapping = {
         if (value instanceof Binding) ensureBindingIsNotClosedOver(vm.context.subCompilerState, name, value);
         if (isPlainObject(value)) vm.stack.push(value)
         else if (value instanceof Module) vm.stack.push(value)
+        // else if (value instanceof LoopObject) vm.stack.push(value)
         else if (value instanceof Binding) {
           if (value.storage !== 'ref') vm.stack.push(unknownToAst(vm.location, value))
           else vm.stack.push(new DerefAst(value.type, vm.location, unknownToAst(vm.location, value) as BindingAst, []))
