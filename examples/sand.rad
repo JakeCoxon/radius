@@ -1,0 +1,91 @@
+import compiler
+import range for Range
+import vec for vec2i
+import array for Array, array_create
+import graphics for begin_app, end_app, window_open, render_app, frame_ticks, delay, copy_pixels, save, restore, set_fill_color, fill_rectangle, rotate, translate, get_mouse_down, get_mouse
+
+scale :: 4
+window_width :: 320
+window_height :: 240
+
+cells_width :: window_width / scale
+cells_height :: window_height / scale
+
+fn abs(v: int) -> int:
+  ifx v < 0: -1 * v else: v
+
+fn main():
+
+  begin_app()
+
+  cells := array_create!int(cells_width * cells_height)
+  next_cells := array_create!int(cells_width * cells_height)
+
+  cells[:] = 0 ...
+  next_cells[:] = 0 ...
+  cells[100] = 1
+  cells[430] = 1
+
+  set_fill_color(0, 0, 0, 1)
+  fill_rectangle(0, 0, window_width, window_height)
+
+  while window_open():
+
+    # copy_pixels(0, scale, window_width, window_height, 0, 0)
+
+    next_cells[:] = 0 ...
+    pressed_left := get_mouse_down(0)
+    pressed_right := get_mouse_down(1)
+    mouse := vec2i(
+      int(get_mouse().x / scale),
+      int(get_mouse().y / scale))
+
+    get_cell :: |x, y|
+      (ifx y == cells_height - 1: 2
+      else: cells[x + y * cells_width])
+
+    for y in Range(0, cells_height - 1):
+      for x in Range(1, cells_width - 1):
+
+        if get_cell(x, y) == 1:
+          if get_cell(x, y + 1) == 0:
+            next_cells[x + (y + 0) * cells_width] = 0
+            next_cells[x + (y + 1) * cells_width] = 1
+          elif get_cell(x - 1, y + 1) == 0 and get_cell(x + 1, y + 1) == 0:
+            next_cells[x + (y + 0) * cells_width] = 0
+            next_cells[x - 1 + (y + 1) * cells_width] = 1
+          elif get_cell(x - 1, y + 1) == 0:
+            next_cells[x + (y + 0) * cells_width] = 0
+            next_cells[x - 1 + (y + 1) * cells_width] = 1
+          elif get_cell(x + 1, y + 1) == 0:
+            next_cells[x + (y + 0) * cells_width] = 0
+            next_cells[x + 1 + (y + 1) * cells_width] = 1
+          else:
+            next_cells[x + (y + 0) * cells_width] = 1
+
+        if pressed_left and abs(mouse.x - x) < 2 and abs(mouse.y - y) < 2:
+          next_cells[x + (y + 0) * cells_width] = 1
+        elif pressed_right and abs(mouse.x - x) < 2 and abs(mouse.y - y) < 2:
+          next_cells[x + (y + 0) * cells_width] = 0
+          
+
+    #   next_cells[x] = calculate_state(
+    #     cells[x - 1], cells[x], cells[x + 1])
+
+    for y in Range(0, cells_height):
+      for x in Range(0, cells_width):
+        if next_cells[x + y * cells_width] == 1: 
+          set_fill_color(1, 1, 1, 1)
+        else:
+          set_fill_color(0, 0, 0, 1)
+      
+        fill_rectangle(scale * float(x), scale * float(y), scale, scale)
+
+    swap := cells
+    cells = next_cells
+    next_cells = swap
+
+    render_app()
+    # delay(5)
+
+  end_app()
