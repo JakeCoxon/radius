@@ -152,7 +152,7 @@ const runModuleInner = (
 ) => {
   const parser = makeParser(input, filepath)
 
-  const subCompilerState = new SubCompilerState('testmodule')
+  const subCompilerState = new SubCompilerState('entrymodule')
   const moduleScope = createScope({ ...globalCompiler.rootScope }, undefined)
   subCompilerState.scope = moduleScope
   subCompilerState.globalCompiler = globalCompiler

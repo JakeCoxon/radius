@@ -1379,6 +1379,7 @@ export const loadModule = (ctx: TaskContext, location: SourceLocation, moduleNam
   const moduleScope = createScope({ ...rootScope }, undefined)
 
   const subCompilerState = pushSubCompilerState(ctx, { debugName: `${moduleName} module`, lexicalParent: undefined, scope: moduleScope })
+  subCompilerState.moduleCompiler = subCompilerState
   ;(subCompilerState as any).location = location
 
   return (

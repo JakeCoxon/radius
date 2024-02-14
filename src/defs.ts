@@ -582,6 +582,7 @@ export class CompilerFunction {
 export const NeverType =        new PrimitiveType("never",         { sizeof: 0, fields: [], metaobject: Object.create(null), isReferenceType: false })
 export const VoidType =         new PrimitiveType("void",          { sizeof: 0, fields: [], metaobject: Object.create(null), isReferenceType: false })
 export const IntType =          new PrimitiveType("int",           { sizeof: 4, fields: [], metaobject: Object.create(null), isReferenceType: false })
+export const u64Type =          new PrimitiveType("u64",           { sizeof: 4, fields: [], metaobject: Object.create(null), isReferenceType: false })
 export const IntLiteralType =   new PrimitiveType("int_literal",   { sizeof: 4, fields: [], metaobject: Object.create(null), isReferenceType: false })
 export const FloatLiteralType = new PrimitiveType("float_literal", { sizeof: 4, fields: [], metaobject: Object.create(null), isReferenceType: false })
 export const BoolType =         new PrimitiveType("bool",          { sizeof: 1, fields: [], metaobject: Object.create(null), isReferenceType: false })
@@ -626,7 +627,8 @@ export const BuiltinTypes = {
   bool: BoolType,
   List: ListTypeConstructor,
   Tuple: TupleTypeConstructor,
-  rawptr: RawPointerType
+  rawptr: RawPointerType,
+  u64: u64Type
 }
 
 class TypeTable {

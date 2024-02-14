@@ -1,5 +1,6 @@
 import vec for rgba
 
+# TODO Fix compiler bug here
 # fn hsva_to_rgba(h: float, s: float, v: float, a: float) -> rgba:
 #   c := v * s
 #   x := c * (1 - fabs(fmodf(h / 60.0, 2.0) - 1))

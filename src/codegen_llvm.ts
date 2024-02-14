@@ -1,5 +1,5 @@
 import { externalBuiltinBindings } from "./compiler_sugar";
-import { Ast, AstType, AstWriterTable, Binding, BindingAst, BlockAst, BoolType, CallAst, CompiledFunction, ConcreteClassType, ConstructorAst, DefaultConsAst, DoubleType, FileWriter, FloatType, FunctionType, GlobalCompilerState, IntType, ListTypeConstructor, LlvmFunctionWriter, LlvmWriter, NeverType, NumberAst, ParameterizedType, Pointer, PrimitiveType, RawPointerType, Register, SourceLocation, StatementsAst, StringType, Type, TypeField, UserCallAst, ValueFieldAst, VoidType, compilerAssert, isAst, isType, textColors } from "./defs";
+import { Ast, AstType, AstWriterTable, Binding, BindingAst, BlockAst, BoolType, CallAst, CompiledFunction, ConcreteClassType, ConstructorAst, DefaultConsAst, DoubleType, FileWriter, FloatType, FunctionType, GlobalCompilerState, IntType, ListTypeConstructor, LlvmFunctionWriter, LlvmWriter, NeverType, NumberAst, ParameterizedType, Pointer, PrimitiveType, RawPointerType, Register, SourceLocation, StatementsAst, StringType, Type, TypeField, UserCallAst, ValueFieldAst, VoidType, compilerAssert, isAst, isType, textColors, u64Type } from "./defs";
 
 // Some useful commands
 //
@@ -10,7 +10,7 @@ import { Ast, AstType, AstWriterTable, Binding, BindingAst, BlockAst, BoolType, 
 //   NAME=generated; /opt/homebrew/opt/llvm/bin/opt -O3 -S $NAME.ll -o $NAME.opt.ll
 //
 
-const operatorMapInt: {[key: string]:string} = {
+const operatorMapSignedInt: {[key: string]:string} = {
   "+": "add",
   "-": "sub",
   "*": "mul",
@@ -29,6 +29,29 @@ const operatorMapInt: {[key: string]:string} = {
   "<": "icmp slt",
   "<=": "icmp sle",
   ">=": "icmp sge",
+}
+
+const operatorMapUnsignedInt: {[key: string]:string} = {
+  "+": "add",
+  "-": "sub",
+  "*": "mul",
+  "/": "udiv", // unsigned
+  "==": "icmp eq",
+  "!=": "icmp ne",
+
+  "<<": "shl",
+  ">>": "lshr", // Logical shift right
+
+  "&": "and",
+  "|": "or",
+
+  // Signed
+  ">": "icmp sgt",
+  "<": "icmp slt",
+  "<=": "icmp sle",
+  ">=": "icmp sge",
+
+  "mod": "urem"
 }
 
 const operatorMapFloat: {[key: string]:string} = {
@@ -202,7 +225,7 @@ const astWriter: LlvmAstWriterTable = {
       format(writer, `  $ = bitcast ptr null to ptr; literal null\n`, valueName)
       return { register: valueName }
     }
-    compilerAssert(ast.type === IntType || ast.type === FloatType || ast.type === DoubleType, "Expected number type got $type", { ast, type: ast.type })
+    compilerAssert(ast.type === IntType || ast.type === u64Type || ast.type === FloatType || ast.type === DoubleType, "Expected number type got $type", { ast, type: ast.type })
     
     if (ast.type === FloatType) {
       format(writer, `  $ = fadd $ 0.0, $ ; literal $\n`, valueName, ast.type, floatToLlvmHex(ast.value), ast.value)
@@ -366,7 +389,8 @@ const astWriter: LlvmAstWriterTable = {
     const [a, b] = ast.args
     const name = createRegister("", VoidType)
     compilerAssert(a.type === b.type, "Expected types to be equal", { a, b })
-    const op = a.type === IntType ? operatorMapInt[ast.operator] : 
+    const op = a.type === IntType ? operatorMapSignedInt[ast.operator] : 
+      a.type === RawPointerType || a.type === u64Type ? operatorMapUnsignedInt[ast.operator] : 
       a.type === FloatType || a.type === DoubleType ? operatorMapFloat[ast.operator] : 
       a.type === BoolType ? operatorMapLogical[ast.operator] : undefined
     compilerAssert(op, "Expected op $op, for type $type", { ast, op: ast.operator, type: a.type })
@@ -456,7 +480,8 @@ const astWriter: LlvmAstWriterTable = {
       if (ast.expr.type === FloatType && ast.type === DoubleType) return 'fpext float $ to double'
       if (ast.expr.type === BoolType && ast.type === IntType) return 'zext i1 $ to i32'
       if (ast.expr.type === IntType && ast.type === BoolType) return 'trunc i32 $ to i1'
-      compilerAssert(false, "Invalid cast conversion")
+      if (ast.expr.type === u64Type && ast.type === DoubleType) return 'uitofp i64 $ to double'
+      compilerAssert(false, "Invalid cast conversion from $a to $b", { a: ast.expr.type, b: ast.type })
     })()
     const register = createRegister("", ast.type)
     const input = toRegister(writer, writeExpr(writer, ast.expr))
@@ -517,6 +542,9 @@ const astWriter: LlvmAstWriterTable = {
   },
   void: (writer, ast) => {
     return null
+  },
+  comptimeobj: (writer, ast) => {
+    compilerAssert(false, "Error unexpected 'comptimeobj'")
   }
 };
 
@@ -566,6 +594,7 @@ export const writeLlvmBytecode = (globalCompilerState: GlobalCompilerState, outp
   }
   insertGlobal(VoidType, "void")
   insertGlobal(IntType, "i32")
+  insertGlobal(u64Type, "i64")
   insertGlobal(BoolType, "i1")
   insertGlobal(FloatType, "float")
   insertGlobal(DoubleType, "double")
@@ -589,6 +618,12 @@ export const writeLlvmBytecode = (globalCompilerState: GlobalCompilerState, outp
 
 
   bytecodeWriter.outputHeaders.push("declare i32 @printf(i8*, ...)\n\n")
+  bytecodeWriter.outputHeaders.push(`\n`)
+
+  globalCompilerState.globalLets.forEach(globalLet => {
+    const name = generateName(bytecodeWriter, globalLet.binding, true)
+    format(bytecodeWriter, "$ = global $ $\n", name, globalLet.binding.type, '0')
+  })
   bytecodeWriter.outputHeaders.push(`\n`)
 
   Array.from(globalCompilerState.compiledFunctions.values()).map(func => {

@@ -1,0 +1,17 @@
+import compiler
+
+mod :: compiler.operator_mod
+random_seed: u64 = 12345
+
+# Really basic linear congruential generator
+fn simple_random_u64() -> u64:
+  a: u64 = 1664525
+  c: u64 = 1013904223
+  m: u64 = 4294967296 # 2^32
+  random_seed = mod(a * random_seed + c, m)
+  random_seed
+
+fn simple_random_float() -> float:
+  # TODO: Fix compiler bug to make this work as a literal
+  max: u64 = 0xFFFFFFFF
+  float(double(simple_random_u64())) / float(double(max))

@@ -1,5 +1,6 @@
 import compiler
 import range for Range
+import random for simple_random_float
 import vec for vec2i, rgba
 import color for hsva_to_rgba
 import array for Array, array_create
@@ -64,7 +65,7 @@ fn main():
 
         if abs(mouse.x - x) < mouse_size and abs(mouse.y - y) < mouse_size:
           if pressed_left:
-            next_cells[cell] = int(current_color)
+            next_cells[cell] = int(current_color + simple_random_float() * 10)
           elif pressed_right:
             next_cells[cell] = 0
 
@@ -73,7 +74,7 @@ fn main():
 
         cell := next_cells[x + y * cells_width]
         color := (ifx cell > 0:
-            hsva_to_rgba(float(cell), 0.8, 0.9, 1)
+            hsva_to_rgba(float(cell), 0.7, 0.7, 1)
           else:
             rgba(0.0, 0.0, 0.0, 0.0))
 
