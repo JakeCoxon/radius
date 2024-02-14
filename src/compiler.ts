@@ -845,7 +845,8 @@ const instructions: InstructionMapping = {
   setlocalast: (vm, { name }) => {
     return TaskDef(resolveScope, vm.scope, name).chainFn((task, binding) => {
       compilerAssert(binding instanceof Binding, "Expected binding got $binding", { binding })
-      vm.stack.push(new SetAst(VoidType, vm.location, binding, expectAst(popStack(vm))))
+      const ast = propagatedLiteralAst(expectAst(popStack(vm)))
+      vm.stack.push(new SetAst(VoidType, vm.location, binding, ast))
       return Task.success()
     });
   },

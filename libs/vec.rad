@@ -1,28 +1,28 @@
-type vec2i < VecType:
+type vec2i < VecType @struct:
   x: int
   y: int
 
-type vec3i < VecType:
+type vec3i < VecType @struct:
   x: int
   y: int
   z: int
 
-type vec2 < VecType:
+type vec2 < VecType @struct:
   x: float
   y: float
 
-type vec3 < VecType:
+type vec3 < VecType @struct:
   x: float
   y: float
   z: float
 
-type vec4 < VecType:
+type vec4 < VecType @struct:
   x: float
   y: float
   z: float
   w: float
 
-type rgba < VecType:
+type rgba < VecType @struct:
   r: float
   g: float
   b: float

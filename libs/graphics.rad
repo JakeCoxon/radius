@@ -31,6 +31,7 @@ fn rotate(angle_radians: float) @external
 fn move_to(x: float, y: float) @external
 fn line_to(x: float, y: float) @external
 fn fill() @external
+fn put_float_image_data(image: rawptr, width: int, height: int, stride: int, x: int, y: int) @external
 
 fn rotate_at_origin(angle_radians: float, x: float, y: float):
   translate(x, y)

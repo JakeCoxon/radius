@@ -1,0 +1,59 @@
+import vec for rgba
+
+# fn hsva_to_rgba(h: float, s: float, v: float, a: float) -> rgba:
+#   c := v * s
+#   x := c * (1 - fabs(fmodf(h / 60.0, 2.0) - 1))
+#   m := rgba(v - c, v - c, v - c, 0.0)
+#   color: rgba
+#   if h >= 0 and h < 60:
+#     color = rgba(c, x, 0.0, a) + m
+#   elif h >= 60 and h < 120:
+#     color = rgba(x, c, 0.0, a) + m
+#   elif h >= 120 and h < 180:
+#     color = rgba(0.0, c, x, a) + m
+#   elif h >= 180 and h < 240:
+#     color = rgba(0.0, x, c, a) + m
+#   elif h >= 240 and h < 300:
+#     color = rgba(x, 0.0, c, a) + m
+#   else:
+#     color = rgba(c, 0.0, x, a) + m
+#   color
+
+fn hsva_to_rgba(h: float, s: float, v: float, a: float) -> rgba:
+  c := v * s
+  x := c * (1.0 - fabs(fmodf(h / 60.0, 2.0) - 1.0))
+  m := v - c
+
+  color: rgba
+  color.a = a
+
+  if h >= 0 and h < 60:
+    color.r = c
+    color.g = x
+    color.b = 0
+  elif h >= 60 and h < 120:
+    color.r = x
+    color.g = c
+    color.b = 0
+  elif h >= 120 and h < 180:
+    color.r = 0
+    color.g = c
+    color.b = x
+  elif h >= 180 and h < 240:
+    color.r = 0
+    color.g = x
+    color.b = c
+  elif h >= 240 and h < 300:
+    color.r = x
+    color.g = 0
+    color.b = c
+  else:
+    color.r = c
+    color.g = 0
+    color.b = x
+  
+  color.r += m
+  color.g += m
+  color.b += m
+  
+  color
