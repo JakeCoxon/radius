@@ -3,7 +3,7 @@ import range for Range
 import vec for vec2i, rgba
 import color for hsva_to_rgba
 import array for Array, array_create
-import graphics for begin_app, end_app, window_open, render_app, frame_ticks, delay, copy_pixels, save, restore, set_fill_color, fill_rectangle, rotate, translate, get_mouse_down, get_mouse, put_float_image_data, get_mouse_x, get_mouse_y
+import graphics for begin_app, end_app, window_open, render_app, frame_ticks, get_mouse_down, put_float_image_data, get_mouse_x, get_mouse_y
 
 window_width :: 320
 window_height :: 240
