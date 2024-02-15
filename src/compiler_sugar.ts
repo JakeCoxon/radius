@@ -286,6 +286,7 @@ export const print = new CompilerFunction('print', (ctx, typeArgs: unknown[], ar
   }
   const formats = new Map()
   formats.set(IntType, '%i')
+  formats.set(u64Type, '%i')
   formats.set(RawPointerType, '%p')
   formats.set(FloatType, '%f')
   formats.set(DoubleType, '%f')
@@ -443,10 +444,13 @@ fn fabs(v: float) -> float:
 
 fn sin(t: double) -> double @external
 fn cos(t: double) -> double @external
+fn tan(t: double) -> double @external
 fn sinf(t: float) -> float:
   float(sin(double(t)))
 fn cosf(t: float) -> float:
   float(cos(double(t)))
+fn tanf(t: float) -> float:
+  float(tan(double(t)))
 
 fn min!(T)(a: T, b: T) -> T @inline:
   ifx a <= b: a else: b
@@ -454,6 +458,8 @@ fn max!(T)(a: T, b: T) -> T @inline:
   ifx a >= b: a else: b
 
 fn exit(status: int) @external
+
+PI :: 3.14159265359
 
 `
 }

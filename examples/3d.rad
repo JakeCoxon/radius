@@ -1,0 +1,69 @@
+import compiler
+import range for Range
+import random for simple_random_float
+import vec for vec3, vec4
+import color for hsva_to_rgba
+import matrix for mat4, mat4_identity, create_perspective_projection, mul_mat4_vec4, mul_mat4_mat4, ndc_to_screen
+import array for Array, array_create
+import graphics for begin_app, end_app, window_open, render_app, frame_ticks, get_mouse_down, put_float_image_data, get_mouse_x, get_mouse_y, set_fill_color, fill_rectangle
+
+window_width :: 320
+window_height :: 240
+
+fn main():
+
+  begin_app()
+
+  points := array_create!vec3(8)
+  points[0] = vec3(0.5, 0.5, -0.5)
+  points[1] = vec3(0.5, -0.5, -0.5)
+  points[2] = vec3(-0.5, 0.5, -0.5)
+  points[3] = vec3(-0.5, -0.5, -0.5)
+  points[4] = vec3(0.5, 0.5, 0.5)
+  points[5] = vec3(0.5, -0.5, 0.5)
+  points[6] = vec3(-0.5, 0.5, 0.5)
+  points[7] = vec3(-0.5, -0.5, 0.5)
+
+  screen_coords := array_create!vec3(8)
+
+  projection := create_perspective_projection(80, window_width / window_height, 0.1, 10000)
+
+  t := 0.0
+
+  while window_open():
+
+    set_fill_color(0, 0, 0, 1)
+    fill_rectangle(0, 0, window_width, window_height)
+
+    t += 0.1
+
+    transform := (
+      mat4_identity()
+      .rotate_y(t * 0.1).rotate_x(t * 0.3)
+      .translate(0, 0, -20)
+      .premul(projection)
+    )
+
+    set_fill_color(1, 1, 1, 1)
+
+    i := -1
+    for point in points:
+      i += 1
+
+      vec := vec4(point.x, point.y, point.z, 1)
+
+      clip_coords := mul_mat4_vec4(transform, vec)
+      ndc := vec3(clip_coords.x / clip_coords.w, clip_coords.y / clip_coords.w, clip_coords.z / clip_coords.w)
+
+      if clip_coords.w < 0:
+        continue
+
+      screen := ndc_to_screen(ndc, window_width, window_height)
+      screen_coords[i] = screen
+
+      fill_rectangle(screen.x, screen.y, 2, 2)
+
+
+    render_app()
+
+  end_app()

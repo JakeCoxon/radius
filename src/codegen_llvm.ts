@@ -446,6 +446,12 @@ const astWriter: LlvmAstWriterTable = {
     return { register: reg }
   },
   field: (writer, ast) => {
+    if (!ast.left.type.typeInfo.isReferenceType) {
+      // This is just valuefield behaviour
+      const leftResult = writeExpr(writer, ast.left)
+      const reg = loadFieldHelper(writer, leftResult, [ast.field])
+      return { register: reg }
+    }
     const leftResult = toRegister(writer, writeExpr(writer, ast.left))
     const register = createRegister("", ast.left.type)
     const dataType = getDataTypeName(writer.writer, register.type)

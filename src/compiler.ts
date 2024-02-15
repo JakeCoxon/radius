@@ -799,8 +799,37 @@ const instructions: InstructionMapping = {
         .chainFn((task, value) => { vm.stack.push(value); return Task.success() })
       )
     }
-    if (isType(expr)) {
-      if (name === 'sizeof') { vm.stack.push(expr.typeInfo.sizeof); return }
+    if (name === 'sizeof') {
+
+      // There should be a nicer way of doing this across all functions that need it
+      const toType = (classDef: ClassDefinition): Task<ConcreteClassType, unknown> => {
+        if (classDef.concreteType) return Task.of(classDef.concreteType)
+        compilerAssert(classDef.typeArgs.length === 0, "Cannot compile class $classDef to type without specifing type arguments", { classDef })
+        return (
+          TaskDef(compileClassTask, { classDef, typeArgs: [] })
+          .chainFn((task, res) => { compilerAssert(res instanceof ConcreteClassType); return Task.of(res) })
+        );
+      }
+
+      const sizeof = (expr: unknown): number => {
+        // TODO: Padding
+
+        if (expr instanceof ConcreteClassType) {
+          compilerAssert(expr, "Expected concrete type") // TODO: Compile it?
+          return expr.typeInfo.fields.reduce((acc, x) => acc + sizeof(x.fieldType), 0)
+        }
+        if (expr instanceof PrimitiveType) { return expr.typeInfo.sizeof }
+        compilerAssert(false, "Not implemented", { expr })
+      }
+
+      if (expr instanceof ClassDefinition) {
+        return (toType(expr).chainFn((task, type) => {
+          vm.stack.push(sizeof(type)); return Task.success()
+        }))
+      }
+
+      vm.stack.push(sizeof(expr))
+      return
     }
     compilerAssert(false, "Not implemented", { expr, name })
   },
@@ -834,6 +863,9 @@ const instructions: InstructionMapping = {
   operatorast: (vm, { name, count }) => {
     const values = expectAsts(popValues(vm, count));
     compilerAssert(operators[name], "Unexpected operator $name", { name, values })
+    if (name == '-' && count == 1) {
+      return void vm.stack.push(new OperatorAst(values[0].type, vm.location, name, [new NumberAst(values[0].type, vm.location, 0), values[0]]))
+    }
     const ctx: CompilerFunctionCallContext = { location: vm.location, compilerState: vm.context.subCompilerState }
     vm.stack.push(operators[name].func(ctx, values[0], values[1]))
   },
@@ -860,7 +892,9 @@ const instructions: InstructionMapping = {
       vm.stack.push(new ValueFieldAst(field.fieldType, vm.location, left, [field]))
     } else if (left instanceof ValueFieldAst && !left.type.typeInfo.isReferenceType) {
       vm.stack.push(new ValueFieldAst(field.fieldType, vm.location, left.left, [...left.fieldPath, field]))
-    } else vm.stack.push(new FieldAst(field.fieldType, vm.location, left, field))
+    } else {
+      vm.stack.push(new FieldAst(field.fieldType, vm.location, left, field))
+    }
   },
   setfieldast: (vm, { name }) => {
     const value = expectAst(popStack(vm));

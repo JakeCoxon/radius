@@ -225,6 +225,7 @@ export const makeParser = (input: string, debugName: string) => {
   const parseLiteral = (): ParseNode => {
     if (match("("))          return parseParens(previous);
     else if (match("["))     return parseList();
+    else if (match("-"))     return new ParseOperator(previous, [parseExpr()])
     else if (match("'"))     return new ParseSymbol(parseIdentifier().token);
     else if (match("@"))     return new ParseNote(previous, parseExpr());
     else if (match("%{"))    return parseDict(previous)
