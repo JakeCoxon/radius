@@ -341,29 +341,29 @@ export function createCallAstFromValue(ctx: CompilerFunctionCallContext, value: 
     )
   }
 
+
+  if (typeArgs.some(x => x instanceof ClassDefinition)) {
+    const compileTypeArgs = Task.concurrency(typeArgs.map(typeArg => {
+      if (typeArg instanceof ClassDefinition && !typeArg.concreteType) {
+        compilerAssert(typeArg.typeArgs.length === 0, "Cannot compile class $classDef to type without specifing type arguments", { classDef: typeArg })
+        return TaskDef(compileClassTask, { classDef: typeArg, typeArgs: [] })
+      }
+      if (typeArg instanceof ClassDefinition) { return Task.of(typeArg.concreteType) }
+      return Task.of(typeArg)
+    }))
+
+    return (
+      compileTypeArgs.chainFn((task, compiledTypeArgs) => 
+        TaskDef(createCallAstFromValue, value, compiledTypeArgs, args) // Call self
+      )
+    )
+  }
+
   if (value instanceof CompilerFunction) {
     return Task.of(value.func(ctx, typeArgs, args))
   }
 
   if (value instanceof Closure) {
-
-    if (typeArgs.some(x => x instanceof ClassDefinition && !x.concreteType)) {
-
-      const compileTypeArgs = Task.concurrency(typeArgs.map(typeArg => {
-        if (typeArg instanceof ClassDefinition && !typeArg.concreteType) {
-          compilerAssert(typeArg.typeArgs.length === 0, "Cannot compile class $classDef to type without specifing type arguments", { classDef: typeArg })
-          return TaskDef(compileClassTask, { classDef: typeArg, typeArgs: [] })
-        }
-        return Task.of(typeArg)
-      }))
-
-      // Call self
-      return (
-        compileTypeArgs.chainFn((task, compiledTypeArgs) => 
-          TaskDef(createCallAstFromValue, value, compiledTypeArgs, args)
-        )
-      )
-    }
     
     const { func, scope: parentScope, lexicalParent } = value
     const call: FunctionCallArg = { location, func, typeArgs, args, parentScope, lexicalParent, result: { concreteTypes: [], substitutions: {}, returnType: undefined! } }
