@@ -1041,6 +1041,8 @@ export type LlvmWriter = {
   outputHeaders: string[],
   mallocBinding: Binding,
 
+  astVisitMap: Map<Ast, boolean>,
+
   writer: LlvmWriter // weirdness for formatting
   currentOutput: string[]
 }

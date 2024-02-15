@@ -263,10 +263,18 @@ export const assert = new CompilerFunction('assert', (ctx, typeArgs: unknown[], 
   const binding = externalBuiltinBindings.exit
   if (!existing) globalCompiler.externalDefinitions.push({ name: name, binding, paramHash, paramTypes: concreteTypes, returnType: NeverType })
 
+  // Gotta be a nicer way to do this automatically
+  const left = new LetAst(VoidType, location, new Binding("", op.args[0].type), op.args[0])
+  const right = new LetAst(VoidType, location, new Binding("", op.args[1].type), op.args[1])
+  const leftBinding = new BindingAst(left.binding.type, location, left.binding)
+  const rightBinding = new BindingAst(right.binding.type, location, right.binding)
+  const newOp = new OperatorAst(op.type, location, op.operator, [leftBinding, rightBinding])
+
   return createStatements(location, [
-    new IfAst(VoidType, location, args[0], new VoidAst(VoidType, location), 
+    left, right,
+    new IfAst(VoidType, location, newOp, new VoidAst(VoidType, location), 
       createStatements(location, [
-        print.func(ctx, [], [new StringAst(StringType, location, 'Expected'), op.args[0], new StringAst(StringType, location, op.operator), op.args[1]]),
+        print.func(ctx, [], [new StringAst(StringType, location, 'Expected'), leftBinding, new StringAst(StringType, location, op.operator), rightBinding]),
         new UserCallAst(VoidType, location, externalBuiltinBindings.exit, [new NumberAst(IntType, location, 1)])
       ])
     )

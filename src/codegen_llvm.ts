@@ -80,6 +80,10 @@ const log = (...args: any[]) => {
 }
 
 const writeExpr = (writer: LlvmFunctionWriter, ast: Ast) => {
+  compilerAssert(!writer.writer.astVisitMap.has(ast), "Already visited AST", { ast }) 
+  if (!(ast instanceof NumberAst || ast instanceof BindingAst)) {
+    writer.writer.astVisitMap.set(ast, true) // Takes up a lot of memory
+  }
   compilerAssert(astWriter[ast.key], `Not implemented ast writer '${ast.key}'`)
   const toPrint = !(ast instanceof StatementsAst || ast instanceof BlockAst) && writer.printNextStatement
   if (toPrint) {
@@ -589,7 +593,8 @@ export const writeLlvmBytecode = (globalCompilerState: GlobalCompilerState, outp
     outputWriter,
     writer: null!,
     currentOutput: null!,
-    mallocBinding: null!
+    mallocBinding: null!,
+    astVisitMap: new Map()
   }
   bytecodeWriter.writer = bytecodeWriter
   bytecodeWriter.currentOutput = bytecodeWriter.outputHeaders
