@@ -139,8 +139,8 @@ const insertMetaObjectPairwiseOperator = (compiledClass: CompiledClass, operator
         const otherField = b.type.typeInfo.fields.find(x => x.name === `_${i+1}`)
         compilerAssert(otherField?.fieldType === field.fieldType, `Expected type of tuple field ${i+1} to be $fieldType got $otherFieldType`, { fieldType: field.fieldType, otherFieldType: otherField?.fieldType })
         return getOperatorTable()[operatorSymbol].func(ctx, 
-          new FieldAst(field.fieldType,      ctx.location, bindingAstA, field),
-          new FieldAst(otherField.fieldType, ctx.location, bindingAstB, otherField))
+          new ValueFieldAst(field.fieldType,      ctx.location, bindingAstA, [field]),
+          new ValueFieldAst(otherField.fieldType, ctx.location, bindingAstB, [otherField]))
       })
       return createStatements(ctx.location, [
         ...lets,
@@ -150,8 +150,8 @@ const insertMetaObjectPairwiseOperator = (compiledClass: CompiledClass, operator
     compilerAssert(b.type === a.type, "Expected vec or tuple. got $type", { type: b.type })
     const constructorArgs = compiledClass.fields.map(field => 
       getOperatorTable()[operatorSymbol].func(ctx, 
-        new FieldAst(field.fieldType, ctx.location, bindingAstA, field),
-        new FieldAst(field.fieldType, ctx.location, bindingAstB, field))
+        new ValueFieldAst(field.fieldType, ctx.location, bindingAstA, [field]),
+        new ValueFieldAst(field.fieldType, ctx.location, bindingAstB, [field]))
     )
     return createStatements(ctx.location, [
       ...lets,
@@ -188,7 +188,7 @@ export const defaultMetaFunction = (subCompilerState: SubCompilerState, compiled
     createAnonymousToken(''), 
     new ParseValue(createAnonymousToken(''), compiledClass.type), 
     compiledClass.fields.map(x => new ParseIdentifier(createAnonymousToken(x.name))))
-  const decl = createAnonymousParserFunctionDecl("constructor", createAnonymousToken(''), fnParams, constructorBody)
+  const decl = createAnonymousParserFunctionDecl(`${compiledClass.debugName} constructor`, createAnonymousToken(''), fnParams, constructorBody)
   const funcDef = insertFunctionDefinition(subCompilerState.globalCompiler, decl)
   const constructor = new Closure(funcDef, definitionScope, subCompilerState.lexicalParent!)
 

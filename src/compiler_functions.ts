@@ -247,7 +247,8 @@ function functionInlineTask(ctx: TaskContext, { location, func, typeArgs, args, 
     binding.storage = storage // is this right for inline?
     binding.definitionCompiler = inlineInto
     templateScope[name.token.value] = binding
-    statements.push(new LetAst(VoidType, location, binding, propagatedLiteralAst(args[i])))
+    propagateLiteralType(concreteTypes[i], args[i])
+    statements.push(new LetAst(VoidType, location, binding, args[i]))
     argBindings.push(binding)
   });
   

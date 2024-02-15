@@ -76,7 +76,7 @@ fn main():
         color := (ifx cell > 0:
             hsva_to_rgba(float(cell), 0.7, 0.7, 1)
           else:
-            rgba(0.0, 0.0, 0.0, 0.0))
+            rgba(0, 0, 0, 0))
 
         rgba_image[(x + y * cells_width) * 4 + 0] = color.r
         rgba_image[(x + y * cells_width) * 4 + 1] = color.g

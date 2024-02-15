@@ -1,0 +1,12 @@
+import vec for rgba
+
+fn hsva_to_rgba(h: float, s: float, v: float, a: float) -> rgba:
+  c := 1.0
+  x := 1.0
+  m := rgba(v - c, v - c, v - c, 0.0)
+  if h >= 0 and h < 60:
+    rgba(x, c, 0.0, a) + m
+  rgba(c, 0.0, x, a)
+
+fn main():
+  hsva_to_rgba(1, 0, 0, 0)

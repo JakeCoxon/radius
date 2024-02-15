@@ -849,3 +849,19 @@ test('current_loop', async () => {
     testObject.close()
   }
 })
+
+test('add_operator_bug', async () => {
+  const testObject = createTest({ 
+    moduleName: 'add_operator_bug',
+    globalOptions,
+    inputPath: `${import.meta.dir}/fixtures/add_operator_bug.rad`,
+  })
+  try {
+    const input = await Bun.file(testObject.inputPath).text()
+    runCompilerTest(input, { testObject })
+    await writeLlvmBytecodeFile(testObject)
+    await executeNativeExecutable(testObject)
+  } finally {
+    testObject.close()
+  }
+})
