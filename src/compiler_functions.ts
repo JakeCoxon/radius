@@ -144,18 +144,34 @@ export function functionTemplateTypeCheckAndCompileTask(ctx: TaskContext, { func
   }
   compilerAssert(func.templatePrototype);
 
-  const typeParamHash = hashValues(typeArgs)
+  const inferedTypeParams: unknown[] = []
+  func.typeParams.forEach((typeParam, i) => {
+    compilerAssert(typeParam instanceof ParseIdentifier, "Not implemented")
+    const name = typeParam.token.value
+    if (result.substitutions[name] === undefined) {
+      compilerAssert(typeArgs[i] !== undefined, "Expected type arg", { substitutions: result.substitutions })
+      inferedTypeParams.push(typeArgs[i])
+    } else inferedTypeParams.push(result.substitutions[name])
+  })
+
+  const typeParamHash = hashValues(inferedTypeParams)
   const existing = func.compiledFunctions.find(compiledFunc => {
     if (compiledFunc.typeParamHash === typeParamHash) {
-      if (compiledFunc.typeParameters.every((x, i) => x === typeArgs[i])) return true
+      if (compiledFunc.typeParameters.every((x, i) => x === inferedTypeParams[i])) return true
     }
   })
-  if (existing) return Task.of(existing);
+  if (existing) return Task.of(existing)
 
   const templateScope = createScope({}, parentScope); // TODO: parent scope
   const subCompilerState = pushSubCompilerState(ctx, { debugName: `${func.debugName} template`, scope: templateScope, lexicalParent: ctx.subCompilerState });
   ;(subCompilerState as any).location = func.name?.token.location
   subCompilerState.functionCompiler = subCompilerState
+
+  func.typeParams.forEach((typeParam, i) => {
+    compilerAssert(typeParam instanceof ParseIdentifier, "Not implemented")
+    const name = typeParam.token.value
+    templateScope[name] = inferedTypeParams[i]
+  })
   
   func.params.forEach(({ name, type, storage }, i) => {
     const binding = new Binding(name.token.value, result.concreteTypes[i]);
@@ -163,15 +179,6 @@ export function functionTemplateTypeCheckAndCompileTask(ctx: TaskContext, { func
     binding.definitionCompiler = subCompilerState
     templateScope[name.token.value] = binding
     argBindings.push(binding)
-  });
-  
-  func.typeParams.forEach((typeParam, i) => {
-    compilerAssert(typeParam instanceof ParseIdentifier, "Not implemented")
-    const name = typeParam.token.value
-    if (result.substitutions[name] === undefined) {
-      compilerAssert(typeArgs[i] !== undefined, "Expected type arg", { substitutions: result.substitutions })
-      templateScope[name] = typeArgs[i]
-    } else templateScope[name] = result.substitutions[name]
   });
 
   return (

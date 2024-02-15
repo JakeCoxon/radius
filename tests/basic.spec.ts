@@ -784,6 +784,7 @@ test('array', async () => {
     const input = await Bun.file(testObject.inputPath).text()
     runCompilerTest(input, { testObject })
     await writeLlvmBytecodeFile(testObject)
+    await executeNativeExecutable(testObject)
   } finally {
     testObject.close()
   }

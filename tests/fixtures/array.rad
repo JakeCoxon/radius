@@ -1,4 +1,7 @@
 import compiler
+import vec for vec3
+
+assert :: compiler.assert
 
 type Array!(T) @struct:
   data: rawptr
@@ -47,16 +50,18 @@ fn main():
   arr[0] = 2
   arr[1] = 1
   arr[2] = 6
-  print(arr[0])
 
-  for x in arr:
-    print(x)
+  assert(arr[2] == 6)
   
   arr.append(10)
   arr.append(20)
   arr.append(30)
   arr.append(40)
-
-  for x in arr:
-    print(x)
   
+  assert(arr[11] == 20)
+  assert(arr[12] == 30)
+  assert(arr[13] == 40)
+
+  arr2 := array_create!vec3(0)
+  arr2.append(vec3(1, 2, 3))
+  assert(arr2[0].x == 1)
