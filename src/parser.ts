@@ -3,10 +3,10 @@ import { ParseAnd, ParseNode, ParseBreak, ParseCall, ParseCast, ParseCompTime, P
 const regexes = {
   KEYWORD:
     /^(?:and|as\!|as|break|class|continue|comptime|def|defn|elif|else|fn|for|if|ifx|in|lambda|meta|null|or|pass|return|try|while|with|type|interface|import|block|fold|ref)(?=\W)/, // note (?=\W)
-  IDENTIFIER: /^[a-zA-Z_][a-zA-Z_0-9-]*/,
+  IDENTIFIER: /^[a-zA-Z_][a-zA-Z_0-9]*/,
   STRING: /^(?:"(?:[^"\\]|\\.)*")/,
   SPECIALNUMBER: /^0o[0-7]+|^0x[0-9a-fA-F_]+|^0b[01_]+/,
-  NUMBER: /^-?(0|[1-9][0-9_]*)(\.[0-9_]+)?(?:[eE][+-]?[0-9]+)?/,
+  NUMBER: /^(0|[1-9][0-9_]*)(\.[0-9_]+)?(?:[eE][+-]?[0-9]+)?/,
   COMMENT: /^#[^\n]+/,
   OPENPAREN: /^(?:[\[\{\(]|%{)/,
   CLOSEPAREN: /^[\]\}\)]/,

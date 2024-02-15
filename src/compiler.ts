@@ -819,6 +819,9 @@ const instructions: InstructionMapping = {
           return expr.typeInfo.fields.reduce((acc, x) => acc + sizeof(x.fieldType), 0)
         }
         if (expr instanceof PrimitiveType) { return expr.typeInfo.sizeof }
+        if (expr instanceof ParameterizedType) { 
+          return expr.typeInfo.fields.reduce((acc, x) => acc + sizeof(x.fieldType), 0)
+        }
         compilerAssert(false, "Not implemented", { expr })
       }
 
