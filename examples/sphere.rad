@@ -1,0 +1,166 @@
+import compiler
+import range for Range
+import random for simple_random_float
+import vec for vec3, vec4
+import color for hsva_to_rgba
+import matrix for mat4, mat4_identity, create_perspective_projection, mul_mat4_vec4, mul_mat4_mat4, ndc_to_screen
+import array for Array, array_create
+import graphics for begin_app, end_app, window_open, render_app, frame_ticks, get_mouse_down, put_float_image_data, get_mouse_x, get_mouse_y, set_fill_color_rgba, fill_rectangle_xywh, move_to, line_to, stroke, set_stroke_color_rgba, begin_path, set_line_width, fill_rectangle_overload
+
+window_width :: 320
+window_height :: 240
+
+band :: compiler.operator_bitwise_and
+
+
+fn attractor(pos: vec3) -> vec3:
+  sigma := 10.0
+  row := 28.0
+  beta := 2.6
+  speed := 0.01
+
+  dx := sigma * (-pos.x + pos.y)
+  dy := -pos.x * pos.z + row * pos.x - pos.y
+  dz := pos.x * pos.y - beta * pos.z
+
+  pos + vec3(dx * speed, dy * speed, dz * speed)
+  
+fn remap(x: float, min1: float, max1: float, min2: float, max2: float) -> float:
+  f := (x - min1) / (max1 - min1)
+  min2 + f * (max2 - min2)
+
+fn main():
+
+  fill_rectangle_overload(1, 2, 3, 4)
+  # begin_app()
+
+  # cube_points := array_create!vec3(8)
+  # for n in Range(0, 8):
+  #   cube_points[n] = vec3(
+  #     float(band(n / 4, 1)) - 0.5, 
+  #     float(band(n / 2, 1)) - 0.5, 
+  #     float(band(n / 1, 1)) - 0.5)
+
+  # screen_coords := array_create!vec3(0)
+
+  # projection := create_perspective_projection(
+  #   120, window_width / window_height, 0.1, 10000)
+
+  # cube_edges := [(0, 1), (0, 2), (3, 1), (3, 2), (4, 5), (4, 6), (7, 5), (7, 6), (0, 4), (1, 5), (2, 6), (3, 7)]
+  # edges := array_create!(Tuple!(int, int))(0)
+
+  # t := 0.0
+
+  # while window_open():
+
+  #   set_fill_color_rgba(0, 0, 0, 1)
+  #   fill_rectangle_xywh(0, 0, window_width, window_height)
+
+  #   t += 0.1
+
+
+  #   transform := (
+  #     mat4_identity()
+  #     .scale(2.5, 2.5, 2.5)
+  #     .rotate_y(t * 0.1)
+  #     .rotate_x(0.2)
+  #     .translate(0, 0, -10)
+  #     .premul(projection)
+  #   )
+
+  #   set_fill_color_rgba(1, 1, 1, 1)
+
+  #   screen_coords.size = 0
+  #   radius := 0.5
+
+  #   num_points_y := 15
+  #   num_points_x := 30
+
+  #   edges.size = 0
+    
+  #   for y in Range(0, num_points_y):
+  #     lon := float(y).remap(0, float(num_points_y - 1), 0, PI)
+  #     for x in Range(0, num_points_x):
+  #       lat := float(x).remap(0, float(num_points_x), -PI, PI)
+
+  #       sin_theta := sinf(lon)
+  #       cos_theta := cosf(lon)
+  #       cos_phi := cosf(lat)
+  #       sin_phi := sinf(lat)
+
+  #       point := vec3(
+  #         radius * sin_theta * cos_phi,
+  #         radius * cos_theta,
+  #         radius * sin_theta * sin_phi
+  #       )
+
+  #       vec := vec4(point.x , point.y, point.z, 1)
+
+  #       clip_coords := mul_mat4_vec4(transform, vec)
+  #       ndc := vec3(clip_coords.x / clip_coords.w, clip_coords.y / clip_coords.w, clip_coords.z / clip_coords.w)
+
+  #       if clip_coords.w < 0:
+  #         continue
+
+  #       screen := ndc_to_screen(ndc, window_width, window_height)
+
+  #       index := screen_coords.size
+  #       if y > 0:
+  #         edges.append((index, index - num_points_x))
+
+
+  #       if index > 0:
+  #         edges.append((index, index - 1))
+
+  #       fill_rectangle_xywh(screen.x - 1, screen.y - 1, 2, 2)
+        
+  #       screen_coords.append(screen)
+
+  #   set_line_width(0.5)
+  #   set_stroke_color_rgba(1, 1, 1, 1)
+  #   for edge in edges:
+
+  #     begin_path()
+  #     move_to(screen_coords[edge._1].xy)
+  #     line_to(screen_coords[edge._2].xy)
+  #     stroke()
+
+  #   render_app()
+
+  #   # set_stroke_color_rgba(1, 1, 1, 1)
+  #   # for i in Range(0, attractor_points.size - 1):
+
+  #   #   begin_path()
+  #   #   move_to(screen_coords[i].x, screen_coords[i].y)
+  #   #   line_to(screen_coords[i + 1].x, screen_coords[i + 1].y)
+    #   stroke()
+
+
+    # Cube border
+
+    screen_coords.size = 0
+
+    for point in cube_points:
+      vec := vec4(point.x, point.y, point.z, 1)
+
+      clip_coords := mul_mat4_vec4(transform, vec)
+      ndc := vec3(clip_coords.x / clip_coords.w, clip_coords.y / clip_coords.w, clip_coords.z / clip_coords.w)
+
+      if clip_coords.w < 0:
+        continue
+
+      screen := ndc_to_screen(ndc, window_width, window_height)
+      screen_coords.append(screen)
+      # fill_rectangle_xywh(screen.x-1, screen.y-1, 2, 2)
+
+    set_stroke_color_rgba(1, 0, 0, 1)
+    for edge in cube_edges:
+
+      begin_path()
+      move_to(screen_coords[edge._1].xy)
+      line_to(screen_coords[edge._2].xy)
+      stroke()
+
+    render_app()
+
+  end_app()

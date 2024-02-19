@@ -134,7 +134,7 @@ export const BytecodeDefault: ParseTreeTable = {
     findLabelBlockByType(out.state.labelBlock, "break").completion.push((address: number) => { instr.address = address })
   },
   continue: (out, node) => {
-    if (node.expr) visitParseNode(out, node.expr);
+    // if (node.expr) visitParseNode(out, node.expr);
     const instr = pushBytecode(out, node.token, { type: 'jump', address: 0 })
     findLabelBlockByType(out.state.labelBlock, "continue").completion.push((address: number) => { instr.address = address })
   },
@@ -1543,7 +1543,7 @@ export const programEntryTask = (ctx: TaskContext, entryModule: ParsedModule): T
         id: undefined,
         debugName: `<entry point>`,
         token: createAnonymousToken(''), functionMetaName: null, name: null, typeParams: [], params: [],
-        keywords: [], anonymous: true, returnType: null, body: null
+        keywords: [], anonymous: true, returnType: null, body: null, annotations: [], variadic: false
       }
       const func = insertFunctionDefinition(ctx.globalCompiler, decl)
 

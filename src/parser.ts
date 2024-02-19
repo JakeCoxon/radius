@@ -10,7 +10,7 @@ const regexes = {
   COMMENT: /^#[^\n]+/,
   OPENPAREN: /^(?:[\[\{\(]|%{)/,
   CLOSEPAREN: /^[\]\}\)]/,
-  PUNCTUATION: /^(?:==|!=|:=|<=|>=|\+=|\-=|\*=|\/=|::|->|\|\>|\.\.\.|[@!:,=<>\-+\.*\/'\|])/,
+  PUNCTUATION: /^(?:==|!=|:=|<=|>=|\+=|\-=|\*=|\/=|::|->|\|\>|\.\.\.|@@|[@!:,=<>\-+\.*\/'\|])/,
   NEWLINE: /^\n/,
   WHITESPACE: /^[ ]+/ // Not newline
 }
@@ -482,9 +482,18 @@ export const makeParser = (input: string, debugName: string) => {
     const iden = parseIdentifier()
     return trailingNewline(new ParseContinue(continueToken, iden))
   }
+  const parseAnnotation = () => {
+    const annotation = parseExpr()
+    expect("\n", "Expected newline after annotation")
+    const stmt = parseStatement()
+    compilerAssert(stmt instanceof ParseFunction, "Not implemented for statement type")
+    stmt.functionDecl.annotations.push(annotation)
+    return stmt
+  }
 
   const parseStatement = (): ParseNode => {
     if (match("fn"))            return parseFunctionDef();
+    else if (match("@@"))       return parseAnnotation()
     else if (match("type"))     return parseClassDef();
     else if (match("if"))       return parseIf(previous, false);
     else if (match("while"))    return parseWhile();
@@ -519,7 +528,7 @@ const createNamedFunc = (state: any, token: Token, functionMetaName: ParseIdenti
     id: undefined,
     debugName: `${name.token.value}`,
     token: token, functionMetaName, name, typeParams, params,
-    keywords, returnType, body
+    keywords, returnType, body, annotations: [], variadic: false
   };
   state.functionDecls.push(decl)
   return new ParseFunction(token, decl)
@@ -530,7 +539,7 @@ const createAnonymousFunc = (state: any, token: Token, params: ParserFunctionPar
     id: undefined,
     debugName: `<anonymous line ${token.location.line}>`,
     token: token, functionMetaName: null, name: null, typeParams: [], params,
-    keywords, anonymous: true, returnType, body
+    keywords, anonymous: true, returnType, body, annotations: [], variadic: false
   };
   state.functionDecls.push(decl)
   return new ParseFunction(token, decl)

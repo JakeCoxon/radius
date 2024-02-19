@@ -1,3 +1,4 @@
+import compiler for overloaded
 import vec for vec2
 
 fn begin_app() @external
@@ -24,13 +25,8 @@ fn get_mouse() -> vec2:
 
 fn save() @external
 fn restore() @external
-fn set_fill_color(r: float, g: float, b: float, a: float) @external
-fn set_stroke_color(r: float, g: float, b: float, a: float) @external
-fn fill_rectangle(x: float, y: float, w: float, h: float) @external
-fn translate(x: float, y: float) @external
+
 fn rotate(angle_radians: float) @external
-fn move_to(x: float, y: float) @external
-fn line_to(x: float, y: float) @external
 fn set_line_width(width: float) @external
 fn fill() @external
 fn stroke() @external
@@ -40,6 +36,37 @@ fn rotate_at_origin(angle_radians: float, x: float, y: float):
   translate(x, y)
   rotate(angle_radians)
   translate(-x, -y)
+
+@@external("translate")
+fn translate_xy(x: float, y: float) @external
+fn translate(pos: vec2):
+  translate_xy(pos.x, pos.y)
+
+@@external("fill_rectangle")
+fn fill_rectangle_xywh(x: float, y: float, w: float, h: float) @external
+fn fill_rectangle(pos: vec2, size: vec2):
+  fill_rectangle_xywh(pos.x, pos.y, size.x, size.y)
+
+@@external("move_to")
+fn move_to_xy(x: float, y: float)
+fn move_to(vec: vec2): move_to_xy(vec.x, vec.y)
+
+@@external("line_to")
+fn line_to_xy(x: float, y: float) @external
+fn line_to(vec: vec2): line_to_xy(vec.x, vec.y)
+
+@@external("set_fill_color")
+fn set_fill_color_rgba(r: float, g: float, b: float, a: float) @external
+fn set_fill_color(color: vec4):
+  set_fill_color_rgba(color.r, color.g, color.b, color.a)
+
+@@external("set_stroke_color")
+fn set_stroke_color_rgba(r: float, g: float, b: float, a: float) @external
+fn set_stroke_color(color: vec4):
+  set_stroke_color_rgba(color.r, color.g, color.b, color.a)
+
+fill_rectangle_overload :: overloaded([
+  fill_rectangle_xywh, fill_rectangle])
 
 # TODO: Fix calling this directly
 add_external_library :: compiler.add_external_library

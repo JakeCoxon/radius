@@ -1,4 +1,4 @@
-import { Event } from "./tasks";
+import { Event, Task } from "./tasks";
 
 export type UnknownObject = {[key:string]:unknown}
 
@@ -72,7 +72,8 @@ export type ParserFunctionDecl = {
   id: number | undefined, debugName: string, anonymous?: boolean,
   token: Token, functionMetaName: ParseIdentifier | null,
   name: ParseIdentifier | null, typeParams: ParseNode[], params: ParserFunctionParameter[], 
-  returnType: ParseNode | null, body: ParseNode | null, keywords: ParseNode[] }
+  returnType: ParseNode | null, body: ParseNode | null, keywords: ParseNode[],
+  annotations: ParseNode[], variadic: boolean }
 
 export const createAnonymousParserFunctionDecl = (debugName: string, sourceToken: Token, params: ParserFunctionParameter[], body: ParseNode) => {
   const decl: ParserFunctionDecl = {
@@ -86,7 +87,9 @@ export const createAnonymousParserFunctionDecl = (debugName: string, sourceToken
     token: sourceToken,
     keywords: [],
     typeParams: [],
-    functionMetaName: null
+    functionMetaName: null,
+    annotations: [],
+    variadic: false
   }
   return decl;
 }
@@ -288,6 +291,7 @@ export class FunctionDefinition {
 
   compiledFunctions: CompiledFunction[] = []
   keywords: string[] = []
+  externalName: string | undefined = undefined
 
   constructor(
     public id: number,
@@ -297,7 +301,9 @@ export class FunctionDefinition {
     public params: ParserFunctionParameter[],
     public returnType: ParseNode | null,
     public body: ParseNode | null,
-    public inline: boolean) {}
+    public inline: boolean,
+    public annotations: ParseNode[] = [],
+    public variadic: boolean = false) {}
 
   [Inspect.custom](depth: any, options: any, inspect: any) {
     if (depth <= 1) return options.stylize(`[FunctionDefinition ${this.debugName}]`, 'special');

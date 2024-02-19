@@ -27,3 +27,5 @@ type rgba < VecType @struct:
   g: float
   b: float
   a: float
+
+fn xy(vec: vec3) -> vec2 @method: vec2(vec.x, vec.y)

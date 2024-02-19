@@ -1,6 +1,6 @@
 import { BytecodeDefault, BytecodeSecondOrder, compileClassTask, compileFunctionPrototype, createBytecodeVmAndExecuteTask, propagateLiteralType, propagatedLiteralAst, pushBytecode, pushGeneratedBytecode, visitParseNode } from "./compiler";
 import { externalBuiltinBindings } from "./compiler_sugar";
-import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, CallAst, IntType, Closure, UserCallAst, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition, ParseCall, TypeVariable, TypeMatcher, typeMatcherEquals, SourceLocation, ExternalTypeConstructor, ScopeParentSymbol, SubCompilerState, CompilerFunction, IntLiteralType, FloatLiteralType, FloatType, RawPointerType, AddressAst, BindingAst, UnknownObject, NeverType, CompilerFunctionCallContext, CompileTimeObjectType, CompTimeObjAst } from "./defs";
+import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, CallAst, IntType, Closure, UserCallAst, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition, ParseCall, TypeVariable, TypeMatcher, typeMatcherEquals, SourceLocation, ExternalTypeConstructor, ScopeParentSymbol, SubCompilerState, CompilerFunction, IntLiteralType, FloatLiteralType, FloatType, RawPointerType, AddressAst, BindingAst, UnknownObject, NeverType, CompilerFunctionCallContext, CompileTimeObjectType, CompTimeObjAst, ParseString } from "./defs";
 import { Task, TaskDef, Unit } from "./tasks";
 
 
@@ -14,8 +14,20 @@ export const insertFunctionDefinition = (compilerState: GlobalCompilerState, dec
     decl.id, decl.debugName,
     decl.name, decl.typeParams, decl.params,
     decl.returnType, decl.body,
-    inline)
+    inline, decl.annotations)
+  funcDef.variadic = decl.variadic
   funcDef.keywords.push(...keywords)
+
+  if (funcDef.keywords.includes("external")) {
+    compilerAssert(decl.name, "Expected name")
+    funcDef.externalName = decl.name.token.value
+  } 
+  const ann = decl.annotations.find(x => x instanceof ParseCall && x.left instanceof ParseIdentifier && x.left.token.value === 'external')
+  if (ann) {
+      compilerAssert(ann instanceof ParseCall)
+      compilerAssert(ann.args.length === 1 && ann.args[0] instanceof ParseString)
+      funcDef.externalName = ann.args[0].string
+    }
 
   compilerState.functionDefinitions.push(funcDef);
   return funcDef;
@@ -37,7 +49,8 @@ export type TypeCheckResult = {
 function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, args, typeArgs, parentScope, result }: TypeCheckHeaderArg): Task<Unit, CompilerError> {
 
   compilerAssert(typeArgs.length <= func.typeParams.length, "Expected $expected type parameters, got $got", { expected: func.typeParams.length, got: typeArgs.length, func })
-  compilerAssert(args.length === func.params.length, 'Expected $expected args got $got', { expected: func.params.length, got: args.length, func })
+  compilerAssert(args.length >= func.params.length, 'Not enough params. Got $expected args got $got', { expected: func.params.length, got: args.length, args, func })
+  compilerAssert(func.variadic || args.length == func.params.length, 'Too many params. Expected $expected args got $got', { expected: func.params.length, got: args.length, args, func })
 
   // if (func.params.length === 0) return Task.success()
   
@@ -227,7 +240,7 @@ function functionInlineTask(ctx: TaskContext, { location, func, typeArgs, args, 
   const argBindings: Binding[] = [];
   const statements: Ast[] = []
 
-  compilerAssert(func.body)
+  compilerAssert(func.body, "Expected body to inline function", { func })
 
   if (!func.templatePrototype)  {
     func.templatePrototype = { name: `${func.debugName} inline bytecode`, body: func.body, initialInstructionTable: BytecodeSecondOrder };
@@ -368,19 +381,18 @@ export function createCallAstFromValue(ctx: CompilerFunctionCallContext, value: 
     const { func, scope: parentScope, lexicalParent } = value
     const call: FunctionCallArg = { location, func, typeArgs, args, parentScope, lexicalParent, result: { concreteTypes: [], substitutions: {}, returnType: undefined! } }
     
-    if (func.keywords.includes('external')) {
-      const name = func.name
-      compilerAssert(name, "Expected name for external function");
+    if (func.externalName !== undefined) {
+      const externalName = func.externalName
       return (
         TaskDef(compileAndExecuteFunctionHeaderTask, call)
         .chainFn((task, arg) => { 
           const ctx = (task._context as TaskContext)
-          const existing = ctx.globalCompiler.externalDefinitions.find(x => x.name === name.token.value)
+          const existing = ctx.globalCompiler.externalDefinitions.find(x => x.name === externalName)
           const paramHash = hashValues(call.result.concreteTypes)
           compilerAssert(!existing || existing.paramHash === paramHash, "Function exists with different param hash", { existing })
-          const binding = existing?.binding ?? externalBuiltinBindings[name.token.value] ?? new Binding(name.token.value, FunctionType)
+          const binding = existing?.binding ?? externalBuiltinBindings[externalName] ?? new Binding(externalName, FunctionType)
 
-          if (!existing) ctx.globalCompiler.externalDefinitions.push({ name: name.token.value, binding, paramHash, paramTypes: call.result.concreteTypes, returnType: call.result.returnType })
+          if (!existing) ctx.globalCompiler.externalDefinitions.push({ name: externalName, binding, paramHash, paramTypes: call.result.concreteTypes, returnType: call.result.returnType })
           compilerAssert(call.result.returnType, "Expected return type got $returnType", { returnType: call.result.returnType })
           const mappedArgs = args.map((ast, i) => {
             propagateLiteralType(call.result.concreteTypes[i], ast)
