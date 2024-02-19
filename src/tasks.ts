@@ -159,9 +159,14 @@ export class InitFn<SIn, SOut, F, F1 extends F> extends Task<SOut, F> implements
 
   _start(queue: Queue) {
     this._state = "started";
-    const newTask = this.fn(this);
-    this._childTask = newTask;
-    queue.enqueue(newTask);
+    try {
+      const newTask = this.fn(this);
+      this._childTask = newTask;
+      queue.enqueue(newTask);
+    } catch (ex) {
+      this._state = "completed"
+      this._failure = ex
+    }
   }
   _step(queue: Queue) {
     this._state = "completed";
@@ -197,9 +202,14 @@ export class ChainFn<SIn, SOut, F, F1> extends Task<SOut, F1 | F> {
     if (this._failure) {
       this._state = "completed";
     } else if (!this._childTask && !this._task._failure) { // Don't use _success because it could be falsey
-      const newTask = this.fn(this, this._task._success!);
-      this._childTask = newTask
-      queue.enqueue(newTask);
+      try {
+        const newTask = this.fn(this, this._task._success!);
+        this._childTask = newTask
+        queue.enqueue(newTask);
+      } catch (ex) {
+        this._state = "completed"
+        this._failure = ex
+      }
     } else if (this._childTask) {
       this._state = "completed";
       this._success = this._childTask._success;
