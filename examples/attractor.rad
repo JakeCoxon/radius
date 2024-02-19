@@ -82,7 +82,7 @@ fn main():
       vec := vec4(point.x * scale , point.y * scale, point.z * scale + 0.5, 1)
 
       clip_coords := mul_mat4_vec4(transform, vec)
-      ndc := vec3(clip_coords.x / clip_coords.w, clip_coords.y / clip_coords.w, clip_coords.z / clip_coords.w)
+      ndc := clip_coords.xyz.div_scalar(clip_coords.w)
 
       if clip_coords.w < 0:
         continue
@@ -94,8 +94,8 @@ fn main():
     for i in Range(0, attractor_points.size - 1):
 
       begin_path()
-      move_to(screen_coords[i].x, screen_coords[i].y)
-      line_to(screen_coords[i + 1].x, screen_coords[i + 1].y)
+      move_to(screen_coords[i].xy)
+      line_to(screen_coords[i + 1].xy)
       stroke()
 
 
@@ -107,21 +107,20 @@ fn main():
       vec := vec4(point.x, point.y, point.z, 1)
 
       clip_coords := mul_mat4_vec4(transform, vec)
-      ndc := vec3(clip_coords.x / clip_coords.w, clip_coords.y / clip_coords.w, clip_coords.z / clip_coords.w)
+      ndc := clip_coords.xyz.div_scalar(clip_coords.w)
 
       if clip_coords.w < 0:
         continue
 
       screen := ndc_to_screen(ndc, window_width, window_height)
       screen_coords.append(screen)
-      # fill_rectangle(screen.x-1, screen.y-1, 2, 2)
 
     set_stroke_color(1, 0, 0, 1)
     for edge in cube_edges:
 
       begin_path()
-      move_to(screen_coords[edge._1].x, screen_coords[edge._1].y)
-      line_to(screen_coords[edge._2].x, screen_coords[edge._2].y)
+      move_to(screen_coords[edge._1].xy)
+      line_to(screen_coords[edge._2].xy)
       stroke()
 
     render_app()

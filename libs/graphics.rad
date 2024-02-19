@@ -1,4 +1,4 @@
-import compiler for overloaded
+import compiler for overloaded, add_external_library
 import vec for vec2
 
 fn begin_app() @external
@@ -39,37 +39,42 @@ fn rotate_at_origin(angle_radians: float, x: float, y: float):
 
 @@external("translate")
 fn translate_xy(x: float, y: float) @external
-fn translate(pos: vec2):
+fn translate_vec2(pos: vec2):
   translate_xy(pos.x, pos.y)
+translate :: overloaded([translate_xy, translate_vec2])
 
 @@external("fill_rectangle")
 fn fill_rectangle_xywh(x: float, y: float, w: float, h: float) @external
-fn fill_rectangle(pos: vec2, size: vec2):
+fn fill_rectangle_vec2_vec2(pos: vec2, size: vec2):
   fill_rectangle_xywh(pos.x, pos.y, size.x, size.y)
+fill_rectangle :: overloaded([
+  fill_rectangle_xywh, fill_rectangle_vec2_vec2])
 
 @@external("move_to")
 fn move_to_xy(x: float, y: float)
-fn move_to(vec: vec2): move_to_xy(vec.x, vec.y)
+fn move_to_vec2(vec: vec2): move_to_xy(vec.x, vec.y)
+move_to :: overloaded([
+  move_to_xy, move_to_vec2])
 
 @@external("line_to")
 fn line_to_xy(x: float, y: float) @external
-fn line_to(vec: vec2): line_to_xy(vec.x, vec.y)
+fn line_to_vec2(vec: vec2): line_to_xy(vec.x, vec.y)
+line_to :: overloaded([
+  line_to_xy, line_to_vec2])
 
 @@external("set_fill_color")
 fn set_fill_color_rgba(r: float, g: float, b: float, a: float) @external
-fn set_fill_color(color: vec4):
+fn set_fill_color_vec4(color: vec4):
   set_fill_color_rgba(color.r, color.g, color.b, color.a)
+set_fill_color :: overloaded([
+  set_fill_color_rgba, set_fill_color_vec4])
 
 @@external("set_stroke_color")
 fn set_stroke_color_rgba(r: float, g: float, b: float, a: float) @external
-fn set_stroke_color(color: vec4):
+fn set_stroke_color_vec4(color: vec4):
   set_stroke_color_rgba(color.r, color.g, color.b, color.a)
-
-fill_rectangle_overload :: overloaded([
-  fill_rectangle_xywh, fill_rectangle])
-
-# TODO: Fix calling this directly
-add_external_library :: compiler.add_external_library
+set_stroke_color :: overloaded([
+  set_stroke_color_rgba, set_stroke_color_vec4])
 
 comptime:
   add_external_library("graphicslib")
