@@ -530,7 +530,7 @@ const popStack = (vm: Vm) => {
 };
 
 
-const operators: {[key:string]: { op: string, typeCheck: unknown, comptime: (a: number, b: number) => unknown, func: (ctx: CompilerFunctionCallContext, a: Ast, b: Ast) => Ast }} = {};
+const operators: {[key:string]: { op: string, typeCheck: unknown, comptime: (a: number, b: number) => unknown, func: (ctx: CompilerFunctionCallContext, a: Ast, b: Ast) => Task<Ast, CompilerError> }} = {};
 
 export const getOperatorTable = () => operators
 
@@ -548,7 +548,7 @@ const createOperator = (op: string, operatorName: string, typeCheck: (config: Ty
       compilerAssert(typeCheckConfig.inferType, "Expected infer type", { type: typeCheckConfig.inferType })
       if (typeCheckConfig.a.type !== a.type) propagateLiteralType(typeCheckConfig.a.type, a)
       if (typeCheckConfig.b.type !== b.type) propagateLiteralType(typeCheckConfig.b.type, b)
-      return new OperatorAst(typeCheckConfig.inferType, ctx.location, op, [a, b])
+      return Task.of(new OperatorAst(typeCheckConfig.inferType, ctx.location, op, [a, b]))
     }
   }
 }
@@ -870,7 +870,10 @@ const instructions: InstructionMapping = {
       return void vm.stack.push(new OperatorAst(values[0].type, vm.location, name, [new NumberAst(values[0].type, vm.location, 0), values[0]]))
     }
     const ctx: CompilerFunctionCallContext = { location: vm.location, compilerState: vm.context.subCompilerState }
-    vm.stack.push(operators[name].func(ctx, values[0], values[1]))
+    return (
+      operators[name].func(ctx, values[0], values[1])
+      .chainFn((task, res) => { vm.stack.push(res); return Task.success() })
+    )
   },
   notast: (vm, {}) => {
     let expr = expectAst(popStack(vm));

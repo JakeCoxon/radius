@@ -866,3 +866,19 @@ test('add_operator_bug', async () => {
     testObject.close()
   }
 })
+
+test('overload', async () => {
+  const testObject = createTest({ 
+    moduleName: 'overload',
+    globalOptions,
+    inputPath: `${import.meta.dir}/fixtures/overload.rad`,
+  })
+  try {
+    const input = await Bun.file(testObject.inputPath).text()
+    runCompilerTest(input, { testObject })
+    await writeLlvmBytecodeFile(testObject)
+    await executeNativeExecutable(testObject)
+  } finally {
+    testObject.close()
+  }
+})

@@ -59,8 +59,18 @@ export class Task<S, F> {
     return new Empty();
   }
 
+  static all<U, F>(tasks: Task<U, F>[]): Task<U[], F> {
+    return tasks.reduce((acc, x, i) => 
+      acc.chainFn((task, _) => x))
+      .chainFn((task, _) => Task.of(tasks.map(x => x._success!)))
+  }
+
   mapRejected(fn: (rejected: F) => F) {
     return new MapRejected(this, fn)
+  }
+
+  chainRejected<F1 extends F>(fn: (arg: F) => Task<S, F | F1>) {
+    return new ChainRejected(this, fn)
   }
 
   chain<S1, F1 extends F>(chainable: Chainable<S, S1, F>): Task<S1, F | F1> {
@@ -204,6 +214,51 @@ export class ChainFn<SIn, SOut, F, F1> extends Task<SOut, F1 | F> {
     } else if (!this._childTask && !this._task._failure) { // Don't use _success because it could be falsey
       try {
         const newTask = this.fn(this, this._task._success!);
+        this._childTask = newTask
+        queue.enqueue(newTask);
+      } catch (ex) {
+        this._state = "completed"
+        this._failure = ex
+      }
+    } else if (this._childTask) {
+      this._state = "completed";
+      this._success = this._childTask._success;
+      this._failure = this._childTask._failure;
+    } else {
+      console.log(this);
+      throw new Error("Invalid state");
+    }
+  }
+
+  _toString() {
+    return `${this._task._toString()}.chain(${this.id}, ..)`;
+  }
+}
+
+export class ChainRejected<S, F, F1> extends Task<S, F1 | F> {
+  _task: Task<S, F> = undefined!;
+  _childTask: Task<S, F | F1> | undefined;
+
+  constructor(
+    task: Task<S, F>,
+    public fn: (error: F) => Task<S, F | F1>
+  ) {
+    super();
+    this._task = task;
+    (task as any)._prevInChain = this
+  }
+
+  _start(queue: Queue) {
+    this._state = "started";
+    queue.enqueue(this._task);
+  }
+  _step(queue: Queue) {
+    this._success = this._task._success;
+    if (this._success || this._failure) {
+      this._state = "completed";
+    } else if (!this._childTask && this._task._failure) {
+      try {
+        const newTask = this.fn(this._task._failure!);
         this._childTask = newTask
         queue.enqueue(newTask);
       } catch (ex) {

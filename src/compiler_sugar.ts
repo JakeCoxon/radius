@@ -1,6 +1,6 @@
 import { BytecodeSecondOrder, getOperatorTable, loadModule, propagatedLiteralAst, pushBytecode, resolveScope, visitParseNode } from "./compiler"
-import { createCallAstFromValueAndPushValue, createMethodCall, insertFunctionDefinition } from "./compiler_functions"
-import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, UserCallAst, hashValues, NeverType, IfAst, BoolType, VoidAst, LoopObject, CompileTimeObjectType, u64Type } from "./defs"
+import { createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, insertFunctionDefinition } from "./compiler_functions"
+import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, UserCallAst, hashValues, NeverType, IfAst, BoolType, VoidAst, LoopObject, CompileTimeObjectType, u64Type, FunctionDefinition, ParserFunctionDecl } from "./defs"
 import { Task, TaskDef } from "./tasks"
 
 export const forLoopSugar = (out: BytecodeWriter, node: ParseFor) => {
@@ -142,10 +142,14 @@ const insertMetaObjectPairwiseOperator = (compiledClass: CompiledClass, operator
           new ValueFieldAst(field.fieldType,      ctx.location, bindingAstA, [field]),
           new ValueFieldAst(otherField.fieldType, ctx.location, bindingAstB, [otherField]))
       })
-      return createStatements(ctx.location, [
-        ...lets,
-        new ConstructorAst(compiledClass.type, ctx.location, constructorArgs)
-      ])
+      return (
+        Task.all(constructorArgs).chainFn((task, constructorArgs) => {
+          return Task.of(createStatements(ctx.location, [
+            ...lets,
+            new ConstructorAst(compiledClass.type, ctx.location, constructorArgs)
+          ]))
+        })
+      )
     }
     compilerAssert(b.type === a.type, "Expected vec or tuple. got $type", { type: b.type })
     const constructorArgs = compiledClass.fields.map(field => 
@@ -153,10 +157,14 @@ const insertMetaObjectPairwiseOperator = (compiledClass: CompiledClass, operator
         new ValueFieldAst(field.fieldType, ctx.location, bindingAstA, [field]),
         new ValueFieldAst(field.fieldType, ctx.location, bindingAstB, [field]))
     )
-    return createStatements(ctx.location, [
-      ...lets,
-      new ConstructorAst(compiledClass.type, ctx.location, constructorArgs)
-    ])
+    return (
+      Task.all(constructorArgs).chainFn((task, constructorArgs) => {
+        return Task.of(createStatements(ctx.location, [
+          ...lets,
+          new ConstructorAst(compiledClass.type, ctx.location, constructorArgs)
+        ]))
+      })
+    )
   })
   compiledClass.metaobject[operatorName] = operatorFunc
 }
@@ -270,15 +278,20 @@ export const assert = new CompilerFunction('assert', (ctx, typeArgs: unknown[], 
   const rightBinding = new BindingAst(right.binding.type, location, right.binding)
   const newOp = new OperatorAst(op.type, location, op.operator, [leftBinding, rightBinding])
 
-  return createStatements(location, [
-    left, right,
-    new IfAst(VoidType, location, newOp, new VoidAst(VoidType, location), 
-      createStatements(location, [
-        print.func(ctx, [], [new StringAst(StringType, location, 'Expected'), leftBinding, new StringAst(StringType, location, op.operator), rightBinding]),
-        new UserCallAst(VoidType, location, externalBuiltinBindings.exit, [new NumberAst(IntType, location, 1)])
-      ])
-    )
-  ])
+  return (
+    print.func(ctx, [], [new StringAst(StringType, location, 'Expected'), leftBinding, new StringAst(StringType, location, op.operator), rightBinding])
+    .chainFn((task, printResult) => {
+      return Task.of(createStatements(location, [
+        left, right,
+        new IfAst(VoidType, location, newOp, new VoidAst(VoidType, location), 
+          createStatements(location, [
+            printResult,
+            new UserCallAst(VoidType, location, externalBuiltinBindings.exit, [new NumberAst(IntType, location, 1)])
+          ])
+        )
+      ]))
+    })
+  )
 })
 
 export const print = new CompilerFunction('print', (ctx, typeArgs: unknown[], args: Ast[]) => {
@@ -337,7 +350,7 @@ export const print = new CompilerFunction('print', (ctx, typeArgs: unknown[], ar
   stmts.unshift(new LetAst(VoidType, location, formatBinding, new StringAst(StringType, location, formatStr)))
   printfArgs.unshift(fieldHelper(formatBinding, 'data'))
   stmts.push(new CallAst(VoidType, location, externalBuiltinBindings.printf, printfArgs, []))
-  return createStatements(location, stmts)
+  return Task.of(createStatements(location, stmts))
 })
 
 export const unsafe_subscript = new CompilerFunction('unsafe_subscript', (ctx, typeArgs: unknown[], args: Ast[]) => {
@@ -346,7 +359,7 @@ export const unsafe_subscript = new CompilerFunction('unsafe_subscript', (ctx, t
   compilerAssert(right && right.type === IntType, "Expected int type", { right })
   compilerAssert(left && left.type === RawPointerType, "Expected rawptr", { left })
   const type = expectType(typeArgs[0])
-  return new SubscriptAst(type, ctx.location, left, propagatedLiteralAst(right))
+  return Task.of(new SubscriptAst(type, ctx.location, left, propagatedLiteralAst(right)))
 })
 export const unsafe_set_subscript = new CompilerFunction('unsafe_set_subscript', (ctx, typeArgs: unknown[], args: Ast[]) => {
   const [left, right, value] = args
@@ -354,7 +367,7 @@ export const unsafe_set_subscript = new CompilerFunction('unsafe_set_subscript',
   compilerAssert(right && right.type === IntType, "Expected int type", { right })
   compilerAssert(left && left.type === RawPointerType, "Expected rawptr", { left })
   compilerAssert(value, "Expected value", { value })
-  return new SetSubscriptAst(VoidType, ctx.location, left, propagatedLiteralAst(right), propagatedLiteralAst(value))
+  return Task.of(new SetSubscriptAst(VoidType, ctx.location, left, propagatedLiteralAst(right), propagatedLiteralAst(value)))
 })
 export const operator_bitshift_left = new CompilerFunction('operator_bitshift_left', (ctx, typeArgs: unknown[], args: Ast[]) => {
   const [a, b] = args
@@ -362,7 +375,7 @@ export const operator_bitshift_left = new CompilerFunction('operator_bitshift_le
   propagatedLiteralAst(b)
   compilerAssert(a && a.type === IntType, "Expected int type", { a })
   compilerAssert(b && b.type === IntType, "Expected int type", { b })
-  return new OperatorAst(IntType, ctx.location, "<<", [a, b])
+  return Task.of(new OperatorAst(IntType, ctx.location, "<<", [a, b]))
 })
 export const operator_bitshift_right = new CompilerFunction('operator_bitshift_right', (ctx, typeArgs: unknown[], args: Ast[]) => {
   const [a, b] = args
@@ -370,7 +383,7 @@ export const operator_bitshift_right = new CompilerFunction('operator_bitshift_r
   propagatedLiteralAst(b)
   compilerAssert(a && a.type === IntType, "Expected int type", { a })
   compilerAssert(b && b.type === IntType, "Expected int type", { b })
-  return new OperatorAst(IntType, ctx.location, ">>", [a, b])
+  return Task.of(new OperatorAst(IntType, ctx.location, ">>", [a, b]))
 })
 export const operator_bitwise_and = new CompilerFunction('operator_bitwise_and', (ctx, typeArgs: unknown[], args: Ast[]) => {
   const [a, b] = args
@@ -378,7 +391,7 @@ export const operator_bitwise_and = new CompilerFunction('operator_bitwise_and',
   propagatedLiteralAst(b)
   compilerAssert(a && a.type === IntType, "Expected int type", { a })
   compilerAssert(b && b.type === IntType, "Expected int type", { b })
-  return new OperatorAst(IntType, ctx.location, "&", [a, b])
+  return Task.of(new OperatorAst(IntType, ctx.location, "&", [a, b]))
 })
 export const operator_bitwise_or = new CompilerFunction('operator_bitwise_or', (ctx, typeArgs: unknown[], args: Ast[]) => {
   const [a, b] = args
@@ -386,7 +399,7 @@ export const operator_bitwise_or = new CompilerFunction('operator_bitwise_or', (
   propagatedLiteralAst(b)
   compilerAssert(a && a.type === IntType, "Expected int type", { a })
   compilerAssert(b && b.type === IntType, "Expected int type", { b })
-  return new OperatorAst(IntType, ctx.location, "|", [a, b])
+  return Task.of(new OperatorAst(IntType, ctx.location, "|", [a, b]))
 })
 export const operator_mod = new CompilerFunction('operator_mod', (ctx, typeArgs: unknown[], args: Ast[]) => {
   const [a, b] = args
@@ -394,7 +407,7 @@ export const operator_mod = new CompilerFunction('operator_mod', (ctx, typeArgs:
   propagatedLiteralAst(b)
   compilerAssert(a && a.type === u64Type, "Expected int type", { a })
   compilerAssert(b && b.type === u64Type, "Expected int type", { b })
-  return new OperatorAst(u64Type, ctx.location, "mod", [a, b])
+  return Task.of(new OperatorAst(u64Type, ctx.location, "mod", [a, b]))
 })
 
 const add_external_library = new ExternalFunction("add_external_library", VoidType, (ctx: CompilerFunctionCallContext, args) => {
@@ -411,12 +424,29 @@ const get_current_loop = new ExternalFunction("get_current_loop", VoidType, (ctx
   return loop
 })
 
+const overloaded = new ExternalFunction("overloaded", VoidType, (ctx: CompilerFunctionCallContext, args) => {
+  const funcs = args[0] as Closure[]
+  compilerAssert(Array.isArray(funcs) && funcs.every(x => x instanceof Closure), "Expected functions", { funcs })
+
+  return new CompilerFunction('overload', (fnctx, typeArgs: unknown[], args: Ast[]) => {
+    return (
+      (funcs.map(func => createCallAstFromValue(fnctx, func, [], args)) as Task<Ast, CompilerError> [])
+      .reduce((acc, funcCall) => acc.chainRejected((err) => funcCall))
+      .chainRejected(err => {
+        // TODO: Can we filter type check errors from compiler errors here
+        const names = funcs.map(x => x.func.debugName).join(', ')
+        compilerAssert(false, `Could not find overload that matches for ${names}`, { args, err })
+      })
+    )
+  })
+})
+
 export const createCompilerModuleTask = (ctx: TaskContext): Task<Module, CompilerError> => {
   const moduleScope = createScope({}, undefined)
   Object.assign(moduleScope, { 
     unsafe_subscript, unsafe_set_subscript, operator_bitshift_left, operator_bitshift_right,
     operator_bitwise_and, operator_bitwise_or, rawptr: RawPointerType, add_external_library, assert,
-    get_current_loop, ctobj: CompileTimeObjectType, operator_mod })
+    get_current_loop, ctobj: CompileTimeObjectType, operator_mod, overloaded })
   const subCompilerState = pushSubCompilerState(ctx, { debugName: `compiler module`, lexicalParent: undefined, scope: moduleScope })
   const module = new Module('compiler', subCompilerState, null!)
   return Task.of(module)

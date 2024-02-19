@@ -14,10 +14,15 @@ fn modify_tuple(tup: (int, float, Person, MyVec)):
   tup._4.x = 12
   tup._4.y = 10
 
+@@external("fill_rectangle")
+fn thing() -> int
+
 fn main():
 
   new_vec := MyVec(30, 40)
   new_person := Person("Another Person", 100)
+
+  asdf := thing()
 
   tup := (23, float(67), new_person, new_vec)
 

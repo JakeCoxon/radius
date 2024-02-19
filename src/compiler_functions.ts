@@ -373,7 +373,7 @@ export function createCallAstFromValue(ctx: CompilerFunctionCallContext, value: 
   }
 
   if (value instanceof CompilerFunction) {
-    return Task.of(value.func(ctx, typeArgs, args))
+    return value.func(ctx, typeArgs, args)
   }
 
   if (value instanceof Closure) {

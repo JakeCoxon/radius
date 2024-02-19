@@ -578,8 +578,10 @@ export class ExternalFunction {
     return options.stylize(`[ExternalFunction ${this.name}]`, 'special');
   }
 }
+
+type CompilerFunctionBuilder = (ctx: CompilerFunctionCallContext, typeArgs: unknown[], args: Ast[]) => Task<Ast, CompilerError>
 export class CompilerFunction {
-  constructor(public name: string, public func: (ctx: CompilerFunctionCallContext, typeArgs: unknown[], args: Ast[]) => Ast) {}
+  constructor(public name: string, public func: CompilerFunctionBuilder) {}
   [Inspect.custom](depth: any, options: any, inspect: any) {
     return options.stylize(`[CompilerFunction ${this.name}]`, 'special');
   }
