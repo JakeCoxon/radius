@@ -1,6 +1,6 @@
-import { BytecodeSecondOrder, getOperatorTable, loadModule, propagatedLiteralAst, pushBytecode, resolveScope, visitParseNode } from "./compiler"
+import { BytecodeSecondOrder, getOperatorTable, loadModule, propagateLiteralType, propagatedLiteralAst, pushBytecode, resolveScope, visitParseNode } from "./compiler"
 import { createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, insertFunctionDefinition } from "./compiler_functions"
-import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, UserCallAst, hashValues, NeverType, IfAst, BoolType, VoidAst, LoopObject, CompileTimeObjectType, u64Type, FunctionDefinition, ParserFunctionDecl } from "./defs"
+import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, UserCallAst, hashValues, NeverType, IfAst, BoolType, VoidAst, LoopObject, CompileTimeObjectType, u64Type, FunctionDefinition, ParserFunctionDecl, StatementsAst, isTypeScalar, IntLiteralType, FloatLiteralType } from "./defs"
 import { Task, TaskDef } from "./tasks"
 
 export const forLoopSugar = (out: BytecodeWriter, node: ParseFor) => {
@@ -128,9 +128,13 @@ export const listComprehensionSugar = (out: BytecodeWriter, node: ParseListComp)
 const insertMetaObjectPairwiseOperator = (compiledClass: CompiledClass, operatorName: string, operatorSymbol: string) => {
   const operatorFunc = new CompilerFunction(operatorName, (ctx, typeArgs, args) => {
     const [a, b] = args
+    // TODO: Try and move this to be more automatic
+    if (b.type === IntLiteralType || b.type === FloatLiteralType) {
+      propagateLiteralType(compiledClass.fields[0].fieldType, b)
+    }
     const bindingAstA = new BindingAst(a.type, ctx.location, new Binding("", a.type))
     const bindingAstB = new BindingAst(b.type, ctx.location, new Binding("", b.type))
-    const lets = [
+    const stmts: Ast[] = [
       new LetAst(VoidType, ctx.location, bindingAstA.binding, a),
       new LetAst(VoidType, ctx.location, bindingAstB.binding, b)]
     if (b.type instanceof ParameterizedType && b.type.typeConstructor === TupleTypeConstructor) {
@@ -144,10 +148,21 @@ const insertMetaObjectPairwiseOperator = (compiledClass: CompiledClass, operator
       })
       return (
         Task.all(constructorArgs).chainFn((task, constructorArgs) => {
-          return Task.of(createStatements(ctx.location, [
-            ...lets,
-            new ConstructorAst(compiledClass.type, ctx.location, constructorArgs)
-          ]))
+          stmts.push(new ConstructorAst(compiledClass.type, ctx.location, constructorArgs))
+          return Task.of(createStatements(ctx.location, stmts))
+        })
+      )
+    }
+    if (isTypeScalar(b.type)) {
+      const constructorArgs = compiledClass.fields.map(field => 
+        getOperatorTable()[operatorSymbol].func(ctx, 
+          new ValueFieldAst(field.fieldType, ctx.location, bindingAstA, [field]),
+          bindingAstB)
+      )
+      return (
+        Task.all(constructorArgs).chainFn((task, constructorArgs) => {
+          stmts.push(new ConstructorAst(compiledClass.type, ctx.location, constructorArgs))
+          return Task.of(createStatements(ctx.location, stmts))
         })
       )
     }
@@ -159,10 +174,8 @@ const insertMetaObjectPairwiseOperator = (compiledClass: CompiledClass, operator
     )
     return (
       Task.all(constructorArgs).chainFn((task, constructorArgs) => {
-        return Task.of(createStatements(ctx.location, [
-          ...lets,
-          new ConstructorAst(compiledClass.type, ctx.location, constructorArgs)
-        ]))
+        stmts.push(new ConstructorAst(compiledClass.type, ctx.location, constructorArgs))
+        return Task.of(createStatements(ctx.location, stmts))
       })
     )
   })

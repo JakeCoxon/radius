@@ -1,3 +1,4 @@
+import compiler for assert
 
 type vec2i < VecType @struct:
   x: int
@@ -8,11 +9,11 @@ type vec3i < VecType @struct:
   y: int
   z: int
 
-type vec2f < VecType @struct:
+type vec2 < VecType @struct:
   x: float
   y: float
 
-type vec3f < VecType @struct:
+type vec3 < VecType @struct:
   x: float
   y: float
   z: float
@@ -24,9 +25,18 @@ fn main():
   v4 := v2 - v1
   v5 := (v2 * v1) / (v1 + v2)
 
+  v6 := v5 * 2
+  v7 := 3 * v5
+
   v10 := vec3i(1, 3, 5)
   v11 := vec3i(7, 9, 11)
   v12 := v10 + v11
 
   v1 += vec2i(10, 10)
   v1 += (10, 20)
+
+  v20 := vec2(2.3, 5.6) * 2.3
+  v21 := 7.5 * vec2(3, 5.6)
+
+  assert(v20.x == 5.29)
+  assert(v21.y == 42)

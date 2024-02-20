@@ -626,6 +626,8 @@ export const TupleTypeConstructor: ExternalTypeConstructor = new ExternalTypeCon
   return type;
 })
 
+export const isTypeScalar = (type: Type) => type === IntType || type === u64Type || type === FloatType || type === DoubleType
+
 export const BuiltinTypes = {
   int: IntType,
   float: FloatType,

@@ -5,7 +5,6 @@ import { makeParser } from '../src/parser'
 import { Queue, TaskDef, stepQueue, withContext } from '../src//tasks'
 import { expect } from 'bun:test'
 import { VecTypeMetaClass, preloadModuleText, print } from '../src/compiler_sugar'
-import { writeFinalBytecode } from '../src/codegen'
 import { FileSink } from 'bun';
 import { writeLlvmBytecode } from '../src/codegen_llvm';
 import { basename, extname, normalize } from 'node:path';
@@ -118,7 +117,7 @@ export const runCompilerTest = (
     if (existsSync(path)) unlinkSync(path)
     const file = Bun.file(path)
     const bytecodeWriter = file.writer()
-    writeFinalBytecode(globalCompiler, bytecodeWriter)
+    // writeFinalBytecode(globalCompiler, bytecodeWriter)
     bytecodeWriter.end()
   }
 

@@ -83,7 +83,7 @@ fn main():
         vec := vec4(point.x , point.y, point.z, 1)
 
         clip_coords := mul_mat4_vec4(transform, vec)
-        ndc := vec3(clip_coords.x / clip_coords.w, clip_coords.y / clip_coords.w, clip_coords.z / clip_coords.w)
+        ndc := clip_coords.xyz / clip_coords.w
 
         if clip_coords.w < 0:
           continue
@@ -130,7 +130,7 @@ fn main():
       vec := vec4(point.x, point.y, point.z, 1)
 
       clip_coords := mul_mat4_vec4(transform, vec)
-      ndc := vec3(clip_coords.x / clip_coords.w, clip_coords.y / clip_coords.w, clip_coords.z / clip_coords.w)
+      ndc := clip_coords.xyz / clip_coords.w
 
       if clip_coords.w < 0:
         continue

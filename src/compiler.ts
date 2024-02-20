@@ -538,10 +538,15 @@ const createOperator = (op: string, operatorName: string, typeCheck: (config: Ty
   operators[op] = { 
     op, typeCheck, comptime,
     func: (ctx: CompilerFunctionCallContext, a: Ast, b: Ast) => {
-      const metafunc = a.type.typeInfo.metaobject[operatorName]
+      let metafunc = a.type.typeInfo.metaobject[operatorName]
       if (metafunc) {
         compilerAssert(metafunc instanceof CompilerFunction, "Not implemented yet", { metafunc })
         return metafunc.func(ctx, [], [a, b])
+      }
+      metafunc = b.type.typeInfo.metaobject[operatorName]
+      if (metafunc) {
+        compilerAssert(metafunc instanceof CompilerFunction, "Not implemented yet", { metafunc })
+        return metafunc.func(ctx, [], [b, a]) // Reverse arguments
       }
       const typeCheckConfig: TypeCheckConfig = { a: { type: a.type }, b: { type: b.type }, inferType: null }
       typeCheck(typeCheckConfig)
