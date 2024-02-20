@@ -337,6 +337,12 @@ export const BytecodeSecondOrder: ParseTreeTable = {
     compilerAssert(false, "Not implemented", { node })
   },
   subscript: (out, node) => {
+    if (node.isStatic) {
+      visitParseNode(out, node.expr)
+      writeMeta(out, node.subscript)
+      pushBytecode(out, node.token, { type: 'staticsubscriptast' })
+      return
+    }
     visitParseNode(out, node.expr)
     visitParseNode(out, node.subscript)
     pushBytecode(out, node.token, { type: 'subscriptast' })
@@ -944,6 +950,13 @@ const instructions: InstructionMapping = {
     const subscript = left.type.typeInfo.metaobject['subscript']
     compilerAssert(subscript, "No 'subscript' operator found for $type", { type: left.type })
     return createCallAstFromValueAndPushValue(vm, subscript, [], [left, right])
+  },
+  staticsubscriptast: (vm, {}) => {
+    const right = popStack(vm)
+    const left = expectAst(popStack(vm))
+    const static_subscript = left.type.typeInfo.metaobject['static_subscript']
+    compilerAssert(static_subscript, "No 'static_subscript' operator found for $type", { type: left.type })
+    return TaskDef(callFunctionFromValueTask, vm, static_subscript, [], [right, left])
   },
   setsubscriptast: (vm, {}) => {
     const value = propagatedLiteralAst(expectAst(popStack(vm)))

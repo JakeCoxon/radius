@@ -1,6 +1,6 @@
 import { BytecodeSecondOrder, getOperatorTable, loadModule, propagateLiteralType, propagatedLiteralAst, pushBytecode, resolveScope, visitParseNode } from "./compiler"
 import { createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, insertFunctionDefinition } from "./compiler_functions"
-import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, UserCallAst, hashValues, NeverType, IfAst, BoolType, VoidAst, LoopObject, CompileTimeObjectType, u64Type, FunctionDefinition, ParserFunctionDecl, StatementsAst, isTypeScalar, IntLiteralType, FloatLiteralType } from "./defs"
+import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, UserCallAst, hashValues, NeverType, IfAst, BoolType, VoidAst, LoopObject, CompileTimeObjectType, u64Type, FunctionDefinition, ParserFunctionDecl, StatementsAst, isTypeScalar, IntLiteralType, FloatLiteralType, isAst, isType } from "./defs"
 import { Task, TaskDef } from "./tasks"
 
 export const forLoopSugar = (out: BytecodeWriter, node: ParseFor) => {
@@ -189,6 +189,22 @@ export const VecTypeMetaClass = new ExternalFunction('VecType', VoidType, (ctx, 
   insertMetaObjectPairwiseOperator(compiledClass, "sub", "-")
   insertMetaObjectPairwiseOperator(compiledClass, "mul", "*")
   insertMetaObjectPairwiseOperator(compiledClass, "div", "/")
+
+  const operatorFunc = new ExternalFunction("static_subscript", VoidType, (ctx, args) => {
+    const [index, value] = args
+    compilerAssert(isAst(value), "Expected AST", { value })
+    compilerAssert(typeof index === 'number', "Expected number")
+    compilerAssert(index >= 0 && index < compiledClass.fields.length, "Index out of bounds $index", { index })
+    const field = compiledClass.fields[index]
+    const bindingAst = new BindingAst(value.type, ctx.location, new Binding("", value.type))
+    return createStatements(ctx.location, [
+      new LetAst(VoidType, ctx.location, bindingAst.binding, value),
+      new ValueFieldAst(field.fieldType, ctx.location, bindingAst, [field]),
+    ])
+  })
+  compiledClass.metaobject["static_subscript"] = operatorFunc
+  compiledClass.metaobject["static_length"] = compiledClass.fields.length
+
 })
 
 export const defaultMetaFunction = (subCompilerState: SubCompilerState, compiledClass: CompiledClass, definitionScope: Scope, templateScope: Scope) => {
@@ -422,6 +438,14 @@ export const operator_mod = new CompilerFunction('operator_mod', (ctx, typeArgs:
   compilerAssert(b && b.type === u64Type, "Expected int type", { b })
   return Task.of(new OperatorAst(u64Type, ctx.location, "mod", [a, b]))
 })
+export const static_length = new ExternalFunction('static_length', VoidType, (ctx, args: Ast[]) => {
+  let type: unknown = args[0]
+  if (type instanceof Binding) type = type.type
+  compilerAssert(isType(type), "Expected type or binding got $type", { type })
+  const static_length = type.typeInfo.metaobject['static_length']
+  compilerAssert(static_length, "Expected 'static_length' metafield for $type", { type })
+  return static_length
+})
 
 const add_external_library = new ExternalFunction("add_external_library", VoidType, (ctx: CompilerFunctionCallContext, args) => {
   compilerAssert(typeof args[0] == 'string', "Expected string")
@@ -459,7 +483,7 @@ export const createCompilerModuleTask = (ctx: TaskContext): Task<Module, Compile
   Object.assign(moduleScope, { 
     unsafe_subscript, unsafe_set_subscript, operator_bitshift_left, operator_bitshift_right,
     operator_bitwise_and, operator_bitwise_or, rawptr: RawPointerType, add_external_library, assert,
-    get_current_loop, ctobj: CompileTimeObjectType, operator_mod, overloaded })
+    get_current_loop, ctobj: CompileTimeObjectType, operator_mod, overloaded, static_length })
   const subCompilerState = pushSubCompilerState(ctx, { debugName: `compiler module`, lexicalParent: undefined, scope: moduleScope })
   const module = new Module('compiler', subCompilerState, null!)
   return Task.of(module)

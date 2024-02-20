@@ -1,4 +1,4 @@
-import compiler for assert
+import compiler for assert, static_length
 
 type vec2i < VecType @struct:
   x: int
@@ -17,6 +17,14 @@ type vec3 < VecType @struct:
   x: float
   y: float
   z: float
+
+fn magnitude!(T)(vec: T) -> float:
+  magnitude := 0.0
+  meta index := 0
+  meta while index < static_length(vec):
+    magnitude += vec.[index]
+    meta index = index + 1
+  magnitude
 
 fn main():
   v1 := vec2i(1, 2)
@@ -40,3 +48,10 @@ fn main():
 
   assert(v20.x == 5.29)
   assert(v21.y == 42)
+
+  v30 := vec3(1, 2, 3)
+  foo :: 3 + 2 + 1 - 4 - 2
+  assert(v30.[foo] == 1)
+
+  assert(int(magnitude(v20)) == 18)
+  assert(magnitude(v30) == 6)
