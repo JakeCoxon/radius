@@ -1,4 +1,4 @@
-import compiler for assert
+import compiler for assert, assert_compile_error
 
 type vec2 @struct:
   x: float
@@ -7,8 +7,19 @@ type vec2 @struct:
 fn named_func(baz: int, foo: int, bar: int) -> int:
   foo * 32 + baz * 16 + bar
 
+fn error_not_enough():
+  named_func(bar=1, foo=2)
+
+fn error_duplicated_positional():
+  named_func(2, baz=1, foo=1)
+
+fn error_duplicated_name():
+  named_func(bar=1, foo=1, bar=2)
+
 fn main():
-  # TODO: Negative tests
+  assert_compile_error!(error_not_enough, "Not enough params")
+  assert_compile_error!(error_duplicated_name, "Already specified parameter")
+  assert_compile_error!(error_duplicated_positional, "Already specified parameter")
 
   assert(named_func(bar=1, foo=2, baz=0) == 65) # Reversed order
   assert(named_func(4, bar=1, foo=2) == 129) # Unnamed
