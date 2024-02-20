@@ -129,54 +129,44 @@ const insertMetaObjectPairwiseOperator = (compiledClass: CompiledClass, operator
   const operatorFunc = new CompilerFunction(operatorName, (ctx, typeArgs, args) => {
     const [a, b] = args
     // TODO: Try and move this to be more automatic
-    if (b.type === IntLiteralType || b.type === FloatLiteralType) {
-      propagateLiteralType(compiledClass.fields[0].fieldType, b)
-    }
+    if (a.type === IntLiteralType || a.type === FloatLiteralType) propagateLiteralType(compiledClass.fields[0].fieldType, a)
+    if (b.type === IntLiteralType || b.type === FloatLiteralType) propagateLiteralType(compiledClass.fields[0].fieldType, b)
     const bindingAstA = new BindingAst(a.type, ctx.location, new Binding("", a.type))
     const bindingAstB = new BindingAst(b.type, ctx.location, new Binding("", b.type))
     const stmts: Ast[] = [
       new LetAst(VoidType, ctx.location, bindingAstA.binding, a),
       new LetAst(VoidType, ctx.location, bindingAstB.binding, b)]
-    if (b.type instanceof ParameterizedType && b.type.typeConstructor === TupleTypeConstructor) {
-      compilerAssert(b.type.args.length === compiledClass.fields.length, `Expected tuple of size ${compiledClass.fields.length}, got ${b.type.args.length}`, { type: b.type })
-      const constructorArgs = compiledClass.fields.map((field, i) => {
-        const otherField = b.type.typeInfo.fields.find(x => x.name === `_${i+1}`)
-        compilerAssert(otherField?.fieldType === field.fieldType, `Expected type of tuple field ${i+1} to be $fieldType got $otherFieldType`, { fieldType: field.fieldType, otherFieldType: otherField?.fieldType })
-        return getOperatorTable()[operatorSymbol].func(ctx, 
-          new ValueFieldAst(field.fieldType,      ctx.location, bindingAstA, [field]),
-          new ValueFieldAst(otherField.fieldType, ctx.location, bindingAstB, [otherField]))
-      })
-      return (
-        Task.all(constructorArgs).chainFn((task, constructorArgs) => {
-          stmts.push(new ConstructorAst(compiledClass.type, ctx.location, constructorArgs))
-          return Task.of(createStatements(ctx.location, stmts))
-        })
-      )
+
+    const length = compiledClass.fields.length // TODO: Static length
+
+    const getFieldOrScalar = (value: BindingAst, index: number): Ast => {
+      const expectedFieldType = compiledClass.fields[index].fieldType
+
+      if (value.type instanceof ParameterizedType && value.type.typeConstructor === TupleTypeConstructor) {
+        compilerAssert(value.type.args.length === compiledClass.fields.length, `Expected tuple of size ${length}, got ${value.type.args.length}`, { type: value.type })
+        const field = value.type.typeInfo.fields.find(x => x.name === `_${index+1}`)
+        compilerAssert(field?.fieldType === expectedFieldType, `Expected type of tuple field ${index+1} to be $fieldType got $otherFieldType`, { fieldType: field?.fieldType, expectedFieldType })
+        return new ValueFieldAst(field.fieldType, ctx.location, bindingAstB, [field])
+      }
+      if (isTypeScalar(value.type)) {
+        compilerAssert(value.type === expectedFieldType, "Expected $expectedFieldType got $type", { expectedFieldType, type: value.type })
+        return value
+      }
+      compilerAssert(value.type === compiledClass.type, "Expected vec or tuple. got $type", { type: b.type })
+      const field = value.type.typeInfo.fields[index]
+      compilerAssert(field.fieldType === expectedFieldType, "Expected $expectedFieldType got $type", { type: field.fieldType, expectedFieldType })
+      return new ValueFieldAst(field.fieldType, ctx.location, value, [field])
     }
-    if (isTypeScalar(b.type)) {
-      const constructorArgs = compiledClass.fields.map(field => 
-        getOperatorTable()[operatorSymbol].func(ctx, 
-          new ValueFieldAst(field.fieldType, ctx.location, bindingAstA, [field]),
-          bindingAstB)
-      )
-      return (
-        Task.all(constructorArgs).chainFn((task, constructorArgs) => {
-          stmts.push(new ConstructorAst(compiledClass.type, ctx.location, constructorArgs))
-          return Task.of(createStatements(ctx.location, stmts))
-        })
-      )
-    }
-    compilerAssert(b.type === a.type, "Expected vec or tuple. got $type", { type: b.type })
-    const constructorArgs = compiledClass.fields.map(field => 
+
+    const constructorArgs = Array(length).fill(0).map((_, i) => 
       getOperatorTable()[operatorSymbol].func(ctx, 
-        new ValueFieldAst(field.fieldType, ctx.location, bindingAstA, [field]),
-        new ValueFieldAst(field.fieldType, ctx.location, bindingAstB, [field]))
-    )
+        getFieldOrScalar(bindingAstA, i), getFieldOrScalar(bindingAstB, i)))
+    
     return (
       Task.all(constructorArgs).chainFn((task, constructorArgs) => {
         stmts.push(new ConstructorAst(compiledClass.type, ctx.location, constructorArgs))
         return Task.of(createStatements(ctx.location, stmts))
-      })
+      }) as Task<Ast, CompilerError>
     )
   })
   compiledClass.metaobject[operatorName] = operatorFunc

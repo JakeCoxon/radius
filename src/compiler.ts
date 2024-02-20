@@ -511,8 +511,10 @@ export function createBytecodeVmAndExecuteTask(ctx: TaskContext, subCompilerStat
   return (
     TaskDef(executeVmTask, { vm })
     .mapRejected(error => {
-      if (!(error.info as any).location) (error.info as any).location = vm.location;
-      (error.info as any).subCompilerState = subCompilerState
+      if (error.info) {
+        if (!(error.info as any).location) (error.info as any).location = vm.location;
+        (error.info as any).subCompilerState = subCompilerState
+      }
       return error
     })
     .chainFn((task, arg) => {
@@ -552,7 +554,7 @@ const createOperator = (op: string, operatorName: string, typeCheck: (config: Ty
       metafunc = b.type.typeInfo.metaobject[operatorName]
       if (metafunc) {
         compilerAssert(metafunc instanceof CompilerFunction, "Not implemented yet", { metafunc })
-        return metafunc.func(ctx, [], [b, a]) // Reverse arguments
+        return metafunc.func(ctx, [], [a, b])
       }
       const typeCheckConfig: TypeCheckConfig = { a: { type: a.type }, b: { type: b.type }, inferType: null }
       typeCheck(typeCheckConfig)
