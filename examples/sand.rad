@@ -1,7 +1,7 @@
 import compiler
 import range for Range
 import random for simple_random_float
-import vec for vec2i, rgba
+import vec for vec2i, rgba, rgba
 import color for hsva_to_rgba
 import array for Array, array_create
 import graphics for begin_app, end_app, window_open, render_app, frame_ticks, get_mouse_down, put_float_image_data, get_mouse_x, get_mouse_y
@@ -18,7 +18,7 @@ fn main():
 
   cells := array_create!int(cells_width * cells_height)
   next_cells := array_create!int(cells_width * cells_height)
-  rgba_image := array_create!float(cells_width * cells_height * 4)
+  rgba_image := array_create!rgba(cells_width * cells_height)
 
   cells[:] = 0 ...
   next_cells[:] = 0 ...
@@ -78,10 +78,7 @@ fn main():
           else:
             rgba(0, 0, 0, 0))
 
-        rgba_image[(x + y * cells_width) * 4 + 0] = color.r
-        rgba_image[(x + y * cells_width) * 4 + 1] = color.g
-        rgba_image[(x + y * cells_width) * 4 + 2] = color.b
-        rgba_image[(x + y * cells_width) * 4 + 3] = color.a
+        rgba_image[x + y * cells_width] = color
       
     put_float_image_data(rgba_image.data, cells_width, cells_height, window_width * 4, 0, 0)
 

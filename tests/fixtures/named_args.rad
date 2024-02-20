@@ -1,0 +1,12 @@
+import compiler for assert
+
+
+fn named_func(baz: int, foo: int, bar: int) -> int:
+  foo * 32 + baz * 16 + bar
+
+fn main():
+  # TODO: Negative tests
+
+  assert(named_func(bar=1, foo=2, baz=0) == 65) # Reversed order
+  assert(named_func(4, bar=1, foo=2) == 129) # Unnamed
+  assert(named_func(4, bar=1, 2) == 129) # Named in the middle

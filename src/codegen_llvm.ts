@@ -84,7 +84,7 @@ const writeExpr = (writer: LlvmFunctionWriter, ast: Ast) => {
   if (!(ast instanceof NumberAst || ast instanceof BindingAst)) {
     writer.writer.astVisitMap.set(ast, true) // Takes up a lot of memory
   }
-  compilerAssert(astWriter[ast.key], `Not implemented ast writer '${ast.key}'`)
+  compilerAssert(astWriter[ast.key], `Not implemented ast writer '${ast.key}'`, { ast })
   const toPrint = !(ast instanceof StatementsAst || ast instanceof BlockAst) && writer.printNextStatement
   if (toPrint) {
     writer.printNextStatement = false
@@ -554,7 +554,10 @@ const astWriter: LlvmAstWriterTable = {
     return null
   },
   comptimeobj: (writer, ast) => {
-    compilerAssert(false, "Error unexpected 'comptimeobj'")
+    compilerAssert(false, "Error unexpected 'comptimeobj'", { ast })
+  },
+  namedarg: (writer, ast) => {
+    compilerAssert(false, "Error unexpected 'namedarg'", { ast })
   }
 };
 

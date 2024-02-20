@@ -17,6 +17,9 @@ fn modify_tuple(tup: (int, float, Person, MyVec)):
 @@external("fill_rectangle")
 fn thing() -> int
 
+fn named_func(foo: int, bar: int) -> int:
+  foo * 32 + bar
+
 fn main():
 
   new_vec := MyVec(30, 40)
@@ -39,5 +42,7 @@ fn main():
     Person("Person3", 103)]
 
   print(list2[0].age)
+
+  named_func(bar=1, foo=2)
 
   # hello

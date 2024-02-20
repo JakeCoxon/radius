@@ -1,4 +1,4 @@
-import { ParseAnd, ParseNode, ParseBreak, ParseCall, ParseCast, ParseCompTime, ParseContinue, ParseDict, ParseExpand, ParseField, ParseFor, ParseForExpr, ParseIf, ParseLet, ParseLetConst, ParseList, ParseListComp, ParseMeta, ParseNot, ParseNumber, ParseOpEq, ParseOperator, ParseOr, ParseReturn, ParseSet, ParseStatements, ParseString, ParseIdentifier, ParseWhile, ParseWhileExpr, ParserFunctionDecl, Token, compilerAssert, ParsePostCall, ParseSymbol, ParseNote, ParseSlice, ParseSubscript, ParserClassDecl, ParseClass, ParseFunction, createToken, ParseBoolean, ParseElse, ParseMetaIf, ParseMetaFor, ParseBlock, ParseImport, ParsedModule, Source, ParseMetaWhile, ParseTuple, ParseImportName, ParseFold, ParserFunctionParameter } from "./defs";
+import { ParseAnd, ParseNode, ParseBreak, ParseCall, ParseCast, ParseCompTime, ParseContinue, ParseDict, ParseExpand, ParseField, ParseFor, ParseForExpr, ParseIf, ParseLet, ParseLetConst, ParseList, ParseListComp, ParseMeta, ParseNot, ParseNumber, ParseOpEq, ParseOperator, ParseOr, ParseReturn, ParseSet, ParseStatements, ParseString, ParseIdentifier, ParseWhile, ParseWhileExpr, ParserFunctionDecl, Token, compilerAssert, ParsePostCall, ParseSymbol, ParseNote, ParseSlice, ParseSubscript, ParserClassDecl, ParseClass, ParseFunction, createToken, ParseBoolean, ParseElse, ParseMetaIf, ParseMetaFor, ParseBlock, ParseImport, ParsedModule, Source, ParseMetaWhile, ParseTuple, ParseImportName, ParseFold, ParserFunctionParameter, ParseNamedArg } from "./defs";
 
 const regexes = {
   KEYWORD:
@@ -194,9 +194,19 @@ export const makeParser = (input: string, debugName: string) => {
   };
   const parseNumberLiteral = () => new ParseNumber(previous);
   const parseArgs = () => {
-    if (match(")")) return [];
-    const args = [parseExpr()];
-    while (match(",")) args.push(parseExpr());
+    if (match(")")) return []
+
+    const parseArg = (): ParseNode => {
+      const argToken = token!
+      const expr = parseExpr()
+      if (match("=")) {
+        compilerAssert(expr instanceof ParseIdentifier, "Expected identifier before '='")
+        return new ParseNamedArg(argToken, expr, parseExpr())
+      }
+      return expr
+    }
+    const args = [parseArg()];
+    while (match(",")) args.push(parseArg());
     expect(")", `Expected ')' after argument list`);
     return args;
   };

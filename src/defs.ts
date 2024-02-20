@@ -164,6 +164,7 @@ export class ParseImport extends ParseNodeType {       key = 'import' as const; 
 export class ParseValue extends ParseNodeType {        key = 'value' as const;        constructor(public token: Token, public value: unknown) { super();} }
 export class ParseQuote extends ParseNodeType {        key = 'quote' as const;        constructor(public token: Token, public expr: ParseNode) { super();} }
 export class ParseFold extends ParseNodeType {         key = 'fold' as const;         constructor(public token: Token, public expr: ParseNode) { super();} }
+export class ParseNamedArg extends ParseNodeType {     key = 'namedarg' as const;     constructor(public token: Token, public name: ParseIdentifier, public expr: ParseNode) { super();} }
 export class ParseBytecode extends ParseNodeType {     key = 'bytecode' as const;     constructor(public token: Token, public bytecode: { code: BytecodeInstr[]; locations: SourceLocation[]; }) { super();} }
 export class ParseFreshIden extends ParseNodeType {    key = 'freshiden' as const;    constructor(public token: Token, public freshBindingToken: FreshBindingToken) { super();} }
 export class ParseConstructor extends ParseNodeType {  key = 'constructor' as const;  constructor(public token: Token, public type: ParseNode, public args: ParseNode[]) { super();} }
@@ -175,7 +176,7 @@ export type ParseNode = ParseStatements | ParseLet | ParseSet | ParseOperator | 
   ParseOpEq | ParseWhile | ParseWhileExpr | ParseForExpr | ParseNot | ParseField | ParseExpand | ParseListComp |
   ParseDict | ParsePostCall | ParseSymbol | ParseNote | ParseSlice | ParseSubscript | ParseTuple | ParseClass |
   ParseNil | ParseBoolean | ParseElse | ParseMetaIf | ParseMetaFor | ParseMetaWhile | ParseBlock | ParseImport | 
-  ParseCompilerIden | ParseValue | ParseConstructor | ParseQuote | ParseBytecode | ParseFreshIden | ParseFold
+  ParseCompilerIden | ParseValue | ParseConstructor | ParseQuote | ParseBytecode | ParseFreshIden | ParseFold | ParseNamedArg
 
 // Void types mean that in secondOrder compilation, the AST doesn't return an AST
 export const isParseVoid = (ast: ParseNode) => ast.key == 'letconst' || ast.key === 'function' || ast.key === 'class' || ast.key === 'comptime' || ast.key === 'metawhile';
@@ -199,6 +200,7 @@ export type BytecodeInstr =
   { type: 'call', name: string, count: number, tcount: number } |
   { type: 'compilerfn', name: string, count: number, tcount: number } |
   { type: 'return', r: boolean } |
+  { type: 'namedarg' } |
   { type: 'not' } |
   { type: 'pop' } |
   { type: 'nil' } |
@@ -421,13 +423,14 @@ export class ConstructorAst extends AstRoot {   key = 'constructor' as const;   
 export class DefaultConsAst extends AstRoot {   key = 'defaultcons' as const;    constructor(public type: Type, public location: SourceLocation) { super() } }
 export class AddressAst extends AstRoot {       key = 'address' as const;        constructor(public type: Type, public location: SourceLocation, public binding: Binding) { super() } }
 export class DerefAst extends AstRoot {         key = 'deref' as const;          constructor(public type: Type, public location: SourceLocation, public left: BindingAst, public fieldPath: TypeField[]) { super() } }
+export class NamedArgAst extends AstRoot {      key = 'namedarg' as const;       constructor(public type: Type, public location: SourceLocation, public name: string, public expr: Ast) { super() } }
 export class SetDerefAst extends AstRoot {      key = 'setderef' as const;       constructor(public type: Type, public location: SourceLocation, public left: BindingAst, public fieldPath: TypeField[], public value: Ast) { super() } }
 export class CompTimeObjAst extends AstRoot {   key = 'comptimeobj' as const;    constructor(public type: Type, public location: SourceLocation, public value: unknown) { super() } }
 
 export type Ast = NumberAst | LetAst | SetAst | OperatorAst | IfAst | ListAst | CallAst | AndAst | UserCallAst |
   OrAst | StatementsAst | WhileAst | ReturnAst | SetFieldAst | VoidAst | CastAst | SubscriptAst | ConstructorAst |
   BindingAst | StringAst | NotAst | FieldAst | BlockAst | BreakAst | BoolAst | CastAst | DefaultConsAst | ValueFieldAst |
-  SetValueFieldAst | SetSubscriptAst | AddressAst | DerefAst | SetDerefAst | CompTimeObjAst
+  SetValueFieldAst | SetSubscriptAst | AddressAst | DerefAst | SetDerefAst | CompTimeObjAst | NamedArgAst
 export const isAst = (value: unknown): value is Ast => value instanceof AstRoot;
 
 export class Tuple {

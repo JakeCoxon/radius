@@ -883,3 +883,19 @@ test('overload', async () => {
     testObject.close()
   }
 })
+
+test('named_args', async () => {
+  const testObject = createTest({ 
+    moduleName: 'named_args',
+    globalOptions,
+    inputPath: `${import.meta.dir}/fixtures/named_args.rad`,
+  })
+  try {
+    const input = await Bun.file(testObject.inputPath).text()
+    runCompilerTest(input, { testObject })
+    await writeLlvmBytecodeFile(testObject)
+    await executeNativeExecutable(testObject)
+  } finally {
+    testObject.close()
+  }
+})

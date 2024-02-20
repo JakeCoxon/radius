@@ -2,7 +2,7 @@ import vec for vec2
 import compiler for overloaded, assert
 
 fn calculate_xywh(x: float, y: float, w: float, h: float) -> float:
-  x + y + w + h
+  x + y + 100 * w + 200 * h
 
 fn calculate_pos_size(pos: vec2, size: vec2) -> float:
   calculate_xywh(pos.x, pos.y, size.x, size.y)
@@ -11,8 +11,11 @@ calculate :: overloaded([
   calculate_xywh, calculate_pos_size])
 
 fn main():
-  assert(calculate_xywh(1, 2, 3, 4) == 10)
-  assert(calculate_pos_size(vec2(1, 2), vec2(3, 4)) == 10)
+  assert(calculate_xywh(1, 2, 3, 4) == 1103)
+  assert(calculate_pos_size(vec2(1, 2), vec2(3, 4)) == 1103)
 
-  assert(calculate(1, 2, 3, 4) == 10)
-  assert(calculate(vec2(1, 2), vec2(3, 4)) == 10)
+  assert(calculate(1, 2, 3, 4) == 1103)
+  assert(calculate(vec2(1, 2), vec2(3, 4)) == 1103)
+
+  # Named args
+  assert(calculate(size=vec2(3, 4), pos=vec2(1, 2)) == 1103)
