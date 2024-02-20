@@ -1,6 +1,6 @@
 import { BytecodeDefault, BytecodeSecondOrder, compileClassTask, compileFunctionPrototype, createBytecodeVmAndExecuteTask, propagateLiteralType, propagatedLiteralAst, pushBytecode, pushGeneratedBytecode, visitParseNode } from "./compiler";
 import { externalBuiltinBindings } from "./compiler_sugar";
-import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, CallAst, IntType, Closure, UserCallAst, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition, ParseCall, TypeVariable, TypeMatcher, typeMatcherEquals, SourceLocation, ExternalTypeConstructor, ScopeParentSymbol, SubCompilerState, CompilerFunction, IntLiteralType, FloatLiteralType, FloatType, RawPointerType, AddressAst, BindingAst, UnknownObject, NeverType, CompilerFunctionCallContext, CompileTimeObjectType, CompTimeObjAst, ParseString, NamedArgAst } from "./defs";
+import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, CallAst, IntType, Closure, UserCallAst, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition, ParseCall, TypeVariable, TypeMatcher, typeMatcherEquals, SourceLocation, ExternalTypeConstructor, ScopeParentSymbol, SubCompilerState, CompilerFunction, IntLiteralType, FloatLiteralType, FloatType, RawPointerType, AddressAst, BindingAst, UnknownObject, NeverType, CompilerFunctionCallContext, CompileTimeObjectType, CompTimeObjAst, ParseString, NamedArgAst, TypeCheckResult } from "./defs";
 import { Task, TaskDef, Unit } from "./tasks";
 
 
@@ -40,18 +40,18 @@ export type TypeCheckHeaderArg = {
   parentScope: Scope
   result: TypeCheckResult
 }
-export type TypeCheckResult = {
-  concreteTypes: Type[]
-  substitutions: UnknownObject
-  returnType: Type
-  sortedArgs: Ast[]
-}
 
 function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, args, typeArgs, parentScope, result }: TypeCheckHeaderArg): Task<Unit, CompilerError> {
 
-  compilerAssert(typeArgs.length <= func.typeParams.length, "Expected $expected type parameters, got $got", { expected: func.typeParams.length, got: typeArgs.length, func })
-  compilerAssert(args.length >= func.params.length, 'Not enough params. Got $expected args got $got', { expected: func.params.length, got: args.length, args, func })
-  compilerAssert(func.variadic || args.length == func.params.length, 'Too many params. Expected $expected args got $got', { expected: func.params.length, got: args.length, args, func })
+  // Adds a special typeCheckResult field and sets checkFailed so we see what exactly failed
+  function typeCheckAssert(condition: boolean, message: string, info: object = {}): asserts condition { 
+    if (!condition) result.checkFailed = true
+    compilerAssert(condition, message, {...info })
+  }
+
+  typeCheckAssert(typeArgs.length <= func.typeParams.length, "Expected $expected type parameters, got $got", { expected: func.typeParams.length, got: typeArgs.length, func })
+  typeCheckAssert(args.length >= func.params.length, 'Not enough params. Got $expected args got $got', { expected: func.params.length, got: args.length, args, func })
+  typeCheckAssert(func.variadic || args.length == func.params.length, 'Too many params. Expected $expected args got $got', { expected: func.params.length, got: args.length, args, func })
 
   // if (func.params.length === 0) return Task.success()
   
@@ -95,8 +95,8 @@ function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, args, typ
   args.forEach((arg, i) => {
     if (arg instanceof NamedArgAst) {
       const namedParamIndex = func.params.findIndex(x => x.name.token.value === arg.name)
-      compilerAssert(namedParamIndex > -1, "Unexpected function parameter named $name", { name: arg.name })
-      compilerAssert(!sortedArgs[namedParamIndex], "Already specified parameter at index $namedParamIndex for argument $name", { namedParamIndex, name: arg.name })
+      typeCheckAssert(namedParamIndex > -1, "Unexpected function parameter named $name", { name: arg.name })
+      typeCheckAssert(!sortedArgs[namedParamIndex], "Already specified parameter at index $namedParamIndex for argument $name", { namedParamIndex, name: arg.name })
       sortedArgs[namedParamIndex] = arg.expr
     }
   })
@@ -132,12 +132,12 @@ function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, args, typ
         if (type === null) {
         } else if (type instanceof TypeMatcher) {
           const matches = typeMatcherEquals(type, givenArg.type, result.substitutions)
-          compilerAssert(matches, "Type check failed. Expected $expected got $got", { expected: type, got: givenArg.type })
+          typeCheckAssert(matches, "Type check failed. Expected $expected got $got", { expected: type, got: givenArg.type })
         } else if (type instanceof TypeVariable) {
           result.substitutions[type.name] = givenType
         } else {
           compilerAssert(isType(type), "Expected type got $type", { type });
-          compilerAssert(givenType === type, "Argument $name of type $value does not match $expected", { name: func.params[i].name.token, value: givenArg.type, expected: type })
+          typeCheckAssert(givenType === type, "Argument $name of type $value does not match $expected", { name: func.params[i].name.token, value: givenArg.type, expected: type })
         }
 
         compilerAssert(givenType !== IntLiteralType && givenType !== FloatLiteralType, "Unexpected literal type", { type: result.concreteTypes.at(-1) })
@@ -343,7 +343,7 @@ export function functionCompileTimeCompileTask(ctx: TaskContext, { vm, func, typ
 };
 
 export function createCallAstFromValueAndPushValue(vm: Vm, value: unknown, typeArgs: unknown[], args: Ast[]): Task<Unit, CompilerError> {
-  const ctx: CompilerFunctionCallContext = { location: vm.location, compilerState: vm.context.subCompilerState }
+  const ctx: CompilerFunctionCallContext = { location: vm.location, compilerState: vm.context.subCompilerState, resultAst: undefined, typeCheckResult: undefined }
   return (
     createCallAstFromValue(ctx, value, typeArgs, args)
     .chainFn((task, ast) => {vm.stack.push(ast); return Task.success() })
@@ -364,7 +364,7 @@ export function createCallAstFromValue(ctx: CompilerFunctionCallContext, value: 
       TaskDef(compileClassTask, { classDef: value, typeArgs }).
       chainFn((task, clssType) => {
         const constructor = expectMap(clssType.typeInfo.metaobject, 'constructor', "Expected constructor in metaobject for object $obj", { obj: value })
-        return createCallAstFromValue(ctx, constructor, [], args)
+        return createCallAstFromValue({...ctx}, constructor, [], args)
       })
     )
   }
@@ -382,7 +382,7 @@ export function createCallAstFromValue(ctx: CompilerFunctionCallContext, value: 
 
     return (
       compileTypeArgs.chainFn((task, compiledTypeArgs) => 
-        TaskDef(createCallAstFromValue, value, compiledTypeArgs, args) // Call self
+        createCallAstFromValue({...ctx}, value, compiledTypeArgs, args) // Call self
       )
     )
   }
@@ -394,8 +394,10 @@ export function createCallAstFromValue(ctx: CompilerFunctionCallContext, value: 
   if (value instanceof Closure) {
     
     const { func, scope: parentScope, lexicalParent } = value
-    const call: FunctionCallArg = { location, func, typeArgs, args, parentScope, lexicalParent, result: { concreteTypes: [], substitutions: {}, returnType: undefined!, sortedArgs: [] } }
-    
+    const typeCheckResult: TypeCheckResult = { concreteTypes: [], substitutions: {}, returnType: undefined!, sortedArgs: [], checkFailed: false }
+    ctx.typeCheckResult = typeCheckResult
+    const call: FunctionCallArg = { location, func, typeArgs, args, parentScope, lexicalParent, result: typeCheckResult }
+
     if (func.externalName !== undefined) {
       const externalName = func.externalName
       return (

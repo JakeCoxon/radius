@@ -1,6 +1,6 @@
 import { BytecodeSecondOrder, getOperatorTable, loadModule, propagateLiteralType, propagatedLiteralAst, pushBytecode, resolveScope, visitParseNode } from "./compiler"
 import { createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, insertFunctionDefinition } from "./compiler_functions"
-import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, UserCallAst, hashValues, NeverType, IfAst, BoolType, VoidAst, LoopObject, CompileTimeObjectType, u64Type, FunctionDefinition, ParserFunctionDecl, StatementsAst, isTypeScalar, IntLiteralType, FloatLiteralType, isAst, isType } from "./defs"
+import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, UserCallAst, hashValues, NeverType, IfAst, BoolType, VoidAst, LoopObject, CompileTimeObjectType, u64Type, FunctionDefinition, ParserFunctionDecl, StatementsAst, isTypeScalar, IntLiteralType, FloatLiteralType, isAst, isType, isTypeCheckError } from "./defs"
 import { Task, TaskDef } from "./tasks"
 
 export const forLoopSugar = (out: BytecodeWriter, node: ParseFor) => {
@@ -456,11 +456,17 @@ const overloaded = new ExternalFunction("overloaded", VoidType, (ctx: CompilerFu
   compilerAssert(Array.isArray(funcs) && funcs.every(x => x instanceof Closure), "Expected functions", { funcs })
 
   return new CompilerFunction('overload', (fnctx, typeArgs: unknown[], args: Ast[]) => {
+    const contexts: CompilerFunctionCallContext[] = funcs.map((func, i) => ({...fnctx}))
+
     return (
-      (funcs.map(func => createCallAstFromValue(fnctx, func, [], args)) as Task<Ast, CompilerError> [])
-      .reduce((acc, funcCall) => acc.chainRejected((err) => funcCall))
+      (funcs.map((func, i) => createCallAstFromValue(contexts[i], func, [], args)) as Task<Ast, CompilerError> [])
+      .reduce((acc, funcCall, i) => acc.chainRejected((err) => {
+        if (contexts[i - 1].typeCheckResult!.checkFailed) return funcCall
+        return Task.rejected(err)
+      }))
       .chainRejected(err => {
-        // TODO: Can we filter type check errors from compiler errors here
+        // Check if the error was something other than type check, in which case propagate it
+        if (!contexts.some(x => x.typeCheckResult!.checkFailed)) return Task.rejected(err)
         const names = funcs.map(x => x.func.debugName).join(', ')
         compilerAssert(false, `Could not find overload that matches for ${names}`, { args, err })
       })
@@ -468,12 +474,32 @@ const overloaded = new ExternalFunction("overloaded", VoidType, (ctx: CompilerFu
   })
 })
 
+export const assert_compile_error = new CompilerFunction("assert_compile_error", (ctx, typeArgs, args) => {
+  const func = typeArgs[0]
+  const errorMsg = typeArgs[1]
+  compilerAssert(typeof errorMsg == 'string', "Expected string")
+  compilerAssert(func instanceof Closure, "Expected function")
+
+  return (
+    TaskDef(createCallAstFromValue, func, [], [])
+    .chainFn((task, v) => {
+      compilerAssert(false, "Expected compile to fail but it didn't", { assertCompileError: true })
+    })
+    .chainRejected((err) => {
+      if ((err.info as any).assertCompileError) return Task.rejected(err)
+      if (err.message.includes(errorMsg)) return Task.of(new VoidAst(VoidType, ctx.location))
+      return Task.rejected(err)
+    })
+  )
+  
+})
+
 export const createCompilerModuleTask = (ctx: TaskContext): Task<Module, CompilerError> => {
   const moduleScope = createScope({}, undefined)
   Object.assign(moduleScope, { 
     unsafe_subscript, unsafe_set_subscript, operator_bitshift_left, operator_bitshift_right,
     operator_bitwise_and, operator_bitwise_or, rawptr: RawPointerType, add_external_library, assert,
-    get_current_loop, ctobj: CompileTimeObjectType, operator_mod, overloaded, static_length })
+    get_current_loop, ctobj: CompileTimeObjectType, operator_mod, overloaded, static_length, assert_compile_error })
   const subCompilerState = pushSubCompilerState(ctx, { debugName: `compiler module`, lexicalParent: undefined, scope: moduleScope })
   const module = new Module('compiler', subCompilerState, null!)
   return Task.of(module)

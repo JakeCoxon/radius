@@ -119,11 +119,11 @@ class TaskOf<S> extends Task<S, never> {
 }
 
 class Rejected<F> extends Task<never, F> {
-  _error: F;
+  _state = 'completed' as const
 
-  constructor(error: F) {
+  constructor(failure: F) {
     super();
-    this._error = error;
+    this._failure = failure;
   }
 
   _toString() { return "rejected(..)"; }

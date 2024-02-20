@@ -169,7 +169,13 @@ export const runCompilerTest = (
 
       logger.log('\nError info')
       Object.entries(ex.info).forEach(([name, value]) => {
-        logger.log(`${name}:`, Bun.inspect(value, { depth: 10, colors: true }))
+        let str = ''
+        try {
+          str = Bun.inspect(value, { depth: 10, colors: true })
+        } catch(ex) {
+          str = `<error printing: ${ex.message}>` // sometimes theres a JSON cyclic error
+        }
+        logger.log(`${name}:`, str)
       })
       if ((ex.info as any).fatal) fatalError = true
     }

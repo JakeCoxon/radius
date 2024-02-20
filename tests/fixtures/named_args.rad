@@ -1,5 +1,8 @@
 import compiler for assert
 
+type vec2 @struct:
+  x: float
+  y: float
 
 fn named_func(baz: int, foo: int, bar: int) -> int:
   foo * 32 + baz * 16 + bar
@@ -10,3 +13,5 @@ fn main():
   assert(named_func(bar=1, foo=2, baz=0) == 65) # Reversed order
   assert(named_func(4, bar=1, foo=2) == 129) # Unnamed
   assert(named_func(4, bar=1, 2) == 129) # Named in the middle
+
+  assert(vec2(y=2, x=1).x == 1) # constructor

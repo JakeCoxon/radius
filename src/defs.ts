@@ -574,6 +574,20 @@ export const createScope = (obj: object, parentScope: Scope | undefined) =>
 export type CompilerFunctionCallContext = {
   compilerState: SubCompilerState
   location: SourceLocation,
+  typeCheckResult: TypeCheckResult | undefined // Added later
+  resultAst: Ast | undefined // Added later
+}
+
+export type TypeCheckResult = {
+  concreteTypes: Type[]
+  substitutions: UnknownObject
+  returnType: Type
+  sortedArgs: Ast[],
+  checkFailed: boolean // default false
+}
+
+export const isTypeCheckError = (error: CompilerError) => {
+  return !!(error.info as any).typeCheckResult
 }
 
 export class ExternalFunction {
@@ -583,7 +597,7 @@ export class ExternalFunction {
   }
 }
 
-type CompilerFunctionBuilder = (ctx: CompilerFunctionCallContext, typeArgs: unknown[], args: Ast[]) => Task<Ast, CompilerError>
+export type CompilerFunctionBuilder = (ctx: CompilerFunctionCallContext, typeArgs: unknown[], args: Ast[]) => Task<Ast, CompilerError>
 export class CompilerFunction {
   constructor(public name: string, public func: CompilerFunctionBuilder) {}
   [Inspect.custom](depth: any, options: any, inspect: any) {

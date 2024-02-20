@@ -1,0 +1,25 @@
+import vec for vec2
+import compiler for overloaded, assert, assert_compile_error
+
+# Real errors must propagate to be real errors during overload resolution.
+# Even if the inner error is itself a typecheck error
+
+fn inner(x: float) -> float:
+  x
+
+fn calculate_xywh(x: float, y: float, w: float, h: float) -> float:
+  inner(x, y) # type check error
+
+fn calculate_xywh2(x: float, y: float, w: float, h: float) -> float:
+  x + y + 100 * w + 200 * h
+
+calculate :: overloaded([
+  calculate_xywh, calculate_xywh2])
+
+fn foo():
+  assert(calculate(1, 2, 3, 4) == 1103)
+
+fn main():
+
+  assert_compile_error!(foo, "Too many params")
+  

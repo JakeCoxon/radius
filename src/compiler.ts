@@ -681,14 +681,14 @@ export function resolveScope(ctx: TaskContext, scope: Scope, name: string): Task
 
 function callFunctionFromValueTask(ctx: TaskContext, vm: Vm, func: unknown, typeArgs: unknown[], values: unknown[]): Task<Unit, CompilerError> {
   if (func instanceof ExternalFunction) {
-    const fnctx: CompilerFunctionCallContext = { location: vm.location, compilerState: ctx.subCompilerState }
+    const fnctx: CompilerFunctionCallContext = { location: vm.location, compilerState: ctx.subCompilerState, resultAst: undefined, typeCheckResult: undefined }
     const functionResult = func.func(fnctx, values)
     vm.stack.push(functionResult)
     return Task.success()
   }
   if (func instanceof CompilerFunction) {
     if (func === print) {
-      const fnctx: CompilerFunctionCallContext = { location: vm.location, compilerState: ctx.subCompilerState} 
+      const fnctx: CompilerFunctionCallContext = { location: vm.location, compilerState: ctx.subCompilerState, resultAst: undefined, typeCheckResult: undefined } 
       ;(ctx.globalCompiler.rootScope['static_print'] as ExternalFunction).func(fnctx, values)
       vm.stack.push(null)
       return Task.success()
@@ -894,7 +894,7 @@ const instructions: InstructionMapping = {
     if (name == '-' && count == 1) {
       return void vm.stack.push(new OperatorAst(values[0].type, vm.location, name, [new NumberAst(values[0].type, vm.location, 0), values[0]]))
     }
-    const ctx: CompilerFunctionCallContext = { location: vm.location, compilerState: vm.context.subCompilerState }
+    const ctx: CompilerFunctionCallContext = { location: vm.location, compilerState: vm.context.subCompilerState, resultAst: undefined, typeCheckResult: undefined }
     return (
       operators[name].func(ctx, values[0], values[1])
       .chainFn((task, res) => { vm.stack.push(res); return Task.success() })
@@ -1296,7 +1296,7 @@ export function compileClassTask(ctx: TaskContext, { classDef, typeArgs }: { cla
           TaskDef(resolveScope, classDef.parentScope, classDef.metaClass.token.value)
           .chainFn((task, func) => {
             if (func instanceof ExternalFunction) {
-              const fnctx: CompilerFunctionCallContext = { location: SourceLocation.anon, compilerState: ctx.subCompilerState}
+              const fnctx: CompilerFunctionCallContext = { location: SourceLocation.anon, compilerState: ctx.subCompilerState, resultAst: undefined, typeCheckResult: undefined }
               func.func(fnctx, [compiledClass])
             } else compilerAssert(false, "Not implemented yet", { func })
             defaultMetaFunction(subCompilerState, compiledClass, definitionScope, templateScope)
@@ -1570,7 +1570,7 @@ export const programEntryTask = (ctx: TaskContext, entryModule: ParsedModule): T
     })
     .chainFn((task, arg) => {
       const func = expectMap(moduleScope, 'main', 'No main function found')
-      const fnctx: CompilerFunctionCallContext = { location: SourceLocation.anon, compilerState: ctx.subCompilerState }
+      const fnctx: CompilerFunctionCallContext = { location: SourceLocation.anon, compilerState: ctx.subCompilerState, resultAst: undefined, typeCheckResult: undefined }
       return createCallAstFromValue(fnctx, func, [], [])
     })
     .chainFn((task, callAst: Ast) => {
