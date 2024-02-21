@@ -1,12 +1,15 @@
-import vec for rgba
+type rgba < VecType @struct:
+  r: float
+  g: float
+  b: float
+  a: float
 
-# TODO Fix compiler bug here
 fn hsva_to_rgba(h: float, s: float, v: float, a: float) -> rgba:
   c := v * s
-  x := c * (1 - fabs(fmodf(h / 60, 2.0) - 1))
+  x := c * (1 - abs(fmod(h / 60, 2.0) - 1))
   m := rgba(v - c, v - c, v - c, 0)
   if h >= 0 and h < 60:
-    return rgba(x, c, 0, a) + m
+    return rgba(c, x, 0, a) + m
   elif h >= 60 and h < 120:
     return rgba(x, c, 0, a) + m
   elif h >= 120 and h < 180:
@@ -17,43 +20,4 @@ fn hsva_to_rgba(h: float, s: float, v: float, a: float) -> rgba:
     return rgba(x, 0, c, a) + m
   else:
     return rgba(c, 0, x, a) + m
-  rgba(0, 0, x, a)
-
-fn hsva_to_rgba2(h: float, s: float, v: float, a: float) -> rgba:
-  c := v * s
-  x := c * (1 - fabs(fmodf(h / 60, 2) - 1))
-  m := v - c
-
-  color: rgba
-  color.a = a
-
-  if h >= 0 and h < 60:
-    color.r = c
-    color.g = x
-    color.b = 0
-  elif h >= 60 and h < 120:
-    color.r = x
-    color.g = c
-    color.b = 0
-  elif h >= 120 and h < 180:
-    color.r = 0
-    color.g = c
-    color.b = x
-  elif h >= 180 and h < 240:
-    color.r = 0
-    color.g = x
-    color.b = c
-  elif h >= 240 and h < 300:
-    color.r = x
-    color.g = 0
-    color.b = c
-  else:
-    color.r = c
-    color.g = 0
-    color.b = x
-  
-  color.r += m
-  color.g += m
-  color.b += m
-  
-  color
+  unreachable()

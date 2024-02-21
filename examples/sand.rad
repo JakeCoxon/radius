@@ -1,8 +1,8 @@
 import compiler
 import range for Range
 import random for simple_random_float
-import vec for vec2i, rgba, rgba
-import color for hsva_to_rgba
+import vec for vec2i
+import color for hsva_to_rgba, rgba
 import array for Array, array_create
 import graphics for begin_app, end_app, window_open, render_app, frame_ticks, get_mouse_down, put_float_image_data, get_mouse_x, get_mouse_y
 

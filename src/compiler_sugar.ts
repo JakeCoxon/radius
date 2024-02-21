@@ -498,7 +498,7 @@ export const createCompilerModuleTask = (ctx: TaskContext): Task<Module, Compile
   const moduleScope = createScope({}, undefined)
   Object.assign(moduleScope, { 
     unsafe_subscript, unsafe_set_subscript, operator_bitshift_left, operator_bitshift_right,
-    operator_bitwise_and, operator_bitwise_or, rawptr: RawPointerType, add_external_library, assert,
+    operator_bitwise_and, operator_bitwise_or, rawptr: RawPointerType, add_external_library, assert, never: NeverType,
     get_current_loop, ctobj: CompileTimeObjectType, operator_mod, overloaded, static_length, assert_compile_error })
   const subCompilerState = pushSubCompilerState(ctx, { debugName: `compiler module`, lexicalParent: undefined, scope: moduleScope })
   const module = new Module('compiler', subCompilerState, null!)
@@ -507,7 +507,7 @@ export const createCompilerModuleTask = (ctx: TaskContext): Task<Module, Compile
 
 export const preloadModuleText = () => {
   return `
-import compiler
+import compiler for rawptr, overloaded, never
 
 fn iterate!(f, T)(list: List!T) @inline @method:
   i := 0
@@ -519,36 +519,48 @@ fn iterate!(f, T)(list: List!T) @inline @method:
 fn length!(T)(list: List!T) @inline @method:
   list.length
 
-fn malloc(size: int) -> compiler.rawptr @external
-fn realloc(ptr: compiler.rawptr, new_size: int) -> compiler.rawptr @external
-fn free(ptr: compiler.rawptr) @external
+fn malloc(size: int) -> rawptr @external
+fn realloc(ptr: rawptr, new_size: int) -> rawptr @external
+fn free(ptr: rawptr) @external
 fn sizeof!(T)() @external
 
-fn fmod(t: double, b: double) -> double @external
-fn fmodf(t: float, b: float) -> float @external
+@@external("fmod")
+fn fmod_double(t: double, b: double) -> double 
+@@external("fmodf")
+fn fmod_float(t: float, b: float) -> float
+fmod :: overloaded([fmod_double, fmod_float])
 
-fn abs(v: int) -> int:
+fn abs_int(v: int) -> int:
   ifx v < 0: -1 * v else: v
-
-fn fabs(v: float) -> float:
+fn abs_float(v: float) -> float:
   ifx v < 0.0: -1.0 * v else: v
+abs :: overloaded([abs_int, abs_float])
 
-fn sin(t: double) -> double @external
-fn cos(t: double) -> double @external
-fn tan(t: double) -> double @external
-fn sinf(t: float) -> float:
-  float(sin(double(t)))
-fn cosf(t: float) -> float:
-  float(cos(double(t)))
-fn tanf(t: float) -> float:
-  float(tan(double(t)))
+@@external("sin")
+fn sin_double(t: double) -> double
+fn sin_float(t: float) -> float:
+  float(sin_double(double(t)))
+sin :: overloaded([sin_double, sin_float])
+
+fn cos_double(t: double) -> double @external
+fn cos_float(t: float) -> float:
+  float(cos_double(double(t)))
+cos :: overloaded([cos_double, cos_float])
+
+fn tan_double(t: double) -> double @external
+fn tan_float(t: float) -> float:
+  float(tan_double(double(t)))
+tan :: overloaded([tan_double, tan_float])
 
 fn min!(T)(a: T, b: T) -> T @inline:
   ifx a <= b: a else: b
 fn max!(T)(a: T, b: T) -> T @inline:
   ifx a >= b: a else: b
 
-fn exit(status: int) @external
+fn exit(status: int) -> never @external
+fn unreachable() -> never @inline:
+  print("Unreachable code")
+  exit(1)
 
 PI :: 3.14159265359
 

@@ -373,7 +373,7 @@ const astWriter: LlvmAstWriterTable = {
   },
 
   usercall: (writer, ast) => {
-    const name = ast.type !== VoidType && createRegister("", VoidType)
+    const name = ast.type !== VoidType && ast.type !== NeverType && createRegister("", VoidType)
 
     const argValues = ast.args.map(arg => {
       return toRegister(writer, writeExpr(writer, arg))
@@ -613,6 +613,7 @@ export const writeLlvmBytecode = (globalCompilerState: GlobalCompilerState, outp
   insertGlobal(FloatType, "float")
   insertGlobal(DoubleType, "double")
   insertGlobal(RawPointerType, "ptr")
+  insertGlobal(NeverType, "void")
   insertGlobal(externalBuiltinBindings.printf, "@printf")
 
   let malloc = globalCompilerState.externalDefinitions.find(x => x.name === 'malloc')
@@ -744,12 +745,11 @@ const writeLlvmBytecodeFunction = (bytecodeWriter: LlvmWriter, func: CompiledFun
 
   if (isMain) { // hardcode for now
     format(funcWriter, `  ret i32 0\n`)
+  } else if (func.body.type === NeverType) {
+    format(funcWriter, `  unreachable\n`)
   } else if (func.returnType !== VoidType) {
-    // If there is a never type there is no implicit return
-    if (func.body.type !== NeverType) {
-      const v = toRegister(funcWriter, result)
-      format(funcWriter, `  ret $ $\n`, func.returnType, v)
-    }
+    const v = toRegister(funcWriter, result)
+    format(funcWriter, `  ret $ $\n`, func.returnType, v)
   } else {
     format(funcWriter, `  ret void\n`)
   }

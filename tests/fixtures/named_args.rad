@@ -21,6 +21,7 @@ fn main():
   assert_compile_error!(error_duplicated_name, "Already specified parameter")
   assert_compile_error!(error_duplicated_positional, "Already specified parameter")
 
+  # TODO: Test side effects order
   assert(named_func(bar=1, foo=2, baz=0) == 65) # Reversed order
   assert(named_func(4, bar=1, foo=2) == 129) # Unnamed
   assert(named_func(4, bar=1, 2) == 129) # Named in the middle

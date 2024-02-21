@@ -22,27 +22,5 @@ type vec4 < VecType @struct:
   z: float
   w: float
 
-type rgba < VecType @struct:
-  r: float
-  g: float
-  b: float
-  a: float
-
 fn xy(vec: vec3) -> vec2 @method: vec2(vec.x, vec.y)
 fn xyz(vec: vec4) -> vec3 @method: vec3(vec.x, vec.y, vec.z)
-
-# We would like these as operators
-
-fn mul_scalar(vec: vec2, scalar: float) -> vec2 @method:
-  vec2(vec.x * scalar, vec.y * scalar)
-fn mul_scalar(vec: vec3, scalar: float) -> vec3 @method:
-  vec3(vec.x * scalar, vec.y * scalar, vec.z * scalar)
-fn mul_scalar(vec: vec4, scalar: float) -> vec4 @method:
-  vec4(vec.x * scalar, vec.y * scalar, vec.z * scalar, vec.w * scalar)
-
-fn div_scalar(vec: vec2, scalar: float) -> vec2 @method:
-  vec2(vec.x / scalar, vec.y / scalar)
-fn div_scalar(vec: vec3, scalar: float) -> vec3 @method:
-  vec3(vec.x / scalar, vec.y / scalar, vec.z / scalar)
-fn div_scalar(vec: vec4, scalar: float) -> vec4 @method:
-  vec4(vec.x / scalar, vec.y / scalar, vec.z / scalar, vec.w / scalar)
