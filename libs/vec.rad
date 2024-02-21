@@ -24,3 +24,16 @@ type vec4 < VecType @struct:
 
 fn xy(vec: vec3) -> vec2 @method: vec2(vec.x, vec.y)
 fn xyz(vec: vec4) -> vec3 @method: vec3(vec.x, vec.y, vec.z)
+
+fn length(vec: vec3) -> float @method:
+  sqrt(vec.x * vec.x + vec.y * vec.y + vec.z * vec.z)
+
+fn dot(v1: vec3, v2: vec3) -> float:
+  v1.x * v2.x + v1.y * v2.y + v1.z * v2.z
+
+fn cross(v1: vec3, v2: vec3) -> vec3:
+  result: vec3
+  result.x = v1.y * v2.z - v1.z * v2.y
+  result.y = v1.z * v2.x - v1.x * v2.z
+  result.z = v1.x * v2.y - v1.y * v2.x
+  result

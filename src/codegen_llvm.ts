@@ -637,7 +637,9 @@ export const writeLlvmBytecode = (globalCompilerState: GlobalCompilerState, outp
 
   globalCompilerState.globalLets.forEach(globalLet => {
     const name = generateName(bytecodeWriter, globalLet.binding, true)
-    format(bytecodeWriter, "$ = global $ $\n", name, globalLet.binding.type, '0')
+    
+    const value = globalLet.binding.type === FloatType ? floatToLlvmHex(0) : '0'
+    format(bytecodeWriter, "$ = global $ $\n", name, globalLet.binding.type, value)
   })
   bytecodeWriter.outputHeaders.push(`\n`)
 

@@ -1,0 +1,97 @@
+import compiler
+import range for Range
+import random for simple_random_float
+import vec for vec2, vec3, cross
+import color for hsva_to_rgba, rgba, rgb
+import array for Array, array_create
+import graphics for begin_app, end_app, window_open, render_app, frame_ticks, get_mouse_down, put_float_image_data, get_mouse_x, get_mouse_y
+
+# Ideas from 
+# https://michaelwalczyk.com/blog-ray-marching.html
+
+window_width :: 320
+window_height :: 240
+
+time := 0.0
+
+fn sphere_sdf(p: vec3, center: vec3, radius: float) -> float:
+  (p - center).length - radius
+
+fn calculate_normal!(scene)(p: vec3) -> vec3:
+  s := 0.001
+  normal: vec3
+  normal.x = scene(p + vec3(s, 0, 0)) - scene(p - vec3(s, 0, 0))
+  normal.y = scene(p + vec3(0, s, 0)) - scene(p - vec3(0, s, 0))
+  normal.z = scene(p + vec3(0, 0, s)) - scene(p - vec3(0, 0, s))
+  normal /= normal.length
+  normal
+
+fn ray_march!(scene)(ray_origin: vec3, ray_dir: vec3) -> rgb:
+  total_dist := 0.0
+  num_steps :: 256
+  min_hit_distance :: 0.0001
+  max_hit_distance :: 1000.0
+
+  for i in Range(0, num_steps):
+    ray_pos := ray_origin + total_dist * ray_dir
+    distance_to_closest := scene(ray_pos)
+
+    if distance_to_closest < min_hit_distance:
+      normal := calculate_normal!scene(ray_pos)
+      return rgb(normal.x, normal.y, normal.z) * 0.5 + 0.5
+    if total_dist > max_hit_distance:
+      break
+    total_dist += distance_to_closest
+
+  # Background
+  rgb(0, 0, 0)
+
+fn sdf_scene(p: vec3) -> float:
+  sphere := sphere_sdf(p, vec3(0, 0, 0), 1)
+
+  displacement_size := sin(time) * 3 + 4
+  displacement := sin(displacement_size * p.x) * sin(displacement_size * p.y) * sin(displacement_size * p.z) * 0.25
+  sphere + displacement
+
+
+fn main():
+
+  begin_app()
+
+  rgba_image := array_create!rgba(window_width * window_height)
+
+  t := 0.0
+
+  while window_open():
+    t += 0.02
+    time = t
+
+    window_ratio := float(window_width) / float(window_height)
+    cam_pos := vec3(sin(t) * 2, 0, cos(t) * 2)
+    global_up := vec3(0, 1, 0)
+
+    for y in Range(0, window_height):
+      for x in Range(0, window_width):
+        uv := vec2(
+          (float(x) / float(window_width)) * 2 - 1, 
+          (float(y) / float(window_height)) * 2 - 1)
+        uv.x *= window_ratio
+        uv.y = - uv.y
+
+        ray_origin := cam_pos
+        ray_dir := (vec3(0,0,0) - ray_origin) / ray_origin.length
+        ray_dir /= ray_dir.length
+        right := cross(ray_dir, global_up)
+        ray_dir += uv.x * right
+        ray_dir.y += uv.y
+        
+        color_rgb := ray_march!sdf_scene(ray_origin, ray_dir)
+
+        color := rgba(color_rgb.r, color_rgb.g, color_rgb.b, 1)
+        rgba_image[x + y * window_width] = color
+      
+    put_float_image_data(rgba_image.data, window_width, window_height, window_width * 4, 0, 0)
+
+    render_app()
+
+  end_app()

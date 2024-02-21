@@ -200,8 +200,7 @@ export const makeParser = (input: string, debugName: string) => {
       const argToken = token!
       const expr = parseExpr()
       if (match("=")) {
-        compilerAssert(expr instanceof ParseIdentifier, "Expected identifier before '='")
-        return new ParseNamedArg(argToken, expr, parseExpr())
+        return new ParseNamedArg(argToken, assertIdentifier(expr), parseExpr())
       }
       return expr
     }

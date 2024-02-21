@@ -542,15 +542,23 @@ fn sin_float(t: float) -> float:
   float(sin_double(double(t)))
 sin :: overloaded([sin_double, sin_float])
 
-fn cos_double(t: double) -> double @external
+@@external("cos")
+fn cos_double(t: double) -> double
 fn cos_float(t: float) -> float:
   float(cos_double(double(t)))
 cos :: overloaded([cos_double, cos_float])
 
-fn tan_double(t: double) -> double @external
+@@external("tan")
+fn tan_double(t: double) -> double
 fn tan_float(t: float) -> float:
   float(tan_double(double(t)))
 tan :: overloaded([tan_double, tan_float])
+
+@@external("sqrt")
+fn sqrt_double(t: double) -> double 
+fn sqrt_float(t: float) -> float:
+  float(sqrt_double(double(t)))
+sqrt :: overloaded([sqrt_double, sqrt_float])
 
 fn min!(T)(a: T, b: T) -> T @inline:
   ifx a <= b: a else: b

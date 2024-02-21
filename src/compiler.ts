@@ -1616,8 +1616,8 @@ export const generateCompileCommands = (globalCompiler: GlobalCompilerState) => 
   const assemblyPath = opts.assemblyPath
   const clang = globalOptions.clangPath
   return {
-    compile: `${llcPath} ${llPath} -O1 -o ${assemblyPath}`,
-    link: `${clang} ${assemblyPath} -o ${nativePath} ${addLibraryDirs} ${libs}`,
+    compile: `${llcPath} ${llPath} -O3 -o ${assemblyPath}`,
+    link: `${clang} ${assemblyPath} -O3 -o ${nativePath} ${addLibraryDirs} ${libs}`,
     nativePath
   }
 }
