@@ -631,15 +631,37 @@ export const writeLlvmBytecode = (globalCompilerState: GlobalCompilerState, outp
     format(bytecodeWriter, "declare $ $($)\n", external.returnType, external.binding, args)
   })
 
+  insertGlobal(globalCompilerState.initializerFunctionBinding, `@${globalCompilerState.initializerFunctionBinding.name}`)
+
+  globalCompilerState.functionDefinitions.forEach(func => {
+    if (!func.keywords.includes("export")) return
+    compilerAssert(func.compiledFunctions.length === 1, `Expected 1 monomorphised function of exported '${func.debugName}'`)
+    const compiled = func.compiledFunctions[0]
+    insertGlobal(compiled.binding, `@${func.externalName}`)
+  })
+
+
 
   bytecodeWriter.outputHeaders.push("declare i32 @printf(i8*, ...)\n\n")
   bytecodeWriter.outputHeaders.push(`\n`)
 
   globalCompilerState.globalLets.forEach(globalLet => {
     const name = generateName(bytecodeWriter, globalLet.binding, true)
+
+    const defaultValueLiteral = (type: Type): string => {
+      if (type === FloatType) return floatToLlvmHex(0)
+      else if (type === DoubleType) return doubleToLlvmHex(0)
+      else if (type === IntType || type === u64Type) return '0'
+      else if (type === RawPointerType) return 'null'
+      else if (type.typeInfo.isReferenceType) return 'null'
+      else {
+        const fields = type.typeInfo.fields.map(x => 
+          `${getTypeName(bytecodeWriter, x.fieldType)} ${defaultValueLiteral(x.fieldType)}`)
+        return `{ ${fields.join(", ")} }`
+      }
+    }
     
-    const value = globalLet.binding.type === FloatType ? floatToLlvmHex(0) : '0'
-    format(bytecodeWriter, "$ = global $ $\n", name, globalLet.binding.type, value)
+    format(bytecodeWriter, "$ = global $ $\n", name, globalLet.binding.type, defaultValueLiteral(globalLet.binding.type))
   })
   bytecodeWriter.outputHeaders.push(`\n`)
 

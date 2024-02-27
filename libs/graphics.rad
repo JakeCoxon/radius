@@ -1,10 +1,7 @@
-import compiler for overloaded, add_external_library
+import compiler for overloaded, add_external_library, add_macos_framework
 import vec for vec2
 
-fn begin_app() @external
-fn end_app() @external
-fn window_open() -> bool @external
-fn render_app() @external
+# fn render_app() @external
 fn frame_ticks() -> int @external
 # fn set_pixel(x: int, y: int, color: int) @external
 # fn get_pixel(x: int, y: int) -> int @external
@@ -78,5 +75,7 @@ set_stroke_color :: overloaded([
 
 comptime:
   add_external_library("graphicslib")
-  add_external_library("SDL2")
   add_external_library("c++")
+  add_macos_framework("Cocoa")
+  add_macos_framework("QuartzCore")
+  add_macos_framework("OpenGL")

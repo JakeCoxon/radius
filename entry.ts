@@ -222,6 +222,7 @@ const writeLlvmBytecodeFile = (build: BuildObject) => {
 }
 
 const execPromise = (command: string) => {
+  console.log('\n' + command)
   return new Promise((resolve, reject) => {
     exec(command, (err, out) => { 
       if (err) reject(err); else resolve(out)
@@ -234,7 +235,7 @@ const executeLlvmCompiler = async (build: BuildObject) => {
   const cmds = generateCompileCommands(build.globalCompiler!)
   await execPromise(cmds.compile)
   await execPromise(cmds.link)
-  console.log(`Built native executable\n${build.globalCompiler.externalCompilerOptions.nativePath}`)
+  console.log(`\nBuilt native executable\n${build.globalCompiler.externalCompilerOptions.nativePath}`)
 }
 
 const args = [...process.argv]

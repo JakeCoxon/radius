@@ -1,5 +1,5 @@
 import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol, ScopeParentSymbol, isPlainObject, ParseLet, ParseList, ParseExpand, ParseBlock, findLabelByBinding, ParseSubscript, ParseNumber, ParseQuote, ParseWhile, ParseOperator, ParseBytecode, ParseOpEq, ParseSet, ParseFreshIden, UnknownObject, ParseNote, DefaultConsAst, RawPointerType, ValueFieldAst, SetValueFieldAst, FloatLiteralType, IntLiteralType, CompilerFunction, DerefAst, SetDerefAst, ParseSlice, CompilerFunctionCallContext, NeverType, LoopObject, CompTimeObjAst, CompileTimeObjectType, NamedArgAst } from "./defs";
-import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, functionCompileTimeCompileTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall } from "./compiler_functions";
+import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, functionCompileTimeCompileTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, compileExportedFunctionTask } from "./compiler_functions";
 import { Event, Task, TaskDef, Unit, isTask, isTaskResult, withContext } from "./tasks";
 import { createCompilerModuleTask, createListConstructor, defaultMetaFunction, expandLoopSugar, foldSugar, forExprSugar, forLoopSugar, listComprehensionSugar, print, sliceSugar, whileExprSugar } from "./compiler_sugar";
 
@@ -1557,8 +1557,64 @@ export const runTopLevelTask = (ctx: TaskContext, stmts: ParseStatements, module
   return Task.concurrency(tasks);
 }
 
+const createInitializerFunctionTask = (ctx: TaskContext) => {
+  const decl: ParserFunctionDecl = {
+    id: undefined,
+    debugName: `<initializer>`,
+    token: createAnonymousToken(''), functionMetaName: null, name: null, typeParams: [], params: [],
+    keywords: [], anonymous: true, returnType: null, body: null, annotations: [], variadic: false
+  }
+  const func = insertFunctionDefinition(ctx.globalCompiler, decl)
+
+  // Map initializers 
+  const lets = ctx.globalCompiler.globalLets.map(globalLet => {
+    const value = globalLet.value || new DefaultConsAst(globalLet.binding.type, globalLet.location)
+    return new SetAst(VoidType, globalLet.location, globalLet.binding, value)
+  })
+  const ast = new StatementsAst(VoidType, SourceLocation.anon, [...lets])
+
+  const binding = ctx.globalCompiler.initializerFunctionBinding
+  const compiledFunction = new CompiledFunction(
+      binding, func, VoidType, [], ast, [], [], 0)
+  ctx.globalCompiler.compiledFunctions.set(binding, compiledFunction)
+  func.compiledFunctions.push(compiledFunction)
+  ctx.globalCompiler.initializerFunction = compiledFunction
+
+  return Task.success()
+}
+
+const createEntryFunctionTask = (ctx: TaskContext) => {
+  const decl: ParserFunctionDecl = {
+    id: undefined,
+    debugName: `<entry>`,
+    token: createAnonymousToken(''), functionMetaName: null, name: null, typeParams: [], params: [],
+    keywords: [], anonymous: true, returnType: null, body: null, annotations: [], variadic: false
+  }
+  const func = insertFunctionDefinition(ctx.globalCompiler, decl)
+
+  compilerAssert(ctx.globalCompiler.initializerFunction, "Expected initialiser function")
+  compilerAssert(ctx.globalCompiler.mainFunction, "Expected main function")
+
+  // Call initializer and main
+  const ast = new StatementsAst(VoidType, SourceLocation.anon, [
+    new CallAst(VoidType, SourceLocation.anon, ctx.globalCompiler.initializerFunctionBinding, [], []),
+    new CallAst(VoidType, SourceLocation.anon, ctx.globalCompiler.mainFunction.binding, [], []),
+  ])
+
+  const id = func.compiledFunctions.length
+  const binding = new Binding(`${func.debugName} compiled ${id}`, FunctionType)
+  const compiledFunction = new CompiledFunction(
+      binding, func, IntType, [], ast, [], [], 0)
+  ctx.globalCompiler.compiledFunctions.set(binding, compiledFunction)
+  func.compiledFunctions.push(compiledFunction)
+  ctx.globalCompiler.entryFunction = compiledFunction
+
+  return Task.success()
+}
+
 export const programEntryTask = (ctx: TaskContext, entryModule: ParsedModule): Task<unknown, CompilerError> => {
   const moduleScope = ctx.subCompilerState.scope
+
   return (
     TaskDef(createCompilerModuleTask)
     .chainFn((task, compilerModule) => {
@@ -1569,37 +1625,33 @@ export const programEntryTask = (ctx: TaskContext, entryModule: ParsedModule): T
       return TaskDef(runTopLevelTask, entryModule.rootNode, moduleScope)
     })
     .chainFn((task, arg) => {
-      const func = expectMap(moduleScope, 'main', 'No main function found')
-      const fnctx: CompilerFunctionCallContext = { location: SourceLocation.anon, compilerState: ctx.subCompilerState, resultAst: undefined, typeCheckResult: undefined }
-      return createCallAstFromValue(fnctx, func, [], [])
-    })
-    .chainFn((task, callAst: Ast) => {
-      const decl: ParserFunctionDecl = {
-        id: undefined,
-        debugName: `<entry point>`,
-        token: createAnonymousToken(''), functionMetaName: null, name: null, typeParams: [], params: [],
-        keywords: [], anonymous: true, returnType: null, body: null, annotations: [], variadic: false
+
+      const tasks: Task<unknown, CompilerError>[] = []
+      
+      if (moduleScope['main']) {
+        compilerAssert(moduleScope['main'] instanceof Closure, "Expected main to be callable")
+
+        const task = TaskDef(compileExportedFunctionTask, moduleScope['main'].func, moduleScope['main'].scope, moduleScope['main'].lexicalParent)
+          .chainFn((task, func) => {
+            ctx.globalCompiler.mainFunction = func
+            return TaskDef(createEntryFunctionTask)
+          })
+        
+        tasks.push(task)
       }
-      const func = insertFunctionDefinition(ctx.globalCompiler, decl)
-
-      // Map initializers and then call main
-      const ast = new StatementsAst(VoidType, SourceLocation.anon, [
-        ...ctx.globalCompiler.globalLets.map(globalLet => {
-          const value = globalLet.value || new DefaultConsAst(globalLet.binding.type, globalLet.location)
-          return new SetAst(VoidType, globalLet.location, globalLet.binding, value)
-        }),
-        callAst
-      ])
-
-      const id = func.compiledFunctions.length
-      const binding = new Binding(`${func.debugName} compiled ${id}`, FunctionType)
-      const compiledFunction = new CompiledFunction(
-          binding, func, IntType, [], ast, [], [], 0)
-      ctx.globalCompiler.compiledFunctions.set(binding, compiledFunction)
-      func.compiledFunctions.push(compiledFunction)
-      ctx.globalCompiler.entryFunction = compiledFunction
-
-      return Task.success()
+      Object.values(moduleScope).forEach(value => {
+        if (value instanceof Closure) {
+          if (value.func.keywords.includes("export")) {
+            value.func.externalName = value.func.debugName // TODO: Don't call this debugName
+            tasks.push(TaskDef(compileExportedFunctionTask, value.func, value.scope, value.lexicalParent))
+          }
+        }
+      })
+      compilerAssert(tasks.length, "No 'main' and no exported function found")
+      return Task.concurrency(tasks)
+    })
+    .chainFn(() => {
+      return TaskDef(createInitializerFunctionTask)
     })
   )
   
@@ -1609,6 +1661,7 @@ export const generateCompileCommands = (globalCompiler: GlobalCompilerState) => 
   const opts = globalCompiler.externalCompilerOptions
   const globalOptions = opts.globalOptions
   const libs = opts.libraries.map(x => `-l${x}`).join(" ")
+  const frameworks = opts.macosFrameworks.map(x => `-framework ${x}`).join(" ")
   const addLibraryDirs = globalOptions.libraryDirs.map(x => `-L${x}`).join(" ")
   const llcPath = globalOptions.llcPath
   const llPath = opts.llPath
@@ -1617,7 +1670,7 @@ export const generateCompileCommands = (globalCompiler: GlobalCompilerState) => 
   const clang = globalOptions.clangPath
   return {
     compile: `${llcPath} ${llPath} -O3 -o ${assemblyPath}`,
-    link: `${clang} ${assemblyPath} -O3 -o ${nativePath} ${addLibraryDirs} ${libs}`,
+    link: `${clang} ${assemblyPath} -O3 -o ${nativePath} ${addLibraryDirs} ${libs} ${frameworks}`,
     nativePath
   }
 }

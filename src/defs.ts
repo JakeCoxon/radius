@@ -828,6 +828,9 @@ export type GlobalCompilerState = {
   typeTable: TypeTable,
   globalLets: LetAst[],
   entryFunction: CompiledFunction | undefined,
+  initializerFunction: CompiledFunction | undefined,
+  initializerFunctionBinding: Binding,
+  mainFunction: CompiledFunction | undefined,
   externalDefinitions: ExternalDefinition[],
   externalCompilerOptions: ExternalCompilerOptions,
   rootScope: Scope
@@ -836,6 +839,7 @@ export type ExternalCompilerOptions = {
   buildName: string
   compilationUnits: string[],
   libraries: string[],
+  macosFrameworks: string[],
   globalOptions: GlobalExternalCompilerOptions,
   llPath: string,
   assemblyPath: string,
@@ -893,6 +897,9 @@ export const createDefaultGlobalCompiler = () => {
     typeTable: new TypeTable(),
     logger: null!,
     entryFunction: undefined, // Inserted later
+    initializerFunction: undefined, // Inserted later
+    initializerFunctionBinding: new Binding(`radius_initializer`, FunctionType),
+    mainFunction: undefined, // Inserted later
     externalDefinitions: [],
     rootScope: null!,
     externalCompilerOptions: {
@@ -906,6 +913,7 @@ export const createDefaultGlobalCompiler = () => {
       buildName: "", 
       compilationUnits: [], 
       libraries: [],
+      macosFrameworks: [],
       assemblyPath: '',
       llPath: '',
       nativePath: ''

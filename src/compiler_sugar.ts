@@ -441,6 +441,10 @@ const add_external_library = new ExternalFunction("add_external_library", VoidTy
   compilerAssert(typeof args[0] == 'string', "Expected string")
   ctx.compilerState.globalCompiler.externalCompilerOptions.libraries.push(args[0])
 })
+const add_macos_framework = new ExternalFunction("add_macos_framework", VoidType, (ctx: CompilerFunctionCallContext, args) => {
+  compilerAssert(typeof args[0] == 'string', "Expected string")
+  ctx.compilerState.globalCompiler.externalCompilerOptions.macosFrameworks.push(args[0])
+})
 
 const get_current_loop = new ExternalFunction("get_current_loop", VoidType, (ctx: CompilerFunctionCallContext, args) => {
   let b = ctx.compilerState.labelBlock
@@ -494,12 +498,16 @@ export const assert_compile_error = new CompilerFunction("assert_compile_error",
   
 })
 
+export const initializer_function = new CompilerFunction("initializer_function", (ctx, typeArgs, args) => {
+  return Task.of(new UserCallAst(VoidType, ctx.location, ctx.compilerState.globalCompiler.initializerFunctionBinding, [], []))
+})
+
 export const createCompilerModuleTask = (ctx: TaskContext): Task<Module, CompilerError> => {
   const moduleScope = createScope({}, undefined)
   Object.assign(moduleScope, { 
     unsafe_subscript, unsafe_set_subscript, operator_bitshift_left, operator_bitshift_right,
-    operator_bitwise_and, operator_bitwise_or, rawptr: RawPointerType, add_external_library, assert, never: NeverType,
-    get_current_loop, ctobj: CompileTimeObjectType, operator_mod, overloaded, static_length, assert_compile_error })
+    operator_bitwise_and, operator_bitwise_or, rawptr: RawPointerType, add_external_library, add_macos_framework, assert, never: NeverType,
+    get_current_loop, ctobj: CompileTimeObjectType, operator_mod, overloaded, static_length, assert_compile_error, initializer_function })
   const subCompilerState = pushSubCompilerState(ctx, { debugName: `compiler module`, lexicalParent: undefined, scope: moduleScope })
   const module = new Module('compiler', subCompilerState, null!)
   return Task.of(module)

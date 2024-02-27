@@ -448,6 +448,17 @@ export function createCallAstFromValue(ctx: CompilerFunctionCallContext, value: 
 
 }
 
+export const compileExportedFunctionTask = (ctx: TaskContext, func: FunctionDefinition, parentScope: Scope, lexicalParent: SubCompilerState) => {
+  // TODO: Handle functions with arguments
+  const typeCheckResult: TypeCheckResult = { concreteTypes: [], substitutions: {}, returnType: undefined!, sortedArgs: [], checkFailed: false }
+  const call: FunctionCallArg = { location: SourceLocation.anon, func, typeArgs: [], args: [], parentScope, lexicalParent, result: typeCheckResult }
+
+  return (
+    TaskDef(compileAndExecuteFunctionHeaderTask, call)
+    .chain(TaskDef(functionTemplateTypeCheckAndCompileTask, call))
+  )
+}
+
 export const createMethodCall = (vm: Vm, receiver: Ast, name: string, typeArgs: unknown[], args: Ast[]) => {
   const type = receiver.type instanceof ParameterizedType ? receiver.type.typeConstructor : receiver.type
   const t = type instanceof ConcreteClassType ? type.compiledClass.classDefinition : type;

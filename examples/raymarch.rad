@@ -4,13 +4,15 @@ import random for simple_random_float
 import vec for vec2, vec3, cross
 import color for hsva_to_rgba, rgba, rgb
 import array for Array, array_create
-import graphics for begin_app, end_app, window_open, render_app, frame_ticks, get_mouse_down, put_float_image_data, get_mouse_x, get_mouse_y
+import graphics for frame_ticks, get_mouse_down, put_float_image_data, get_mouse_x, get_mouse_y
 
 # Ideas from 
 # https://michaelwalczyk.com/blog-ray-marching.html
 
 window_width :: 320
 window_height :: 240
+
+rgba_image := array_create!rgba(window_width * window_height)
 
 time := 0.0
 
@@ -54,44 +56,41 @@ fn sdf_scene(p: vec3) -> float:
   sphere + displacement
 
 
-fn main():
+fn cleanup() @export:
+  print("Cleanup")
 
-  begin_app()
+fn on_event() @export:
+  0
 
-  rgba_image := array_create!rgba(window_width * window_height)
+fn init() @export:
+  compiler.initializer_function()
 
-  t := 0.0
+fn frame() @export:
 
-  while window_open():
-    t += 0.02
-    time = t
+  time += 0.02
 
-    window_ratio := float(window_width) / float(window_height)
-    cam_pos := vec3(sin(t) * 2, 0, cos(t) * 2)
-    global_up := vec3(0, 1, 0)
+  window_ratio := float(window_width) / float(window_height)
+  cam_pos := vec3(sin(time) * 2, 0, cos(time) * 2)
+  global_up := vec3(0, 1, 0)
 
-    for y in Range(0, window_height):
-      for x in Range(0, window_width):
-        uv := vec2(
-          (float(x) / float(window_width)) * 2 - 1, 
-          (float(y) / float(window_height)) * 2 - 1)
-        uv.x *= window_ratio
-        uv.y = - uv.y
+  for y in Range(0, window_height):
+    for x in Range(0, window_width):
+      uv := vec2(
+        (float(x) / float(window_width)) * 2 - 1, 
+        (float(y) / float(window_height)) * 2 - 1)
+      uv.x *= window_ratio
+      uv.y = - uv.y
 
-        ray_origin := cam_pos
-        ray_dir := (vec3(0,0,0) - ray_origin) / ray_origin.length
-        ray_dir /= ray_dir.length
-        right := cross(ray_dir, global_up)
-        ray_dir += uv.x * right
-        ray_dir.y += uv.y
-        
-        color_rgb := ray_march!sdf_scene(ray_origin, ray_dir)
-
-        color := rgba(color_rgb.r, color_rgb.g, color_rgb.b, 1)
-        rgba_image[x + y * window_width] = color
+      ray_origin := cam_pos
+      ray_dir := (vec3(0,0,0) - ray_origin) / ray_origin.length
+      ray_dir /= ray_dir.length
+      right := cross(ray_dir, global_up)
+      ray_dir += uv.x * right
+      ray_dir.y += uv.y
       
-    put_float_image_data(rgba_image.data, window_width, window_height, window_width * 4, 0, 0)
+      color_rgb := ray_march!sdf_scene(ray_origin, ray_dir)
 
-    render_app()
-
-  end_app()
+      color := rgba(color_rgb.r, color_rgb.g, color_rgb.b, 1)
+      rgba_image[x + y * window_width] = color
+    
+  put_float_image_data(rgba_image.data, window_width, window_height, window_width * 4, 0, 0)
