@@ -1596,13 +1596,12 @@ const createEntryFunctionTask = (ctx: TaskContext) => {
   }
   const func = insertFunctionDefinition(ctx.globalCompiler, decl)
 
-  compilerAssert(ctx.globalCompiler.initializerFunction, "Expected initialiser function")
   compilerAssert(ctx.globalCompiler.mainFunction, "Expected main function")
 
   // Call initializer and main
   const ast = new StatementsAst(VoidType, SourceLocation.anon, [
-    new CallAst(VoidType, SourceLocation.anon, ctx.globalCompiler.initializerFunctionBinding, [], []),
-    new CallAst(VoidType, SourceLocation.anon, ctx.globalCompiler.mainFunction.binding, [], []),
+    new UserCallAst(VoidType, SourceLocation.anon, ctx.globalCompiler.initializerFunctionBinding, []),
+    new UserCallAst(VoidType, SourceLocation.anon, ctx.globalCompiler.mainFunction.binding, []),
   ])
 
   const id = func.compiledFunctions.length
@@ -1612,6 +1611,8 @@ const createEntryFunctionTask = (ctx: TaskContext) => {
   ctx.globalCompiler.compiledFunctions.set(binding, compiledFunction)
   func.compiledFunctions.push(compiledFunction)
   ctx.globalCompiler.entryFunction = compiledFunction
+  compilerAssert(!ctx.globalCompiler.exports['main'], "Already got main export")
+  ctx.globalCompiler.exports['main'] = compiledFunction
 
   return Task.success()
 }
@@ -1635,7 +1636,7 @@ export const programEntryTask = (ctx: TaskContext, entryModule: ParsedModule): T
       if (moduleScope['main']) {
         compilerAssert(moduleScope['main'] instanceof Closure, "Expected main to be callable")
 
-        const task = TaskDef(compileExportedFunctionTask, 'main', moduleScope['main'].func, moduleScope['main'].scope, moduleScope['main'].lexicalParent)
+        const task = TaskDef(compileExportedFunctionTask, { closure: moduleScope['main'] })
           .chainFn((task, compiledFunction) => {
             ctx.globalCompiler.mainFunction = compiledFunction
             return TaskDef(createEntryFunctionTask)
@@ -1646,7 +1647,7 @@ export const programEntryTask = (ctx: TaskContext, entryModule: ParsedModule): T
       Object.values(moduleScope).forEach(value => {
         if (value instanceof Closure && value.func.keywords.includes("export")) {
           const exportName = value.func.externalName = value.func.debugName // TODO: Don't call this debugName
-          tasks.push(TaskDef(compileExportedFunctionTask, exportName, value.func, value.scope, value.lexicalParent))
+          tasks.push(TaskDef(compileExportedFunctionTask, { exportName, closure: value }))
         }
       })
       compilerAssert(tasks.length, "No 'main' and no exported function found")

@@ -5,13 +5,29 @@ import vec for vec3, vec4
 import color for hsva_to_rgba
 import matrix for mat4, mat4_identity, create_perspective_projection, mul_mat4_vec4, mul_mat4_mat4, ndc_to_screen
 import array for Array, array_create
-import graphics for begin_app, end_app, window_open, render_app, frame_ticks, get_mouse_down, put_float_image_data, get_mouse_x, get_mouse_y, set_fill_color, fill_rectangle, move_to, line_to, stroke, set_stroke_color, begin_path
+import graphics for frame_ticks, get_mouse_down, put_float_image_data, get_mouse_x, get_mouse_y, set_fill_color, fill_rectangle, move_to, line_to, stroke, set_stroke_color, begin_path
 
 window_width :: 320
 window_height :: 240
 
 band :: compiler.operator_bitwise_and
 
+t := 0.0
+cube_edges := [(0, 1), (0, 2), (3, 1), (3, 2), (4, 5), (4, 6), (7, 5), (7, 6), (0, 4), (1, 5), (2, 6), (3, 7)]
+attractor_points := array_create!vec3(0)
+
+cube_points := block:
+  ar := array_create!vec3(8)
+  for n in Range(0, 8):
+    ar[n] = vec3(
+      float(band(n / 4, 1)) - 0.5, 
+      float(band(n / 2, 1)) - 0.5, 
+      float(band(n / 1, 1)) - 0.5)
+  ar
+
+screen_coords := array_create!vec3(0)
+projection := create_perspective_projection(
+    120, window_width / window_height, 0.1, 10000)
 
 fn attractor(pos: vec3) -> vec3:
   sigma := 10.0
@@ -25,104 +41,88 @@ fn attractor(pos: vec3) -> vec3:
 
   pos + vec3(dx * speed, dy * speed, dz * speed)
   
-fn main():
+fn init() @export:
+  0
 
-  begin_app()
+fn frame() @export:
+  set_fill_color(0, 0, 0, 1)
+  fill_rectangle(0, 0, window_width, window_height)
 
-  cube_points := array_create!vec3(8)
-  for n in Range(0, 8):
-    cube_points[n] = vec3(
-      float(band(n / 4, 1)) - 0.5, 
-      float(band(n / 2, 1)) - 0.5, 
-      float(band(n / 1, 1)) - 0.5)
+  if attractor_points.size == 0:
+    attractor_points.append(vec3(1.1, 2, 7))
 
-  screen_coords := array_create!vec3(0)
+  t += 0.1
 
-  projection := create_perspective_projection(
-    120, window_width / window_height, 0.1, 10000)
+  if attractor_points.size < 2000:
+    prev_point := attractor_points[attractor_points.size - 1]
+    new_point := attractor(prev_point)
+    attractor_points.append(new_point)
+  else:
+    attractor_points.size = 1
 
-  attractor_points := array_create!vec3(0)
-  attractor_points.append(vec3(1.1, 2, 7))
+  transform := (
+    mat4_identity()
+    .scale(2.5, 2.5, 2.5)
+    .rotate_y(t * 0.1)
+    .rotate_x(0.2)
+    .translate(0, 0, -10)
+    .premul(projection)
+  )
 
-  cube_edges := [(0, 1), (0, 2), (3, 1), (3, 2), (4, 5), (4, 6), (7, 5), (7, 6), (0, 4), (1, 5), (2, 6), (3, 7)]
+  set_fill_color(1, 1, 1, 1)
 
-  t := 0.0
+  screen_coords.size = 0
+  
+  attractor_point_start := screen_coords.size
 
-  while window_open():
+  for point in attractor_points:
+    scale := 0.02
+    vec := vec4(point.x * scale , point.y * scale, point.z * scale + 0.5, 1)
 
-    set_fill_color(0, 0, 0, 1)
-    fill_rectangle(0, 0, window_width, window_height)
+    clip_coords := mul_mat4_vec4(transform, vec)
+    ndc := clip_coords.xyz / clip_coords.w
 
-    t += 0.1
+    if clip_coords.w < 0:
+      continue
 
-    if attractor_points.size < 2000:
-      prev_point := attractor_points[attractor_points.size - 1]
-      new_point := attractor(prev_point)
-      attractor_points.append(new_point)
-    else:
-      attractor_points.size = 1
+    screen := ndc_to_screen(ndc, window_width, window_height)
+    screen_coords.append(screen)
 
-    transform := (
-      mat4_identity()
-      .scale(2.5, 2.5, 2.5)
-      .rotate_y(t * 0.1)
-      .rotate_x(0.2)
-      .translate(0, 0, -10)
-      .premul(projection)
-    )
+  set_stroke_color(1, 1, 1, 1)
+  for i in Range(0, attractor_points.size - 1):
 
-    set_fill_color(1, 1, 1, 1)
-
-    screen_coords.size = 0
-    
-    attractor_point_start := screen_coords.size
-
-    for point in attractor_points:
-      scale := 0.02
-      vec := vec4(point.x * scale , point.y * scale, point.z * scale + 0.5, 1)
-
-      clip_coords := mul_mat4_vec4(transform, vec)
-      ndc := clip_coords.xyz / clip_coords.w
-
-      if clip_coords.w < 0:
-        continue
-
-      screen := ndc_to_screen(ndc, window_width, window_height)
-      screen_coords.append(screen)
-
-    set_stroke_color(1, 1, 1, 1)
-    for i in Range(0, attractor_points.size - 1):
-
-      begin_path()
-      move_to(screen_coords[i].xy)
-      line_to(screen_coords[i + 1].xy)
-      stroke()
+    begin_path()
+    move_to(screen_coords[i].xy)
+    line_to(screen_coords[i + 1].xy)
+    stroke()
 
 
-    # Cube border
+  # Cube border
 
-    screen_coords.size = 0
+  screen_coords.size = 0
 
-    for point in cube_points:
-      vec := vec4(point.x, point.y, point.z, 1)
+  for point in cube_points:
+    vec := vec4(point.x, point.y, point.z, 1)
 
-      clip_coords := mul_mat4_vec4(transform, vec)
-      ndc := clip_coords.xyz / clip_coords.w
+    clip_coords := mul_mat4_vec4(transform, vec)
+    ndc := clip_coords.xyz / clip_coords.w
 
-      if clip_coords.w < 0:
-        continue
+    if clip_coords.w < 0:
+      continue
 
-      screen := ndc_to_screen(ndc, window_width, window_height)
-      screen_coords.append(screen)
+    screen := ndc_to_screen(ndc, window_width, window_height)
+    screen_coords.append(screen)
 
-    set_stroke_color(1, 0, 0, 1)
-    for edge in cube_edges:
+  set_stroke_color(1, 0, 0, 1)
+  for edge in cube_edges:
 
-      begin_path()
-      move_to(screen_coords[edge._1].xy)
-      line_to(screen_coords[edge._2].xy)
-      stroke()
+    begin_path()
+    move_to(screen_coords[edge._1].xy)
+    line_to(screen_coords[edge._2].xy)
+    stroke()
 
-    render_app()
+fn cleanup() @export:
+  0
 
-  end_app()
+fn on_event() @export:
+  0

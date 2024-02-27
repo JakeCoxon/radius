@@ -603,6 +603,7 @@ export const writeLlvmBytecode = (globalCompilerState: GlobalCompilerState, outp
   bytecodeWriter.currentOutput = bytecodeWriter.outputHeaders
 
   const insertGlobal = (binding: Binding | Type, name: string) => {
+    compilerAssert(!bytecodeWriter.globalNameToBinding.has(name), `Already generated ${name}`)
     bytecodeWriter.globalNames.set(binding, name)
     bytecodeWriter.globalNameToBinding.set(name, binding)
   }
@@ -613,7 +614,7 @@ export const writeLlvmBytecode = (globalCompilerState: GlobalCompilerState, outp
   insertGlobal(FloatType, "float")
   insertGlobal(DoubleType, "double")
   insertGlobal(RawPointerType, "ptr")
-  insertGlobal(NeverType, "void")
+  bytecodeWriter.globalNames.set(NeverType, "void")
   insertGlobal(externalBuiltinBindings.printf, "@printf")
 
   let malloc = globalCompilerState.externalDefinitions.find(x => x.name === 'malloc')

@@ -503,11 +503,11 @@ export const initializer_function = new CompilerFunction("initializer_function",
 })
 
 export const add_export = new ExternalFunction("add_export", VoidType, (ctx, values) => {
-  const [name, func] = values
+  const [name, closure] = values
   compilerAssert(typeof name === 'string', "Expected string", { name })
-  compilerAssert(func instanceof Closure, "Expected function", { func })
+  compilerAssert(closure instanceof Closure, "Expected function", { closure })
   return (
-    TaskDef(compileExportedFunctionTask, name, func.func, func.scope, func.lexicalParent)
+    TaskDef(compileExportedFunctionTask, { exportName: name, closure })
     .chainFn((task, value) => {
       return Task.of(new VoidAst(VoidType, ctx.location))
     })
