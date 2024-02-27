@@ -55,15 +55,14 @@ fn sdf_scene(p: vec3) -> float:
   displacement := sin(displacement_size * p.x) * sin(displacement_size * p.y) * sin(displacement_size * p.z) * 0.25
   sphere + displacement
 
-
 fn cleanup() @export:
-  print("Cleanup")
+  0
 
 fn on_event() @export:
   0
 
 fn init() @export:
-  compiler.initializer_function()
+  0
 
 fn frame() @export:
 

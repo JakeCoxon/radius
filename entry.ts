@@ -81,6 +81,7 @@ const loadBuildObject = (inputPath: string, globalOptions: GlobalExternalCompile
   const file = Bun.file(debugOutputPath)
   const writer = file.writer()
   logger.debugWriter = writer
+  // console.log = (...args) => writeToFile(logger.debugWriter!, ...args)
 
   const build = new BuildObject(moduleName, inputPath, globalOptions, globalCompiler, input, debugOutputPath)
 
@@ -233,8 +234,7 @@ const execPromise = (command: string) => {
 const executeLlvmCompiler = async (build: BuildObject) => {
   compilerAssert(build.globalCompiler, "Not compiled")
   const cmds = generateCompileCommands(build.globalCompiler!)
-  await execPromise(cmds.compile)
-  await execPromise(cmds.link)
+  await execPromise(cmds.compileAndLink)
   console.log(`\nBuilt native executable\n${build.globalCompiler.externalCompilerOptions.nativePath}`)
 }
 

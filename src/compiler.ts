@@ -683,8 +683,12 @@ function callFunctionFromValueTask(ctx: TaskContext, vm: Vm, func: unknown, type
   if (func instanceof ExternalFunction) {
     const fnctx: CompilerFunctionCallContext = { location: vm.location, compilerState: ctx.subCompilerState, resultAst: undefined, typeCheckResult: undefined }
     const functionResult = func.func(fnctx, values)
-    vm.stack.push(functionResult)
-    return Task.success()
+    if (!(functionResult instanceof Task)) {
+      vm.stack.push(functionResult); return Task.success()
+    }
+    return functionResult.chainFn((task, value) => {
+      vm.stack.push(value); return Task.success()
+    })
   }
   if (func instanceof CompilerFunction) {
     if (func === print) {
@@ -1509,7 +1513,7 @@ export const topLevelComptimeTask = (ctx: TaskContext, expr: ParseNode, moduleSc
   ctx.globalCompiler.logger.log(bytecodeToString(out.bytecode))
   ctx.globalCompiler.logger.log("")
 
-  const subCompilerState = pushSubCompilerState(ctx, { debugName: 'top level comptime', lexicalParent: ctx.subCompilerState, scope: ctx.subCompilerState.scope })
+  const subCompilerState = pushSubCompilerState(ctx, { debugName: 'top level comptime', lexicalParent: ctx.subCompilerState, scope: moduleScope })
 
   return (
     TaskDef(createBytecodeVmAndExecuteTask, subCompilerState, out.bytecode, moduleScope)
@@ -1631,20 +1635,18 @@ export const programEntryTask = (ctx: TaskContext, entryModule: ParsedModule): T
       if (moduleScope['main']) {
         compilerAssert(moduleScope['main'] instanceof Closure, "Expected main to be callable")
 
-        const task = TaskDef(compileExportedFunctionTask, moduleScope['main'].func, moduleScope['main'].scope, moduleScope['main'].lexicalParent)
-          .chainFn((task, func) => {
-            ctx.globalCompiler.mainFunction = func
+        const task = TaskDef(compileExportedFunctionTask, 'main', moduleScope['main'].func, moduleScope['main'].scope, moduleScope['main'].lexicalParent)
+          .chainFn((task, compiledFunction) => {
+            ctx.globalCompiler.mainFunction = compiledFunction
             return TaskDef(createEntryFunctionTask)
           })
         
         tasks.push(task)
       }
       Object.values(moduleScope).forEach(value => {
-        if (value instanceof Closure) {
-          if (value.func.keywords.includes("export")) {
-            value.func.externalName = value.func.debugName // TODO: Don't call this debugName
-            tasks.push(TaskDef(compileExportedFunctionTask, value.func, value.scope, value.lexicalParent))
-          }
+        if (value instanceof Closure && value.func.keywords.includes("export")) {
+          const exportName = value.func.externalName = value.func.debugName // TODO: Don't call this debugName
+          tasks.push(TaskDef(compileExportedFunctionTask, exportName, value.func, value.scope, value.lexicalParent))
         }
       })
       compilerAssert(tasks.length, "No 'main' and no exported function found")
@@ -1670,7 +1672,7 @@ export const generateCompileCommands = (globalCompiler: GlobalCompilerState) => 
   const clang = globalOptions.clangPath
   return {
     compile: `${llcPath} ${llPath} -O3 -o ${assemblyPath}`,
-    link: `${clang} ${assemblyPath} -O3 -o ${nativePath} ${addLibraryDirs} ${libs} ${frameworks}`,
+    compileAndLink: `${clang} ${llPath} -O3 -o ${nativePath} ${addLibraryDirs} ${libs} ${frameworks}`,
     nativePath
   }
 }

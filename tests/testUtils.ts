@@ -253,8 +253,8 @@ const execPromise = (command: string) => {
 const executeLlvmCompiler = async (build: BuildObject) => {
   compilerAssert(build.globalCompiler, "Not compiled")
   const cmds = generateCompileCommands(build.globalCompiler!)
-  await execPromise(cmds.compile)
-  await execPromise(cmds.link)
+  // await execPromise(cmds.compile)
+  await execPromise(cmds.compileAndLink)
   console.log(`Built native executable\n${build.globalCompiler.externalCompilerOptions.nativePath}`)
 }
 
@@ -331,7 +331,7 @@ export const createTest = ({
 
 export const printCompileCommands = (testObject: TestObject) => {
   const cmds = generateCompileCommands(testObject.globalCompiler!)
-  console.log(`${cmds.compile} && ${cmds.link} && ${cmds.nativePath}`)
+  console.log(`${cmds.compileAndLink} && ${cmds.nativePath}`)
 }
 
 export const runVm = async ({ testObject}: { testObject: TestObject }) => {

@@ -4,7 +4,7 @@ import random for simple_random_float
 import vec for vec2i
 import color for hsva_to_rgba, rgba
 import array for Array, array_create
-import graphics for begin_app, end_app, window_open, render_app, frame_ticks, get_mouse_down, put_float_image_data, get_mouse_x, get_mouse_y
+import graphics for frame_ticks, get_mouse_down, put_float_image_data, get_mouse_x, get_mouse_y
 
 window_width :: 320
 window_height :: 240
@@ -12,80 +12,80 @@ window_height :: 240
 cells_width :: window_width
 cells_height :: window_height
 
-fn main():
+cells := array_create!int(cells_width * cells_height)
+next_cells := array_create!int(cells_width * cells_height)
+rgba_image := array_create!rgba(cells_width * cells_height)
 
-  begin_app()
+current_color := 200.0
 
-  cells := array_create!int(cells_width * cells_height)
-  next_cells := array_create!int(cells_width * cells_height)
-  rgba_image := array_create!rgba(cells_width * cells_height)
+fn init() @export:
 
   cells[:] = 0 ...
   next_cells[:] = 0 ...
 
-  current_color := 200.0
+fn frame() @export:
 
-  while window_open():
+  next_cells[:] = 0 ...
+  pressed_left := get_mouse_down(0)
+  pressed_right := get_mouse_down(1)
+  mouse := vec2i(get_mouse_x(), get_mouse_y())
 
-    next_cells[:] = 0 ...
-    pressed_left := get_mouse_down(0)
-    pressed_right := get_mouse_down(1)
-    mouse := vec2i(get_mouse_x(), get_mouse_y())
+  mouse_size := ifx pressed_left: 4 else: 2
 
-    mouse_size := ifx pressed_left: 4 else: 2
+  current_color += 0.1
+  if current_color > 360.0:
+    current_color = 1.0
 
-    current_color += 0.1
-    if current_color > 360.0:
-      current_color = 1.0
+  for y in Range(0, cells_height - 1):
+    for x in Range(1, cells_width - 1):
 
-    for y in Range(0, cells_height - 1):
-      for x in Range(1, cells_width - 1):
+      cell := x + y * cells_width
+      down := cell + cells_width
+      down_left := down - 1
+      down_right := down + 1
+      cell_value := cells[x + y * cells_width]
 
-        cell := x + y * cells_width
-        down := cell + cells_width
-        down_left := down - 1
-        down_right := down + 1
-        cell_value := cells[x + y * cells_width]
+      bottom_edge := y == cells_height - 2
 
-        bottom_edge := y == cells_height - 2
+      down_blocked := cells[down] > 0 or bottom_edge
+      down_left_blocked := cells[down_left] > 0 or bottom_edge or x == 1
+      down_right_blocked := cells[down_right] > 0 or bottom_edge or x == cells_width - 2
 
-        down_blocked := cells[down] > 0 or bottom_edge
-        down_left_blocked := cells[down_left] > 0 or bottom_edge or x == 1
-        down_right_blocked := cells[down_right] > 0 or bottom_edge or x == cells_width - 2
+      if cell_value > 0:
+        if !down_blocked:
+          next_cells[down] = cell_value
+        elif !down_left_blocked:
+          next_cells[down_left] = cell_value
+        elif !down_right_blocked:
+          next_cells[down_right] = cell_value
+        else:
+          next_cells[cell] = cell_value
 
-        if cell_value > 0:
-          if !down_blocked:
-            next_cells[down] = cell_value
-          elif !down_left_blocked:
-            next_cells[down_left] = cell_value
-          elif !down_right_blocked:
-            next_cells[down_right] = cell_value
-          else:
-            next_cells[cell] = cell_value
+      if abs(mouse.x - x) < mouse_size and abs(mouse.y - y) < mouse_size:
+        if pressed_left:
+          next_cells[cell] = int(current_color + simple_random_float() * 10)
+        elif pressed_right:
+          next_cells[cell] = 0
 
-        if abs(mouse.x - x) < mouse_size and abs(mouse.y - y) < mouse_size:
-          if pressed_left:
-            next_cells[cell] = int(current_color + simple_random_float() * 10)
-          elif pressed_right:
-            next_cells[cell] = 0
+  for y in Range(0, cells_height):
+    for x in Range(0, cells_width):
 
-    for y in Range(0, cells_height):
-      for x in Range(0, cells_width):
+      cell := next_cells[x + y * cells_width]
+      color := (ifx cell > 0:
+          hsva_to_rgba(float(cell), 0.7, 0.7, 1)
+        else:
+          rgba(0, 0, 0, 0))
 
-        cell := next_cells[x + y * cells_width]
-        color := (ifx cell > 0:
-            hsva_to_rgba(float(cell), 0.7, 0.7, 1)
-          else:
-            rgba(0, 0, 0, 0))
+      rgba_image[x + y * cells_width] = color
+    
+  put_float_image_data(rgba_image.data, cells_width, cells_height, window_width * 4, 0, 0)
 
-        rgba_image[x + y * cells_width] = color
-      
-    put_float_image_data(rgba_image.data, cells_width, cells_height, window_width * 4, 0, 0)
+  swap := cells
+  cells = next_cells
+  next_cells = swap
 
-    swap := cells
-    cells = next_cells
-    next_cells = swap
+fn cleanup() @export:
+  0
 
-    render_app()
-
-  end_app()
+fn on_event() @export:
+  0

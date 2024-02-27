@@ -1,5 +1,18 @@
-import compiler for overloaded, add_external_library, add_macos_framework
+import compiler for overloaded, add_external_library, add_macos_framework, add_export, initializer_function
 import vec for vec2
+
+comptime:
+  add_external_library("graphicslib")
+  add_external_library("c++")
+  add_macos_framework("Cocoa")
+  add_macos_framework("QuartzCore")
+  add_macos_framework("OpenGL")
+  add_export("gfx_main", gfx_main)
+
+# Because graphicslib takes over main, this function is expected
+# by the graphics library called during to run the language initializers
+fn gfx_main():
+  initializer_function()
 
 # fn render_app() @external
 fn frame_ticks() -> int @external
@@ -72,10 +85,3 @@ fn set_stroke_color_vec4(color: vec4):
   set_stroke_color_rgba(color.r, color.g, color.b, color.a)
 set_stroke_color :: overloaded([
   set_stroke_color_rgba, set_stroke_color_vec4])
-
-comptime:
-  add_external_library("graphicslib")
-  add_external_library("c++")
-  add_macos_framework("Cocoa")
-  add_macos_framework("QuartzCore")
-  add_macos_framework("OpenGL")

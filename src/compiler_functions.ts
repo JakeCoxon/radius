@@ -448,7 +448,7 @@ export function createCallAstFromValue(ctx: CompilerFunctionCallContext, value: 
 
 }
 
-export const compileExportedFunctionTask = (ctx: TaskContext, func: FunctionDefinition, parentScope: Scope, lexicalParent: SubCompilerState) => {
+export const compileExportedFunctionTask = (ctx: TaskContext, exportName: string, func: FunctionDefinition, parentScope: Scope, lexicalParent: SubCompilerState): Task<CompiledFunction, CompilerError> => {
   // TODO: Handle functions with arguments
   const typeCheckResult: TypeCheckResult = { concreteTypes: [], substitutions: {}, returnType: undefined!, sortedArgs: [], checkFailed: false }
   const call: FunctionCallArg = { location: SourceLocation.anon, func, typeArgs: [], args: [], parentScope, lexicalParent, result: typeCheckResult }
@@ -456,6 +456,11 @@ export const compileExportedFunctionTask = (ctx: TaskContext, func: FunctionDefi
   return (
     TaskDef(compileAndExecuteFunctionHeaderTask, call)
     .chain(TaskDef(functionTemplateTypeCheckAndCompileTask, call))
+    .chainFn((task, compiledFunction) => {
+      compilerAssert(!ctx.globalCompiler.exports[exportName], "Already exported '$exportName'", { exportName })
+      ctx.globalCompiler.exports[exportName] = compiledFunction
+      return Task.of(compiledFunction)
+    })
   )
 }
 

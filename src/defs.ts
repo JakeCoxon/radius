@@ -833,6 +833,7 @@ export type GlobalCompilerState = {
   mainFunction: CompiledFunction | undefined,
   externalDefinitions: ExternalDefinition[],
   externalCompilerOptions: ExternalCompilerOptions,
+  exports: {[key:string]: CompiledFunction},
   rootScope: Scope
 }
 export type ExternalCompilerOptions = {
@@ -901,6 +902,7 @@ export const createDefaultGlobalCompiler = () => {
     initializerFunctionBinding: new Binding(`radius_initializer`, FunctionType),
     mainFunction: undefined, // Inserted later
     externalDefinitions: [],
+    exports: {},
     rootScope: null!,
     externalCompilerOptions: {
       globalOptions: {

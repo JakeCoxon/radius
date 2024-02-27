@@ -633,14 +633,9 @@ export const writeLlvmBytecode = (globalCompilerState: GlobalCompilerState, outp
 
   insertGlobal(globalCompilerState.initializerFunctionBinding, `@${globalCompilerState.initializerFunctionBinding.name}`)
 
-  globalCompilerState.functionDefinitions.forEach(func => {
-    if (!func.keywords.includes("export")) return
-    compilerAssert(func.compiledFunctions.length === 1, `Expected 1 monomorphised function of exported '${func.debugName}'`)
-    const compiled = func.compiledFunctions[0]
-    insertGlobal(compiled.binding, `@${func.externalName}`)
+  Object.entries(globalCompilerState.exports).forEach(([name, compiledFunction]) => {
+    insertGlobal(compiledFunction.binding, `@${name}`)
   })
-
-
 
   bytecodeWriter.outputHeaders.push("declare i32 @printf(i8*, ...)\n\n")
   bytecodeWriter.outputHeaders.push(`\n`)
