@@ -1,4 +1,4 @@
-import vec for rgba
+import color for rgba
 
 fn hsva_to_rgba(h: float, s: float, v: float, a: float) -> rgba:
   c := 1.0

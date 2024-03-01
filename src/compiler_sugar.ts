@@ -508,9 +508,7 @@ export const add_export = new ExternalFunction("add_export", VoidType, (ctx, val
   compilerAssert(closure instanceof Closure, "Expected function", { closure })
   return (
     TaskDef(compileExportedFunctionTask, { exportName: name, closure })
-    .chainFn((task, value) => {
-      return Task.of(new VoidAst(VoidType, ctx.location))
-    })
+    .chainFn((task, value) => { return Task.of(null) })
   )
 })
 

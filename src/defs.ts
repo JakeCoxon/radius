@@ -536,7 +536,7 @@ export class ExternalTypeConstructor {
 
 export type Type = PrimitiveType | ConcreteClassType | ParameterizedType
 export type TypeConstructor = ExternalTypeConstructor | ClassDefinition // Type constructor for already-compiled types
-export const isType = (type: unknown): type is Type => type instanceof TypeRoot
+export const isType = (type: unknown): type is Type => !!type && type instanceof TypeRoot
 
 export class Closure {
   constructor(public func: FunctionDefinition, public scope: Scope, public lexicalParent: SubCompilerState) {}
@@ -578,6 +578,10 @@ export type CompilerFunctionCallContext = {
   resultAst: Ast | undefined // Added later
 }
 
+// Used in operators and function calls
+export type TypeCheckVar = { type: Type }
+export type TypeCheckConfig = { a: TypeCheckVar, b: TypeCheckVar, inferType: Type | null }
+
 export type TypeCheckResult = {
   concreteTypes: Type[]
   substitutions: UnknownObject
@@ -609,6 +613,7 @@ export const NeverType =        new PrimitiveType("never",         { sizeof: 0, 
 export const VoidType =         new PrimitiveType("void",          { sizeof: 0, fields: [], metaobject: Object.create(null), isReferenceType: false })
 export const IntType =          new PrimitiveType("int",           { sizeof: 4, fields: [], metaobject: Object.create(null), isReferenceType: false })
 export const u64Type =          new PrimitiveType("u64",           { sizeof: 4, fields: [], metaobject: Object.create(null), isReferenceType: false })
+export const u8Type =           new PrimitiveType("u8",            { sizeof: 1, fields: [], metaobject: Object.create(null), isReferenceType: false })
 export const IntLiteralType =   new PrimitiveType("int_literal",   { sizeof: 4, fields: [], metaobject: Object.create(null), isReferenceType: false })
 export const FloatLiteralType = new PrimitiveType("float_literal", { sizeof: 4, fields: [], metaobject: Object.create(null), isReferenceType: false })
 export const BoolType =         new PrimitiveType("bool",          { sizeof: 1, fields: [], metaobject: Object.create(null), isReferenceType: false })
@@ -644,7 +649,9 @@ export const TupleTypeConstructor: ExternalTypeConstructor = new ExternalTypeCon
   return type;
 })
 
-export const isTypeScalar = (type: Type) => type === IntType || type === u64Type || type === FloatType || type === DoubleType
+export const isTypeInteger = (type: Type) => type === IntType || type === u64Type || type === u8Type
+export const isTypeFloating = (type: Type) => type === FloatType || type === DoubleType
+export const isTypeScalar = (type: Type) => isTypeInteger(type) || isTypeFloating(type)
 
 export const BuiltinTypes = {
   int: IntType,
@@ -656,7 +663,8 @@ export const BuiltinTypes = {
   List: ListTypeConstructor,
   Tuple: TupleTypeConstructor,
   rawptr: RawPointerType,
-  u64: u64Type
+  u64: u64Type,
+  u8: u8Type
 }
 
 class TypeTable {

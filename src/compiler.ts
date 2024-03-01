@@ -1,4 +1,4 @@
-import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol, ScopeParentSymbol, isPlainObject, ParseLet, ParseList, ParseExpand, ParseBlock, findLabelByBinding, ParseSubscript, ParseNumber, ParseQuote, ParseWhile, ParseOperator, ParseBytecode, ParseOpEq, ParseSet, ParseFreshIden, UnknownObject, ParseNote, DefaultConsAst, RawPointerType, ValueFieldAst, SetValueFieldAst, FloatLiteralType, IntLiteralType, CompilerFunction, DerefAst, SetDerefAst, ParseSlice, CompilerFunctionCallContext, NeverType, LoopObject, CompTimeObjAst, CompileTimeObjectType, NamedArgAst } from "./defs";
+import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol, ScopeParentSymbol, isPlainObject, ParseLet, ParseList, ParseExpand, ParseBlock, findLabelByBinding, ParseSubscript, ParseNumber, ParseQuote, ParseWhile, ParseOperator, ParseBytecode, ParseOpEq, ParseSet, ParseFreshIden, UnknownObject, ParseNote, DefaultConsAst, RawPointerType, ValueFieldAst, SetValueFieldAst, FloatLiteralType, IntLiteralType, CompilerFunction, DerefAst, SetDerefAst, ParseSlice, CompilerFunctionCallContext, NeverType, LoopObject, CompTimeObjAst, CompileTimeObjectType, NamedArgAst, TypeCheckVar, TypeCheckConfig, u8Type, u64Type, isTypeScalar } from "./defs";
 import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, functionCompileTimeCompileTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, compileExportedFunctionTask } from "./compiler_functions";
 import { Event, Task, TaskDef, Unit, isTask, isTaskResult, withContext } from "./tasks";
 import { createCompilerModuleTask, createListConstructor, defaultMetaFunction, expandLoopSugar, foldSugar, forExprSugar, forLoopSugar, listComprehensionSugar, print, sliceSugar, whileExprSugar } from "./compiler_sugar";
@@ -572,45 +572,50 @@ const createOperator = (op: string, operatorName: string, typeCheck: (config: Ty
   }
 }
 
-type TypeCheckVar = { type: Type }
-type TypeCheckConfig = { a: TypeCheckVar, b: TypeCheckVar, inferType: Type | null }
-
-const normalizeNumberOperatorType = (from: TypeCheckVar, to: TypeCheckVar) => {
-  if (from.type === IntLiteralType && to.type === FloatType) from.type = FloatType
-  else if (from.type === IntLiteralType && to.type === DoubleType) from.type = DoubleType
-  else if (from.type === IntLiteralType && to.type === FloatLiteralType) from.type = FloatLiteralType
-  else if (from.type === IntLiteralType && to.type === IntType) from.type = IntType
-  else if (from.type === FloatLiteralType && to.type === FloatType) from.type = FloatType
-  else if (from.type === FloatLiteralType && to.type === DoubleType) from.type = DoubleType
+export const normalizeNumberType = (from: TypeCheckVar, to: TypeCheckVar) => {
+  if (from.type === IntLiteralType) {
+    if (to.type === FloatType) from.type = FloatType
+    else if (to.type === u8Type) from.type = u8Type
+    else if (to.type === u64Type) from.type = u64Type
+    else if (to.type === DoubleType) from.type = DoubleType
+    else if (to.type === FloatLiteralType) from.type = FloatLiteralType
+    else if (to.type === IntType) from.type = IntType
+  }
+  else if (from.type === FloatLiteralType) {
+    if (to.type === FloatType) from.type = FloatType
+    else if (to.type === DoubleType) from.type = DoubleType
+  }
 }
-const numberOperatorTypeToConcrete = (from: TypeCheckVar) => {
+export const numberTypeToConcrete = (from: TypeCheckVar) => {
   if (from.type === IntLiteralType) from.type = IntType
   else if (from.type === FloatLiteralType) from.type = FloatType
 }
 const typecheckNumberOperator = (config: TypeCheckConfig): void => {
-  normalizeNumberOperatorType(config.a, config.b)
-  normalizeNumberOperatorType(config.b, config.a)
+  normalizeNumberType(config.a, config.b)
+  normalizeNumberType(config.b, config.a)
   compilerAssert(config.a.type === config.b.type, "Expected int, float or double type got $a $b", { a: config.a.type, b: config.b.type })
   config.inferType = config.b.type
 }
 
 const typecheckNumberComparison = (config: TypeCheckConfig) => {
-  normalizeNumberOperatorType(config.a, config.b)
-  normalizeNumberOperatorType(config.b, config.a)
-  numberOperatorTypeToConcrete(config.a)
-  numberOperatorTypeToConcrete(config.b)
-  const aok = config.a.type === IntType || config.a.type === FloatType || config.a.type === DoubleType
-  const bok = config.b.type === IntType || config.b.type === FloatType || config.b.type === DoubleType
+  normalizeNumberType(config.a, config.b)
+  normalizeNumberType(config.b, config.a)
+  numberTypeToConcrete(config.a)
+  numberTypeToConcrete(config.b)
+  const aok = isTypeScalar(config.a.type)
+  const bok = isTypeScalar(config.b.type)
   compilerAssert(aok && bok, "Expected int, float or double type got $a $b", { a: config.a.type, b: config.b.type })
   config.inferType = BoolType
 }
 
 const typecheckEquality = (config: TypeCheckConfig) => {
-  normalizeNumberOperatorType(config.a, config.b)
-  normalizeNumberOperatorType(config.b, config.a)
-  numberOperatorTypeToConcrete(config.a)
-  numberOperatorTypeToConcrete(config.b)
-  compilerAssert(config.a.type === BoolType || config.a.type === IntType || config.a.type === FloatType || config.a.type === DoubleType, "Expected bool, int, float or double type got $type", { type: config.a.type })
+  normalizeNumberType(config.a, config.b)
+  normalizeNumberType(config.b, config.a)
+  numberTypeToConcrete(config.a)
+  numberTypeToConcrete(config.b)
+  const aok = config.a.type === BoolType || isTypeScalar(config.a.type)
+  const bok = config.b.type === BoolType || isTypeScalar(config.b.type)
+  compilerAssert(aok && bok, "Expected bool, int, float or double type got $type", { a: config.a.type, b: config.b.type })
   config.inferType = BoolType
 }
 createOperator("-",  "sub", typecheckNumberOperator,   (a, b) => a - b)

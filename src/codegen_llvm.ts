@@ -1,5 +1,5 @@
 import { externalBuiltinBindings } from "./compiler_sugar";
-import { Ast, AstType, AstWriterTable, Binding, BindingAst, BlockAst, BoolType, CallAst, CompiledFunction, ConcreteClassType, ConstructorAst, DefaultConsAst, DoubleType, FileWriter, FloatType, FunctionType, GlobalCompilerState, IntType, ListTypeConstructor, LlvmFunctionWriter, LlvmWriter, NeverType, NumberAst, ParameterizedType, Pointer, PrimitiveType, RawPointerType, Register, SourceLocation, StatementsAst, StringType, Type, TypeField, UserCallAst, ValueFieldAst, VoidType, compilerAssert, isAst, isType, textColors, u64Type } from "./defs";
+import { Ast, AstType, AstWriterTable, Binding, BindingAst, BlockAst, BoolType, CallAst, CompiledFunction, ConcreteClassType, ConstructorAst, DefaultConsAst, DoubleType, FileWriter, FloatType, FunctionType, GlobalCompilerState, IntType, ListTypeConstructor, LlvmFunctionWriter, LlvmWriter, NeverType, NumberAst, ParameterizedType, Pointer, PrimitiveType, RawPointerType, Register, SourceLocation, StatementsAst, StringType, Type, TypeField, UserCallAst, ValueFieldAst, VoidType, compilerAssert, isAst, isType, textColors, u64Type, u8Type } from "./defs";
 
 // Some useful commands
 //
@@ -229,7 +229,7 @@ const astWriter: LlvmAstWriterTable = {
       format(writer, `  $ = bitcast ptr null to ptr; literal null\n`, valueName)
       return { register: valueName }
     }
-    compilerAssert(ast.type === IntType || ast.type === u64Type || ast.type === FloatType || ast.type === DoubleType, "Expected number type got $type", { ast, type: ast.type })
+    compilerAssert(ast.type === IntType || ast.type === u8Type || ast.type === u64Type || ast.type === FloatType || ast.type === DoubleType, "Expected number type got $type", { ast, type: ast.type })
     
     if (ast.type === FloatType) {
       format(writer, `  $ = fadd $ 0.0, $ ; literal $\n`, valueName, ast.type, floatToLlvmHex(ast.value), ast.value)
@@ -394,7 +394,7 @@ const astWriter: LlvmAstWriterTable = {
     const name = createRegister("", VoidType)
     compilerAssert(a.type === b.type, "Expected types to be equal", { a, b })
     const op = a.type === IntType ? operatorMapSignedInt[ast.operator] : 
-      a.type === RawPointerType || a.type === u64Type ? operatorMapUnsignedInt[ast.operator] : 
+      a.type === RawPointerType || a.type === u64Type || a.type === u8Type ? operatorMapUnsignedInt[ast.operator] : 
       a.type === FloatType || a.type === DoubleType ? operatorMapFloat[ast.operator] : 
       a.type === BoolType ? operatorMapLogical[ast.operator] : undefined
     compilerAssert(op, "Expected op $op, for type $type", { ast, op: ast.operator, type: a.type })
@@ -490,6 +490,7 @@ const astWriter: LlvmAstWriterTable = {
       if (ast.expr.type === FloatType && ast.type === DoubleType) return 'fpext float $ to double'
       if (ast.expr.type === BoolType && ast.type === IntType) return 'zext i1 $ to i32'
       if (ast.expr.type === IntType && ast.type === BoolType) return 'trunc i32 $ to i1'
+      if (ast.expr.type === IntType && ast.type === u8Type) return 'trunc i32 $ to i8'
       if (ast.expr.type === u64Type && ast.type === DoubleType) return 'uitofp i64 $ to double'
       compilerAssert(false, "Invalid cast conversion from $a to $b", { a: ast.expr.type, b: ast.type })
     })()
@@ -610,6 +611,7 @@ export const writeLlvmBytecode = (globalCompilerState: GlobalCompilerState, outp
   insertGlobal(VoidType, "void")
   insertGlobal(IntType, "i32")
   insertGlobal(u64Type, "i64")
+  insertGlobal(u8Type, "i8")
   insertGlobal(BoolType, "i1")
   insertGlobal(FloatType, "float")
   insertGlobal(DoubleType, "double")

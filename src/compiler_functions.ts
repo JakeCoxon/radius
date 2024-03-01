@@ -1,6 +1,6 @@
-import { BytecodeDefault, BytecodeSecondOrder, compileClassTask, compileFunctionPrototype, createBytecodeVmAndExecuteTask, propagateLiteralType, propagatedLiteralAst, pushBytecode, pushGeneratedBytecode, visitParseNode } from "./compiler";
+import { BytecodeDefault, BytecodeSecondOrder, compileClassTask, compileFunctionPrototype, createBytecodeVmAndExecuteTask, normalizeNumberType, numberTypeToConcrete, propagateLiteralType, propagatedLiteralAst, pushBytecode, pushGeneratedBytecode, visitParseNode } from "./compiler";
 import { externalBuiltinBindings } from "./compiler_sugar";
-import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, CallAst, IntType, Closure, UserCallAst, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition, ParseCall, TypeVariable, TypeMatcher, typeMatcherEquals, SourceLocation, ExternalTypeConstructor, ScopeParentSymbol, SubCompilerState, CompilerFunction, IntLiteralType, FloatLiteralType, FloatType, RawPointerType, AddressAst, BindingAst, UnknownObject, NeverType, CompilerFunctionCallContext, CompileTimeObjectType, CompTimeObjAst, ParseString, NamedArgAst, TypeCheckResult } from "./defs";
+import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, CallAst, IntType, Closure, UserCallAst, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition, ParseCall, TypeVariable, TypeMatcher, typeMatcherEquals, SourceLocation, ExternalTypeConstructor, ScopeParentSymbol, SubCompilerState, CompilerFunction, IntLiteralType, FloatLiteralType, FloatType, RawPointerType, AddressAst, BindingAst, UnknownObject, NeverType, CompilerFunctionCallContext, CompileTimeObjectType, CompTimeObjAst, ParseString, NamedArgAst, TypeCheckResult, u8Type, TypeCheckVar } from "./defs";
 import { Task, TaskDef, Unit } from "./tasks";
 
 
@@ -115,34 +115,33 @@ function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, args, typ
     TaskDef(createBytecodeVmAndExecuteTask, subCompilerState, func.headerPrototype!.bytecode!, scope)
     .chainFn((task, resultTuple) => {
       compilerAssert(resultTuple instanceof Tuple, "Expected tuple")
-      let [compiledArgTypes, returnType] = resultTuple.values
+      let [compiledParamTypes, returnType] = resultTuple.values
       
       returnType = returnType || VoidType
       // compilerAssert(isType(returnType), "Expected type got $returnType", { returnType })
       result.returnType = returnType as any // TODO: Fix this
 
-      compilerAssert(compiledArgTypes instanceof Tuple, "Expected tuple")
-      compiledArgTypes.values.forEach((type, i) => {
+      compilerAssert(compiledParamTypes instanceof Tuple, "Expected tuple")
+      compiledParamTypes.values.forEach((paramType, i) => {
         const givenArg = sortedArgs[i]
-        let givenType = givenArg.type
-        if (givenType === IntLiteralType && type === FloatType) givenType = FloatType
-        else if (givenType === IntLiteralType) givenType = IntType
-        else if (givenType === FloatLiteralType) givenType = FloatType
-        
-        if (type === null) {
-        } else if (type instanceof TypeMatcher) {
-          const matches = typeMatcherEquals(type, givenArg.type, result.substitutions)
-          typeCheckAssert(matches, "Type check failed. Expected $expected got $got", { expected: type, got: givenArg.type })
-        } else if (type instanceof TypeVariable) {
-          result.substitutions[type.name] = givenType
+        const fromType: TypeCheckVar = { type: givenArg.type }
+        if (isType(paramType)) normalizeNumberType(fromType, { type: paramType })
+        numberTypeToConcrete(fromType)
+
+        if (paramType === null) {
+        } else if (paramType instanceof TypeMatcher) {
+          const matches = typeMatcherEquals(paramType, fromType.type, result.substitutions)
+          typeCheckAssert(matches, "Type check failed. Expected $expected got $got", { expected: paramType, got: fromType.type })
+        } else if (paramType instanceof TypeVariable) {
+          result.substitutions[paramType.name] = fromType.type
         } else {
-          compilerAssert(isType(type), "Expected type got $type", { type });
-          typeCheckAssert(givenType === type, "Argument $name of type $value does not match $expected", { name: func.params[i].name.token, value: givenArg.type, expected: type })
+          compilerAssert(isType(paramType), "Expected type got $paramType", { paramType });
+          typeCheckAssert(fromType.type === paramType, "Argument $name of type $value does not match $expected", { name: func.params[i].name.token, value: fromType.type, expected: paramType })
         }
 
-        compilerAssert(givenType !== IntLiteralType && givenType !== FloatLiteralType, "Unexpected literal type", { type: result.concreteTypes.at(-1) })
+        compilerAssert(fromType.type !== IntLiteralType && fromType.type !== FloatLiteralType, "Unexpected literal type", { type: result.concreteTypes.at(-1) })
 
-        result.concreteTypes.push(givenType)
+        result.concreteTypes.push(fromType.type)
 
       })
       return Task.success()

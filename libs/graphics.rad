@@ -1,5 +1,6 @@
 import compiler for overloaded, add_external_library, add_macos_framework, add_export, initializer_function
 import vec for vec2
+import color for rgb
 
 comptime:
   add_external_library("graphicslib")
@@ -19,7 +20,7 @@ fn frame_ticks() -> int @external
 # fn set_pixel(x: int, y: int, color: int) @external
 # fn get_pixel(x: int, y: int) -> int @external
 # fn fill_rect(x: int, y: int, w: int, h: int, color: int) @external
-fn delay(milliseconds: int) @external
+# fn delay(milliseconds: int) @external
 fn copy_pixels(source_x: int, source_y: int, w: int, h: int, dest_x: int, dest_y: int) @external
 
 fn begin_path() @external
@@ -85,3 +86,39 @@ fn set_stroke_color_vec4(color: vec4):
   set_stroke_color_rgba(color.r, color.g, color.b, color.a)
 set_stroke_color :: overloaded([
   set_stroke_color_rgba, set_stroke_color_vec4])
+
+@@external("sgl_defaults")
+fn draw_defaults()
+
+@@external("sgl_begin_triangles")
+fn begin_triangles()
+
+@@external("sgl_end")
+fn end_draw()
+
+@@external("sgl_push_matrix")
+fn push_matrix()
+
+@@external("sgl_pop_matrix")
+fn pop_matrix()
+
+fn sgl_v2f_c3b(x: float, y: float, r: u8, g: u8, b: u8) @external
+fn sgl_v2f_floats(x: float, y: float, r: float, g: float, b: float):
+  sgl_v2f_c3b(x, y, u8(int(r * 255)), u8(int(g * 255)), u8(int(b * 255)))
+
+fn vertex_v2f_color(x: float, y: float, color: rgb):
+  sgl_v2f_floats(x, y, color.r, color.g, color.b)
+
+fn vertex_vec2_color(pos: vec2, color: rgb):
+  sgl_v2f_floats(pos.x, pos.y, color.r, color.g, color.b)
+
+vertex :: overloaded([sgl_v2f_c3b, sgl_v2f_floats, vertex_v2f_color, vertex_vec2_color])
+
+@@external("sgl_translate")
+fn translate3d(x: float, y: float, z: float)
+
+@@external("sgl_scale")
+fn scale3d(x: float, y: float, z: float)
+
+@@external("sgl_rotate")
+fn rotate3d(angle_radians: float, x: float, y: float, z: float)
