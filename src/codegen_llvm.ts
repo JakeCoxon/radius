@@ -1,5 +1,5 @@
 import { externalBuiltinBindings } from "./compiler_sugar";
-import { Ast, AstType, AstWriterTable, Binding, BindingAst, BlockAst, BoolType, CallAst, CompiledFunction, ConcreteClassType, ConstructorAst, DefaultConsAst, DoubleType, FileWriter, FloatType, FunctionType, GlobalCompilerState, IntType, ListTypeConstructor, LlvmFunctionWriter, LlvmWriter, NeverType, NumberAst, ParameterizedType, Pointer, PrimitiveType, RawPointerType, Register, SourceLocation, StatementsAst, StringType, Type, TypeField, UserCallAst, ValueFieldAst, VoidType, compilerAssert, isAst, isType, textColors, u64Type, u8Type } from "./defs";
+import { Ast, AstType, AstWriterTable, Binding, BindingAst, BlockAst, BoolType, CallAst, CompiledFunction, ConcreteClassType, ConstructorAst, DefaultConsAst, DoubleType, FileWriter, FloatType, FsmAlternatorAst, FunctionType, GlobalCompilerState, IntType, ListTypeConstructor, LlvmFunctionWriter, LlvmWriter, NeverType, NumberAst, ParameterizedType, Pointer, PrimitiveType, RawPointerType, Register, SourceLocation, StatementsAst, StringType, Type, TypeField, UserCallAst, ValueFieldAst, VoidType, compilerAssert, isAst, isType, textColors, u64Type, u8Type } from "./defs";
 
 // Some useful commands
 //
@@ -209,7 +209,7 @@ const astWriter: LlvmAstWriterTable = {
   },
   let: (writer, ast) => {
     // TODO: No value should zero initialize?
-    compilerAssert(ast.value, "Not implemented", { ast })
+    compilerAssert(ast.value, "Let without value not implemented", { ast })
     const storageType = getBindingStorageType(ast.binding)
     const pointer = allocaHelper(writer, ast.binding as Pointer, storageType)
     const result = toRegister(writer, writeExpr(writer, ast.value))
@@ -317,7 +317,7 @@ const astWriter: LlvmAstWriterTable = {
     const loopBody = new Binding(`while_body`, VoidType)
     const loopEnd = new Binding(`while_end`, VoidType)
 
-    format(writer, `  br label $\n`, loopCondition)
+    format(writer, `  br label $\n\n`, loopCondition)
     beginBasicBlock(writer, loopCondition)
     const condResult = writeExpr(writer, ast.condition)
     const aVal = toRegister(writer, condResult)
@@ -328,6 +328,53 @@ const astWriter: LlvmAstWriterTable = {
     format(writer, `  br label $\n\n`, loopCondition)
 
     beginBasicBlock(writer, loopEnd)
+    return null
+  },
+
+  alternator: (writer, ast) => {
+    const fsmEnd = new Binding(`fsm_end`, VoidType)
+
+    const jumpPointer = allocaHelper(writer, createPointer("altjmp", IntType))
+    format(writer, "  store i32 $, ptr $\n", 0, jumpPointer)
+
+    const alternator = { jumpPointer, alternatorCurrentLabels: ast.entryLabels, alternatorLabels: ast.otherLabels }
+    writer.blocks.push({ binding: ast.binding, alternator })
+    // TODO: I realised that I want to start at the other label instead of entry label
+    // but this is because of the ordering of compilation. should try and fix this
+    // and make entry the actual entry point
+    format(writer, `  br label $\n\n`, ast.otherLabels[0])
+
+    beginBasicBlock(writer, ast.entryLabels[0])
+    writeExpr(writer, ast.entry)
+    format(writer, `  br label $\n\n`, fsmEnd)
+
+    Object.assign(alternator, { alternatorCurrentLabels: ast.otherLabels, alternatorLabels: ast.entryLabels })
+
+    beginBasicBlock(writer, ast.otherLabels[0])
+    writeExpr(writer, ast.other)
+    format(writer, `  br label $\n\n`, fsmEnd)
+
+    writer.blocks.pop()
+
+    beginBasicBlock(writer, fsmEnd)
+    return null
+  },
+  alternate: (writer, ast) => {
+    const block = writer.blocks.findLast(x => x.binding === ast.fsmBinding)
+    compilerAssert(block?.alternator)
+    const { jumpPointer, alternatorLabels, alternatorCurrentLabels } = block?.alternator
+    const table = alternatorLabels.map((x: Binding, i: number) => 
+      `i32 ${i}, label ${generateName(writer.writer, x)}`).join(" ")
+
+    const index = alternatorCurrentLabels.indexOf(ast.labelBinding)
+    compilerAssert(index >= 0, "Expected label")
+
+    const register = createRegister("", IntType)
+    format(writer, "  $ = load $, ptr $\n", register, register.type, jumpPointer)
+    format(writer, "  store i32 $, ptr $\n", index, jumpPointer)
+    format(writer, `  switch i32 $, label $ [$]\n\n`, register, alternatorLabels[0], table)
+
+    beginBasicBlock(writer, ast.labelBinding)
     return null
   },
 

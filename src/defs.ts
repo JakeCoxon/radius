@@ -169,6 +169,7 @@ export class ParseBytecode extends ParseNodeType {     key = 'bytecode' as const
 export class ParseFreshIden extends ParseNodeType {    key = 'freshiden' as const;    constructor(public token: Token, public freshBindingToken: FreshBindingToken) { super();} }
 export class ParseConstructor extends ParseNodeType {  key = 'constructor' as const;  constructor(public token: Token, public type: ParseNode, public args: ParseNode[]) { super();} }
 export class ParseCompilerIden extends ParseNodeType { key = 'compileriden' as const; constructor(public token: Token, public value: string) { super();} }
+export class ParseEvalFunc extends ParseNodeType {      key = 'evalfunc' as const;    constructor(public token: Token, public func: (vm: Vm) => void, public args: ParseNode[]) { super();} }
 
 export type ParseNode = ParseStatements | ParseLet | ParseSet | ParseOperator | ParseIdentifier | 
   ParseNumber | ParseMeta | ParseCompTime | ParseLetConst | ParseCall | ParseList | ParseOr | ParseAnd | 
@@ -176,7 +177,7 @@ export type ParseNode = ParseStatements | ParseLet | ParseSet | ParseOperator | 
   ParseOpEq | ParseWhile | ParseWhileExpr | ParseForExpr | ParseNot | ParseField | ParseExpand | ParseListComp |
   ParseDict | ParsePostCall | ParseSymbol | ParseNote | ParseSlice | ParseSubscript | ParseTuple | ParseClass |
   ParseNil | ParseBoolean | ParseElse | ParseMetaIf | ParseMetaFor | ParseMetaWhile | ParseBlock | ParseImport | 
-  ParseCompilerIden | ParseValue | ParseConstructor | ParseQuote | ParseBytecode | ParseFreshIden | ParseFold | ParseNamedArg
+  ParseCompilerIden | ParseValue | ParseConstructor | ParseQuote | ParseBytecode | ParseFreshIden | ParseFold | ParseNamedArg | ParseEvalFunc
 
 // Void types mean that in secondOrder compilation, the AST doesn't return an AST
 export const isParseVoid = (ast: ParseNode) => ast.key == 'letconst' || ast.key === 'function' || ast.key === 'class' || ast.key === 'comptime' || ast.key === 'metawhile';
@@ -237,6 +238,7 @@ export type BytecodeInstr =
   { type: 'appendq' } |
   { type: 'jump', address: number } |
   { type: 'jumpf', address: number } |
+  { type: 'evalfunc', func: (vm: Vm) => void } |
   { type: 'halt' }
 
 
@@ -426,11 +428,13 @@ export class DerefAst extends AstRoot {         key = 'deref' as const;         
 export class NamedArgAst extends AstRoot {      key = 'namedarg' as const;       constructor(public type: Type, public location: SourceLocation, public name: string, public expr: Ast) { super() } }
 export class SetDerefAst extends AstRoot {      key = 'setderef' as const;       constructor(public type: Type, public location: SourceLocation, public left: BindingAst, public fieldPath: TypeField[], public value: Ast) { super() } }
 export class CompTimeObjAst extends AstRoot {   key = 'comptimeobj' as const;    constructor(public type: Type, public location: SourceLocation, public value: unknown) { super() } }
+export class FsmAlternatorAst extends AstRoot { key = 'alternator' as const;     constructor(public type: Type, public location: SourceLocation, public binding: Binding, public entryLabels: Binding[], public otherLabels: Binding[], public entry: Ast, public other: Ast) { super() } }
+export class FsmAlternateAst extends AstRoot {  key = 'alternate' as const;      constructor(public type: Type, public location: SourceLocation, public fsmBinding: Binding, public labelBinding: Binding) { super() } }
 
 export type Ast = NumberAst | LetAst | SetAst | OperatorAst | IfAst | ListAst | CallAst | AndAst | UserCallAst |
   OrAst | StatementsAst | WhileAst | ReturnAst | SetFieldAst | VoidAst | CastAst | SubscriptAst | ConstructorAst |
   BindingAst | StringAst | NotAst | FieldAst | BlockAst | BreakAst | BoolAst | CastAst | DefaultConsAst | ValueFieldAst |
-  SetValueFieldAst | SetSubscriptAst | AddressAst | DerefAst | SetDerefAst | CompTimeObjAst | NamedArgAst
+  SetValueFieldAst | SetSubscriptAst | AddressAst | DerefAst | SetDerefAst | CompTimeObjAst | NamedArgAst | FsmAlternatorAst | FsmAlternateAst
 export const isAst = (value: unknown): value is Ast => value instanceof AstRoot;
 
 export class Tuple {
@@ -1064,7 +1068,11 @@ export type LlvmFunctionWriter = {
   // constantSlots: number[]
   // nextConstantSlot: number
   // locals: { binding: Binding, slot: number, scopeIndex: number }[]
-  blocks: { binding: Binding }[],
+  blocks: { binding: Binding, alternator?: { 
+    jumpPointer: Pointer,
+    alternatorCurrentLabels: Binding[]
+    alternatorLabels: Binding[]
+  } }[],
   // currentScopeIndex: number
   // nextLocalSlot: number,
   currentBlockLabel: Binding,

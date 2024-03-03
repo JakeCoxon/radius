@@ -271,10 +271,11 @@ function functionInlineTask(ctx: TaskContext, { location, func, typeArgs, parent
   const args = result.sortedArgs
   
   func.params.forEach(({ name, type, storage }, i) => {
-    compilerAssert(concreteTypes[i], `Expected type`, { args, concreteTypes })
+    compilerAssert(concreteTypes[i], `Expected type`, { func, args, concreteTypes })
     compilerAssert(concreteTypes[i] !== IntLiteralType)
-    if (args[i] instanceof CompTimeObjAst) { // Special case compile time objects
-      templateScope[name.token.value] = args[i]
+    const arg = args[i]
+    if (arg instanceof CompTimeObjAst) { // Special case compile time objects
+      templateScope[name.token.value] = arg.value
       return
     }
     const binding = new Binding(name.token.value, concreteTypes[i])

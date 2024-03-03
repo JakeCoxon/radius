@@ -239,6 +239,7 @@ export const writeLlvmBytecodeFile = async (testObject: TestObject) => {
 
 
 const execPromise = (command: string) => {
+  console.log(command)
   return new Promise<string>((resolve, reject) => {
     exec(command, (err, out) => { 
       if (err) {

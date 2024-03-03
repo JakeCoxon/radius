@@ -1,0 +1,25 @@
+import compiler for fsm
+import range for Range
+
+fn foop(x: int):
+
+  foo :: |yield|
+    for x in Range(0, x):
+      yield(x)
+
+  # bar :: |yield|
+  #   for x in Range(0, 10):
+  #     yield(x)
+
+  consume :: |yield|
+    while true:
+      val := yield()
+      print(val)
+  
+  print("OK")
+
+  fsm!(foo, consume)()
+
+
+fn main():
+  foop(10)

@@ -915,3 +915,19 @@ test('overload_error', async () => {
     testObject.close()
   }
 })
+
+test('fsm', async () => {
+  const testObject = createTest({ 
+    moduleName: 'fsm',
+    globalOptions,
+    inputPath: `${import.meta.dir}/fixtures/fsm.rad`,
+  })
+  try {
+    const input = await Bun.file(testObject.inputPath).text()
+    runCompilerTest(input, { testObject })
+    await writeLlvmBytecodeFile(testObject)
+    await executeNativeExecutable(testObject)
+  } finally {
+    testObject.close()
+  }
+})

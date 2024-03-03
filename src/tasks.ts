@@ -440,8 +440,9 @@ export const stepQueue = (queue: Queue) => {
     if (task._dependant) {
       // if (task._dependant instanceof ParallelTask) debugger
       if (task._dependant._state === 'completed' && !task._dependant._failure) {
-        console.log("Dependant task", task._dependant)
-        throw new Error("Already completed") // Not entirely sure when this occurs
+        // At first I thought this was an error but it can happen when the dependant is Task.of(...)
+        // console.log("Dependant task", task._dependant)
+        // throw new Error("Already completed") // Not entirely sure when this occurs
       }
       queue.list.push(task._dependant);
     }

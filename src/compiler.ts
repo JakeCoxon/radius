@@ -64,6 +64,8 @@ export const BytecodeDefault: ParseTreeTable = {
   comptime:   (out, node) => (visitParseNode(out, node.expr)),
   not:        (out, node) => (visitParseNode(out, node.expr), pushBytecode(out, node.token, { type: 'not' })),
 
+  evalfunc: (out, node) => (visitAll(out, node.args), pushBytecode(out, node.token, { type: "evalfunc", func: node.func })),
+
   dict: (out, node) => {
     node.pairs.forEach(([key, value]) => {
       visitParseNode(out, new ParseSymbol(key.token))
@@ -274,6 +276,9 @@ export const BytecodeSecondOrder: ParseTreeTable = {
   freshiden: (out, node) => {
     visitParseNode(out, new ParseIdentifier(createAnonymousToken(node.freshBindingToken.identifier)))
   },
+
+  evalfunc: (out, node) => (visitAll(out, node.args), pushBytecode(out, node.token, { type: "evalfunc", func: node.func })),
+
 
   while: (out, node) => {
     pushBytecode(out, node.token, { type: 'beginblockast', breakType: 'break', name: null })
@@ -779,6 +784,7 @@ const instructions: InstructionMapping = {
     if (e) compilerAssert(falseBody && falseBody.type === trueBody.type, "If expression inferred to be of type $trueType but got $falseType", { trueType: trueBody.type, falseType: falseBody?.type })
     vm.stack.push(new IfAst(resultType, vm.location, cond, trueBody, falseBody))
   },
+  evalfunc: (vm, { func }) => { func(vm) },
   listast: (vm, { count }) => {
     const values = expectAsts(popValues(vm, count))
     const elementType = getCommonType(values.map(x => x.type))
