@@ -784,7 +784,7 @@ const instructions: InstructionMapping = {
     if (e) compilerAssert(falseBody && falseBody.type === trueBody.type, "If expression inferred to be of type $trueType but got $falseType", { trueType: trueBody.type, falseType: falseBody?.type })
     vm.stack.push(new IfAst(resultType, vm.location, cond, trueBody, falseBody))
   },
-  evalfunc: (vm, { func }) => { func(vm) },
+  evalfunc: (vm, { func }) => { return func(vm) },
   listast: (vm, { count }) => {
     const values = expectAsts(popValues(vm, count))
     const elementType = getCommonType(values.map(x => x.type))
@@ -1206,9 +1206,9 @@ function executeVmTask(ctx: TaskContext, { vm } : { vm: Vm }, p: void): Task<Uni
   compilerAssert(current, "Expected 'halt' instruction")
   while (current.type !== "halt") {
     const startIp = vm.ip;
-    const instr = instructions[current.type] as (vm: Vm, instr: BytecodeInstr) => void;
+    const instr = instructions[current.type] as (vm: Vm, instr: BytecodeInstr) => void | Task<unknown, CompilerError>;
     compilerAssert(instr, "Not inplemented yet instruction $type", { type: current.type, current })
-    let res;
+    let res : void | Task<unknown, CompilerError>;
     try {
       res = instr(vm, current);
     } catch(ex) {
@@ -1221,7 +1221,7 @@ function executeVmTask(ctx: TaskContext, { vm } : { vm: Vm }, p: void): Task<Uni
       current = code[vm.ip];
       vm.location = locations[vm.ip];
     } else {
-      return (res as Task<string, CompilerError>).chainFn(() => {
+      return res.chainFn(() => {
         if (vm.ip === startIp) vm.ip++;
         current = code[vm.ip];
         vm.location = locations[vm.ip];

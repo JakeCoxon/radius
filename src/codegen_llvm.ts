@@ -339,10 +339,7 @@ const astWriter: LlvmAstWriterTable = {
 
     const alternator = { jumpPointer, alternatorCurrentLabels: ast.entryLabels, alternatorLabels: ast.otherLabels }
     writer.blocks.push({ binding: ast.binding, alternator })
-    // TODO: I realised that I want to start at the other label instead of entry label
-    // but this is because of the ordering of compilation. should try and fix this
-    // and make entry the actual entry point
-    format(writer, `  br label $\n\n`, ast.otherLabels[0])
+    format(writer, `  br label $\n\n`, ast.entryLabels[0])
 
     beginBasicBlock(writer, ast.entryLabels[0])
     writeExpr(writer, ast.entry)

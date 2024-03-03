@@ -17,11 +17,11 @@ interface Result<S, F> {
 
 
 export function isTask(value: unknown): value is Task<unknown, unknown> {
-  return value instanceof Task;
+  return !!value && value instanceof Task;
 }
 
 export function isTaskResult(value: unknown): value is TaskOf<unknown> {
-  return value instanceof TaskOf;
+  return !!value && value instanceof TaskOf;
 }
 
 export type Unit = { _type: 'unit' }
@@ -90,9 +90,13 @@ export class Task<S, F> {
   }
 
   static waitFor<S, F>(event: Event<S, F>): Task<S, F> {
+    if (event._success) return Task.of(event._success)
+    else if (event._failure) return Task.rejected(event._failure)
     return new WaitForEventTask(event)
   }
   static waitForOrError<S, F>(event: Event<S, F>, onError: (f: F) => void): Task<S, F> {
+    if (event._success) return Task.of(event._success)
+    else if (event._failure) return Task.rejected(event._failure)
     return new WaitForEventTask(event, onError)
   }
 
@@ -360,6 +364,7 @@ export class WaitForEventTask<S, F> extends Task<S, F> {
 
   _start(queue: Queue) {
     this._state = "started";
+    this._step(queue)
   }
   _step(queue: Queue) {
     

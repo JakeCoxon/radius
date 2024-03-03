@@ -7,19 +7,40 @@ fn foop(x: int):
     for x in Range(0, x):
       yield(x)
 
-  # bar :: |yield|
-  #   for x in Range(0, 10):
-  #     yield(x)
+  bar :: |yield|
+    for x in Range(1, 8):
+      yield(x * x)
+
+  baz :: |yield|
+    f := 1
+    while true:
+      yield(f)
+      f *= 2
 
   consume :: |yield|
     while true:
       val := yield()
       print(val)
   
+
+  consume2 :: |yield|
+    val := yield()
+    print("val 1", val)
+    val = yield()
+    print("val 2", val)
+    val = yield()
+    print("val 3", val)
+    val = yield()
+    print("val 4", val)
+      
+  
   print("OK")
 
-  fsm!(foo, consume)()
+  fsm!(foo, consume2)()
+  # thing :: concat(foo, bar)
+  # concat!(foo, bar)()
 
+  # zip!(foo, bar, consume)()
 
 fn main():
   foop(10)

@@ -169,7 +169,7 @@ export class ParseBytecode extends ParseNodeType {     key = 'bytecode' as const
 export class ParseFreshIden extends ParseNodeType {    key = 'freshiden' as const;    constructor(public token: Token, public freshBindingToken: FreshBindingToken) { super();} }
 export class ParseConstructor extends ParseNodeType {  key = 'constructor' as const;  constructor(public token: Token, public type: ParseNode, public args: ParseNode[]) { super();} }
 export class ParseCompilerIden extends ParseNodeType { key = 'compileriden' as const; constructor(public token: Token, public value: string) { super();} }
-export class ParseEvalFunc extends ParseNodeType {      key = 'evalfunc' as const;    constructor(public token: Token, public func: (vm: Vm) => void, public args: ParseNode[]) { super();} }
+export class ParseEvalFunc extends ParseNodeType {     key = 'evalfunc' as const;     constructor(public token: Token, public func: (vm: Vm) => void | Task<unknown, CompilerError>, public args: ParseNode[]) { super();} }
 
 export type ParseNode = ParseStatements | ParseLet | ParseSet | ParseOperator | ParseIdentifier | 
   ParseNumber | ParseMeta | ParseCompTime | ParseLetConst | ParseCall | ParseList | ParseOr | ParseAnd | 
@@ -238,12 +238,12 @@ export type BytecodeInstr =
   { type: 'appendq' } |
   { type: 'jump', address: number } |
   { type: 'jumpf', address: number } |
-  { type: 'evalfunc', func: (vm: Vm) => void } |
+  { type: 'evalfunc', func: (vm: Vm) => void | Task<unknown, CompilerError> } |
   { type: 'halt' }
 
 
 export type InstructionMapping = {
-  [T in BytecodeInstr as T['type']]: (vm: Vm, instr: T) => void;
+  [T in BytecodeInstr as T['type']]: (vm: Vm, instr: T) => unknown | Task<unknown, CompilerError>;
 }
 
 export type BytecodeProgram = {
