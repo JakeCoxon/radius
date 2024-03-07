@@ -751,6 +751,7 @@ const unknownToAst = (location: SourceLocation, value: unknown) => {
   if (value === null) return new VoidAst(VoidType, location);
   if (value instanceof Binding) return new BindingAst(value.type, location, value);
   if (value instanceof LoopObject) return new CompTimeObjAst(CompileTimeObjectType, location, value)
+  if (value instanceof Closure) return new CompTimeObjAst(CompileTimeObjectType, location, value)
   compilerAssert(false, "Type is not convertable to an AST: $value", { value })
 }
 

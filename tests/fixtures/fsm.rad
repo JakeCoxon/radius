@@ -1,15 +1,19 @@
-import compiler for fsm
+import compiler for fsm, concat
 import range for Range
 
 fn foop(x: int):
 
   foo :: |yield|
-    for x in Range(0, x):
-      yield(x)
+    for i in Range(0, x):
+      yield(i)
 
   bar :: |yield|
-    for x in Range(1, 8):
-      yield(x * x)
+    for i in Range(1, 9):
+      yield(i * i)
+
+  bamp :: |yield|
+    for i in Range(1, 9):
+      yield(i * i * i)
 
   baz :: |yield|
     f := 1
@@ -32,11 +36,17 @@ fn foop(x: int):
     print("val 3", val)
     val = yield()
     print("val 4", val)
-      
+
   
   print("OK")
 
   fsm!(foo, consume2)()
+
+  printer :: {|x| print(x) }
+  foo_then_bar :: concat(concat(foo, bar), bamp)
+  
+  foo_then_bar(printer)
+  
   # thing :: concat(foo, bar)
   # concat!(foo, bar)()
 

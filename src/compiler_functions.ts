@@ -352,6 +352,7 @@ export function createCallAstFromValueAndPushValue(vm: Vm, value: unknown, typeA
 
 export function createCallAstFromValue(ctx: CompilerFunctionCallContext, value: unknown, typeArgs: unknown[], args: Ast[]): Task<Ast, CompilerError> {
   const location = ctx.location 
+  compilerAssert(location, "Expected location. This function is not a TaskDef task!!!")
   if (value instanceof PrimitiveType) {
     compilerAssert(args.length === 1 && typeArgs.length === 0, "Expected 1 arg got $count", { count: args.length })
     const ast = propagatedLiteralAst(args[0])

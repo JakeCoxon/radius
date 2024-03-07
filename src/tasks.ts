@@ -90,6 +90,9 @@ export class Task<S, F> {
   }
 
   static waitFor<S, F>(event: Event<S, F>): Task<S, F> {
+    // This is a quick way out if the event is already completed,
+    // but we must still handle the case where the event is not completed
+    // at creation-time, but is completed by the time the task is started
     if (event._success) return Task.of(event._success)
     else if (event._failure) return Task.rejected(event._failure)
     return new WaitForEventTask(event)
@@ -363,25 +366,27 @@ export class WaitForEventTask<S, F> extends Task<S, F> {
   }
 
   _start(queue: Queue) {
-    this._state = "started";
+    this._state = "started"
     this._step(queue)
   }
   _step(queue: Queue) {
-    
+
     if (this.event._success) {
       this._state = 'completed'
       this._success = this.event._success;
     } else if (this.event._failure) {
       this._state = 'completed'
       this._failure = this.event._failure;
+    } else {
+      this._waitForEvent(queue)
     }
   }
-  _waitForEvent(continuation: () => void) {
+  _waitForEvent(queue: Queue) {
     this._state = 'started'
 
     this.event.listeners.push((failure: F, success: S) => {
       if (failure && this.onError) this.onError(failure)
-      continuation()
+      queue.enqueueFromExternalSource(this)
     });
   }
 
@@ -409,17 +414,14 @@ export class Queue {
     if (task._dependant) throw new Error("Task already has a dependant")
     task._dependant = this.currentTask!;
     if (this.currentTask!) task._acceptContext(this.currentTask._context);
-    if (task instanceof WaitForEventTask) {
-      this.allTasks.push(task);
-      task._waitForEvent(() => {
-        // Different from enqueue because it doesn't update _dependant
-        this.list.push(task)
-      });
-      return
-    }
-    // console.log("pushed", task.toString());
     this.list.push(task);
     this.allTasks.push(task);
+  }
+
+  enqueueFromExternalSource(task: Task<unknown, unknown>) {
+    // Different from enqueue because it doesn't update _dependant
+    // Only to be used inside in events
+    this.list.push(task)
   }
 }
 
