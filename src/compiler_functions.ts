@@ -1,6 +1,6 @@
 import { BytecodeDefault, BytecodeSecondOrder, compileClassTask, compileFunctionPrototype, createBytecodeVmAndExecuteTask, normalizeNumberType, numberTypeToConcrete, propagateLiteralType, propagatedLiteralAst, pushBytecode, pushGeneratedBytecode, visitParseNode } from "./compiler";
 import { externalBuiltinBindings } from "./compiler_sugar";
-import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, CallAst, IntType, Closure, UserCallAst, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition, ParseCall, TypeVariable, TypeMatcher, typeMatcherEquals, SourceLocation, ExternalTypeConstructor, ScopeParentSymbol, SubCompilerState, CompilerFunction, IntLiteralType, FloatLiteralType, FloatType, RawPointerType, AddressAst, BindingAst, UnknownObject, NeverType, CompilerFunctionCallContext, CompileTimeObjectType, CompTimeObjAst, ParseString, NamedArgAst, TypeCheckResult, u8Type, TypeCheckVar } from "./defs";
+import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, CallAst, IntType, Closure, UserCallAst, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition, ParseCall, TypeVariable, TypeMatcher, typeMatcherEquals, SourceLocation, ExternalTypeConstructor, ScopeParentSymbol, SubCompilerState, CompilerFunction, IntLiteralType, FloatLiteralType, FloatType, RawPointerType, AddressAst, BindingAst, UnknownObject, NeverType, CompilerFunctionCallContext, CompileTimeObjectType, CompTimeObjAst, ParseString, NamedArgAst, TypeCheckResult, u8Type, TypeCheckVar, ParseFreshIden } from "./defs";
 import { Task, TaskDef, Unit } from "./tasks";
 
 
@@ -274,14 +274,16 @@ function functionInlineTask(ctx: TaskContext, { location, func, typeArgs, parent
     compilerAssert(concreteTypes[i], `Expected type`, { func, args, concreteTypes })
     compilerAssert(concreteTypes[i] !== IntLiteralType)
     const arg = args[i]
+    const nameValue = name instanceof ParseFreshIden ? name.freshBindingToken.identifier : name.token.value
     if (arg instanceof CompTimeObjAst) { // Special case compile time objects
-      templateScope[name.token.value] = arg.value
+      templateScope[nameValue] = arg.value
       return
     }
-    const binding = new Binding(name.token.value, concreteTypes[i])
+    const binding = new Binding(nameValue, concreteTypes[i])
     binding.storage = storage // is this right for inline?
+    compilerAssert(storage !== 'ref', "Not implemented yet")
     binding.definitionCompiler = inlineInto
-    templateScope[name.token.value] = binding
+    templateScope[nameValue] = binding
     propagateLiteralType(concreteTypes[i], args[i])
     statements.push(new LetAst(VoidType, location, binding, args[i]))
     argBindings.push(binding)

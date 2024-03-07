@@ -73,11 +73,14 @@ fn foop(x: int):
 
   # foo_then_bar :: concat2(foo, bar)
 
-  zip_foo_bar :: zip2(foo, baz)
-  # foo_then_bar :: concat(concat(foo, bar), bamp)
+  print(foo[:]) ...
 
-  for z in zip_foo_bar:
-    print(z)
+  # zip_foo_bar :: zip2(foo, baz)
+  # # foo_then_bar :: concat(concat(foo, bar), bamp)
+
+
+  # for z in zip_foo_bar:
+  #   print(z)
 
   # zip!(foo, bar, consume)()
 

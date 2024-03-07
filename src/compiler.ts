@@ -64,7 +64,7 @@ export const BytecodeDefault: ParseTreeTable = {
   comptime:   (out, node) => (visitParseNode(out, node.expr)),
   not:        (out, node) => (visitParseNode(out, node.expr), pushBytecode(out, node.token, { type: 'not' })),
 
-  evalfunc: (out, node) => (visitAll(out, node.args), pushBytecode(out, node.token, { type: "evalfunc", func: node.func })),
+  evalfunc: (out, node) => (node.typeArgs.map(x => writeMeta(out, x)), visitAll(out, node.args), pushBytecode(out, node.token, { type: "evalfunc", func: node.func })),
 
   dict: (out, node) => {
     node.pairs.forEach(([key, value]) => {
@@ -277,7 +277,7 @@ export const BytecodeSecondOrder: ParseTreeTable = {
     visitParseNode(out, new ParseIdentifier(createAnonymousToken(node.freshBindingToken.identifier)))
   },
 
-  evalfunc: (out, node) => (visitAll(out, node.args), pushBytecode(out, node.token, { type: "evalfunc", func: node.func })),
+  evalfunc: (out, node) => (node.typeArgs.map(x => writeMeta(out, x)), visitAll(out, node.args), pushBytecode(out, node.token, { type: "evalfunc", func: node.func })),
 
 
   while: (out, node) => {

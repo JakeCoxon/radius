@@ -63,7 +63,7 @@ export const createToken = (source: Source, value: any, type = "NONE"): Token =>
 export const createAnonymousToken = (value: any, type = "NONE"): Token => Object.assign(Object.create(TokenRoot), { value, type, location: new SourceLocation(-1, -1, null!) });
 
 export type ParserFunctionParameter = {
-  name: ParseIdentifier,
+  name: ParseIdentifier | ParseFreshIden,
   type: ParseNode | null,
   storage: 'ref' | null
 }
@@ -169,7 +169,7 @@ export class ParseBytecode extends ParseNodeType {     key = 'bytecode' as const
 export class ParseFreshIden extends ParseNodeType {    key = 'freshiden' as const;    constructor(public token: Token, public freshBindingToken: FreshBindingToken) { super();} }
 export class ParseConstructor extends ParseNodeType {  key = 'constructor' as const;  constructor(public token: Token, public type: ParseNode, public args: ParseNode[]) { super();} }
 export class ParseCompilerIden extends ParseNodeType { key = 'compileriden' as const; constructor(public token: Token, public value: string) { super();} }
-export class ParseEvalFunc extends ParseNodeType {     key = 'evalfunc' as const;     constructor(public token: Token, public func: (vm: Vm) => void | Task<unknown, CompilerError>, public args: ParseNode[]) { super();} }
+export class ParseEvalFunc extends ParseNodeType {     key = 'evalfunc' as const;     constructor(public token: Token, public func: (vm: Vm) => void | Task<unknown, CompilerError>, public args: ParseNode[], public typeArgs: ParseNode[]) { super();} }
 
 export type ParseNode = ParseStatements | ParseLet | ParseSet | ParseOperator | ParseIdentifier | 
   ParseNumber | ParseMeta | ParseCompTime | ParseLetConst | ParseCall | ParseList | ParseOr | ParseAnd | 
@@ -260,7 +260,10 @@ export interface BytecodeWriter {
     expansion: {
       iteratorListIdentifier: ParseFreshIden,
       fold: { iden: ParseFreshIden, initial: ParseNode } | null,
-      selectors: { node: ParseNode, start: ParseNode | null, end: ParseNode | null, step: ParseNode | null, indexIdentifier: ParseFreshIden }[]
+      selectors: { 
+        node: ParseNode, start: ParseNode | null, 
+        end: ParseNode | null, step: ParseNode | null,
+        elemIdentifier: ParseFreshIden }[]
     } | null
   }
   instructionTable: ParseTreeTable
@@ -986,7 +989,7 @@ export function bytecodeToString(bytecodeProgram: BytecodeProgram) {
   const instr = (instr: BytecodeInstr) => {
     const { type, ...args } = instr;
     const values = Object.entries(args)
-      .map(([k, v]) => `${k}: ${v}`)
+      .map(([k, v]) => `${k}: ${typeof v === 'function' ? '<function>' : v}`)
       .join(", ");
     return `${type.padStart("beginblockast".length, " ")}  ${values}`;
   };

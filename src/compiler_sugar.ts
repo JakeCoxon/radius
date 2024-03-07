@@ -52,37 +52,127 @@ export const expandLoopSugar = (out: BytecodeWriter, node: ParseExpand) => {
   const expansion: typeof out.state.expansion = out.state.expansion = { selectors: [], iteratorListIdentifier, fold: null }
   visitParseNode({ bytecode, instructionTable: BytecodeSecondOrder, globalCompilerState: out.globalCompilerState, state: out.state }, node.expr)
 
-  const getIterator = (i: number) => new ParseMeta(node.token, new ParseSubscript(node.token, 
-    iteratorListIdentifier, new ParseNumber(createAnonymousToken(i)), false))
+  // const getIterator = (i: number) => new ParseMeta(node.token, new ParseSubscript(node.token, 
+  //   iteratorListIdentifier, new ParseNumber(createAnonymousToken(i)), false))
 
-  const iteratorNodes = expansion.selectors.map((s, i) => {
-    let lengthNode: ParseNode = getLength(node.token, getIterator(i))
-    // TODO: Handle positive end positions!
-    if (s.end) lengthNode = new ParseOperator(createAnonymousToken("+"), [lengthNode, s.end])
-    let letLengthNode: ParseNode = new ParseLet(node.token, new ParseFreshIden(node.token, new FreshBindingToken('length')), null, lengthNode)
-    const letIndexNode = new ParseLet(node.token, s.indexIdentifier, null, s.start ?? new ParseNumber(createAnonymousToken('0')))
-    const incNode = new ParseOpEq(createAnonymousToken("+="), letIndexNode.name, s.step ?? new ParseNumber(createAnonymousToken('1')))
-    const condNode = new ParseOperator(createAnonymousToken("<"), [letIndexNode.name, letLengthNode.name])
-    return { letLengthNode, condNode, letIndexNode, incNode }
-  })
+  // const iteratorNodes = expansion.selectors.map((selector, i) => {
+  //   // let lengthNode: ParseNode = getLength(node.token, getIterator(i))
+  //   // TODO: Handle positive end positions!
+  //   // if (s.end) lengthNode = new ParseOperator(createAnonymousToken("+"), [lengthNode, s.end])
+  //   // let letLengthNode: ParseNode = new ParseLet(node.token, new ParseFreshIden(node.token, new FreshBindingToken('length')), null, lengthNode)
+  //   // const letIndexNode = new ParseLet(node.token, selector.elemIdentifier, null, s.start ?? new ParseNumber(createAnonymousToken('0')))
+  //   // const incNode = new ParseOpEq(createAnonymousToken("+="), letIndexNode.name, s.step ?? new ParseNumber(createAnonymousToken('1')))
+  //   // const condNode = new ParseOperator(createAnonymousToken("<"), [letIndexNode.name, letLengthNode.name])
+  //   return { letLengthNode, condNode, letIndexNode, incNode }
+  // })
 
   const list = new ParseList(node.token, expansion.selectors.map(x => new ParseQuote(node.token, x.node)))
   const letIteratorList = new ParseLet(node.token, iteratorListIdentifier, null, list)
-  const lets = iteratorNodes.flatMap(x => [x.letLengthNode, x.letIndexNode])
-  const cond = iteratorNodes.slice(1).reduce((acc: ParseNode, x) => new ParseAnd(node.token, [acc, x.condNode]), iteratorNodes[0].condNode)
+  // const lets = iteratorNodes.flatMap(x => [x.letLengthNode, x.letIndexNode])
+  // const cond = iteratorNodes.slice(1).reduce((acc: ParseNode, x) => new ParseAnd(node.token, [acc, x.condNode]), iteratorNodes[0].condNode)
 
   let loopBody: ParseNode = new ParseBytecode(node.token, bytecode)
   const result: ParseNode[] = []
   
-  if (expansion.fold) {
-    lets.push(new ParseLet(node.token, expansion.fold.iden, null, expansion.fold.initial))
-    loopBody = new ParseSet(node.token, expansion.fold.iden, loopBody)
-    result.push(expansion.fold.iden)
-  }
-  const whileStmts = new ParseStatements(node.token, [loopBody, ...iteratorNodes.map(x => x.incNode)])
-  const loop = new ParseWhile(node.token, cond, whileStmts)
+  // if (expansion.fold) {
+  //   lets.push(new ParseLet(node.token, expansion.fold.iden, null, expansion.fold.initial))
+  //   loopBody = new ParseSet(node.token, expansion.fold.iden, loopBody)
+  //   result.push(expansion.fold.iden)
+  // }
+  // const whileStmts = new ParseStatements(node.token, [loopBody, ...iteratorNodes.map(x => x.incNode)])
+  // const loop = new ParseWhile(node.token, cond, whileStmts)
   const metaList = new ParseMeta(node.token, letIteratorList)
-  visitParseNode(out, new ParseStatements(node.token, [metaList, ...lets, loop, ...result]))
+
+  const finalAst = new ParseEvalFunc(createAnonymousToken(''), (vm) => {
+    
+    const iteratorList = vm.stack.pop()
+    compilerAssert(Array.isArray(iteratorList))
+    compilerAssert(iteratorList.length == 1, 'Not implemented yet')
+    const iterator1 = iteratorList[0]
+    compilerAssert(iterator1 instanceof CompTimeObjAst)
+    compilerAssert(iterator1.value instanceof Closure)
+
+
+    const fnctx: CompilerFunctionCallContext = { location: vm.location, compilerState: vm.context.subCompilerState, resultAst: undefined, typeCheckResult: undefined }
+    // const yieldA = closureHelper(fnctx, ['x'], (bindingAst) => {
+    //   compilerAssert(bindingAst instanceof BindingAst)
+    //   // compilerAssert(false, "Not impl", { bindingAst })
+
+    //   const binding = new Binding(expansion.selectors[0].elemIdentifier.freshBindingToken.identifier, bindingAst.type)
+
+    //   return createStatements(vm.location, [
+    //     new LetAst(VoidType, vm.location, binding, bindingAst)
+    //     // alternator.createSetter(vm.location, bindingAst),
+    //     // alternator.alternateEntry(vm.location),
+    //   ])
+    // })
+
+    
+
+    const fnParams: ParserFunctionParameter[] = [{
+      name: expansion.selectors[0].elemIdentifier, storage: null, type: null
+    }]
+    
+    const fnBody = new ParseStatements(createAnonymousToken(''), [loopBody])
+    const decl = createAnonymousParserFunctionDecl(`fn`, createAnonymousToken(''), fnParams, fnBody)
+    const funcDef = insertFunctionDefinition(vm.context.subCompilerState.globalCompiler, decl)
+    const resultClosure = new Closure(funcDef, vm.context.subCompilerState.scope, vm.context.subCompilerState)
+
+    if (false) {
+      const fnctx1: CompilerFunctionCallContext = { location: vm.location, compilerState: vm.context.subCompilerState, resultAst: undefined, typeCheckResult: undefined }
+      const callA = createCallAstFromValue(fnctx1, iterator1.value, [], [new CompTimeObjAst(VoidType, vm.location, resultClosure)])
+
+      return callA.chainFn((task, ast) => {
+        vm.stack.push(ast)
+        return Task.success()
+      })
+    }
+    
+    // const callA = createCallAstFromValue(fnctx1, iterator1.value, [], [new CompTimeObjAst(VoidType, vm.location, yieldA)])
+
+    const fnctx1: CompilerFunctionCallContext = { location: vm.location, compilerState: vm.context.subCompilerState, resultAst: undefined, typeCheckResult: undefined }
+    const consumer = closureHelper(fnctx1, ['yield'], (yieldFnObj) => {
+      
+      compilerAssert(yieldFnObj instanceof CompTimeObjAst)
+      compilerAssert(yieldFnObj.value instanceof Closure, "Expect closure", { yieldFn: yieldFnObj.value })
+      const yieldFn = yieldFnObj.value
+
+      return (
+        createCallAstFromValue(fnctx2, yieldFn, [], [])
+        .chainFn((task, arg) => {
+          const binding = new Binding("", arg.type)
+          const bindingAst = new BindingAst(binding.type, vm.location, binding)
+
+          return (
+            createCallAstFromValue(fnctx2, resultClosure, [], [bindingAst])
+            .chainFn((task, result) => {
+              const stmts = createStatements(vm.location, [
+                new LetAst(VoidType, vm.location, binding, arg),
+                result
+              ])
+              const whileAst = new WhileAst(VoidType, vm.location, 
+                new BoolAst(BoolType, vm.location, true), stmts)
+              return Task.of(whileAst)
+            })
+          )
+
+        })
+      )
+    })
+
+    const fnctx2: CompilerFunctionCallContext = { location: vm.location, compilerState: vm.context.subCompilerState, resultAst: undefined, typeCheckResult: undefined }
+    const callFsm = createCallAstFromValue(fnctx2, fsm, [iterator1.value, consumer], [])
+
+    return callFsm.chainFn((task, ast) => {
+      vm.stack.push(ast)
+      return Task.success()
+    })
+    // compilerAssert(false, "Not impl", { i: iterator1.value })
+    
+  }, [], [iteratorListIdentifier, ])
+
+
+  visitParseNode(out, new ParseStatements(node.token, [metaList, finalAst]))
 
   out.state.expansion = null
 }
@@ -103,14 +193,14 @@ export const foldSugar = (out: BytecodeWriter, node: ParseFold) => {
 }
 export const sliceSugar = (out: BytecodeWriter, node: ParseSlice, assignValue: ParseNode | null) => {
   compilerAssert(out.state.expansion, "Expected expansion locus for slice operator")
-  const selectorIndex = out.state.expansion.selectors.length
-  const indexIdentifier = new ParseFreshIden(node.token, new FreshBindingToken('i'))
-  out.state.expansion.selectors.push({ node: node.expr, start: node.start, end: node.end, step: node.step, indexIdentifier })
-  const selectorIndexNode = new ParseNumber(createAnonymousToken(selectorIndex))
-  const iteratorList = new ParseMeta(node.token, new ParseSubscript(node.token, out.state.expansion.iteratorListIdentifier, selectorIndexNode, false))
-  const subscriptIterator = new ParseSubscript(node.token, iteratorList, indexIdentifier, false);
-  const finalNode = assignValue ? new ParseSet(node.token, subscriptIterator, assignValue) : subscriptIterator
-  visitParseNode(out, finalNode)
+  // const selectorIndex = out.state.expansion.selectors.length
+  const elemIdentifier = new ParseFreshIden(node.token, new FreshBindingToken('elem'))
+  out.state.expansion.selectors.push({ node: node.expr, start: node.start, end: node.end, step: node.step, elemIdentifier })
+  // const selectorIndexNode = new ParseNumber(createAnonymousToken(selectorIndex))
+  // const iteratorList = new ParseMeta(node.token, new ParseSubscript(node.token, out.state.expansion.iteratorListIdentifier, selectorIndexNode, false))
+  // const subscriptIterator = new ParseSubscript(node.token, iteratorList, elemIdentifier, false);
+  // const finalNode = assignValue ? new ParseSet(node.token, subscriptIterator, assignValue) : subscriptIterator
+  visitParseNode(out, elemIdentifier)
 }
 
 export const listComprehensionSugar = (out: BytecodeWriter, node: ParseListComp) => {
@@ -538,7 +628,7 @@ const closureHelper = (ctx: CompilerFunctionCallContext, params: string[], func:
         return Task.success()
       });
       
-    }, fnParams.map(x => x.name)),
+    }, fnParams.map(x => x.name), []),
   ])
   const decl = createAnonymousParserFunctionDecl(`fn`, createAnonymousToken(''), fnParams, fnBody)
   const funcDef = insertFunctionDefinition(ctx.compilerState.globalCompiler, decl)
@@ -582,14 +672,8 @@ const alternatorHelper = () => {
     return new SetAst(VoidType, location, entryParam, value)
   }
   return {
-    createEntryLabel,
-    createOtherLabel,
-    alternateEntry,
-    alternateOther,
-    waitForEntryBinding,
-    getOrCreateParamBinding,
-    createSetter,
-    create
+    createEntryLabel, createOtherLabel, alternateEntry, alternateOther, waitForEntryBinding, 
+    getOrCreateParamBinding, createSetter, create
   }
 }
 
