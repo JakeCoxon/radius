@@ -25,6 +25,33 @@ fn foop(x: int):
     while true:
       val := yield()
       print(val)
+
+    
+  concat2 :: |iterator_a, iterator_b|
+    {|yield_outer|
+      fsm!({|yield|
+        iterator_a(yield)
+        iterator_b(yield)
+      }, {|yield| 
+        while true:
+          elem := yield()
+          yield_outer(elem)
+      })()
+    }
+
+  
+  zip2 :: |iterator_a, iterator_b|
+    {|yield_outer|
+      fsm!(iterator_a, {|yield_a| 
+        fsm!(iterator_b, {|yield_b| 
+          while true:
+            elem_a := yield_a()
+            elem_b := yield_b()
+            yield_outer((elem_a, elem_b))
+        })()
+      })()
+    }
+
   
 
   consume2 :: |yield|
@@ -40,15 +67,17 @@ fn foop(x: int):
   
   print("OK")
 
-  fsm!(foo, consume2)()
+  # fsm!(foo, consume2)()
 
-  printer :: {|x| print(x) }
-  foo_then_bar :: concat(concat(foo, bar), bamp)
-  
-  foo_then_bar(printer)
-  
-  # thing :: concat(foo, bar)
-  # concat!(foo, bar)()
+  # fsm!(foo, consume)()
+
+  # foo_then_bar :: concat2(foo, bar)
+
+  zip_foo_bar :: zip2(foo, baz)
+  # foo_then_bar :: concat(concat(foo, bar), bamp)
+
+  for z in zip_foo_bar:
+    print(z)
 
   # zip!(foo, bar, consume)()
 

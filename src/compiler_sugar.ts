@@ -60,15 +60,15 @@ export const expandLoopSugar = (out: BytecodeWriter, node: ParseExpand) => {
     // TODO: Handle positive end positions!
     if (s.end) lengthNode = new ParseOperator(createAnonymousToken("+"), [lengthNode, s.end])
     let letLengthNode: ParseNode = new ParseLet(node.token, new ParseFreshIden(node.token, new FreshBindingToken('length')), null, lengthNode)
-    const letItNode = new ParseLet(node.token, s.indexIdentifier, null, s.start ?? new ParseNumber(createAnonymousToken('0')))
-    const incNode = new ParseOpEq(createAnonymousToken("+="), letItNode.name, s.step ?? new ParseNumber(createAnonymousToken('1')))
-    const condNode = new ParseOperator(createAnonymousToken("<"), [letItNode.name, letLengthNode.name])
-    return { letLengthNode, condNode, letItNode, incNode }
+    const letIndexNode = new ParseLet(node.token, s.indexIdentifier, null, s.start ?? new ParseNumber(createAnonymousToken('0')))
+    const incNode = new ParseOpEq(createAnonymousToken("+="), letIndexNode.name, s.step ?? new ParseNumber(createAnonymousToken('1')))
+    const condNode = new ParseOperator(createAnonymousToken("<"), [letIndexNode.name, letLengthNode.name])
+    return { letLengthNode, condNode, letIndexNode, incNode }
   })
 
   const list = new ParseList(node.token, expansion.selectors.map(x => new ParseQuote(node.token, x.node)))
   const letIteratorList = new ParseLet(node.token, iteratorListIdentifier, null, list)
-  const lets = iteratorNodes.flatMap(x => [x.letLengthNode, x.letItNode])
+  const lets = iteratorNodes.flatMap(x => [x.letLengthNode, x.letIndexNode])
   const cond = iteratorNodes.slice(1).reduce((acc: ParseNode, x) => new ParseAnd(node.token, [acc, x.condNode]), iteratorNodes[0].condNode)
 
   let loopBody: ParseNode = new ParseBytecode(node.token, bytecode)
@@ -103,11 +103,11 @@ export const foldSugar = (out: BytecodeWriter, node: ParseFold) => {
 }
 export const sliceSugar = (out: BytecodeWriter, node: ParseSlice, assignValue: ParseNode | null) => {
   compilerAssert(out.state.expansion, "Expected expansion locus for slice operator")
-  const index = out.state.expansion.selectors.length
+  const selectorIndex = out.state.expansion.selectors.length
   const indexIdentifier = new ParseFreshIden(node.token, new FreshBindingToken('i'))
   out.state.expansion.selectors.push({ node: node.expr, start: node.start, end: node.end, step: node.step, indexIdentifier })
-  const indexNode = new ParseNumber(createAnonymousToken(index))
-  const iteratorList = new ParseMeta(node.token, new ParseSubscript(node.token, out.state.expansion.iteratorListIdentifier, indexNode, false))
+  const selectorIndexNode = new ParseNumber(createAnonymousToken(selectorIndex))
+  const iteratorList = new ParseMeta(node.token, new ParseSubscript(node.token, out.state.expansion.iteratorListIdentifier, selectorIndexNode, false))
   const subscriptIterator = new ParseSubscript(node.token, iteratorList, indexIdentifier, false);
   const finalNode = assignValue ? new ParseSet(node.token, subscriptIterator, assignValue) : subscriptIterator
   visitParseNode(out, finalNode)
@@ -709,6 +709,8 @@ export const fsm = new CompilerFunction("fsm", (ctx, typeArgs, args) => {
     Task.concurrency<unknown, CompilerError>([yieldA, yieldB, alternator.waitForEntryBinding()])
     .chainFn((task, args) => {
       const [a, b, entryParam] = args
+      compilerAssert(isAst(a))
+      compilerAssert(isAst(b))
       compilerAssert(ctx.location)
       compilerAssert(entryParam instanceof Binding)
       return Task.of(

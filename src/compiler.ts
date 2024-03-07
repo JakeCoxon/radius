@@ -792,9 +792,13 @@ const instructions: InstructionMapping = {
     return createListConstructor(vm, elementType, values)
   },
   callast: (vm, { name, count, tcount, method }) => {
-    const args = popValues(vm, count)
+    const args_ = popValues(vm, count)
     const typeArgs = popValues(vm, tcount || 0);
-    const receiver = method ? args.shift() : null
+    const receiver = method ? args_.shift() : null
+    const args = args_.map(val => {
+      if (val instanceof Closure) return new CompTimeObjAst(CompileTimeObjectType, vm.location, val)
+      return val
+    })
     compilerAssert(args.every(isAst), "Expected ASTs for function call $name", { name, args })
 
     if (receiver) {
@@ -1119,6 +1123,13 @@ const instructions: InstructionMapping = {
 
     if (name === 'iteratefn') {
       const iterator = expectAst(values[0])
+      // compilerAssert(false, "", { iterator })
+      // console.log('iterator', iterator, typeArgs[0])
+      if (iterator instanceof CompTimeObjAst) {
+        compilerAssert(iterator.value instanceof Closure, "Expected function")
+        const iterateAst = new CompTimeObjAst(CompileTimeObjectType, vm.location, typeArgs[0])
+        return createCallAstFromValueAndPushValue(vm, iterator.value, [], [iterateAst])
+      }
       const metaObject = iterator.type.typeInfo.metaobject;
       if (metaObject['iterate']) return createCallAstFromValueAndPushValue(vm, metaObject['iterate'], [typeArgs[0]], [iterator])
       return createMethodCall(vm, iterator, 'iterate', [typeArgs[0]], [])
