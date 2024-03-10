@@ -1,0 +1,54 @@
+import compiler for generator, concat, assert
+import range for Range
+
+fn foop(x: int):
+
+  foo :: |yield|
+    for i in Range(0, x):
+      yield(i)
+
+  bar :: |yield|
+    for i in Range(1, 9):
+      yield(i * i)
+
+  bamp :: |yield|
+    for i in Range(1, 9):
+      yield(i * i * i)
+
+  baz :: |yield|
+    f := 1
+    while true:
+      yield(f)
+      f *= 2
+
+  consume :: |yield|
+    while true:
+      val := yield()
+      print(val)
+
+    
+  consume2 :: |yield|
+    val := yield()
+    print("val 1", val)
+    val = yield()
+    print("val 2", val)
+    val = yield()
+    print("val 3", val)
+    val = yield()
+    print("val 4", val)
+
+  
+  numbers := [40, 20, 10, 32, 12, 3124]
+
+  count := (fold(0) + numbers[:] * bamp[:] ...)
+  assert(count == 678802)
+
+  foos := [0, 0, 0, 0]
+  foos[:] = numbers[:] * bamp[:] + 2 ...
+
+  count2 := (fold(0) + foos[:] ...)
+  assert(count2 == 2526)
+
+
+fn main():
+  foop(10)

@@ -917,11 +917,27 @@ test('overload_error', async () => {
   }
 })
 
-test('fsm', async () => {
+test('generator', async () => {
   const testObject = createTest({ 
-    moduleName: 'fsm',
+    moduleName: 'generator',
     globalOptions,
-    inputPath: `${import.meta.dir}/fixtures/fsm.rad`,
+    inputPath: `${import.meta.dir}/fixtures/generator.rad`,
+  })
+  try {
+    const input = await Bun.file(testObject.inputPath).text()
+    runCompilerTest(input, { testObject })
+    await writeLlvmBytecodeFile(testObject)
+    await executeNativeExecutable(testObject)
+  } finally {
+    testObject.close()
+  }
+})
+
+test('iterator_expansion', async () => {
+  const testObject = createTest({ 
+    moduleName: 'iterator_expansion',
+    globalOptions,
+    inputPath: `${import.meta.dir}/fixtures/iterator_expansion.rad`,
   })
   try {
     const input = await Bun.file(testObject.inputPath).text()

@@ -1,0 +1,123 @@
+import compiler for generator, assert
+import range for Range
+
+concat2 :: |iterator_a, iterator_b|
+  {|yield_outer|
+    generator!({|yield|
+      iterator_a(yield)
+      iterator_b(yield)
+    }, {|yield| 
+      while true:
+        elem := yield()
+        yield_outer(elem)
+    })()
+  }
+
+
+zip2 :: |iterator_a, iterator_b|
+  {|yield_outer|
+    generator!(iterator_a, {|yield_a| 
+      generator!(iterator_b, {|yield_b| 
+        while true:
+          elem_a := yield_a()
+          elem_b := yield_b()
+          yield_outer((elem_a, elem_b))
+      })()
+    })()
+  }
+  
+
+interpose :: |iterator, value|
+  {|yield_outer|
+    generator!(iterator, {|yield| 
+      elem := yield()
+      yield_outer(elem)
+      while true:
+        elem2 := yield()
+        yield_outer(value)
+        yield_outer(elem2)
+    })()
+  }
+  
+interleave :: |iterator_a, iterator_b|
+  {|yield_outer|
+    generator!(iterator_a, {|yield_a| 
+      generator!(iterator_b, {|yield_b| 
+        while true:
+          elem_a := yield_a()
+          yield_outer(elem_a)
+          elem_b := yield_b()
+          yield_outer(elem_b)
+      })()
+    })()
+  }
+  
+  
+fn foop(x: int):
+
+  foo :: |yield|
+    for i in Range(0, x):
+      yield(i)
+
+  bar :: |yield|
+    for i in Range(1, 9):
+      yield(i * i)
+
+  bamp :: |yield|
+    for i in Range(1, 9):
+      yield(i * i * i)
+
+  baz :: |yield|
+    f := 1
+    while true:
+      yield(f)
+      f *= 2
+
+  consume :: |yield|
+    while true:
+      val := yield()
+      print(val)
+  
+
+  foo_then_bar :: concat2(foo, bar)
+
+  num := 0
+  for x in foo_then_bar:
+    num += x
+  assert(num == 249)
+
+
+  foo_bar_bamp :: concat2(concat2(foo, bar), bamp)
+  num = 0
+  for y in foo_bar_bamp:
+    num += y
+  assert(num == 1545)
+
+
+  zip_foo_bar :: zip2(foo, bar)
+  num = 0
+  for tup in zip_foo_bar:
+    num += tup._1 * tup._2
+
+  assert(num == 1092)
+
+
+  interposed :: interpose(foo, 1000)
+  num = 0
+  for x2 in interposed:
+    num += x2
+  assert(num == 9045)
+  
+
+  
+  interleaved :: interleave(foo, bar)
+  num = 0
+  for x3 in interleaved:
+    num += x3
+  assert(num == 240)
+  
+
+
+
+fn main():
+  foop(10)

@@ -143,8 +143,8 @@ const expansionZipIterator = (iterator1: IteratorState) => {
 
       const fnctx2: CompilerFunctionCallContext = { location, compilerState: state.compilerState, resultAst: undefined, typeCheckResult: undefined }
       compilerAssert(iterator1)
-      const callFsm = createCallAstFromValue(fnctx2, fsm, [iterator1.closure, consumer], [])
-      return callFsm
+      const callGenerator = createCallAstFromValue(fnctx2, generator, [iterator1.closure, consumer], [])
+      return callGenerator
     }
   }
 }
@@ -756,7 +756,7 @@ const closureHelper = (ctx: CompilerFunctionCallContext, debugName: string, para
 }
 
 const alternatorHelper = () => {
-  const alternatorBinding = new Binding("fsm", VoidType)
+  const alternatorBinding = new Binding("alternator", VoidType)
   const entryLabels: Binding[] = []
   const otherLabels: Binding[] = []
   const createEntryLabel = () => {
@@ -874,7 +874,7 @@ export const concat = new ExternalFunction("concat", VoidType, (ctx, values) => 
   
 })
 
-export const fsm = new CompilerFunction("fsm", (ctx, typeArgs, args) => {
+export const generator = new CompilerFunction("generator", (ctx, typeArgs, args) => {
   const [givenFunc, consumeFunc] = typeArgs
   compilerAssert(givenFunc instanceof Closure, "Expected function", { givenFunc })
 
@@ -942,7 +942,7 @@ export const createCompilerModuleTask = (ctx: TaskContext): Task<Module, Compile
     unsafe_subscript, unsafe_set_subscript, operator_bitshift_left, operator_bitshift_right,
     operator_bitwise_and, operator_bitwise_or, rawptr: RawPointerType, add_external_library, add_macos_framework, assert, never: NeverType,
     get_current_loop, ctobj: CompileTimeObjectType, operator_mod, overloaded, static_length, assert_compile_error, initializer_function, add_export,
-    fsm, concat })
+    generator, concat })
   const subCompilerState = pushSubCompilerState(ctx, { debugName: `compiler module`, lexicalParent: undefined, scope: moduleScope })
   const module = new Module('compiler', subCompilerState, null!)
   return Task.of(module)

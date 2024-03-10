@@ -1006,11 +1006,8 @@ const instructions: InstructionMapping = {
   breakast: (vm, { v, named, breakType }) => {
     const expr = v ? propagatedLiteralAst(expectAst(popStack(vm))) : null
     const name = named ? popStack(vm) : null
-    if (name && name instanceof CompTimeObjAst) { // It's possible to directly pass a loop object to break from
-      // TODO: Kinda sucks to have to unwrap the comptimeobj
-      const loop = name.value
-      compilerAssert(loop instanceof LoopObject, "Expected loop object")
-      const block = breakType === 'break' ? loop.breakBlock : loop.continueBlock
+    if (name && name instanceof LoopObject) { // It's possible to directly pass a loop object to break from
+      const block = breakType === 'break' ? name.breakBlock : name.continueBlock
       compilerAssert(block.binding, "Expected binding")
       vm.stack.push(new BreakAst(NeverType, vm.location, block.binding, expr))
       return
