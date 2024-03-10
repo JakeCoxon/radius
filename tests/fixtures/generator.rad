@@ -1,57 +1,63 @@
 import compiler for generator, assert
 import range for Range
 
+to_iterator :: |thing|
+  {|yield|
+    for v in thing:
+      yield(v)
+  }
+
 concat2 :: |iterator_a, iterator_b|
   {|yield_outer|
-    generator!({|yield|
-      iterator_a(yield)
-      iterator_b(yield)
-    }, {|yield| 
+    generator!({|yield| 
       while true:
         elem := yield()
         yield_outer(elem)
+    }, {|yield|
+      iterator_a(yield)
+      iterator_b(yield)
     })()
   }
 
 
 zip2 :: |iterator_a, iterator_b|
   {|yield_outer|
-    generator!(iterator_a, {|yield_a| 
-      generator!(iterator_b, {|yield_b| 
+    generator!({|yield_a| 
+      generator!({|yield_b| 
         while true:
           elem_a := yield_a()
           elem_b := yield_b()
           yield_outer((elem_a, elem_b))
-      })()
-    })()
+      }, iterator_b)()
+    }, iterator_a)()
   }
   
 
 interpose :: |iterator, value|
   {|yield_outer|
-    generator!(iterator, {|yield| 
+    generator!({|yield| 
       elem := yield()
       yield_outer(elem)
       while true:
         elem2 := yield()
         yield_outer(value)
         yield_outer(elem2)
-    })()
+    }, iterator)()
   }
   
 interleave :: |iterator_a, iterator_b|
   {|yield_outer|
-    generator!(iterator_a, {|yield_a| 
-      generator!(iterator_b, {|yield_b| 
+    generator!({|yield_a| 
+      generator!({|yield_b| 
         while true:
           elem_a := yield_a()
           yield_outer(elem_a)
           elem_b := yield_b()
           yield_outer(elem_b)
-      })()
-    })()
+      }, iterator_b)()
+    }, iterator_a)()
   }
-  
+
   
 fn foop(x: int):
 
@@ -116,6 +122,11 @@ fn foop(x: int):
     num += x3
   assert(num == 240)
   
+
+  thing := [10, 20, 30]
+  interleaved2 :: interleave(to_iterator(thing), bar)
+  for x4 in interleaved2:
+    print(x4)
 
 
 

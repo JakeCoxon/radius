@@ -143,7 +143,7 @@ const expansionZipIterator = (iterator1: IteratorState) => {
 
       const fnctx2: CompilerFunctionCallContext = { location, compilerState: state.compilerState, resultAst: undefined, typeCheckResult: undefined }
       compilerAssert(iterator1)
-      const callGenerator = createCallAstFromValue(fnctx2, generator, [iterator1.closure, consumer], [])
+      const callGenerator = createCallAstFromValue(fnctx2, generator, [consumer, iterator1.closure], [])
       return callGenerator
     }
   }
@@ -875,7 +875,7 @@ export const concat = new ExternalFunction("concat", VoidType, (ctx, values) => 
 })
 
 export const generator = new CompilerFunction("generator", (ctx, typeArgs, args) => {
-  const [givenFunc, consumeFunc] = typeArgs
+  const [consumeFunc, givenFunc] = typeArgs
   compilerAssert(givenFunc instanceof Closure, "Expected function", { givenFunc })
 
   const alternator = alternatorHelper()
