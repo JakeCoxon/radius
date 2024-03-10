@@ -50,7 +50,7 @@ function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, args, typ
   }
 
   typeCheckAssert(typeArgs.length <= func.typeParams.length, "Expected $expected type parameters, got $got", { expected: func.typeParams.length, got: typeArgs.length, func })
-  typeCheckAssert(args.length >= func.params.length, 'Not enough params. Got $expected args got $got', { expected: func.params.length, got: args.length, args, func })
+  typeCheckAssert(args.length >= func.params.length, 'Not enough params. Expected $expected args got $got', { expected: func.params.length, got: args.length, args, func })
   typeCheckAssert(func.variadic || args.length == func.params.length, 'Too many params. Expected $expected args got $got', { expected: func.params.length, got: args.length, args, func })
 
   // if (func.params.length === 0) return Task.success()

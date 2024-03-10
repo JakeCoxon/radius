@@ -38,6 +38,8 @@ const makeColor = (x: unknown) => {
   }, { colors: true })
 }
 
+export const isArray = (value: any): value is unknown[] => Array.isArray(value)
+
 export class Source {
   tokens: Token[]
   constructor(public debugName: string, public input: string) {}
@@ -250,6 +252,14 @@ export type BytecodeProgram = {
   code: BytecodeInstr[]
   locations: SourceLocation[]
 }
+
+export type ExpansionSelector = {
+  node: ParseNode, start: ParseNode | null, 
+  end: ParseNode | null, step: ParseNode | null,
+  elemIdentifier: ParseFreshIden,
+  indexIdentifier: ParseFreshIden | null,
+  setterIdentifier: ParseFreshIden | null,
+}
 export interface BytecodeWriter {
   bytecode: {
     code: BytecodeInstr[]
@@ -260,10 +270,8 @@ export interface BytecodeWriter {
     expansion: {
       iteratorListIdentifier: ParseFreshIden,
       fold: { iden: ParseFreshIden, initial: ParseNode } | null,
-      selectors: { 
-        node: ParseNode, start: ParseNode | null, 
-        end: ParseNode | null, step: ParseNode | null,
-        elemIdentifier: ParseFreshIden }[]
+      setterSelector: ExpansionSelector | null,
+      selectors: ExpansionSelector[]
     } | null
   }
   instructionTable: ParseTreeTable

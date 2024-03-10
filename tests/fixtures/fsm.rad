@@ -51,6 +51,22 @@ fn foop(x: int):
         })()
       })()
     }
+  
+    # fsm!(iterator_a, {|yield_a| 
+    #   fsm!(iterator_b, {|yield_b| 
+    #     bar :: {||
+    #       elem_a := yield_a()
+    #       elem_b := yield_b()
+    #       (elem_a, elem_b)
+    #     }
+      
+    #     i := 0
+    #     while i < 30:
+    #       foo[i] = bar()
+    #       i += 1
+          
+    #   })()
+    # })()
 
   
 
@@ -73,7 +89,18 @@ fn foop(x: int):
 
   # foo_then_bar :: concat2(foo, bar)
 
-  print(foo[:]) ...
+
+  # print(foo[:], " * ", bamp[:], " = ", foo[:] * bamp[:]) ...
+
+  asd := [40, 20, 10, 32, 12, 3124]
+  # print((asd[:], bamp[:])) ...
+  kjhkjh := (fold(0) + asd[:] * bamp[:] ...)
+  print(kjhkjh)
+
+  foos := [0, 0, 0, 0]
+  # foos[:] = bamp[:] + 2 ...
+  foos[:] = 10 ...
+  print(foos[:]) ...
 
   # zip_foo_bar :: zip2(foo, baz)
   # # foo_then_bar :: concat(concat(foo, bar), bamp)

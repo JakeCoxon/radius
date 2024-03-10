@@ -58,7 +58,7 @@ export const BytecodeDefault: ParseTreeTable = {
   freshiden:  (out, node) => pushBytecode(out, node.token, { type: "binding", name: node.freshBindingToken.identifier }),
   identifier: (out, node) => pushBytecode(out, node.token, { type: "binding", name: node.token.value }), 
   operator:   (out, node) => (visitAll(out, node.exprs), pushBytecode(out, node.token, { type: 'operator', name: node.token.value, count: node.exprs.length })), 
-  set:        (out, node) => (visitParseNode(out, node.value), pushBytecode(out, node.token, { type: 'setlocal', name: node.left.token.value })), 
+  set:        (out, node) => (visitParseNode(out, node.value), pushBytecode(out, node.token, { type: 'setlocal', name: node.left instanceof ParseFreshIden ? node.left.freshBindingToken.identifier : node.left.token.value })), 
   letconst:   (out, node) => (visitParseNode(out, node.value), pushBytecode(out, node.token, { type: 'letlocal', name: node.name.token.value, t: false, v: true })), 
   meta:       (out, node) => (visitParseNode(out, node.expr)),
   comptime:   (out, node) => (visitParseNode(out, node.expr)),
@@ -404,10 +404,11 @@ export const BytecodeSecondOrder: ParseTreeTable = {
       pushBytecode(out, node.token, { type: "compilerfn", name: node.left.value, count: node.args.length, tcount: node.typeArgs.length });
       return
     }
-    if (node.left instanceof ParseIdentifier) {
+    if (node.left instanceof ParseIdentifier || node.left instanceof ParseFreshIden) {
       node.typeArgs.forEach(x => writeMeta(out, x));
-      visitAll(out, node.args);
-      pushBytecode(out, node.token, { type: "callast", name: node.left.token.value, count: node.args.length, tcount: node.typeArgs.length });
+      visitAll(out, node.args)
+      const name = node.left instanceof ParseFreshIden ? node.left.freshBindingToken.identifier : node.left.token.value
+      pushBytecode(out, node.token, { type: "callast", name, count: node.args.length, tcount: node.typeArgs.length });
       return;
     }
     if (node.left instanceof ParseField) {
@@ -1101,7 +1102,7 @@ const instructions: InstructionMapping = {
     vm.stack.push(null) // statement expression
   },
   setlocal: (vm, { name }) => {
-    compilerAssert(Object.hasOwn(vm.scope, name), `$name not existing in scope`, { name });
+    compilerAssert(Object.hasOwn(vm.scope, name), `$name does not exist in scope`, { name });
     vm.scope[name] = popStack(vm);
     vm.stack.push(null) // statement expression
   },

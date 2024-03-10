@@ -1,6 +1,6 @@
 import { BytecodeSecondOrder, getOperatorTable, loadModule, propagateLiteralType, propagatedLiteralAst, pushBytecode, resolveScope, visitParseNode } from "./compiler"
 import { compileExportedFunctionTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, insertFunctionDefinition } from "./compiler_functions"
-import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, UserCallAst, hashValues, NeverType, IfAst, BoolType, VoidAst, LoopObject, CompileTimeObjectType, u64Type, FunctionDefinition, ParserFunctionDecl, StatementsAst, isTypeScalar, IntLiteralType, FloatLiteralType, isAst, isType, isTypeCheckError, FsmAlternatorAst, FsmAlternateAst, CompTimeObjAst, ParseEvalFunc, SetAst, DefaultConsAst, WhileAst, BoolAst } from "./defs"
+import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, UserCallAst, hashValues, NeverType, IfAst, BoolType, VoidAst, LoopObject, CompileTimeObjectType, u64Type, FunctionDefinition, ParserFunctionDecl, StatementsAst, isTypeScalar, IntLiteralType, FloatLiteralType, isAst, isType, isTypeCheckError, FsmAlternatorAst, FsmAlternateAst, CompTimeObjAst, ParseEvalFunc, SetAst, DefaultConsAst, WhileAst, BoolAst, isArray } from "./defs"
 import { Event, Task, TaskDef, isTask } from "./tasks"
 
 export const forLoopSugar = (out: BytecodeWriter, node: ParseFor) => {
@@ -36,6 +36,66 @@ const minAll = (token: Token, letIden: ParseIdentifier | ParseFreshIden, exprs: 
   return [letMin, ...mins]
 }
 
+const createArrayIterator = (token: Token, subCompilerState: SubCompilerState, selector: { node: ParseNode, start: ParseNode | null, end: ParseNode | null, step: ParseNode | null, setterIdentifier: ParseNode | null, indexIdentifier: ParseFreshIden | null }) => {
+
+  const yieldParam = new ParseFreshIden(token, new FreshBindingToken('yield'))
+  const indexIdentifier = selector.indexIdentifier
+  compilerAssert(indexIdentifier)
+  const fnParams: ParserFunctionParameter[] = [{ name: yieldParam, storage: null, type: null }]
+
+  let lengthNode: ParseNode = getLength(token, selector.node)
+  if (selector.end) {
+    const offsetNode = new ParseOperator(createAnonymousToken("+"), [lengthNode, selector.end])
+    const lenCond = new ParseOperator(createAnonymousToken("<"), [selector.end, new ParseNumber(createAnonymousToken('0'))])
+    lengthNode = new ParseIf(token, true, lenCond, offsetNode, new ParseElse(token, selector.end))
+  }
+  let letLengthNode: ParseNode = new ParseLet(token, new ParseFreshIden(token, new FreshBindingToken('length')), null, lengthNode)
+  const letIndexNode = new ParseLet(token, indexIdentifier, null, selector.start ?? new ParseNumber(createAnonymousToken('0')))
+  const incNode = new ParseOpEq(createAnonymousToken("+="), letIndexNode.name, selector.step ?? new ParseNumber(createAnonymousToken('1')))
+  const condNode = new ParseOperator(createAnonymousToken("<"), [letIndexNode.name, letLengthNode.name])
+  const subscriptIterator = new ParseSubscript(token, selector.node, indexIdentifier, false)
+  const loopBody = new ParseCall(createAnonymousToken(''), yieldParam, [subscriptIterator], [])
+  const whileStmts = new ParseStatements(token, [loopBody, incNode])
+  const loop = new ParseWhile(token, condNode, whileStmts)
+
+  const fnBody = new ParseStatements(createAnonymousToken(''), [letIndexNode, letLengthNode, loop])
+  const decl = createAnonymousParserFunctionDecl(`array_iterator`, createAnonymousToken(''), fnParams, fnBody)
+  const funcDef = insertFunctionDefinition(subCompilerState.globalCompiler, decl)
+  const closure = new Closure(funcDef, subCompilerState.scope, subCompilerState)
+  return { closure, yieldParam, indexIdentifier, subscriptIterator }
+}
+
+const createArraySetterIterator = (token: Token, subCompilerState: SubCompilerState, selector: { node: ParseNode, start: ParseNode | null, end: ParseNode | null, step: ParseNode | null, setterIdentifier: ParseNode | null, indexIdentifier: ParseFreshIden | null }) => {
+  
+  const yieldParam = new ParseFreshIden(token, new FreshBindingToken('yield'))
+  const valueIdentifier = new ParseFreshIden(token, new FreshBindingToken('value'))
+  const indexIdentifier = selector.indexIdentifier
+  compilerAssert(indexIdentifier)
+  const fnParams: ParserFunctionParameter[] = [{ name: yieldParam, storage: null, type: null }]
+
+  let lengthNode: ParseNode = getLength(token, selector.node)
+  if (selector.end) {
+    const offsetNode = new ParseOperator(createAnonymousToken("+"), [lengthNode, selector.end])
+    const lenCond = new ParseOperator(createAnonymousToken("<"), [selector.end, new ParseNumber(createAnonymousToken('0'))])
+    lengthNode = new ParseIf(token, true, lenCond, offsetNode, new ParseElse(token, selector.end))
+  }
+  let letLengthNode: ParseNode = new ParseLet(token, new ParseFreshIden(token, new FreshBindingToken('length')), null, lengthNode)
+  const letIndexNode = new ParseLet(token, indexIdentifier, null, selector.start ?? new ParseNumber(createAnonymousToken('0')))
+  const incNode = new ParseOpEq(createAnonymousToken("+="), letIndexNode.name, selector.step ?? new ParseNumber(createAnonymousToken('1')))
+  const condNode = new ParseOperator(createAnonymousToken("<"), [letIndexNode.name, letLengthNode.name])
+  const subscriptIterator = new ParseSubscript(token, selector.node, indexIdentifier, false)
+  const loopBody = new ParseLet(token, valueIdentifier, null, new ParseCall(createAnonymousToken(''), yieldParam, [], []))
+  const setNode = new ParseSet(token, subscriptIterator, valueIdentifier)
+  const whileStmts = new ParseStatements(token, [loopBody, setNode, incNode])
+  const loop = new ParseWhile(token, condNode, whileStmts)
+
+  const fnBody = new ParseStatements(createAnonymousToken(''), [letIndexNode, letLengthNode, loop])
+  const decl = createAnonymousParserFunctionDecl(`array_setter_iterator`, createAnonymousToken(''), fnParams, fnBody)
+  const funcDef = insertFunctionDefinition(subCompilerState.globalCompiler, decl)
+  const closure = new Closure(funcDef, subCompilerState.scope, subCompilerState)
+  return { closure, yieldParam, indexIdentifier, subscriptIterator, valueIdentifier }
+}
+
 export const expandLoopSugar = (out: BytecodeWriter, node: ParseExpand) => {
 
   // Because we want to use the expansion state to insert a loop construct
@@ -43,136 +103,198 @@ export const expandLoopSugar = (out: BytecodeWriter, node: ParseExpand) => {
   // Visit the body of the expansion node but output to a fresh bytecode
   // array which we will append later using a ParseBytecode.
   // This is in combination with sliceSugar below
-  // TODO: use fresh variables
 
   const bytecode = { code: [], locations: [] }
-  // const indexIdentifier = new ParseFreshIden(node.token, new FreshBindingToken('i'))
   const iteratorListIdentifier = new ParseFreshIden(node.token, new FreshBindingToken('iterator_list'))
 
-  const expansion: typeof out.state.expansion = out.state.expansion = { selectors: [], iteratorListIdentifier, fold: null }
+  const expansion: typeof out.state.expansion = out.state.expansion = { selectors: [], iteratorListIdentifier, fold: null, setterSelector: null }
   visitParseNode({ bytecode, instructionTable: BytecodeSecondOrder, globalCompilerState: out.globalCompilerState, state: out.state }, node.expr)
-
-  // const getIterator = (i: number) => new ParseMeta(node.token, new ParseSubscript(node.token, 
-  //   iteratorListIdentifier, new ParseNumber(createAnonymousToken(i)), false))
-
-  // const iteratorNodes = expansion.selectors.map((selector, i) => {
-  //   // let lengthNode: ParseNode = getLength(node.token, getIterator(i))
-  //   // TODO: Handle positive end positions!
-  //   // if (s.end) lengthNode = new ParseOperator(createAnonymousToken("+"), [lengthNode, s.end])
-  //   // let letLengthNode: ParseNode = new ParseLet(node.token, new ParseFreshIden(node.token, new FreshBindingToken('length')), null, lengthNode)
-  //   // const letIndexNode = new ParseLet(node.token, selector.elemIdentifier, null, s.start ?? new ParseNumber(createAnonymousToken('0')))
-  //   // const incNode = new ParseOpEq(createAnonymousToken("+="), letIndexNode.name, s.step ?? new ParseNumber(createAnonymousToken('1')))
-  //   // const condNode = new ParseOperator(createAnonymousToken("<"), [letIndexNode.name, letLengthNode.name])
-  //   return { letLengthNode, condNode, letIndexNode, incNode }
-  // })
 
   const list = new ParseList(node.token, expansion.selectors.map(x => new ParseQuote(node.token, x.node)))
   const letIteratorList = new ParseLet(node.token, iteratorListIdentifier, null, list)
-  // const lets = iteratorNodes.flatMap(x => [x.letLengthNode, x.letIndexNode])
-  // const cond = iteratorNodes.slice(1).reduce((acc: ParseNode, x) => new ParseAnd(node.token, [acc, x.condNode]), iteratorNodes[0].condNode)
 
-  let loopBody: ParseNode = new ParseBytecode(node.token, bytecode)
-  const result: ParseNode[] = []
-  
-  // if (expansion.fold) {
-  //   lets.push(new ParseLet(node.token, expansion.fold.iden, null, expansion.fold.initial))
-  //   loopBody = new ParseSet(node.token, expansion.fold.iden, loopBody)
-  //   result.push(expansion.fold.iden)
-  // }
-  // const whileStmts = new ParseStatements(node.token, [loopBody, ...iteratorNodes.map(x => x.incNode)])
-  // const loop = new ParseWhile(node.token, cond, whileStmts)
   const metaList = new ParseMeta(node.token, letIteratorList)
+  let calledOnce = false
 
   const finalAst = new ParseEvalFunc(createAnonymousToken(''), (vm) => {
+    compilerAssert(!calledOnce, "Error called multiple times")
+    calledOnce = true
     
-    const iteratorList = vm.stack.pop()
-    compilerAssert(Array.isArray(iteratorList))
-    compilerAssert(iteratorList.length == 1, 'Not implemented yet')
-    const iterator1 = iteratorList[0]
-    compilerAssert(iterator1 instanceof CompTimeObjAst)
-    compilerAssert(iterator1.value instanceof Closure)
-
-
-    const fnctx: CompilerFunctionCallContext = { location: vm.location, compilerState: vm.context.subCompilerState, resultAst: undefined, typeCheckResult: undefined }
-    // const yieldA = closureHelper(fnctx, ['x'], (bindingAst) => {
-    //   compilerAssert(bindingAst instanceof BindingAst)
-    //   // compilerAssert(false, "Not impl", { bindingAst })
-
-    //   const binding = new Binding(expansion.selectors[0].elemIdentifier.freshBindingToken.identifier, bindingAst.type)
-
-    //   return createStatements(vm.location, [
-    //     new LetAst(VoidType, vm.location, binding, bindingAst)
-    //     // alternator.createSetter(vm.location, bindingAst),
-    //     // alternator.alternateEntry(vm.location),
-    //   ])
-    // })
-
+    const iteratorObjList = vm.stack.pop() as unknown
+    compilerAssert(isArray(iteratorObjList))
+    let loopBody: ParseNode = new ParseBytecode(node.token, bytecode)
+    if (expansion.fold) {
+      loopBody = new ParseSet(node.token, expansion.fold.iden, loopBody)
+    }
     
+    const fnParams: ParserFunctionParameter[] = expansion.selectors.map(selector => {
+      return { name: selector.elemIdentifier, storage: null, type: null }
+    })
 
-    const fnParams: ParserFunctionParameter[] = [{
-      name: expansion.selectors[0].elemIdentifier, storage: null, type: null
-    }]
-    
     const fnBody = new ParseStatements(createAnonymousToken(''), [loopBody])
-    const decl = createAnonymousParserFunctionDecl(`fn`, createAnonymousToken(''), fnParams, fnBody)
+    const decl = createAnonymousParserFunctionDecl(`reduced`, createAnonymousToken(''), fnParams, fnBody)
     const funcDef = insertFunctionDefinition(vm.context.subCompilerState.globalCompiler, decl)
     const resultClosure = new Closure(funcDef, vm.context.subCompilerState.scope, vm.context.subCompilerState)
 
-    if (false) {
+    type BindingState = {
+      bindingValues: BindingAst[],
+      lets: Ast[]
+    }
+    type IteratorState = {
+      closure: Closure,
+      selector: typeof expansion.selectors[0]
+    }
+
+    const iteratorList: IteratorState[] = iteratorObjList.map((obj, i) => {
+      const selector = expansion.selectors[i]
+      const lets: ParseNode[] = []
+      if (obj instanceof CompTimeObjAst && obj.value instanceof Closure) {
+        compilerAssert(!selector.end, "Not implemented yet")
+        compilerAssert(!selector.start, "Not implemented yet")
+        compilerAssert(!selector.step, "Not implemented yet")
+        compilerAssert(!selector.setterIdentifier, "Not possible to assign to an iterator")
+        return { closure: obj.value, selector, lets }
+      }
+
+      compilerAssert(selector.indexIdentifier)
+      const iterator = createArrayIterator(node.token, vm.context.subCompilerState, selector)
+      if (selector.setterIdentifier) {
+        lets.push(new ParseMeta(createAnonymousToken(''), 
+          new ParseLet(createAnonymousToken(''), selector.setterIdentifier, null,
+            new ParseQuote(createAnonymousToken(''), iterator.subscriptIterator))))
+      }
+      
+      return { closure: iterator.closure, selector, lets }
+    })
+
+
+    
+
+    const step = (iterator1: IteratorState, restIterators: IteratorState[], state: BindingState) => {
+      
       const fnctx1: CompilerFunctionCallContext = { location: vm.location, compilerState: vm.context.subCompilerState, resultAst: undefined, typeCheckResult: undefined }
-      const callA = createCallAstFromValue(fnctx1, iterator1.value, [], [new CompTimeObjAst(VoidType, vm.location, resultClosure)])
+      const consumer = closureHelper(fnctx1, 'consumer', ['yield'], (yieldFnObj) => {
+        
+        compilerAssert(yieldFnObj instanceof CompTimeObjAst)
+        compilerAssert(yieldFnObj.value instanceof Closure, "Expect closure", { yieldFn: yieldFnObj.value })
+        const yieldFn = yieldFnObj.value
+
+        return (
+          createCallAstFromValue(fnctx2, yieldFn, [], [])
+          .chainFn((task, yieldedValue) => {
+
+            const binding = new Binding("asd", yieldedValue.type)
+            const bindingAst = new BindingAst(binding.type, vm.location, binding)
+
+            const letAst = new LetAst(VoidType, vm.location, binding, yieldedValue)
+            const newState: BindingState = {
+              bindingValues: [...state.bindingValues, bindingAst],
+              lets: [...state.lets, letAst],
+            }
+
+            if (!restIterators.length && expansion.setterSelector) { return createSetter(newState) }
+            if (!restIterators.length) { return final(newState) }
+            compilerAssert(restIterators[0], "", { iteratorList })
+            return step(restIterators[0], restIterators.slice(1), newState)
+
+          })
+        )
+      })
+
+      const fnctx2: CompilerFunctionCallContext = { location: vm.location, compilerState: vm.context.subCompilerState, resultAst: undefined, typeCheckResult: undefined }
+      compilerAssert(iterator1)
+      const callFsm = createCallAstFromValue(fnctx2, fsm, [iterator1.closure, consumer], [])
+      return callFsm
+    }
+
+    const createSetter = (state: BindingState) => {
+
+      compilerAssert(expansion.setterSelector)
+
+      const setter = createArraySetterIterator(node.token, vm.context.subCompilerState, expansion.setterSelector)
+
+
+      const fnctx1: CompilerFunctionCallContext = { location: vm.location, compilerState: vm.context.subCompilerState, resultAst: undefined, typeCheckResult: undefined }
+      const finalProducer = closureHelper(fnctx1, 'finalproducer', [], () => {
+
+        const fnctx2: CompilerFunctionCallContext = { location: vm.location, compilerState: vm.context.subCompilerState, resultAst: undefined, typeCheckResult: undefined }
+        return (
+          createCallAstFromValue(fnctx2, resultClosure, [], state.bindingValues)
+          .chainFn((task, value) => {
+            const stmts = createStatements(vm.location, [...state.lets, value])
+            return Task.of(stmts)
+          })
+        )
+      })
+
+      const fnctx2: CompilerFunctionCallContext = { location: vm.location, compilerState: vm.context.subCompilerState, resultAst: undefined, typeCheckResult: undefined }
+      const callFsm = createCallAstFromValue(fnctx2, setter.closure, [], [new CompTimeObjAst(VoidType, vm.location, finalProducer)])
+      return callFsm
+        
+    }
+
+    const final = (state: BindingState): Task<Ast, CompilerError> => {
+
+      const fnctx2: CompilerFunctionCallContext = { location: vm.location, compilerState: vm.context.subCompilerState, resultAst: undefined, typeCheckResult: undefined }
+      return (
+        createCallAstFromValue(fnctx2, resultClosure, [], state.bindingValues)
+        .chainFn((task, result) => {
+
+
+          const stmts = createStatements(vm.location, [...state.lets, result])
+          const whileAst = new WhileAst(VoidType, vm.location, 
+            new BoolAst(BoolType, vm.location, true), stmts)
+          return Task.of(whileAst)
+        })
+      )
+    }
+
+
+
+
+    if (iteratorList.length === 1 && !expansion.setterSelector) {
+
+      const iterator1 = iteratorList[0]
+      const fnctx1: CompilerFunctionCallContext = { location: vm.location, compilerState: vm.context.subCompilerState, resultAst: undefined, typeCheckResult: undefined }
+      const callA = createCallAstFromValue(fnctx1, iterator1.closure, [], [new CompTimeObjAst(VoidType, vm.location, resultClosure)])
 
       return callA.chainFn((task, ast) => {
         vm.stack.push(ast)
         return Task.success()
       })
     }
-    
-    // const callA = createCallAstFromValue(fnctx1, iterator1.value, [], [new CompTimeObjAst(VoidType, vm.location, yieldA)])
 
-    const fnctx1: CompilerFunctionCallContext = { location: vm.location, compilerState: vm.context.subCompilerState, resultAst: undefined, typeCheckResult: undefined }
-    const consumer = closureHelper(fnctx1, ['yield'], (yieldFnObj) => {
-      
-      compilerAssert(yieldFnObj instanceof CompTimeObjAst)
-      compilerAssert(yieldFnObj.value instanceof Closure, "Expect closure", { yieldFn: yieldFnObj.value })
-      const yieldFn = yieldFnObj.value
-
+    if (iteratorList.length === 0) {
+      compilerAssert(expansion.setterSelector)
       return (
-        createCallAstFromValue(fnctx2, yieldFn, [], [])
-        .chainFn((task, arg) => {
-          const binding = new Binding("", arg.type)
-          const bindingAst = new BindingAst(binding.type, vm.location, binding)
-
-          return (
-            createCallAstFromValue(fnctx2, resultClosure, [], [bindingAst])
-            .chainFn((task, result) => {
-              const stmts = createStatements(vm.location, [
-                new LetAst(VoidType, vm.location, binding, arg),
-                result
-              ])
-              const whileAst = new WhileAst(VoidType, vm.location, 
-                new BoolAst(BoolType, vm.location, true), stmts)
-              return Task.of(whileAst)
-            })
-          )
-
+        createSetter({ bindingValues: [], lets: [] })
+        .chainFn((task, ast) => {
+          vm.stack.push(ast)
+          return Task.success()
         })
       )
-    })
+    }
 
-    const fnctx2: CompilerFunctionCallContext = { location: vm.location, compilerState: vm.context.subCompilerState, resultAst: undefined, typeCheckResult: undefined }
-    const callFsm = createCallAstFromValue(fnctx2, fsm, [iterator1.value, consumer], [])
+
+    const initialState = { bindingValues: [], lets: [] }
+    compilerAssert(iteratorList[0])
+    const callFsm = step(iteratorList[0], iteratorList.slice(1), initialState)
 
     return callFsm.chainFn((task, ast) => {
       vm.stack.push(ast)
       return Task.success()
     })
-    // compilerAssert(false, "Not impl", { i: iterator1.value })
     
   }, [], [iteratorListIdentifier, ])
 
+  const lets: ParseNode[] = [metaList]
+  const final: ParseNode[] = [finalAst]
+  if (expansion.fold) {
+    lets.push(new ParseLet(node.token, expansion.fold.iden, null, expansion.fold.initial))
+    final.push(expansion.fold.iden)
+  }
 
-  visitParseNode(out, new ParseStatements(node.token, [metaList, finalAst]))
+  visitParseNode(out, new ParseStatements(node.token, [...lets, ...final]))
 
   out.state.expansion = null
 }
@@ -194,13 +316,29 @@ export const foldSugar = (out: BytecodeWriter, node: ParseFold) => {
 export const sliceSugar = (out: BytecodeWriter, node: ParseSlice, assignValue: ParseNode | null) => {
   compilerAssert(out.state.expansion, "Expected expansion locus for slice operator")
   // const selectorIndex = out.state.expansion.selectors.length
+
+  const indexIdentifier = new ParseFreshIden(node.token, new FreshBindingToken('i'))
   const elemIdentifier = new ParseFreshIden(node.token, new FreshBindingToken('elem'))
-  out.state.expansion.selectors.push({ node: node.expr, start: node.start, end: node.end, step: node.step, elemIdentifier })
+  let setterIdentifier: ParseNode | null = null
+  let finalNode: ParseNode = elemIdentifier
+  const selector = { node: node.expr, start: node.start, end: node.end, step: node.step, elemIdentifier, setterIdentifier, indexIdentifier }
+  if (assignValue) {
+    const subscript = new ParseSubscript(node.token, node.expr, indexIdentifier, false)
+    out.state.expansion.setterSelector = selector
+    // setterIdentifier = new ParseFreshIden(node.token, new FreshBindingToken('setter'))
+    // setterIdentifier = subscript
+    // finalNode = assignValue ? new ParseSet(node.token, subscript, assignValue) : elemIdentifier
+    visitParseNode(out, assignValue)
+    return
+  }
+  out.state.expansion.selectors.push(selector)
   // const selectorIndexNode = new ParseNumber(createAnonymousToken(selectorIndex))
   // const iteratorList = new ParseMeta(node.token, new ParseSubscript(node.token, out.state.expansion.iteratorListIdentifier, selectorIndexNode, false))
   // const subscriptIterator = new ParseSubscript(node.token, iteratorList, elemIdentifier, false);
-  // const finalNode = assignValue ? new ParseSet(node.token, subscriptIterator, assignValue) : subscriptIterator
-  visitParseNode(out, elemIdentifier)
+  // if (assignValue) {
+  //   compilerAssert(false, "", { node, assignValue })
+  // }
+  visitParseNode(out, finalNode)
 }
 
 export const listComprehensionSugar = (out: BytecodeWriter, node: ParseListComp) => {
@@ -605,7 +743,7 @@ export const initializer_function = new CompilerFunction("initializer_function",
   return Task.of(new UserCallAst(VoidType, ctx.location, ctx.compilerState.globalCompiler.initializerFunctionBinding, []))
 })
 
-const closureHelper = (ctx: CompilerFunctionCallContext, params: string[], func: (...args: unknown[]) => Ast | Task<Ast, CompilerError>) => {
+const closureHelper = (ctx: CompilerFunctionCallContext, debugName: string, params: string[], func: (...args: unknown[]) => Ast | Task<Ast, CompilerError>) => {
   
   const fnParams: ParserFunctionParameter[] = params.map(name => ({
     name: new ParseIdentifier(createAnonymousToken(name)), storage: null, type: null
@@ -630,7 +768,7 @@ const closureHelper = (ctx: CompilerFunctionCallContext, params: string[], func:
       
     }, fnParams.map(x => x.name), []),
   ])
-  const decl = createAnonymousParserFunctionDecl(`fn`, createAnonymousToken(''), fnParams, fnBody)
+  const decl = createAnonymousParserFunctionDecl(debugName, createAnonymousToken(''), fnParams, fnBody)
   const funcDef = insertFunctionDefinition(ctx.compilerState.globalCompiler, decl)
   const fn = new Closure(funcDef, ctx.compilerState.scope, ctx.compilerState)
   return fn
@@ -690,7 +828,7 @@ export const concat = new ExternalFunction("concat", VoidType, (ctx, values) => 
 
     const alternator = alternatorHelper()
 
-    const yieldA = closureHelper(ctx, ['x'], (bindingAst) => {
+    const yieldA = closureHelper(ctx, 'yieldA', ['x'], (bindingAst) => {
       compilerAssert(bindingAst instanceof BindingAst)
       return createStatements(ctx.location, [
         alternator.createSetter(ctx.location, bindingAst),
@@ -700,7 +838,7 @@ export const concat = new ExternalFunction("concat", VoidType, (ctx, values) => 
     const fnctx1: CompilerFunctionCallContext = { location: ctx.location, compilerState: ctx.compilerState, resultAst: undefined, typeCheckResult: undefined }
     const callA = createCallAstFromValue(fnctx1, a, [], [new CompTimeObjAst(VoidType, ctx.location, yieldA)])
 
-    const yieldB = closureHelper(ctx, ['x'], (bindingAst) => {
+    const yieldB = closureHelper(ctx, 'yieldB',['x'], (bindingAst) => {
       compilerAssert(bindingAst instanceof BindingAst)
       return createStatements(ctx.location, [
         alternator.createSetter(ctx.location, bindingAst),
@@ -749,7 +887,7 @@ export const concat = new ExternalFunction("concat", VoidType, (ctx, values) => 
     )
     
   }
-  const fn = closureHelper(ctx, ['x'], closureBody)
+  const fn = closureHelper(ctx, 'concat',['x'], closureBody)
 
   return fn
   
@@ -762,7 +900,7 @@ export const fsm = new CompilerFunction("fsm", (ctx, typeArgs, args) => {
   const alternator = alternatorHelper()
   
 
-  const fn1 = closureHelper(ctx, [], () => {
+  const fn1 = closureHelper(ctx, 'fn1',[], () => {
     return (
       alternator.waitForEntryBinding()
       .chainFn((task, entryParam) => {
@@ -777,7 +915,7 @@ export const fsm = new CompilerFunction("fsm", (ctx, typeArgs, args) => {
   const fnctx1: CompilerFunctionCallContext = { location: ctx.location, compilerState: ctx.compilerState, resultAst: undefined, typeCheckResult: undefined }
   const yieldA = createCallAstFromValue(fnctx1, consumeFunc, [], [new CompTimeObjAst(VoidType, ctx.location, fn1)])
 
-  const fn2 = closureHelper(ctx, ['x'], (bindingAst) => {
+  const fn2 = closureHelper(ctx, 'fn2',['x'], (bindingAst) => {
     compilerAssert(isAst(bindingAst))
 
     const stmts = createStatements(ctx.location, [
