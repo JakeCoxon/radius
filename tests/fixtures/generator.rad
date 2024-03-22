@@ -7,6 +7,10 @@ to_iterator :: |thing|
       yield(v)
   }
 
+# fn iterate!T(a: Array!T) -> (yield: int -> int):
+#   for x in a:
+#     yield(x)
+
 concat2 :: |iterator_a, iterator_b|
   {|yield_outer|
     generator!({|yield| 
@@ -57,6 +61,59 @@ interleave :: |iterator_a, iterator_b|
       }, iterator_b)()
     }, iterator_a)()
   }
+
+interleave_infinite :: |iterator_a, iterator_b|
+  {|yield_outer|
+
+    # Track which one is complete
+    complete_a := false
+    complete_b := false
+
+    generator!({|yield_a| 
+      generator!({|yield_b| 
+        while !complete_a or !complete_b:
+          elem_a := yield_a()
+          if !complete_a:
+            yield_outer(elem_a)
+          elem_b := yield_b()
+          if !complete_b:
+            yield_outer(elem_b)
+      }, {|yield_c|
+        for elem in iterator_b:
+          yield_c(elem)
+        complete_b = true
+        while true:
+          yield_c(0)
+      })()
+    }, {|yield_d|
+      for elem in iterator_a:
+        yield_d(elem)
+      complete_a = true
+      while true:
+        yield_d(0)
+    })()
+  }
+
+# interleave_infinite :: |iterator_a, iterator_b| -> |yield_outer|
+
+#   generator!({|yield_a| 
+#     generator!({|yield_b| 
+#       while true:
+#         complete_a, elem_a := yield_a()
+#         if !complete_a: yield_outer(elem_a)
+
+#         complete_b, elem_b := yield_b()
+#         if !complete_b: yield_outer(elem_b)
+
+#         if !complete_a and !complete_b: break
+#     }, {|yield_c|
+#       for elem in iterator_b: yield_c(false, elem)
+#       while true: yield_c(true, 0)
+#     })()
+#   }, {|yield_d|
+#     for elem in iterator_a: yield_d((false, elem))
+#     while true: yield_d((true, 0))
+#   })()
 
   
 fn foop(x: int):
@@ -125,8 +182,17 @@ fn foop(x: int):
 
   thing := [10, 20, 30]
   interleaved2 :: interleave(to_iterator(thing), bar)
+  num = 0
   for x4 in interleaved2:
-    print(x4)
+    num += x4
+  assert(num == 74)
+
+
+  interleaved3 :: interleave_infinite(to_iterator(thing), bar)
+  num = 0
+  for x5 in interleaved3:
+    num += x5
+  assert(num == 264)
 
 
 
