@@ -1,5 +1,6 @@
 import vec for vec2, vec3
 import color for rgb
+import range for Range
 import graphics for draw_defaults, begin_triangles, vertex, end_draw, translate3d, push_matrix, pop_matrix, rotate3d
 
 window_width :: 320
@@ -13,28 +14,21 @@ fn init() @export:
 fn frame() @export:
   draw_defaults()
   t += 1
-  
-  block:
+
+  for x in Range(0, 1000):
     push_matrix()
-    translate3d(sin(t * 0.01) * 0.1, 0, 0)
+    d := sin(float(x) * 0.1 + t * 0.001) * 1
+    translate3d(
+      sin(float(x) * 0.01 + t * 0.01) * d, 
+      cos(float(x) * 0.01 + t * 0.01) * d, 0)
     
     begin_triangles()
-    vertex(vec2( 0.0,  0.5), rgb(1, 0, 0))
-    vertex(vec2(-0.5, -0.5), rgb(0, 0, 1))
-    vertex(vec2( 0.5, -0.5), rgb(0, 1, 0))
+    vertex(vec2( 0.0,  0.05),  rgb(1, 1, 0))
+    vertex(vec2(-0.05, -0.05), rgb(0, 1, 1))
+    vertex(vec2( 0.05, -0.05), rgb(1, 0, 1))
     end_draw()
     pop_matrix()
 
-  block:
-    push_matrix()
-    rotate3d(t * 0.01, 0, 0, 1)
-    
-    begin_triangles()
-    vertex(vec2( 0.0,  0.5), rgb(1, 1, 0))
-    vertex(vec2(-0.5, -0.5), rgb(0, 1, 1))
-    vertex(vec2( 0.5, -0.5), rgb(1, 0, 1))
-    end_draw()
-    pop_matrix()
 
 fn cleanup() @export:
   0
