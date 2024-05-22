@@ -1,11 +1,6 @@
-import compiler
-import range for Range
-import random for simple_random_float
-import vec for vec2, vec3, vec4
-import color for hsva_to_rgba, rgb
-import matrix for mat4, mat4_identity, create_perspective_projection, mul_mat4_vec4, mul_mat4_mat4, ndc_to_screen
-import array for Array, array_create
-import graphics for frame_ticks, get_mouse_down, put_float_image_data, get_mouse_x, get_mouse_y, set_fill_color, move_to, line_to, stroke, set_stroke_color_rgba, begin_path, set_line_width, fill_rectangle, draw_defaults, begin_triangles, vertex, end_draw, translate3d, push_matrix, pop_matrix, rotate3d
+import vec for vec2, vec3
+import color for rgb
+import graphics for draw_defaults, begin_triangles, vertex, end_draw, translate3d, push_matrix, pop_matrix, rotate3d
 
 window_width :: 320
 window_height :: 240
