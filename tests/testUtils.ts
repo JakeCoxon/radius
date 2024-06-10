@@ -33,6 +33,7 @@ const runTestInner = (
     if (queue.list.length === 0) {
       if (root._state !== 'completed') {
         // TODO: remove events after they are completed
+        console.log("Failing all events")
         globalCompiler.allWaitingEvents.forEach((e) => e.failure({}))
       }
       if (queue.list.length === 0) break

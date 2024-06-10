@@ -1,0 +1,15 @@
+
+thing :: "something"
+
+asd :: main()
+
+fn main():
+  # Thing should resolve to the function that returns an int
+  # even though it is defined later in the scope
+  thing + 1
+
+  meta define(get_name(), 2)
+
+
+fn get_name() -> string:
+  "thing"

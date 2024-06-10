@@ -1,0 +1,11 @@
+
+asd :: main()
+
+# Main is resolved in the same scope as where it is called
+fn main():
+  thing()
+
+# Thing is resolved in a higher scope than it is called, which needs
+# different behaviour to resolve properly
+fn thing() -> int:
+  1

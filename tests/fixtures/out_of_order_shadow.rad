@@ -1,0 +1,13 @@
+fn thing() -> int:
+  2
+
+asd :: main()
+
+fn main():
+  thing() + 1
+
+  # It should be an error to shadow something after something
+  # in the same scope has already captured it. The question
+  # is how do we define "after" when we compiler out of order?
+  fn thing() -> int:
+    1

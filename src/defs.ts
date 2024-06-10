@@ -555,9 +555,12 @@ export class Closure {
 
 export const ScopeEventsSymbol = Symbol('ScopeEventsSymbol')
 export const ScopeParentSymbol = Symbol('ScopeParentSymbol')
+export const ScopeCapturesSymbol = Symbol('ScopeCapturesSymbol')
 export type Scope = UnknownObject & {
   _scope: true,
   [ScopeEventsSymbol]: {[key:string]:Event<unknown, CompilerError>}
+  [ScopeParentSymbol]: Scope | undefined
+  [ScopeCapturesSymbol]: {[key:string]: boolean}
 }
 const ScopePrototype = Object.assign(Object.create(null), {
   [Inspect.custom](depth: any, options: any, inspect: any) {
@@ -568,6 +571,8 @@ const ScopePrototype = Object.assign(Object.create(null), {
 export const createScope = (obj: object, parentScope: Scope | undefined) => 
   Object.assign(Object.create(ScopePrototype), {
     [ScopeParentSymbol]: parentScope,
+    [ScopeEventsSymbol]: {},
+    [ScopeCapturesSymbol]: {},
     ...obj
   }) as Scope;
 

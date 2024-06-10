@@ -210,6 +210,34 @@ test.todo('expressions', async () => {
   }
 })
 
+test('out_of_order', async () => {
+  const testObject = createTest({ 
+    moduleName: 'out_of_order',
+    globalOptions,
+    inputPath: `${import.meta.dir}/fixtures/out_of_order.rad`,
+  })
+  try {
+    const input = await Bun.file(testObject.inputPath).text()
+    runCompilerTest(input, { testObject  })
+  } finally {
+    testObject.close()
+  }
+})
+
+test('out_of_order_shadow', async () => {
+  const testObject = createTest({ 
+    moduleName: 'out_of_order_shadow',
+    globalOptions,
+    inputPath: `${import.meta.dir}/fixtures/out_of_order_shadow.rad`,
+  })
+  try {
+    const input = await Bun.file(testObject.inputPath).text()
+    runCompilerTest(input, { testObject, expectError: true })
+  } finally {
+    testObject.close()
+  }
+})
+
 test('identifier_error', async () => {
   const testObject = createTest({ 
     moduleName: 'identifier_error',

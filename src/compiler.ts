@@ -1,4 +1,4 @@
-import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol, ScopeParentSymbol, isPlainObject, ParseLet, ParseList, ParseExpand, ParseBlock, findLabelByBinding, ParseSubscript, ParseNumber, ParseQuote, ParseWhile, ParseOperator, ParseBytecode, ParseOpEq, ParseSet, ParseFreshIden, UnknownObject, ParseNote, DefaultConsAst, RawPointerType, ValueFieldAst, SetValueFieldAst, FloatLiteralType, IntLiteralType, CompilerFunction, DerefAst, SetDerefAst, ParseSlice, CompilerFunctionCallContext, NeverType, LoopObject, CompTimeObjAst, CompileTimeObjectType, NamedArgAst, TypeCheckVar, TypeCheckConfig, u8Type, u64Type, isTypeScalar } from "./defs";
+import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol, ScopeParentSymbol, isPlainObject, ParseLet, ParseList, ParseExpand, ParseBlock, findLabelByBinding, ParseSubscript, ParseNumber, ParseQuote, ParseWhile, ParseOperator, ParseBytecode, ParseOpEq, ParseSet, ParseFreshIden, UnknownObject, ParseNote, DefaultConsAst, RawPointerType, ValueFieldAst, SetValueFieldAst, FloatLiteralType, IntLiteralType, CompilerFunction, DerefAst, SetDerefAst, ParseSlice, CompilerFunctionCallContext, NeverType, LoopObject, CompTimeObjAst, CompileTimeObjectType, NamedArgAst, TypeCheckVar, TypeCheckConfig, u8Type, u64Type, isTypeScalar, ScopeCapturesSymbol } from "./defs";
 import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, functionCompileTimeCompileTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, compileExportedFunctionTask } from "./compiler_functions";
 import { Event, Task, TaskDef, Unit, isTask, isTaskResult, withContext } from "./tasks";
 import { createCompilerModuleTask, createListConstructor, defaultMetaFunction, expandLoopSugar, foldSugar, forExprSugar, forLoopSugar, listComprehensionSugar, print, sliceSugar, whileExprSugar } from "./compiler_sugar";
@@ -669,17 +669,46 @@ const letLocalAst = (vm: Vm, name: string, type: Type | null, value: Ast | null)
 }
 
 export function resolveScope(ctx: TaskContext, scope: Scope, name: string): Task<unknown, CompilerError> {
-  let checkScope: Scope | undefined = scope;
+  if (scope[name] !== undefined) return Task.of(scope[name])
+
+  let checkScope = scope[ScopeParentSymbol]
   while (checkScope) {
-    if (checkScope[name] !== undefined) return Task.of(checkScope[name])
-    checkScope = (checkScope as any)[ScopeParentSymbol]
+    if (checkScope[name] !== undefined) {
+      scope[ScopeCapturesSymbol][name] = true
+      return Task.of(checkScope[name])
+    }
+    checkScope = checkScope[ScopeParentSymbol]
   }
 
-  // TODO: This should attach events to every ancestor in the scope chain
-  if (!scope[ScopeEventsSymbol]) scope[ScopeEventsSymbol] = {}
-  if (!scope[ScopeEventsSymbol][name]) scope[ScopeEventsSymbol][name] = new Event<string, CompilerError>()
-  ctx.globalCompiler.allWaitingEvents.push(scope[ScopeEventsSymbol][name])
-  return Task.waitFor(scope[ScopeEventsSymbol][name]).mapRejected((error) => {
+  const allScopes: Scope[] = []
+  let currentScope: Scope | undefined = scope
+  while (currentScope) {
+    allScopes.push(currentScope)
+    currentScope = currentScope[ScopeParentSymbol]
+  }
+  allScopes.reverse()
+
+  let prevScope: Scope | undefined = undefined
+
+  // Cascade events down the scope chain
+  let event: Event<string, CompilerError>
+  for (const scope of allScopes) {
+    if (!scope[ScopeEventsSymbol][name]) {
+      scope[ScopeEventsSymbol][name] = new Event<string, CompilerError>()
+      if (prevScope) {
+        prevScope[ScopeEventsSymbol][name].on((fail, value) => {
+          if (value) scope[ScopeEventsSymbol][name].success(value)
+        })
+      }
+    }
+    prevScope = scope
+    event = scope[ScopeEventsSymbol][name] as any
+  }
+  compilerAssert(event!, "Expected event", { name, scope })
+
+  ctx.globalCompiler.allWaitingEvents.push(event)
+  return Task.waitFor(event).mapRejected((error) => {
+    console.log("Error", error)
     return createCompilerError('Binding $name not found in scope', { name })
   })
 }
@@ -1352,6 +1381,7 @@ const createParameterizedExternalType = (globalCompiler: GlobalCompilerState, ty
 }
 
 function topLevelFunctionDefinitionTask(ctx: TaskContext, funcDecl: ParserFunctionDecl, scope: Scope) {
+  console.log("topLevelFunctionDefinitionTask", funcDecl.name!.token.value, scope)
   const funcDef = insertFunctionDefinition(ctx.globalCompiler, funcDecl)
 
   if (funcDef.keywords.includes('method')) {

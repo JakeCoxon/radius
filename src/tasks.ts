@@ -335,6 +335,10 @@ export class Event<S, F> {
 
   listeners: ((f: F | null, s: S | null) => void)[] = []
 
+  on(continuation: (f: F | null, s: S | null) => void) {
+    this.listeners.push(continuation);
+  }
+
   success(s: S) {
     this._success = s;
     const listeners = [...this.listeners]
