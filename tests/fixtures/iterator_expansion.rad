@@ -60,10 +60,17 @@ fn foop(x: int):
   assert(x1 == true)
   print(x1)
 
+  x2 := @all(numbers[:] < 1000)
+  assert(x2 == false)
+  print(x2)
 
   y1 := @any(numbers[:] == 20)
   assert(y1 == true)
   print(y1)
+
+  y2 := @any(numbers[:] == 1000)
+  assert(y2 == false)
+  print(y2)
 
   z1 := @sum(numbers[1:])
   assert(z1 == 3198)

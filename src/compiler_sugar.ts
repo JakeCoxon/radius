@@ -607,8 +607,13 @@ export const print = new CompilerFunction('print', (ctx, typeArgs: unknown[], ar
       formatStr += '%.*s'
       printfArgs.push(lengthGetter, dataGetter)
     } else if (arg.type === BoolType) {
-      printfArgs.push(arg)
-      formatStr += '%i'
+      const binding = new Binding("", StringType)
+      const str = new IfAst(StringType, location, arg, new StringAst(StringType, location, 'true'), new StringAst(StringType, location, 'false'))
+      stmts.push(new LetAst(VoidType, location, binding, str))
+      const lengthGetter = fieldHelper(binding, 'length')
+      const dataGetter = fieldHelper(binding, 'data')
+      formatStr += '%.*s'
+      printfArgs.push(lengthGetter, dataGetter)
     } else if (formats.has(arg.type)) {
       printfArgs.push(arg)
       formatStr += formats.get(arg.type)
