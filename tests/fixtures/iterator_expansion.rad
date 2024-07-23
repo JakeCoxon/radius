@@ -42,27 +42,47 @@ fn foop(x: int):
   numbers := [40, 20, 10, 32, 12, 3124]
 
   count := (fold(0) + numbers[:] * bamp[:] ...)
+  print(count)
   assert(count == 678802)
 
   foos := [0, 0, 0, 0]
   foos[:] = numbers[:] * bamp[:] + 2 ...
 
   count2 := (fold(0) + foos[:] ...)
+  print(count2)
   assert(count2 == 2526)
 
   count3 := (fold(0) + foo[:] ...)
+  print(count3)
   assert(count3 == 45)
 
-  print(count)
-  print(count2)
-  print(count3)
+  x1 := @all(numbers[:] > 9)
+  assert(x1 == true)
+  print(x1)
 
-  #x := @all(lst1[:] > 0)
-  #x := @any(lst1[:] == 2)
-  #x := @sum(lst1)
-  #x := @sum(x for x in lst1 if lst1[:] > 2)
-  #x := @max(lst1 if lst1[:] > 2) orelse 0
-  #x := (@fold(0) + lst1[:]) ...)
+
+  y1 := @any(numbers[:] == 20)
+  assert(y1 == true)
+  print(y1)
+
+  z1 := @sum(numbers[1:])
+  assert(z1 == 3198)
+  print(z1)
+
+  w1 := @sum(bar[:])
+  print(w1)
+  assert(w1 == 204)
+
+  # Ideas
+
+  # @[numbers[:] ..., numbers[1:] ...]
+  # @max(numbers[:] + foo[:] in numbers[:])
+  # @max(numbers[:] where numbers[:] + foo[:])
+  # @max(select(numbers[:]).size)
+
+  #x := sum(x for x in lst1 if lst1[:] > 2)
+  #x := max(lst1 if lst1[:] > 2) orelse 0
+
 
 
 fn main():

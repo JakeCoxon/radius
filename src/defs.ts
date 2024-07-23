@@ -260,6 +260,13 @@ export type ExpansionSelector = {
   indexIdentifier: ParseFreshIden | null,
   setterIdentifier: ParseFreshIden | null,
 }
+export type ExpansionCompilerState = {
+  loopBodyNode: ParseNode | null
+  iteratorListIdentifier: ParseFreshIden,
+  fold: { iden: ParseFreshIden, initial: ParseNode } | null,
+  setterSelector: ExpansionSelector | null,
+  selectors: ExpansionSelector[]
+}
 export interface BytecodeWriter {
   bytecode: {
     code: BytecodeInstr[]
@@ -267,12 +274,7 @@ export interface BytecodeWriter {
   },
   state: {
     labelBlock: LabelBlock | null,
-    expansion: {
-      iteratorListIdentifier: ParseFreshIden,
-      fold: { iden: ParseFreshIden, initial: ParseNode } | null,
-      setterSelector: ExpansionSelector | null,
-      selectors: ExpansionSelector[]
-    } | null
+    expansion: ExpansionCompilerState | null
   }
   instructionTable: ParseTreeTable
   globalCompilerState: GlobalCompilerState // Not nice

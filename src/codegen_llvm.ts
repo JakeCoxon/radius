@@ -84,6 +84,8 @@ const operatorMapFloat: {[key: string]:string} = {
 const operatorMapLogical: {[key: string]:string} = {
   "&": "and",
   "|": "or",
+  "==": "icmp eq",
+  "!=": "icmp ne",
 };
 
 const log = (...args: any[]) => {
