@@ -439,13 +439,13 @@ export class DerefAst extends AstRoot {         key = 'deref' as const;         
 export class NamedArgAst extends AstRoot {      key = 'namedarg' as const;       constructor(public type: Type, public location: SourceLocation, public name: string, public expr: Ast) { super() } }
 export class SetDerefAst extends AstRoot {      key = 'setderef' as const;       constructor(public type: Type, public location: SourceLocation, public left: BindingAst, public fieldPath: TypeField[], public value: Ast) { super() } }
 export class CompTimeObjAst extends AstRoot {   key = 'comptimeobj' as const;    constructor(public type: Type, public location: SourceLocation, public value: unknown) { super() } }
-export class FsmAlternatorAst extends AstRoot { key = 'alternator' as const;     constructor(public type: Type, public location: SourceLocation, public binding: Binding, public entryLabels: Binding[], public otherLabels: Binding[], public entry: Ast, public other: Ast) { super() } }
-export class FsmAlternateAst extends AstRoot {  key = 'alternate' as const;      constructor(public type: Type, public location: SourceLocation, public fsmBinding: Binding, public labelBinding: Binding) { super() } }
+export class InterleaveAst extends AstRoot {    key = 'interleave' as const;     constructor(public type: Type, public location: SourceLocation, public binding: Binding, public entryLabels: Binding[], public elseLabels: Binding[], public entryBlock: Ast, public elseBlock: Ast) { super() } }
+export class ContinueInterAst extends AstRoot { key = 'continueinter' as const;  constructor(public type: Type, public location: SourceLocation, public interleaveBinding: Binding, public labelBinding: Binding) { super() } }
 
 export type Ast = NumberAst | LetAst | SetAst | OperatorAst | IfAst | ListAst | CallAst | AndAst | UserCallAst |
   OrAst | StatementsAst | WhileAst | ReturnAst | SetFieldAst | VoidAst | CastAst | SubscriptAst | ConstructorAst |
   BindingAst | StringAst | NotAst | FieldAst | BlockAst | BreakAst | BoolAst | CastAst | DefaultConsAst | ValueFieldAst |
-  SetValueFieldAst | SetSubscriptAst | AddressAst | DerefAst | SetDerefAst | CompTimeObjAst | NamedArgAst | FsmAlternatorAst | FsmAlternateAst
+  SetValueFieldAst | SetSubscriptAst | AddressAst | DerefAst | SetDerefAst | CompTimeObjAst | NamedArgAst | InterleaveAst | ContinueInterAst
 export const isAst = (value: unknown): value is Ast => value instanceof AstRoot;
 
 export class Tuple {
@@ -1079,11 +1079,21 @@ export type LlvmFunctionWriter = {
   // constantSlots: number[]
   // nextConstantSlot: number
   // locals: { binding: Binding, slot: number, scopeIndex: number }[]
-  blocks: { binding: Binding, alternator?: { 
-    jumpPointer: Pointer,
-    alternatorCurrentLabels: Binding[]
-    alternatorLabels: Binding[]
-  } }[],
+  blocks: { 
+    binding: Binding, 
+
+    // We have to do some bookkeeping here to handle
+    // interleave blocks since we do codgen in a single
+    // pass. Maybe I'd like to add another pass to neaten
+    // this up
+    interleave?: { 
+      jumpPointer: Pointer,
+      returnPointer: Pointer,
+      interleaveCurrentLabels: Binding[]
+      interleaveLabels: Binding[]
+      unreachable: Binding
+    }
+  }[],
   // currentScopeIndex: number
   // nextLocalSlot: number,
   currentBlockLabel: Binding,

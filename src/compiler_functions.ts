@@ -1,6 +1,6 @@
 import { BytecodeDefault, BytecodeSecondOrder, compileClassTask, compileFunctionPrototype, createBytecodeVmAndExecuteTask, normalizeNumberType, numberTypeToConcrete, propagateLiteralType, propagatedLiteralAst, pushBytecode, pushGeneratedBytecode, visitParseNode } from "./compiler";
 import { externalBuiltinBindings } from "./compiler_sugar";
-import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, CallAst, IntType, Closure, UserCallAst, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition, ParseCall, TypeVariable, TypeMatcher, typeMatcherEquals, SourceLocation, ExternalTypeConstructor, ScopeParentSymbol, SubCompilerState, CompilerFunction, IntLiteralType, FloatLiteralType, FloatType, RawPointerType, AddressAst, BindingAst, UnknownObject, NeverType, CompilerFunctionCallContext, CompileTimeObjectType, CompTimeObjAst, ParseString, NamedArgAst, TypeCheckResult, u8Type, TypeCheckVar, ParseFreshIden } from "./defs";
+import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, CallAst, IntType, Closure, UserCallAst, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition, ParseCall, TypeVariable, TypeMatcher, typeMatcherEquals, SourceLocation, ExternalTypeConstructor, ScopeParentSymbol, SubCompilerState, CompilerFunction, IntLiteralType, FloatLiteralType, FloatType, RawPointerType, AddressAst, BindingAst, UnknownObject, NeverType, CompilerFunctionCallContext, CompileTimeObjectType, CompTimeObjAst, ParseString, NamedArgAst, TypeCheckResult, u8Type, TypeCheckVar, ParseFreshIden, NumberAst, BoolAst, createStatements } from "./defs";
 import { Task, TaskDef, Unit } from "./tasks";
 
 
@@ -275,8 +275,15 @@ function functionInlineTask(ctx: TaskContext, { location, func, typeArgs, parent
     compilerAssert(concreteTypes[i] !== IntLiteralType)
     const arg = args[i]
     const nameValue = name instanceof ParseFreshIden ? name.freshBindingToken.identifier : name.token.value
+    
     if (arg instanceof CompTimeObjAst) { // Special case compile time objects
       templateScope[nameValue] = arg.value
+      return
+    }
+    let isSimpleObj = arg instanceof BindingAst || arg instanceof AddressAst || arg instanceof NumberAst || arg instanceof BoolAst
+    if (isSimpleObj) {
+      propagateLiteralType(concreteTypes[i], arg)
+      templateScope[nameValue] = arg
       return
     }
     const binding = new Binding(nameValue, concreteTypes[i])
@@ -284,7 +291,7 @@ function functionInlineTask(ctx: TaskContext, { location, func, typeArgs, parent
     compilerAssert(storage !== 'ref', "Not implemented yet")
     binding.definitionCompiler = inlineInto
     templateScope[nameValue] = binding
-    propagateLiteralType(concreteTypes[i], args[i])
+    propagateLiteralType(concreteTypes[i], arg)
     statements.push(new LetAst(VoidType, location, binding, args[i]))
     argBindings.push(binding)
   });
@@ -303,7 +310,7 @@ function functionInlineTask(ctx: TaskContext, { location, func, typeArgs, parent
       compilerAssert(isAst(ast), "Expected ast got $ast", { ast });
 
       ctx.globalCompiler.logger.log(textColors.cyan(`Compiled inline ${func.debugName}`))
-      return Task.of(new StatementsAst(ast.type, location, [...statements, ast]))
+      return Task.of(createStatements(location, [...statements, ast]))
     })
   )
 

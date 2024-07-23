@@ -1,6 +1,7 @@
 import compiler for generator, concat, assert
 import range for Range
 
+
 fn foop(x: int):
 
   foo :: |yield|
@@ -48,6 +49,20 @@ fn foop(x: int):
 
   count2 := (fold(0) + foos[:] ...)
   assert(count2 == 2526)
+
+  count3 := (fold(0) + foo[:] ...)
+  assert(count3 == 45)
+
+  print(count)
+  print(count2)
+  print(count3)
+
+  #x := @all(lst1[:] > 0)
+  #x := @any(lst1[:] == 2)
+  #x := @sum(lst1)
+  #x := @sum(x for x in lst1 if lst1[:] > 2)
+  #x := @max(lst1 if lst1[:] > 2) orelse 0
+  #x := (@fold(0) + lst1[:]) ...)
 
 
 fn main():

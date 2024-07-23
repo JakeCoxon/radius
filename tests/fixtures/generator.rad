@@ -7,59 +7,101 @@ to_iterator :: |thing|
       yield(v)
   }
 
-# fn iterate!T(a: Array!T) -> (yield: int -> int):
-#   for x in a:
-#     yield(x)
+# TODO: Can this work?
+# Where the compiler automatically generates the interleave
+# control flow and disallows using yield_outer twice otherwise
+# concat2 :: |iterator_a, iterator_b|
+#   {|yield_outer: iter|
+#     while true:
+#       iterator_a({|consume| 
+#         elem := consume()
+#         yield_outer(elem)
+#       })
+#       iterator_b({|consume| 
+#         elem := consume()
+#         yield_outer(elem)
+#       })
+#   }
+# or
+# concat2 :: |iterator_a, iterator_b|
+#   {|yield_outer: yielder|
+#     while true:
+#       elem_a := consume(iterator_a)
+#       yield_outer(elem_a)
+#       elem_b := consume(iterator_b)
+#       yield_outer(elem_b)
+#   }
+# a
+# concat2 :: {|iterator_a: iter, iterator_b: iter| -> |outer: yielder|
+#   while true:
+#     elem_a := iterator_a()
+#     outer(elem_a)
+#     elem_b := iterator_b()
+#     outer(elem_b)
+# }
+# a
+
+
+
 
 concat2 :: |iterator_a, iterator_b|
   {|yield_outer|
-    generator!({|yield| 
+    generator({|consume| 
       while true:
-        elem := yield()
+        elem := consume()
         yield_outer(elem)
     }, {|yield|
       iterator_a(yield)
       iterator_b(yield)
-    })()
+    })
   }
 
 
+# zip2 :: {|iterator_a: Iterator, iterator_b: Iterator|
+#   {|yield_outer|
+#     while true:
+#       elem_a := consume(iterator_a)
+#       elem_b := consume(iterator_b)
+#       yield_outer((elem_a, elem_b))
+#   }
+# }
+
 zip2 :: |iterator_a, iterator_b|
   {|yield_outer|
-    generator!({|yield_a| 
-      generator!({|yield_b| 
+    generator({|consume_b|
+      generator({|consume_a| 
         while true:
-          elem_a := yield_a()
-          elem_b := yield_b()
+          elem_a := consume_a()
+          elem_b := consume_b()
           yield_outer((elem_a, elem_b))
-      }, iterator_b)()
-    }, iterator_a)()
+      }, iterator_a)
+    }, iterator_b)
   }
   
 
 interpose :: |iterator, value|
   {|yield_outer|
-    generator!({|yield| 
-      elem := yield()
+    generator({|consume| 
+      elem := consume()
       yield_outer(elem)
       while true:
-        elem2 := yield()
+        elem2 := consume()
         yield_outer(value)
         yield_outer(elem2)
-    }, iterator)()
+    }, iterator)
   }
   
 interleave :: |iterator_a, iterator_b|
   {|yield_outer|
-    generator!({|yield_a| 
-      generator!({|yield_b| 
+    generator({|consume_a| 
+      generator({|consume_b| 
         while true:
-          elem_a := yield_a()
+          elem_a := consume_a()
           yield_outer(elem_a)
-          elem_b := yield_b()
+          elem_b := consume_b()
           yield_outer(elem_b)
-      }, iterator_b)()
-    }, iterator_a)()
+      }, iterator_b)
+    }, iterator_a)
   }
 
 interleave_infinite :: |iterator_a, iterator_b|
@@ -69,29 +111,29 @@ interleave_infinite :: |iterator_a, iterator_b|
     complete_a := false
     complete_b := false
 
-    generator!({|yield_a| 
-      generator!({|yield_b| 
+    generator({|consume_a| 
+      generator({|consume_b| 
         while !complete_a or !complete_b:
-          elem_a := yield_a()
+          elem_a := consume_a()
           if !complete_a:
-            yield_outer(elem_a)
-          elem_b := yield_b()
+            yield_outer(elem_a) # TODO: yield is repeated!
+          elem_b := consume_b()
           if !complete_b:
-            yield_outer(elem_b)
+            yield_outer(elem_b) # TODO: yield is repeated!
       }, {|yield_c|
         for elem in iterator_b:
           yield_c(elem)
         complete_b = true
         while true:
           yield_c(0)
-      })()
+      })
     }, {|yield_d|
       for elem in iterator_a:
         yield_d(elem)
       complete_a = true
       while true:
         yield_d(0)
-    })()
+    })
   }
 
 # interleave_infinite :: |iterator_a, iterator_b| -> |yield_outer|
@@ -115,86 +157,150 @@ interleave_infinite :: |iterator_a, iterator_b|
 #     while true: yield_d((true, 0))
 #   })()
 
-  
-fn foop(x: int):
+foo :: |yield|
+  for i in Range(0, 10):
+    yield(i)
 
-  foo :: |yield|
-    for i in Range(0, x):
+bar :: |yield|
+  for i in Range(1, 9):
+    yield(i * i)
+
+bamp :: |yield|
+  for i in Range(1, 9):
+    yield(i * i * i)
+
+baz :: |yield|
+  f := 1
+  while true:
+    yield(f)
+    f *= 2
+
+custom_consume :: |yield|
+  while true:
+    val := yield()
+    print(val)
+
+
+fn main():
+  # test_basic()
+  test_concat2()
+  # test_normal_concat()
+  # test_concat2_concat2()
+  # test_zip2()
+  # test_interpose()
+  # test_interleave()
+  # test_interleave_to_iterator()
+  # test_interleave_infinite()
+
+  
+fn test_basic():
+
+  generator({|consume| 
+    elem1 := consume()
+    print(elem1)
+    elem2 := consume()
+    print(elem2)
+    elem3 := consume()
+    print(elem3)
+  }, {|yield|
+    yield(1)
+    yield(2)
+    yield(3)
+  })
+  
+fn test_concat2():
+
+
+  foo1 :: |yield|
+    i := 0
+    while i < 3:
       yield(i)
+      i += 1
 
-  bar :: |yield|
-    for i in Range(1, 9):
-      yield(i * i)
-
-  bamp :: |yield|
-    for i in Range(1, 9):
-      yield(i * i * i)
-
-  baz :: |yield|
-    f := 1
-    while true:
-      yield(f)
-      f *= 2
-
-  consume :: |yield|
-    while true:
-      val := yield()
-      print(val)
-  
-
-  foo_then_bar :: concat2(foo, bar)
-
-  num := 0
+  bar1 :: |yield|
+    j := 0
+    while j < 5:
+      yield(j)
+      j += 1
+      
+  foo_then_bar :: concat2(foo1, bar1)
+  # num := 0
   for x in foo_then_bar:
-    num += x
+    print(x)
+    # num += x
+  # assert(num == 249)
+  
+fn test_normal_concat():
+  num := 0
+  for i in Range(0, 10):
+    num += i
+  for i in Range(1, 9):
+    num += i * i
   assert(num == 249)
+
+fn test_concat2_concat2():
 
 
   foo_bar_bamp :: concat2(concat2(foo, bar), bamp)
-  num = 0
+  num := 0
   for y in foo_bar_bamp:
     num += y
   assert(num == 1545)
 
+fn test_zip2():
 
   zip_foo_bar :: zip2(foo, bar)
-  num = 0
+  num := 0
   for tup in zip_foo_bar:
     num += tup._1 * tup._2
 
   assert(num == 1092)
 
+# fn test_zip_syntax():
+
+
+#   zip_foo_bar :: %iter[
+#     %ints ...,
+#     foo[:] + bar[:] ...,
+#     1, 2, 3
+#   ]
+  
+#   num := 0
+#   for tup in zip_foo_bar:
+#     num += tup._1 * tup._2
+
+#   assert(num == 1092)
+
+fn test_interpose():
 
   interposed :: interpose(foo, 1000)
-  num = 0
+  num := 0
   for x2 in interposed:
     num += x2
   assert(num == 9045)
   
-
+fn test_interleave():
   
   interleaved :: interleave(foo, bar)
-  num = 0
+  num := 0
   for x3 in interleaved:
     num += x3
   assert(num == 240)
   
+fn test_interleave_to_iterator():
 
   thing := [10, 20, 30]
   interleaved2 :: interleave(to_iterator(thing), bar)
-  num = 0
+  num := 0
   for x4 in interleaved2:
     num += x4
   assert(num == 74)
 
+# fn test_interleave_infinite():
 
-  interleaved3 :: interleave_infinite(to_iterator(thing), bar)
-  num = 0
-  for x5 in interleaved3:
-    num += x5
-  assert(num == 264)
-
-
-
-fn main():
-  foop(10)
+#   thing := [10, 20, 30]
+#   interleaved3 :: interleave_infinite(to_iterator(thing), bar)
+#   num := 0
+#   for x5 in interleaved3:
+#     num += x5
+#   assert(num == 264)

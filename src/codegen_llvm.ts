@@ -1,5 +1,5 @@
 import { externalBuiltinBindings } from "./compiler_sugar";
-import { Ast, AstType, AstWriterTable, Binding, BindingAst, BlockAst, BoolType, CallAst, CompiledFunction, ConcreteClassType, ConstructorAst, DefaultConsAst, DoubleType, FileWriter, FloatType, FsmAlternatorAst, FunctionType, GlobalCompilerState, IntType, ListTypeConstructor, LlvmFunctionWriter, LlvmWriter, NeverType, NumberAst, ParameterizedType, Pointer, PrimitiveType, RawPointerType, Register, SourceLocation, StatementsAst, StringType, Type, TypeField, UserCallAst, ValueFieldAst, VoidType, compilerAssert, isAst, isType, textColors, u64Type, u8Type } from "./defs";
+import { Ast, AstType, AstWriterTable, Binding, BindingAst, BlockAst, BoolType, CallAst, CompiledFunction, ConcreteClassType, ConstructorAst, DefaultConsAst, DoubleType, FileWriter, FloatType, FunctionType, GlobalCompilerState, IntType, ListTypeConstructor, LlvmFunctionWriter, LlvmWriter, NeverType, NumberAst, ParameterizedType, Pointer, PrimitiveType, RawPointerType, Register, SourceLocation, StatementsAst, StringType, Type, TypeField, UserCallAst, ValueFieldAst, VoidType, compilerAssert, isAst, isType, textColors, u64Type, u8Type } from "./defs";
 
 // Some useful commands
 //
@@ -9,6 +9,17 @@ import { Ast, AstType, AstWriterTable, Binding, BindingAst, BlockAst, BoolType, 
 //   NAME=generated; /opt/homebrew/opt/llvm/bin/opt -O1 -S $NAME.ll -o $NAME.opt.ll
 //   NAME=generated; /opt/homebrew/opt/llvm/bin/opt -O3 -S $NAME.ll -o $NAME.opt.ll
 //
+
+// NAME=generated; /opt/homebrew/opt/llvm/bin/llc -filetype=asm -mtriple=wasm32-unknown-unknown $NAME.ll -o $NAME.wat
+
+// TOOD:
+// `function<eager-inv>(`,
+// // `  lower-expect,`,
+// `  sroa<>,`,
+// `  early-cse,`,
+// `  simplifycfg`,
+// `),`,
+
 
 const operatorMapSignedInt: {[key: string]:string} = {
   "+": "add",
@@ -331,45 +342,57 @@ const astWriter: LlvmAstWriterTable = {
     return null
   },
 
-  alternator: (writer, ast) => {
-    const fsmEnd = new Binding(`fsm_end`, VoidType)
+  interleave: (writer, ast) => {
+    const interleaveEnd = new Binding(`interleave_end`, VoidType)
+    const unreachable = new Binding(`unreachable`, VoidType)
 
-    const jumpPointer = allocaHelper(writer, createPointer("altjmp", IntType))
-    format(writer, "  store i32 $, ptr $\n", 0, jumpPointer)
+    const jumpPointerEntry = allocaHelper(writer, createPointer("interjmp", IntType))
+    format(writer, "  store i32 $, ptr $\n", 0, jumpPointerEntry)
+    const jumpPointerElse = allocaHelper(writer, createPointer("interjmp", IntType))
+    format(writer, "  store i32 $, ptr $\n", 0, jumpPointerElse)
 
-    const alternator = { jumpPointer, alternatorCurrentLabels: ast.entryLabels, alternatorLabels: ast.otherLabels }
-    writer.blocks.push({ binding: ast.binding, alternator })
-    format(writer, `  br label $\n\n`, ast.entryLabels[0])
+    const interleave = { 
+      jumpPointer: jumpPointerElse, returnPointer: jumpPointerEntry,
+      interleaveCurrentLabels: ast.entryLabels, 
+      interleaveLabels: ast.elseLabels, unreachable }
+    writer.blocks.push({ binding: ast.binding, interleave })
 
-    beginBasicBlock(writer, ast.entryLabels[0])
-    writeExpr(writer, ast.entry)
-    format(writer, `  br label $\n\n`, fsmEnd)
+    writeExpr(writer, ast.entryBlock)
+    format(writer, `  br label $\n\n`, interleaveEnd)
 
-    Object.assign(alternator, { alternatorCurrentLabels: ast.otherLabels, alternatorLabels: ast.entryLabels })
+    // Swap current and interleave labels for the continue
+    // statements to work correctly
+    Object.assign(interleave, { 
+      jumpPointer: jumpPointerEntry, returnPointer: jumpPointerElse,
+      interleaveCurrentLabels: ast.elseLabels, interleaveLabels: ast.entryLabels })
 
-    beginBasicBlock(writer, ast.otherLabels[0])
-    writeExpr(writer, ast.other)
-    format(writer, `  br label $\n\n`, fsmEnd)
+    beginBasicBlock(writer, ast.elseLabels[0])
+    writeExpr(writer, ast.elseBlock)
+    format(writer, `  br label $\n\n`, interleaveEnd)
 
     writer.blocks.pop()
 
-    beginBasicBlock(writer, fsmEnd)
+    beginBasicBlock(writer, unreachable)
+    format(writer, `  unreachable\n\n`)
+
+    beginBasicBlock(writer, interleaveEnd)
     return null
   },
-  alternate: (writer, ast) => {
-    const block = writer.blocks.findLast(x => x.binding === ast.fsmBinding)
-    compilerAssert(block?.alternator)
-    const { jumpPointer, alternatorLabels, alternatorCurrentLabels } = block?.alternator
-    const table = alternatorLabels.map((x: Binding, i: number) => 
+  continueinter: (writer, ast) => {
+    const block = writer.blocks.findLast(x => x.binding === ast.interleaveBinding)
+    compilerAssert(writer.blocks.filter(x => x.binding === ast.interleaveBinding).length === 1, "Expected one block to match")
+    compilerAssert(block?.interleave, "Expected interleave block")
+    const { jumpPointer, returnPointer, interleaveLabels, interleaveCurrentLabels, unreachable } = block.interleave
+    const table = interleaveLabels.map((x: Binding, i: number) => 
       `i32 ${i}, label ${generateName(writer.writer, x)}`).join(" ")
 
-    const index = alternatorCurrentLabels.indexOf(ast.labelBinding)
+    const index = interleaveCurrentLabels.indexOf(ast.labelBinding)
     compilerAssert(index >= 0, "Expected label")
 
     const register = createRegister("", IntType)
     format(writer, "  $ = load $, ptr $\n", register, register.type, jumpPointer)
-    format(writer, "  store i32 $, ptr $\n", index, jumpPointer)
-    format(writer, `  switch i32 $, label $ [$]\n\n`, register, alternatorLabels[0], table)
+    format(writer, "  store i32 $, ptr $\n", index, returnPointer)
+    format(writer, `  switch i32 $, label $ [$]\n\n`, register, unreachable, table)
 
     beginBasicBlock(writer, ast.labelBinding)
     return null

@@ -9,6 +9,7 @@ import { FileSink } from 'bun';
 import { writeLlvmBytecode } from '../src/codegen_llvm';
 import { basename, extname, normalize } from 'node:path';
 import { exec } from 'node:child_process';
+import { writeSyntax } from '../src/codegen_syntax';
 
 const runTestInner = (
   queue: Queue,
@@ -238,6 +239,24 @@ export const writeLlvmBytecodeFile = async (testObject: TestObject) => {
   testObject.writer.write(await file.text())
 }
 
+export const writeSyntaxFile = async (testObject: TestObject) => {
+  compilerAssert(testObject.globalCompiler, "Not compiled")
+  const path = testObject.syntaxPath
+  if (existsSync(path)) unlinkSync(path)
+  const file = Bun.file(path)
+  const writer = file.writer()
+  try {
+    writeSyntax(testObject.globalCompiler, writer)
+  } catch(ex) {
+    // console.log(ex)
+    logError(ex, testObject.logger)
+    throw ex
+  }
+  writer.end()
+  testObject.writer.write("LLVm file")
+  testObject.writer.write(await file.text())
+}
+
 
 const execPromise = (command: string) => {
   console.log(command)
@@ -278,6 +297,7 @@ type TestObject = {
   assemblyPath: string,
   nativePath: string,
   llPath: string
+  syntaxPath: string
   logger: Logger
   writer: FileSink,
   globalCompiler?: GlobalCompilerState,
@@ -296,6 +316,7 @@ export const createTest = ({
   const llPath = `${globalOptions.outputDir}${moduleName}.ll`
   const assemblyPath = `${globalOptions.outputDir}${moduleName}.s`
   const nativePath = `${globalOptions.outputDir}${moduleName}.native`
+  const syntaxPath = `${globalOptions.outputDir}${moduleName}.compiled.rad`
 
   if (existsSync(outputPath)) unlinkSync(outputPath)
   const file = Bun.file(outputPath)
@@ -328,7 +349,12 @@ export const createTest = ({
     writer.end()
   }
 
-  return <TestObject>{ moduleName, fail: false, nativePath, assemblyPath, inputPath, globalOptions, rawPath, outputPath, llPath, logger, writer, close, prints: [] }
+  return <TestObject>{ 
+    moduleName, fail: false, nativePath, 
+    assemblyPath, inputPath, globalOptions, 
+    rawPath, outputPath, llPath, syntaxPath,
+    logger, writer, 
+    close, prints: [] }
 }
 
 export const printCompileCommands = (testObject: TestObject) => {
