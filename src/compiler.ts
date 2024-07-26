@@ -1,7 +1,7 @@
 import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol, ScopeParentSymbol, isPlainObject, ParseLet, ParseList, ParseExpand, ParseBlock, findLabelByBinding, ParseSubscript, ParseNumber, ParseQuote, ParseWhile, ParseOperator, ParseBytecode, ParseOpEq, ParseSet, ParseFreshIden, UnknownObject, ParseNote, DefaultConsAst, RawPointerType, ValueFieldAst, SetValueFieldAst, FloatLiteralType, IntLiteralType, CompilerFunction, DerefAst, SetDerefAst, ParseSlice, CompilerFunctionCallContext, NeverType, LoopObject, CompTimeObjAst, CompileTimeObjectType, NamedArgAst, TypeCheckVar, TypeCheckConfig, u8Type, u64Type, isTypeScalar } from "./defs";
 import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, functionCompileTimeCompileTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, compileExportedFunctionTask } from "./compiler_functions";
 import { Event, Task, TaskDef, Unit, isTask, isTaskResult, withContext } from "./tasks";
-import { createCompilerModuleTask, createListConstructor, defaultMetaFunction, expandFuncAllSugar, expandFuncAnySugar, expandFuncSugar, expandFuncSumSugar, expandLoopSugar, foldSugar, forExprSugar, forLoopSugar, listComprehensionSugar, print, sliceSugar, whileExprSugar } from "./compiler_sugar";
+import { createCompilerModuleTask, createListConstructor, defaultMetaFunction, expandFuncAllSugar, expandFuncAnySugar, expandFuncConcatSugar, expandFuncSugar, expandFuncSumSugar, expandLoopSugar, foldSugar, forExprSugar, forLoopSugar, listComprehensionSugar, print, sliceSugar, whileExprSugar } from "./compiler_sugar";
 
 export const pushBytecode = <T extends BytecodeInstr>(out: BytecodeWriter, token: Token, instr: T) => {
   out.bytecode.locations.push(token.location);
@@ -33,7 +33,6 @@ export const BytecodeDefault: ParseTreeTable = {
   whileexpr: (out, node) => compilerAssert(false, "Not implemented 'whileexpr' in BytecodeDefault"),
   expand:    (out, node) => compilerAssert(false, "Not implemented 'expand' in BytecodeDefault"),
   
-  note:      (out, node) => compilerAssert(false, "Not implemented 'note' in BytecodeDefault"),
   slice:     (out, node) => compilerAssert(false, "Not implemented 'slice' in BytecodeDefault"),
   class:     (out, node) => compilerAssert(false, "Not implemented 'class' in BytecodeDefault"),
   metafor:   (out, node) => compilerAssert(false, "Not implemented 'metafor' in BytecodeDefault"),
@@ -65,6 +64,13 @@ export const BytecodeDefault: ParseTreeTable = {
   not:        (out, node) => (visitParseNode(out, node.expr), pushBytecode(out, node.token, { type: 'not' })),
 
   evalfunc: (out, node) => (node.typeArgs.map(x => writeMeta(out, x)), visitAll(out, node.args), pushBytecode(out, node.token, { type: "evalfunc", func: node.func })),
+
+  note: (out, node) => {
+    if (node.expr instanceof ParseCall) {
+      if (node.expr.left.token.value === 'concat') return expandFuncConcatSugar(out, node, node.expr.args)
+    }
+    compilerAssert(false, "Not implemented", { node })
+  },
 
   dict: (out, node) => {
     node.pairs.forEach(([key, value]) => {
@@ -104,6 +110,10 @@ export const BytecodeDefault: ParseTreeTable = {
   call: (out, node) => {
     visitAll(out, node.typeArgs)
     visitAll(out, node.args);
+    if (node.left instanceof ParseValue) { // Internal desugar results in a fixed value sometimes
+      pushBytecode(out, node.token, { type: "callobj", callable: node.left.value, count: node.args.length, tcount: node.typeArgs.length })
+      return;
+    }
     if (node.left instanceof ParseIdentifier) {
       pushBytecode(out, node.token, { type: "call", name: node.left.token.value, count: node.args.length, tcount: node.typeArgs.length }); 
       return;
@@ -283,6 +293,9 @@ export const BytecodeSecondOrder: ParseTreeTable = {
       if (node.expr.left.token.value === 'all') return expandFuncAllSugar(out, node, node.expr.args)
       if (node.expr.left.token.value === 'any') return expandFuncAnySugar(out, node, node.expr.args)
       if (node.expr.left.token.value === 'sum') return expandFuncSumSugar(out, node, node.expr.args)
+      if (node.expr.left.token.value === 'concat') {
+        compilerAssert(false, "Not available for this context", { node })
+      }
       // if (node.expr.left.token.value === 'max') return expandFuncMaxSugar(out, node, node.expr.args)
       // if (node.expr.left.token.value === 'min') return expandFuncMinSugar(out, node, node.expr.args)
     }
@@ -702,6 +715,7 @@ export function resolveScope(ctx: TaskContext, scope: Scope, name: string): Task
 function callFunctionFromValueTask(ctx: TaskContext, vm: Vm, func: unknown, typeArgs: unknown[], values: unknown[]): Task<Unit, CompilerError> {
   if (func instanceof ExternalFunction) {
     const fnctx: CompilerFunctionCallContext = { location: vm.location, compilerState: ctx.subCompilerState, resultAst: undefined, typeCheckResult: undefined }
+    compilerAssert(typeArgs.length === 0, "Not supported", { typeArgs })
     const functionResult = func.func(fnctx, values)
     if (!(functionResult instanceof Task)) {
       vm.stack.push(functionResult); return Task.success()
@@ -1122,6 +1136,11 @@ const instructions: InstructionMapping = {
         return TaskDef(callFunctionFromValueTask, vm, func, typeArgs, values)
       })
     )
+  },
+  callobj: (vm, { callable, count, tcount }) => {
+    const values = popValues(vm, count);
+    const typeArgs = popValues(vm, tcount || 0);
+    return TaskDef(callFunctionFromValueTask, vm, callable, typeArgs, values)
   },
 
   compilerfn: (vm, { name, count, tcount }) => {

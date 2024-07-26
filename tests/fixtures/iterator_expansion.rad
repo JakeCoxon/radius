@@ -2,43 +2,42 @@ import compiler for generator, concat, assert
 import range for Range
 
 
-fn foop(x: int):
+foo :: |yield|
+  for i in Range(0, 10):
+    yield(i)
 
-  foo :: |yield|
-    for i in Range(0, x):
-      yield(i)
+bar :: |yield|
+  for i in Range(1, 9):
+    yield(i * i)
 
-  bar :: |yield|
-    for i in Range(1, 9):
-      yield(i * i)
+bamp :: |yield|
+  for i in Range(1, 9):
+    yield(i * i * i)
 
-  bamp :: |yield|
-    for i in Range(1, 9):
-      yield(i * i * i)
+baz :: |yield|
+  f := 1
+  while true:
+    yield(f)
+    f *= 2
 
-  baz :: |yield|
-    f := 1
-    while true:
-      yield(f)
-      f *= 2
-
-  consume :: |yield|
-    while true:
-      val := yield()
-      print(val)
-
-    
-  consume2 :: |yield|
+consume :: |yield|
+  while true:
     val := yield()
-    print("val 1", val)
-    val = yield()
-    print("val 2", val)
-    val = yield()
-    print("val 3", val)
-    val = yield()
-    print("val 4", val)
+    print(val)
 
   
+consume2 :: |yield|
+  val := yield()
+  print("val 1", val)
+  val = yield()
+  print("val 2", val)
+  val = yield()
+  print("val 3", val)
+  val = yield()
+  print("val 4", val)
+
+fn test_fold():
+
   numbers := [40, 20, 10, 32, 12, 3124]
 
   count := (fold(0) + numbers[:] * bamp[:] ...)
@@ -56,6 +55,11 @@ fn foop(x: int):
   print(count3)
   assert(count3 == 45)
 
+
+fn test_shorthand():
+
+  numbers := [40, 20, 10, 32, 12, 3124]
+  
   x1 := @all(numbers[:] > 9)
   assert(x1 == true)
   print(x1)
@@ -80,17 +84,33 @@ fn foop(x: int):
   print(w1)
   assert(w1 == 204)
 
-  # Ideas
+fn test_concat():
 
-  # @[numbers[:] ..., numbers[1:] ...]
-  # @max(numbers[:] + foo[:] in numbers[:])
-  # @max(numbers[:] where numbers[:] + foo[:])
-  # @max(select(numbers[:]).size)
+  numbers := [40, 20, 10, 32, 12, 3124]
+  
+  concat1 :: @concat(foo[:], bar[:])
+  x3 := @sum(concat1[:])
+  print(x3)
+  assert(x3 == 249)
 
-  #x := sum(x for x in lst1 if lst1[:] > 2)
-  #x := max(lst1 if lst1[:] > 2) orelse 0
 
+  concat2 :: @concat(foo[:], bar[:], bamp[:], numbers[:])
+  x4 := @sum(concat2[:])
+  print(x4)
+  assert(x4 == 4783)
 
+  
+
+# Ideas
+
+# @[numbers[:] ..., numbers[1:] ...]
+# @max(people[:].age, people[:])
+# @max(select(numbers[:]).size)
+
+#x := sum(x for x in lst1 if lst1[:] > 2)
+#x := max(lst1 if lst1[:] > 2) orelse 0
 
 fn main():
-  foop(10)
+  test_fold()
+  test_shorthand()
+  test_concat()
