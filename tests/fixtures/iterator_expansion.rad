@@ -1,6 +1,8 @@
 import compiler for generator, concat, assert
 import range for Range
 
+type Person @struct:
+  age: int
 
 foo :: |yield|
   for i in Range(0, 10):
@@ -99,6 +101,34 @@ fn test_concat():
   print(x4)
   assert(x4 == 4783)
 
+fn test_concat2():
+
+  numbers := [40, 20, 10, 32, 12, 3124]
+  
+  concat1 :: @concat(foo[:], bar[:], 2, 3, 4)
+  x3 := @sum(concat1[:])
+  print(x3)
+  assert(x3 == 258)
+
+  # TODO: Optimise the forwarding generator to be inline
+  # @concat to @iter ?
+  # @first and @last
+  # Figure out if its easy to make constant parts of the iterator constant
+  # while expr
+  # if expr
+  # for expr ?
+  # Try to cut down the amount of code
+
+
+
+fn test_people():
+
+  people := [Person(10), Person(20), Person(30), Person(40), Person(50)]
+  
+  x4 := @sum(people[:].age)
+  print(x4)
+  assert(x4 == 150)
+
   
 
 # Ideas
@@ -113,4 +143,4 @@ fn test_concat():
 fn main():
   test_fold()
   test_shorthand()
-  test_concat()
+  test_concat()  test_concat2()  test_people()

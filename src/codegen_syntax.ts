@@ -112,10 +112,10 @@ const astWriter: SyntaxAstWriterTable = {
   },
 
   interleave: (writer, ast) => {
-    format(writer, "interleave $ else $", toStmts(ast.entryBlock), toStmts(ast.elseBlock))
+    format(writer, "interleave '$ $ else $", ast.binding, toStmts(ast.entryBlock), toStmts(ast.elseBlock))
   },
   continueinter: (writer, ast) => {
-    format(writer, "continueinter")
+    format(writer, "continueinter '$", ast.interleaveBinding)
   },
 
   block: (writer, ast) => {
@@ -232,7 +232,7 @@ const astWriter: SyntaxAstWriterTable = {
     else format(writer, "return $", ast.expr)
   },
   address: (writer, ast) => {
-    format(writer, `*$`, ast.binding)
+    format(writer, `&$`, ast.binding)
     // return { register: ast.binding as Register }
 
   },

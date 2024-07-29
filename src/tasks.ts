@@ -411,9 +411,12 @@ export class Queue {
   allTasks: UnknownTask[] = []
 
   enqueue(task: Task<unknown, unknown>) {
+    if (!(task instanceof Task)) throw new Error("Tried to enqueue a non-task");
     if (task._dependant) throw new Error("Task already has a dependant")
     task._dependant = this.currentTask!;
-    if (this.currentTask!) task._acceptContext(this.currentTask._context);
+    if (this.currentTask!) {
+      task._acceptContext(this.currentTask._context);
+    }
     this.list.push(task);
     this.allTasks.push(task);
   }

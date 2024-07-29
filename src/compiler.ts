@@ -731,7 +731,7 @@ function callFunctionFromValueTask(ctx: TaskContext, vm: Vm, func: unknown, type
       vm.stack.push(null)
       return Task.success()
     }
-    compilerAssert(false, "Not implemented")
+    compilerAssert(false, "Not implemented", { func, values })
   }
 
   if (func instanceof Closure) {
@@ -766,7 +766,7 @@ function callFunctionFromValueTask(ctx: TaskContext, vm: Vm, func: unknown, type
   compilerAssert(false, "$func is not a function", { func })
 }
 
-const unknownToAst = (location: SourceLocation, value: unknown) => {
+export const unknownToAst = (location: SourceLocation, value: unknown) => {
   if (typeof value === 'number') {
     const type = Math.floor(value) === value ? IntLiteralType : FloatLiteralType
     return new NumberAst(type, location, value)
