@@ -1,6 +1,6 @@
 import { BytecodeSecondOrder, compileFunctionPrototype, getOperatorTable, loadModule, propagateLiteralType, propagatedLiteralAst, pushBytecode, resolveScope, unknownToAst, visitParseNode } from "./compiler"
 import { compileExportedFunctionTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, insertFunctionDefinition } from "./compiler_functions"
-import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, UserCallAst, hashValues, NeverType, IfAst, BoolType, VoidAst, LoopObject, CompileTimeObjectType, u64Type, FunctionDefinition, ParserFunctionDecl, StatementsAst, isTypeScalar, IntLiteralType, FloatLiteralType, isAst, isType, isTypeCheckError, InterleaveAst, ContinueInterAst, CompTimeObjAst, ParseEvalFunc, SetAst, DefaultConsAst, WhileAst, BoolAst, isArray, ExpansionSelector, ParseNote, ExpansionCompilerState, ParseBoolean, ParseOr } from "./defs"
+import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, UserCallAst, hashValues, NeverType, IfAst, BoolType, VoidAst, LoopObject, CompileTimeObjectType, u64Type, FunctionDefinition, ParserFunctionDecl, StatementsAst, isTypeScalar, IntLiteralType, FloatLiteralType, isAst, isType, isTypeCheckError, InterleaveAst, ContinueInterAst, CompTimeObjAst, ParseEvalFunc, SetAst, DefaultConsAst, WhileAst, BoolAst, isArray, ExpansionSelector, ParseNote, ExpansionCompilerState, ParseBoolean, ParseOr, ParseBreak } from "./defs"
 import { Event, Task, TaskDef, isTask } from "./tasks"
 
 export const forLoopSugar = (out: BytecodeWriter, node: ParseFor) => {
@@ -347,6 +347,56 @@ export const expandFuncSumSugar = (out: BytecodeWriter, noteNode: ParseNote, arg
   expansion.loopBodyNode = new ParseSet(node.token, expansion.fold.iden, expansion.loopBodyNode)
 
   visitParseNode(out, compileExpansionToParseNode(out, expansion, node))
+}
+export const expandFuncLastSugar = (out: BytecodeWriter, noteNode: ParseNote, args: ParseNode[]) => {
+  compilerAssert(!out.state.expansion, "Already in expansion state")
+  const node = args[0]
+  const bytecode = { code: [], locations: [] }
+  const iteratorListIdentifier = new ParseFreshIden(node.token, new FreshBindingToken('iterator_list'))
+
+  const expansion: ExpansionCompilerState = out.state.expansion = { debugName: 'last', optimiseSimple: true,
+    loopBodyNode: null, selectors: [], iteratorListIdentifier, fold: null, setterSelector: null }
+  
+  visitParseNode({ bytecode, instructionTable: BytecodeSecondOrder, globalCompilerState: out.globalCompilerState, state: out.state }, node)
+  out.state.expansion = null
+
+  compilerAssert(!expansion.fold, "Fold not supported in this context")
+
+  const iden = new ParseFreshIden(node.token, new FreshBindingToken('last'))
+  expansion.loopBodyNode = new ParseSet(node.token, iden, new ParseBytecode(node.token, bytecode))
+  
+  // TODO: Only supports numbers at the moment
+  const reduce = compileExpansionToParseNode(out, expansion, node)
+  const let_ = new ParseLet(node.token, iden, null, new ParseNumber(createAnonymousToken('0')))
+  const value = new ParseStatements(node.token, [let_, reduce, iden])
+  visitParseNode(out, value)
+}
+export const expandFuncFirstSugar = (out: BytecodeWriter, noteNode: ParseNote, args: ParseNode[]) => {
+  compilerAssert(!out.state.expansion, "Already in expansion state")
+  const node = args[0]
+  const bytecode = { code: [], locations: [] }
+  const iteratorListIdentifier = new ParseFreshIden(node.token, new FreshBindingToken('iterator_list'))
+
+  const expansion: ExpansionCompilerState = out.state.expansion = { debugName: 'first', optimiseSimple: true,
+    loopBodyNode: null, selectors: [], iteratorListIdentifier, fold: null, setterSelector: null }
+  
+  visitParseNode({ bytecode, instructionTable: BytecodeSecondOrder, globalCompilerState: out.globalCompilerState, state: out.state }, node)
+  out.state.expansion = null
+
+  compilerAssert(!expansion.fold, "Fold not supported in this context")
+
+  const iden = new ParseFreshIden(node.token, new FreshBindingToken('first'))
+  const set = new ParseSet(node.token, iden, new ParseBytecode(node.token, bytecode))
+  const blockName = new ParseFreshIden(node.token, new FreshBindingToken('block'))
+  
+  expansion.loopBodyNode = new ParseStatements(node.token, [set, new ParseBreak(node.token, blockName, null)])
+
+  // TODO: Only supports numbers at the moment
+  const reduce = compileExpansionToParseNode(out, expansion, node)
+  const namedBlock = new ParseBlock(node.token, 'break', blockName, reduce)
+  const let_ = new ParseLet(node.token, iden, null, new ParseNumber(createAnonymousToken('0')))
+  const value = new ParseStatements(node.token, [let_, namedBlock, iden])
+  visitParseNode(out, value)
 }
 
 export const forExprSugar = (out: BytecodeWriter, node: ParseForExpr) => {

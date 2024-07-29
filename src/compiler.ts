@@ -1,7 +1,7 @@
 import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol, ScopeParentSymbol, isPlainObject, ParseLet, ParseList, ParseExpand, ParseBlock, findLabelByBinding, ParseSubscript, ParseNumber, ParseQuote, ParseWhile, ParseOperator, ParseBytecode, ParseOpEq, ParseSet, ParseFreshIden, UnknownObject, ParseNote, DefaultConsAst, RawPointerType, ValueFieldAst, SetValueFieldAst, FloatLiteralType, IntLiteralType, CompilerFunction, DerefAst, SetDerefAst, ParseSlice, CompilerFunctionCallContext, NeverType, LoopObject, CompTimeObjAst, CompileTimeObjectType, NamedArgAst, TypeCheckVar, TypeCheckConfig, u8Type, u64Type, isTypeScalar } from "./defs";
 import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, functionCompileTimeCompileTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, compileExportedFunctionTask } from "./compiler_functions";
 import { Event, Task, TaskDef, Unit, isTask, isTaskResult, withContext } from "./tasks";
-import { createCompilerModuleTask, createListConstructor, defaultMetaFunction, expandFuncAllSugar, expandFuncAnySugar, expandFuncConcatSugar, expandFuncSugar, expandFuncSumSugar, expandLoopSugar, foldSugar, forExprSugar, forLoopSugar, listComprehensionSugar, print, sliceSugar, whileExprSugar } from "./compiler_sugar";
+import { createCompilerModuleTask, createListConstructor, defaultMetaFunction, expandFuncAllSugar, expandFuncAnySugar, expandFuncConcatSugar, expandFuncFirstSugar, expandFuncLastSugar, expandFuncSugar, expandFuncSumSugar, expandLoopSugar, foldSugar, forExprSugar, forLoopSugar, listComprehensionSugar, print, sliceSugar, whileExprSugar } from "./compiler_sugar";
 
 export const pushBytecode = <T extends BytecodeInstr>(out: BytecodeWriter, token: Token, instr: T) => {
   out.bytecode.locations.push(token.location);
@@ -293,6 +293,8 @@ export const BytecodeSecondOrder: ParseTreeTable = {
       if (node.expr.left.token.value === 'all') return expandFuncAllSugar(out, node, node.expr.args)
       if (node.expr.left.token.value === 'any') return expandFuncAnySugar(out, node, node.expr.args)
       if (node.expr.left.token.value === 'sum') return expandFuncSumSugar(out, node, node.expr.args)
+      if (node.expr.left.token.value === 'last') return expandFuncLastSugar(out, node, node.expr.args)
+      if (node.expr.left.token.value === 'first') return expandFuncFirstSugar(out, node, node.expr.args)
       if (node.expr.left.token.value === 'concat') {
         compilerAssert(false, "Not available for this context", { node })
       }
@@ -453,7 +455,8 @@ export const BytecodeSecondOrder: ParseTreeTable = {
     pushBytecode(out, node.token, { type: "popqs" });
   },
   block: (out, node) => {
-    pushBytecode(out, node.token, { type: 'beginblockast', breakType: node.breakType, name: node.name?.token.value ?? null })
+    const name = (node.name instanceof ParseFreshIden ? node.name.freshBindingToken.identifier : node.name?.token.value) ?? null
+    pushBytecode(out, node.token, { type: 'beginblockast', breakType: node.breakType, name })
     visitParseNode(out, node.statements)
     pushBytecode(out, node.token, { type: 'endblockast' })
   },
@@ -683,7 +686,7 @@ export const propagateLiteralType = (inferType: Type, ast: Ast | null): Type => 
 export const propagatedLiteralAst = (ast: Ast) => { propagateLiteralType(ast.type, ast); return ast }
 
 const letLocalAst = (vm: Vm, name: string, type: Type | null, value: Ast | null) => {
-  compilerAssert(type || value);
+  compilerAssert(type || value, "Expected type or initial value for let binding $name", { name });
   compilerAssert(!Object.hasOwn(vm.scope, name), `Already defined $name`, { name });
   let inferType = type || value!.type
   compilerAssert(inferType !== VoidType, "Expected type for local $name but got $inferType", { name, inferType })

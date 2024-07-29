@@ -160,6 +160,21 @@ fn test_people():
   assert(x4 == 150)
 
 
+
+fn test_last():
+
+  numbers := [40, 20, 10, 32, 12, 3124]
+  x := @last(numbers[:])
+  print(x)
+  assert(x == 3124)
+
+fn test_first():
+
+  numbers := [40, 20, 10, 32, 12, 3124]
+  x := @first(numbers[:])
+  print(x)
+  assert(x == 40)
+
 fn main():
   test_fold()
   test_shorthand()
@@ -170,3 +185,5 @@ fn main():
   test_concat5()
   test_concat6()
   test_people()
+  test_last()
+  test_first()
