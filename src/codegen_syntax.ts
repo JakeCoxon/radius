@@ -1,5 +1,5 @@
 import { externalBuiltinBindings } from "./compiler_sugar";
-import { Ast, AstType, AstWriterTable, Binding, BindingAst, BlockAst, BoolType, CallAst, CompiledFunction, ConcreteClassType, ConstructorAst, DefaultConsAst, DoubleType, FileWriter, FloatType, FunctionType, GlobalCompilerState, IntType, ListTypeConstructor, LlvmFunctionWriter, LlvmWriter, NeverType, NumberAst, ParameterizedType, Pointer, PrimitiveType, RawPointerType, Register, SourceLocation, StatementsAst, StringType, Type, TypeField, UserCallAst, ValueFieldAst, VoidType, compilerAssert, isAst, isType, textColors, u64Type, u8Type } from "./defs";
+import { Ast, AstType, AstWriterTable, Binding, BindingAst, BlockAst, BoolType, CallAst, CompiledFunction, ConcreteClassType, ConstructorAst, DefaultConsAst, DoubleType, FileWriter, FloatType, FunctionType, GlobalCompilerState, IntType, ListTypeConstructor, LlvmFunctionWriter, LlvmWriter, NeverType, NumberAst, ParameterizedType, Pointer, PrimitiveType, RawPointerType, Register, SourceLocation, StatementsAst, StringType, Type, TypeField, UserCallAst, ValueFieldAst, VoidAst, VoidType, compilerAssert, isAst, isType, textColors, u64Type, u8Type } from "./defs";
 
 const log = (...args: any[]) => {
   if ((globalThis as any).logger) (globalThis as any).logger.log(...args)
@@ -60,6 +60,7 @@ const astWriter: SyntaxAstWriterTable = {
         visit(expr.body)
         return
       }
+      if (expr instanceof VoidAst) return
 
       writer.printNextStatement = true
       writeExpr(writer, expr)

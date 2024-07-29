@@ -943,6 +943,7 @@ test('iterator_expansion', async () => {
   try {
     const input = await Bun.file(testObject.inputPath).text()
     runCompilerTest(input, { testObject })
+    await writeSyntaxFile(testObject)
     await writeLlvmBytecodeFile(testObject)
     await executeNativeExecutable(testObject)
   } finally {

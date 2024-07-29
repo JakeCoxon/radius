@@ -262,6 +262,8 @@ export type ExpansionSelector = {
   setterIdentifier: ParseFreshIden | null,
 }
 export type ExpansionCompilerState = {
+  debugName: string,
+  optimiseSimple?: boolean,
   loopBodyNode: ParseNode | null
   iteratorListIdentifier: ParseFreshIden,
   fold: { iden: ParseFreshIden, initial: ParseNode } | null,

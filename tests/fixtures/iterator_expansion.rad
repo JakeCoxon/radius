@@ -105,20 +105,50 @@ fn test_concat2():
 
   numbers := [40, 20, 10, 32, 12, 3124]
   
-  concat1 :: @concat(foo[:], bar[:], 2, 3, 4)
+  concat1 :: @concat(foo[:], bar[:], numbers[:], 2, 3, 4)
   x3 := @sum(concat1[:])
   print(x3)
-  assert(x3 == 258)
+  assert(x3 == 3496)
 
-  # TODO: Optimise the forwarding generator to be inline
-  # @concat to @iter ?
-  # @first and @last
-  # Figure out if its easy to make constant parts of the iterator constant
-  # while expr
-  # if expr
-  # for expr ?
-  # Try to cut down the amount of code
+fn test_concat3():
 
+  numbers := [40, 20, 10, 32, 12, 3124]
+  
+  concat1 :: @concat(foo[:], bar[:], numbers[:], 2, 3, 4)
+  for x in concat1:
+    print(x)
+
+
+fn test_concat4():
+
+  numbers := [40, 20, 10, 32, 12, 3124]
+  
+  concat1 :: @concat(foo[:], bar[:], 2, 3, 4)
+  concat2 :: @concat(concat1[:], numbers[:], 5, 6, 7)
+
+  res := 0
+  res += concat2[:] ...
+  print(res)
+  assert(res == 3514)
+
+
+fn test_concat5():
+
+  numbers := [40, 20, 10, 32, 12, 3124]
+  
+  concat1 :: @concat(foo[:] * numbers[:], 2, 3, 4)
+  x3 := @sum(concat1[:])
+  print(x3)
+  assert(x3 == 15813)
+
+
+fn test_concat6():
+
+  numbers := [40, 20, 10, 32, 12, 3124]
+  
+  concat1 :: @concat(foo[:] * numbers[:], 2, 3, 4)
+  numbers[:] = concat1[:] ...
+  print(numbers[:]) ...
 
 
 fn test_people():
@@ -129,18 +159,14 @@ fn test_people():
   print(x4)
   assert(x4 == 150)
 
-  
-
-# Ideas
-
-# @[numbers[:] ..., numbers[1:] ...]
-# @max(people[:].age, people[:])
-# @max(select(numbers[:]).size)
-
-#x := sum(x for x in lst1 if lst1[:] > 2)
-#x := max(lst1 if lst1[:] > 2) orelse 0
 
 fn main():
   test_fold()
   test_shorthand()
-  test_concat()  test_concat2()  test_people()
+  test_concat()
+  test_concat2()
+  test_concat3()
+  test_concat4()
+  test_concat5()
+  test_concat6()
+  test_people()
