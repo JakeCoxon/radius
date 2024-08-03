@@ -1,0 +1,12 @@
+import compiler for assert
+
+fn main():
+
+  a, (b, c), (d, (e, f), g) := (1, (2, float(3)), (4, (5, float(6)), 7))
+  assert(a == 1)
+  assert(b == 2)
+  assert(c == 3)
+  assert(d == 4)
+  assert(e == 5)
+  assert(f == 6)
+  assert(g == 7)

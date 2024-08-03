@@ -165,19 +165,7 @@ const astWriter: SyntaxAstWriterTable = {
     })
   },
   field: (writer, ast) => {
-    format(writer, `field not implemented`)
-    // if (!ast.left.type.typeInfo.isReferenceType) {
-    //   // This is just valuefield behaviour
-    //   const leftResult = writeExpr(writer, ast.left)
-    //   const reg = loadFieldHelper(writer, leftResult, [ast.field])
-    //   return { register: reg }
-    // }
-    // const leftResult = toRegister(writer, writeExpr(writer, ast.left))
-    // const register = createRegister("", ast.left.type)
-    // const dataType = getDataTypeName(writer.writer, register.type)
-    // format(writer, "  $ = load $, ptr $\n", register, dataType, leftResult)
-    // const reg = loadFieldHelper(writer, { register }, [ast.field])
-    // return { register: reg }
+    format(writer, "$.$", ast.left, ast.field.name)
   },
   setvaluefield: (writer, ast) => {
     format(writer, `$`, ast.left)
@@ -401,11 +389,13 @@ const getDataTypeName = (writer: LlvmWriter, obj: Type): string => {
     return writer.globalNames.get(obj)!
   }
   const name = generateName(writer, new Binding(`%${obj.shortName}`, VoidType))
-
   writer.globalNames.set(obj, name)
+
+  const fields = obj.typeInfo.fields.map(x => getTypeName(writer, x.fieldType)) // May be recursive so do it before emitting
+  
   format(writer, `type $ {\n`, name)
   obj.typeInfo.fields.forEach((field, i) => {
-    format(writer, "  $: $\n", field.name, field.fieldType)
+    format(writer, "  $: $\n", field.name, fields[i])
   })
   writer.outputHeaders.push(`}\n`)
 

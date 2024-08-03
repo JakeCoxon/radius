@@ -477,6 +477,23 @@ test('tuple', async () => {
   }
 })
 
+test('tuple_extract', async () => {
+  const testObject = createTest({ 
+    moduleName: 'tuple_extract',
+    globalOptions,
+    inputPath: `${import.meta.dir}/fixtures/tuple_extract.rad`,
+  })
+  try {
+    const input = await Bun.file(testObject.inputPath).text()
+    runCompilerTest(input, { testObject })
+    await writeSyntaxFile(testObject)
+    await writeLlvmBytecodeFile(testObject)
+    await executeNativeExecutable(testObject)
+  } finally {
+    testObject.close()
+  }
+})
+
 test('tuple_return_type', async () => {
   const testObject = createTest({ 
     moduleName: 'tuple_return_type',

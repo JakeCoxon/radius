@@ -98,8 +98,8 @@ const createArrayIterator = (token: Token, subCompilerState: SubCompilerState, s
   }
   let letLengthNode: ParseNode = new ParseLet(token, new ParseFreshIden(token, new FreshBindingToken('length')), null, lengthNode)
   const letIndexNode = new ParseLet(token, indexIdentifier, null, selector.start ?? new ParseNumber(createAnonymousToken('0')))
-  const incNode = new ParseOpEq(createAnonymousToken("+="), letIndexNode.name, selector.step ?? new ParseNumber(createAnonymousToken('1')))
-  const condNode = new ParseOperator(createAnonymousToken("<"), [letIndexNode.name, letLengthNode.name])
+  const incNode = new ParseOpEq(createAnonymousToken("+="), letIndexNode.left, selector.step ?? new ParseNumber(createAnonymousToken('1')))
+  const condNode = new ParseOperator(createAnonymousToken("<"), [letIndexNode.left, letLengthNode.left])
   const subscriptIterator = new ParseSubscript(token, selector.node, indexIdentifier, false)
   const loopBody = new ParseCall(createAnonymousToken(''), yieldParam, [subscriptIterator], [])
   const whileStmts = new ParseStatements(token, [loopBody, incNode])
@@ -128,8 +128,8 @@ const createArraySetterIterator = (token: Token, subCompilerState: SubCompilerSt
   }
   let letLengthNode: ParseNode = new ParseLet(token, new ParseFreshIden(token, new FreshBindingToken('length')), null, lengthNode)
   const letIndexNode = new ParseLet(token, indexIdentifier, null, selector.start ?? new ParseNumber(createAnonymousToken('0')))
-  const incNode = new ParseOpEq(createAnonymousToken("+="), letIndexNode.name, selector.step ?? new ParseNumber(createAnonymousToken('1')))
-  const condNode = new ParseOperator(createAnonymousToken("<"), [letIndexNode.name, letLengthNode.name])
+  const incNode = new ParseOpEq(createAnonymousToken("+="), letIndexNode.left, selector.step ?? new ParseNumber(createAnonymousToken('1')))
+  const condNode = new ParseOperator(createAnonymousToken("<"), [letIndexNode.left, letLengthNode.left])
   const subscriptIterator = new ParseSubscript(token, selector.node, indexIdentifier, false)
   const loopBody = new ParseLet(token, valueIdentifier, null, new ParseCall(createAnonymousToken(''), yieldParam, [], []))
   const setNode = new ParseSet(token, subscriptIterator, valueIdentifier)
@@ -158,19 +158,19 @@ const createIteratorSliceLoop = (token: Token, subCompilerState: SubCompilerStat
   const letEndNode = selector.end ? new ParseLet(token, new ParseFreshIden(token, new FreshBindingToken('end')), null, selector.end) : null
   const letStepNode = selector.step ? new ParseLet(token, new ParseFreshIden(token, new FreshBindingToken('step')), null, selector.step) : null
   const letIndexNode = new ParseLet(token, indexIdentifier, null, new ParseNumber(createAnonymousToken('0')))
-  const incNode = new ParseOpEq(createAnonymousToken("+="), letIndexNode.name, new ParseNumber(createAnonymousToken('1')))
+  const incNode = new ParseOpEq(createAnonymousToken("+="), letIndexNode.left, new ParseNumber(createAnonymousToken('1')))
   const consumedValue = new ParseFreshIden(token, new FreshBindingToken('foo'))
   const trueNode = new ParseBoolean(createAnonymousToken('true'))
-  const loopCondNode = letEndNode ? new ParseOperator(createAnonymousToken("<"), [letIndexNode.name, letEndNode.name]) : trueNode
+  const loopCondNode = letEndNode ? new ParseOperator(createAnonymousToken("<"), [letIndexNode.left, letEndNode.left]) : trueNode
   let yieldCall: ParseNode = new ParseCall(createAnonymousToken(''), yieldParam, [consumedValue], [])
   const yieldConds: ParseNode[] = []
   if (letStartNode) {
-    yieldConds.push(new ParseOperator(createAnonymousToken(">="), [letIndexNode.name, letStartNode.name]))
+    yieldConds.push(new ParseOperator(createAnonymousToken(">="), [letIndexNode.left, letStartNode.left]))
   }
   if (letStepNode) {
-    let check: ParseNode = letIndexNode.name
-    if (letStartNode) check = new ParseOperator(createAnonymousToken("-"), [check, letStartNode.name])
-    const mod = new ParseOperator(createAnonymousToken("mod"), [check, letStepNode.name])
+    let check: ParseNode = letIndexNode.left
+    if (letStartNode) check = new ParseOperator(createAnonymousToken("-"), [check, letStartNode.left])
+    const mod = new ParseOperator(createAnonymousToken("mod"), [check, letStepNode.left])
     yieldConds.push(new ParseOperator(createAnonymousToken("=="), [mod, new ParseNumber(createAnonymousToken('0'))]))
   }
   const condNode = yieldConds.length > 0 ? yieldConds.reduce((prev, curr) => new ParseAnd(createAnonymousToken('and'), [prev, curr])) : null

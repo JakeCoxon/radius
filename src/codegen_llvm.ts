@@ -778,17 +778,18 @@ const getDataTypeName = (writer: LlvmWriter, obj: Type): string => {
     return writer.globalNames.get(obj)!
   }
   const name = generateName(writer, new Binding(`%struct.${obj.shortName}`, VoidType))
-
   writer.globalNames.set(obj, name)
+
+  const fields = obj.typeInfo.fields.map(x => getTypeName(writer, x.fieldType)) // May be recursive so do it before emitting
+
   writer.outputHeaders.push(`${name} = type { `)
   obj.typeInfo.fields.forEach((field, i) => {
     if (i !== 0) writer.outputHeaders.push(', ')
-    writer.outputHeaders.push(getTypeName(writer, field.fieldType))
+    writer.outputHeaders.push(fields[i])
   })
   writer.outputHeaders.push(` }\n`)
 
   return name
-  // compilerAssert(false, "Type not implemented", { obj })
 }
 const writeLlvmBytecodeFunction = (bytecodeWriter: LlvmWriter, func: CompiledFunction) => {
   log("\nWriting func", func.functionDefinition.debugName, "\n")

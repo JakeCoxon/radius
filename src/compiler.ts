@@ -1,8 +1,8 @@
-import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol, ScopeParentSymbol, isPlainObject, ParseLet, ParseList, ParseExpand, ParseBlock, findLabelByBinding, ParseSubscript, ParseNumber, ParseQuote, ParseWhile, ParseOperator, ParseBytecode, ParseOpEq, ParseSet, ParseFreshIden, UnknownObject, ParseNote, DefaultConsAst, RawPointerType, ValueFieldAst, SetValueFieldAst, FloatLiteralType, IntLiteralType, CompilerFunction, DerefAst, SetDerefAst, ParseSlice, CompilerFunctionCallContext, NeverType, LoopObject, CompTimeObjAst, CompileTimeObjectType, NamedArgAst, TypeCheckVar, TypeCheckConfig, u8Type, u64Type, isTypeScalar } from "./defs";
+import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol, ScopeParentSymbol, isPlainObject, ParseLet, ParseList, ParseExpand, ParseBlock, findLabelByBinding, ParseSubscript, ParseNumber, ParseQuote, ParseWhile, ParseOperator, ParseBytecode, ParseOpEq, ParseSet, ParseFreshIden, UnknownObject, ParseNote, DefaultConsAst, RawPointerType, ValueFieldAst, SetValueFieldAst, FloatLiteralType, IntLiteralType, CompilerFunction, DerefAst, SetDerefAst, ParseSlice, CompilerFunctionCallContext, NeverType, LoopObject, CompTimeObjAst, CompileTimeObjectType, NamedArgAst, TypeCheckVar, TypeCheckConfig, u8Type, u64Type, isTypeScalar, FreshBindingToken } from "./defs";
 import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, functionCompileTimeCompileTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, compileExportedFunctionTask } from "./compiler_functions";
 import { Event, Task, TaskDef, Unit, isTask, isTaskResult, withContext } from "./tasks";
 import { createCompilerModuleTask, createListConstructor, defaultMetaFunction, print } from "./compiler_sugar";
-import { expandFuncAllSugar, expandFuncAnySugar, expandFuncConcatSugar, expandFuncFirstSugar, expandFuncLastSugar, expandFuncSugar, expandFuncSumSugar, expandLoopSugar, foldSugar, forExprSugar, forLoopSugar, listComprehensionSugar, sliceSugar, whileExprSugar } from "./compiler_iterator"
+import { expandFuncAllSugar, expandFuncAnySugar, expandFuncConcatSugar, expandFuncFirstSugar, expandFuncLastSugar, expandFuncSumSugar, expandLoopSugar, foldSugar, forExprSugar, forLoopSugar, listComprehensionSugar, sliceSugar, whileExprSugar } from "./compiler_iterator"
 
 export const pushBytecode = <T extends BytecodeInstr>(out: BytecodeWriter, token: Token, instr: T) => {
   out.bytecode.locations.push(token.location);
@@ -101,7 +101,8 @@ export const BytecodeDefault: ParseTreeTable = {
       writeMeta(out, node.type);
       pushBytecode(out, node.type.token, { type: 'totype' });
     }
-    const name = node.name instanceof ParseFreshIden ? node.name.freshBindingToken.identifier : node.name.token.value
+    compilerAssert(!(node.left instanceof ParseTuple), "Tuple not implemented yet", { node })
+    const name = node.left instanceof ParseFreshIden ? node.left.freshBindingToken.identifier : node.left.token.value
     pushBytecode(out, node.token, { type: 'letlocal', name, t: !!node.type, v: !!node.value }) 
   },
 
@@ -418,7 +419,21 @@ export const BytecodeSecondOrder: ParseTreeTable = {
       writeMeta(out, node.type);
       pushBytecode(out, node.type.token, { type: 'totype' });
     }
-    const name = node.name instanceof ParseFreshIden ? node.name.freshBindingToken.identifier : node.name.token.value
+    if (node.left instanceof ParseTuple) {
+      const recur = (tup: ParseTuple) => {
+        tup.exprs.forEach(expr => {
+          if (expr instanceof ParseTuple) return recur(expr)
+          else if (expr instanceof ParseIdentifier || expr instanceof ParseFreshIden)
+            pushBytecode(out, expr.token, { type: 'push', value: expr instanceof ParseFreshIden ? expr.freshBindingToken.identifier : expr.token.value })
+          else compilerAssert(false, "Invalid let", { expr })
+        })
+        pushBytecode(out, tup.token, { type: 'tuple', count: tup.exprs.length })
+      }
+      recur(node.left)
+      pushBytecode(out, node.token, { type: 'letmatchast', t: !!node.type, v: !!node.value })
+      return
+    }
+    const name = node.left instanceof ParseFreshIden ? node.left.freshBindingToken.identifier : node.left.token.value
     pushBytecode(out, node.token, { type: 'letast', name, t: !!node.type, v: !!node.value })
   },
 
@@ -806,6 +821,32 @@ const instructions: InstructionMapping = {
   whileast: (vm) =>               vm.stack.push(new WhileAst(VoidType, vm.location, expectAst(popStack(vm)), expectAst(popStack(vm)))),
   returnast: (vm, { r }) =>       vm.stack.push(new ReturnAst(NeverType, vm.location, r ? propagatedLiteralAst(expectAst(popStack(vm))) : null)),
   letast: (vm, { name, t, v }) => vm.stack.push(letLocalAst(vm, name, t ? expectType(popStack(vm)) : null, v ? expectAst(popStack(vm)) : null)),
+  letmatchast: (vm, { t, v }) =>  {
+    compilerAssert(!t, "Type not supported for tuple let")
+    const tuple = popStack(vm)
+    const value = v ? expectAst(popStack(vm)) : null
+    compilerAssert(value, "Expected value for tuple let")
+    compilerAssert(tuple instanceof Tuple, "Expected tuple got $tuple", { tuple })
+    const stmts: Ast[] = []
+    const recur = (tuple: Tuple, tupleType: Type, rightSide: Ast) => {
+      const newName = new FreshBindingToken("tup")
+      const letAst = letLocalAst(vm, newName.identifier, null, rightSide)
+      const rightSideBinding = new BindingAst(VoidType, vm.location, letAst.binding)
+      stmts.push(letAst)
+
+      compilerAssert(tupleType instanceof ParameterizedType && tupleType.typeConstructor === TupleTypeConstructor, "Expected tuple type got $type", { type: tupleType })
+      compilerAssert(tuple.values.length === tupleType.typeInfo.fields.length, "Expected $expected fields in tuple got $actual", { expected: letAst.binding.type.typeInfo.fields.length, actual: tuple.values.length }) // TODO: Make this more clearer
+      tuple.values.map((value, i) => {
+        const field = tupleType.typeInfo.fields[i]
+        const fieldAst = new FieldAst(field.fieldType, vm.location, rightSideBinding, field)
+        if (value instanceof Tuple) return recur(value, field.fieldType, fieldAst)
+        compilerAssert(typeof value === 'string', "Expected string got $value", { value })
+        stmts.push(letLocalAst(vm, value, field.fieldType, fieldAst))
+      })
+    }
+    recur(tuple, value.type, value)
+    vm.stack.push(new StatementsAst(VoidType, vm.location, stmts))
+  },
   ifast: (vm, { f, e }) => {
     const cond = propagatedLiteralAst(expectAst(popStack(vm)))
     const trueBody = propagatedLiteralAst(expectAst(popStack(vm)))

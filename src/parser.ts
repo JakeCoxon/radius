@@ -171,7 +171,11 @@ export const makeParser = (input: string, debugName: string) => {
   const matchType = (expected: string) =>
     token && token.type === expected ? (advance(), true) : false;
   
-  const assertIdentifier = (node: ParseNode): ParseIdentifier => (compilerAssert(node instanceof ParseIdentifier, "Expected identifier"), node);
+  const assertIdentifier = (node: ParseNode): ParseIdentifier => (compilerAssert(node instanceof ParseIdentifier, "Expected identifier", { lexer, token, previous, location: previous?.location, prevLocation: previous?.location }), node);
+  const assertLeftSide = (node: ParseNode): ParseIdentifier | ParseTuple => {
+    (compilerAssert(node instanceof ParseIdentifier || node instanceof ParseTuple, "Expected identifier or tuple", { lexer, token, previous, location: previous?.location }), node);
+    return node
+  }
 
   const parseParens = (tupleToken: Token) => {
     const expr = parseExpr();
@@ -427,8 +431,13 @@ export const makeParser = (input: string, debugName: string) => {
   const parseWhile = () => new ParseWhile(previous, parseExpr(), parseColonBlock('while condition')); // prettier-ignore
 
   const parseExpressionStatement2 = () => {
-    const expr = parseExpr();
-    if (match(":="))      return new ParseLet(previous, assertIdentifier(expr), null, parseAssignExpr());
+    let expr = parseExpr();
+    if (match(",")) {
+      const list = [expr, parseExpr()];
+      while (match(",")) list.push(parseExpr());
+      expr = new ParseTuple(previous, list);
+    }
+    if (match(":="))      return new ParseLet(previous, assertLeftSide(expr), null, parseAssignExpr());
     else if (match("::")) return new ParseLetConst(previous, assertIdentifier(expr), parseAssignExpr());
     else if (match("="))  return new ParseSet(previous, expr, parseAssignExpr());
     else if (match("+=")) return new ParseOpEq(previous, expr, parseAssignExpr());
@@ -438,7 +447,7 @@ export const makeParser = (input: string, debugName: string) => {
     else if (match(":")) {
       const type = parseExpr();
       const value = match("=") ? parseAssignExpr() : null
-      return new ParseLet(previous, assertIdentifier(expr), type, value)
+      return new ParseLet(previous, assertLeftSide(expr), type, value)
     }
     return expr;
   };

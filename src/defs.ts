@@ -124,7 +124,7 @@ export class ParseNumber extends ParseNodeType {       key = 'number' as const; 
 export class ParseString extends ParseNodeType {       key = 'string' as const;       constructor(public token: Token, public string: string) { super();} }
 export class ParseBoolean extends ParseNodeType {      key = 'boolean' as const;      constructor(public token: Token) { super();} }
 export class ParseStatements extends ParseNodeType {   key = 'statements' as const;   constructor(public token: Token, public exprs: ParseNode[]) { super();} }
-export class ParseLet extends ParseNodeType {          key = 'let' as const;          constructor(public token: Token, public name: ParseIdentifier | ParseFreshIden, public type: ParseNode | null, public value: ParseNode | null) { super();} }
+export class ParseLet extends ParseNodeType {          key = 'let' as const;          constructor(public token: Token, public left: ParseIdentifier | ParseFreshIden | ParseTuple, public type: ParseNode | null, public value: ParseNode | null) { super();} }
 export class ParseSet extends ParseNodeType {          key = 'set' as const;          constructor(public token: Token, public left: ParseNode, public value: ParseNode) { super();} }
 export class ParseOperator extends ParseNodeType {     key = 'operator' as const;     constructor(public token: Token, public exprs: ParseNode[]) { super();} }
 export class ParseNote extends ParseNodeType {         key = 'note' as const;         constructor(public token: Token, public expr: ParseNode) { super();} }
@@ -235,6 +235,7 @@ export type BytecodeInstr =
   { type: 'ifast', f: boolean, e: boolean } |
   { type: 'notast' } |
   { type: 'letast', name: string, t: boolean, v: boolean } |
+  { type: 'letmatchast', t: boolean, v: boolean } |
   { type: 'callast', name: string, count: number, tcount: number, method?: boolean } |
   { type: 'pushqs' } |
   { type: 'popqs' } |
