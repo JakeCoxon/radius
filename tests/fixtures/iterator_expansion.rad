@@ -183,8 +183,19 @@ fn test_stuff():
       yield(i * i)
       i += 1
 
-  print(squares[5:10]) ...
-  print(@sum(squares[:10]))
+  factorial :: |yield|
+    i := 1
+    f := 1
+    while true:
+      yield(f)
+      f *= i
+      i += 1
+
+  # print(squares[5:10:2]) ...
+  # print(squares[1:100:10]) ...
+  # print(squares[2:10], factorial[1:20:2]) ...
+  print(factorial[:20:4], factorial[1:10:2]) ...
+  # print(@sum(squares[:10]))
 
 fn main():
   test_fold()
@@ -198,3 +209,4 @@ fn main():
   test_people()
   test_last()
   test_first()
+  test_stuff()

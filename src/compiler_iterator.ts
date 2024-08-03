@@ -156,21 +156,30 @@ const createIteratorSliceLoop = (token: Token, subCompilerState: SubCompilerStat
 
   const letStartNode = selector.start ? new ParseLet(token, new ParseFreshIden(token, new FreshBindingToken('start')), null, selector.start) : null
   const letEndNode = selector.end ? new ParseLet(token, new ParseFreshIden(token, new FreshBindingToken('end')), null, selector.end) : null
+  const letStepNode = selector.step ? new ParseLet(token, new ParseFreshIden(token, new FreshBindingToken('step')), null, selector.step) : null
   const letIndexNode = new ParseLet(token, indexIdentifier, null, new ParseNumber(createAnonymousToken('0')))
-  const incNode = new ParseOpEq(createAnonymousToken("+="), letIndexNode.name, selector.step ?? new ParseNumber(createAnonymousToken('1')))
+  const incNode = new ParseOpEq(createAnonymousToken("+="), letIndexNode.name, new ParseNumber(createAnonymousToken('1')))
   const consumedValue = new ParseFreshIden(token, new FreshBindingToken('foo'))
   const trueNode = new ParseBoolean(createAnonymousToken('true'))
   const loopCondNode = letEndNode ? new ParseOperator(createAnonymousToken("<"), [letIndexNode.name, letEndNode.name]) : trueNode
   let yieldCall: ParseNode = new ParseCall(createAnonymousToken(''), yieldParam, [consumedValue], [])
+  const yieldConds: ParseNode[] = []
   if (letStartNode) {
-    const condNode = new ParseOperator(createAnonymousToken(">="), [letIndexNode.name, letStartNode.name])
-    yieldCall = new ParseIf(token, false, condNode, yieldCall, null)
+    yieldConds.push(new ParseOperator(createAnonymousToken(">="), [letIndexNode.name, letStartNode.name]))
   }
+  if (letStepNode) {
+    let check: ParseNode = letIndexNode.name
+    if (letStartNode) check = new ParseOperator(createAnonymousToken("-"), [check, letStartNode.name])
+    const mod = new ParseOperator(createAnonymousToken("mod"), [check, letStepNode.name])
+    yieldConds.push(new ParseOperator(createAnonymousToken("=="), [mod, new ParseNumber(createAnonymousToken('0'))]))
+  }
+  const condNode = yieldConds.length > 0 ? yieldConds.reduce((prev, curr) => new ParseAnd(createAnonymousToken('and'), [prev, curr])) : null
+  if (condNode) yieldCall = new ParseIf(token, false, condNode, yieldCall, null)
   const consumeCall = new ParseLet(token, consumedValue, null, new ParseCall(createAnonymousToken(''), consumeParam, [], []))
-  const loopBody = new ParseStatements(token, [consumeCall, yieldCall, incNode])
+  const loopBody = new ParseStatements(token, [consumeCall, yieldCall, incNode].filter(x => !!x) as ParseNode[])
   const loop = new ParseWhile(token, loopCondNode, loopBody)
 
-  const fnBody = new ParseStatements(createAnonymousToken(''), ([letStartNode, letEndNode, letIndexNode, loop] as ParseNode[]).filter((x): x is ParseNode => !!x))
+  const fnBody = new ParseStatements(createAnonymousToken(''), ([letStartNode, letEndNode, letStepNode, letIndexNode, loop] as ParseNode[]).filter((x): x is ParseNode => !!x))
   const decl = createAnonymousParserFunctionDecl(`array_iterator`, createAnonymousToken(''), fnParams, fnBody)
   const funcDef = insertFunctionDefinition(subCompilerState.globalCompiler, decl)
   const closure = new Closure(funcDef, subCompilerState.scope, subCompilerState)

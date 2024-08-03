@@ -40,6 +40,8 @@ const operatorMapSignedInt: {[key: string]:string} = {
   "<": "icmp slt",
   "<=": "icmp sle",
   ">=": "icmp sge",
+
+  "mod": "srem"
 }
 
 const operatorMapUnsignedInt: {[key: string]:string} = {
