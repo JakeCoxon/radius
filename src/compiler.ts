@@ -425,7 +425,7 @@ export const BytecodeSecondOrder: ParseTreeTable = {
           if (expr instanceof ParseTuple) return recur(expr)
           else if (expr instanceof ParseIdentifier || expr instanceof ParseFreshIden)
             pushBytecode(out, expr.token, { type: 'push', value: expr instanceof ParseFreshIden ? expr.freshBindingToken.identifier : expr.token.value })
-          else compilerAssert(false, "Invalid let", { expr })
+          else compilerAssert(false, "Expression is invalid for left side of a pattern match statement", { expr, location: expr.token.location })
         })
         pushBytecode(out, tup.token, { type: 'tuple', count: tup.exprs.length })
       }
