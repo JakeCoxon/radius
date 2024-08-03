@@ -175,6 +175,17 @@ fn test_first():
   print(x)
   assert(x == 40)
 
+fn test_stuff():
+
+  squares :: |yield|
+    i := 0
+    while true:
+      yield(i * i)
+      i += 1
+
+  print(squares[5:10]) ...
+  print(@sum(squares[:10]))
+
 fn main():
   test_fold()
   test_shorthand()
