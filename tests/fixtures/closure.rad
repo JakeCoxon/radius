@@ -3,7 +3,7 @@ fn main():
 
   x := 32
 
-  fn thing(x: int):
+  fn thing(x: int) -> int:
     52 + x
 
   print(thing(x))
