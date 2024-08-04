@@ -233,6 +233,7 @@ fn test_if():
   print(x)
   assert(x == 3222)
   
+  # TODO: Syntax?
   (print(numbers[:]) if operator_mod(numbers[:], 2) == 0) ...
 
   print("--")
@@ -247,6 +248,40 @@ fn test_if():
 
   cc1 :: @concat(numbers[:] if numbers[:] < 20, numbers[:] if numbers[:] > 20)
   print(cc1[:]) ...
+
+fn test_while():
+  
+  numbers := [40, 20, 10, 32, 12, 3124]
+  x := @sum(numbers[:] while numbers[:] < 100)
+  print(x)
+  assert(x == 114)
+
+  # TODO: Syntax?
+  (print(factorial[:]) while numbers[:] < 100) ...
+
+  for x in (numbers[:] while numbers[:] < 100):
+    print(x)
+
+fn test_sideeffect():
+
+  numbers := [40, 20, 10, 32, 12, 3124]
+  calls := 0
+
+  side :: {||
+    print("sideeffect")
+    calls += 1
+    500
+  }
+
+  x := @any(numbers[:] > side())
+  assert(calls == 1)
+
+fn test_template!(T)():
+
+  numbers := [40, 20, 10, 32, 12, 3124]
+  x := @sum(numbers[:])
+  print(x)
+  
 
 fn main():
   test_fold()
@@ -264,3 +299,7 @@ fn main():
   test_stuff()
   test_for_loop()
   test_if()
+  # test_sideeffect()
+  test_template!int()
+  test_template!float()
+  test_while()

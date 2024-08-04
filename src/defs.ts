@@ -272,7 +272,8 @@ export type ExpansionCompilerState = {
   fold: { iden: ParseFreshIden, initial: ParseNode } | null,
   setterSelector: ExpansionSelector | null,
   selectors: ExpansionSelector[],
-  filter: ParseNode | null,
+  filterNode: ParseNode | null,
+  whileNode: ParseNode | null,
 }
 export interface BytecodeWriter {
   location: SourceLocation

@@ -20,6 +20,10 @@ type IteratorState = {
   closure: Closure,
   selector: ExpansionSelector
 }
+const createExpansionState = (debugName: string, location: SourceLocation): ExpansionCompilerState => {
+  const iteratorListIdentifier = new ParseFreshIden(createAnonymousToken(''), new FreshBindingToken('iterator_list'))
+  return { debugName, loopBodyNode: null, selectors: [], iteratorListIdentifier, fold: null, setterSelector: null, filterNode: null, whileNode: null, optimiseSimple: false, location }
+}
 const canOptimiseSimpleIterator = (closure: Closure) => {
   return (closure as any)._canOptimiseSimpleIterator
 }
@@ -337,7 +341,7 @@ const expandZipIterator = (state: ExpansionZipState): Task<Ast, CompilerError> =
   const location = state.location
 
   if (state.iteratorList.length === 0 && state.setterSelector) {
-    compilerAssert(!state.expansion.filter, "Filter not implemented in setter yet")
+    compilerAssert(!state.expansion.filterNode, "Filter not implemented in setter yet")
 
     const setter = createArraySetterIterator(createAnonymousToken(''), state.compilerState, state.setterSelector)
 
@@ -434,10 +438,6 @@ const iteratableToClosure = (ctx: CompilerFunctionCallContext, token: Token, ite
   return iterator.closure
 }
 
-const createExpansionState = (debugName: string, location: SourceLocation): ExpansionCompilerState => {
-  const iteratorListIdentifier = new ParseFreshIden(createAnonymousToken(''), new FreshBindingToken('iterator_list'))
-  return { debugName, loopBodyNode: null, selectors: [], iteratorListIdentifier, fold: null, setterSelector: null, filter: null, optimiseSimple: false, location }
-}
 const visitExpansion = (out: BytecodeWriter, expansion: ExpansionCompilerState, node: ParseNode) => {
   // Because we want to use the expansion state to insert a loop construct
   // around the expansion body we need to evaluate the body first.
@@ -452,8 +452,14 @@ const visitExpansion = (out: BytecodeWriter, expansion: ExpansionCompilerState, 
   if (node instanceof ParseIf) {
     const bytecode = { code: [], locations: [] }
     visitParseNode({ location: expansion.location, bytecode, instructionTable: BytecodeSecondOrder, globalCompilerState: out.globalCompilerState, state: out.state }, node.condition)
-    expansion.filter = new ParseBytecode(node.token, bytecode)
+    expansion.filterNode = new ParseBytecode(node.token, bytecode)
     node = node.trueBody
+  }
+  if (node instanceof ParseWhileExpr) {
+    const bytecode = { code: [], locations: [] }
+    visitParseNode({ location: expansion.location, bytecode, instructionTable: BytecodeSecondOrder, globalCompilerState: out.globalCompilerState, state: out.state }, node.condition)
+    expansion.whileNode = new ParseBytecode(node.token, bytecode)
+    node = node.body
   }
   visitParseNode({ location: expansion.location, bytecode, instructionTable: BytecodeSecondOrder, globalCompilerState: out.globalCompilerState, state: out.state }, node)
   out.state.expansion = null
@@ -466,6 +472,7 @@ const compileExpansionToParseNode = (out: BytecodeWriter, expansion: ExpansionCo
   const letIteratorList = new ParseLet(node.token, expansion.iteratorListIdentifier, null, list)
 
   const metaList = new ParseMeta(node.token, letIteratorList)
+  const breakIden = new ParseFreshIden(node.token, new FreshBindingToken('break'))
 
   const finalAst = new ParseEvalFunc(createAnonymousToken(''), (vm: Vm) => {
 
@@ -479,8 +486,14 @@ const compileExpansionToParseNode = (out: BytecodeWriter, expansion: ExpansionCo
     })
     compilerAssert(expansion.loopBodyNode, "Expected loop body")
 
-    if (expansion.filter) {
-      expansion.loopBodyNode = new ParseIf(node.token, false, expansion.filter, expansion.loopBodyNode, null)
+    if (expansion.filterNode) {
+      expansion.loopBodyNode = new ParseIf(node.token, false, expansion.filterNode, expansion.loopBodyNode, null)
+    }
+    if (expansion.whileNode) {
+      const break_ = new ParseBreak(node.token, breakIden, null)
+      const cond = new ParseNot(createAnonymousToken(''), expansion.whileNode)
+      const ifBreak = new ParseIf(node.token, false, cond, break_, null)
+      expansion.loopBodyNode = new ParseStatements(node.token, [ifBreak, expansion.loopBodyNode])
     }
 
     const fnBody = new ParseStatements(createAnonymousToken(''), [expansion.loopBodyNode])
@@ -520,7 +533,7 @@ const compileExpansionToParseNode = (out: BytecodeWriter, expansion: ExpansionCo
     final.push(expansion.fold.iden)
   }
 
-  return new ParseStatements(node.token, [...lets, ...final])
+  return new ParseBlock(createAnonymousToken(''), 'break', breakIden, new ParseStatements(node.token, [...lets, ...final]))
 }
 
 
@@ -576,7 +589,7 @@ export const expandFuncSumSugar = (out: BytecodeWriter, noteNode: ParseNote, arg
   const result = visitExpansion(out, expansion, node)
   compilerAssert(!expansion.fold, "Fold not supported in this context")
 
-  expansion.optimiseSimple = expansion.selectors.length === 1 && !expansion.filter
+  expansion.optimiseSimple = expansion.selectors.length === 1 && !expansion.filterNode
 
   expansion.fold = { iden: new ParseFreshIden(node.token, new FreshBindingToken('fold_iden')), initial: new ParseNumber((createAnonymousToken('0'))) }
   expansion.loopBodyNode = new ParseOperator(createAnonymousToken('+'), [result, expansion.fold.iden])
@@ -589,7 +602,7 @@ export const expandFuncLastSugar = (out: BytecodeWriter, noteNode: ParseNote, ar
   const node = args[0]
   const expansion = createExpansionState('last', node.token.location)
   const result = visitExpansion(out, expansion, node)
-  expansion.optimiseSimple = expansion.selectors.length === 1 && !expansion.filter
+  expansion.optimiseSimple = expansion.selectors.length === 1 && !expansion.filterNode
 
   compilerAssert(!expansion.fold, "Fold not supported in this context")
 
@@ -607,7 +620,7 @@ export const expandFuncFirstSugar = (out: BytecodeWriter, noteNode: ParseNote, a
   const node = args[0]
   const expansion = createExpansionState('first', node.token.location)
   const result = visitExpansion(out, expansion, node)
-  expansion.optimiseSimple = expansion.selectors.length === 1 && !expansion.filter
+  expansion.optimiseSimple = expansion.selectors.length === 1 && !expansion.filterNode
 
   compilerAssert(!expansion.fold, "Fold not supported in this context")
 
