@@ -1,4 +1,4 @@
-import compiler for generator, concat, assert
+import compiler for generator, concat, assert, operator_mod
 import range for Range, ints
 
 type Person @struct:
@@ -228,10 +228,12 @@ fn test_for_loop():
 
 fn test_if():
 
-  numbers := [40, 20, 10, 32, 12, 3124]
+  numbers := [43, 21, 10, 34, 12, 3124]
   x := @sum(numbers[:] if numbers[:] > 20)
   print(x)
-  assert(x == 3196)
+  assert(x == 3222)
+  
+  (print(numbers[:]) if operator_mod(numbers[:], 2) == 0) ...
 
 fn main():
   test_fold()

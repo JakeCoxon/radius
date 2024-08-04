@@ -2,7 +2,7 @@ import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst,
 import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, functionCompileTimeCompileTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, compileExportedFunctionTask } from "./compiler_functions";
 import { Event, Task, TaskDef, Unit, isTask, isTaskResult, withContext } from "./tasks";
 import { createCompilerModuleTask, createListConstructor, defaultMetaFunction, print } from "./compiler_sugar";
-import { expandFuncAllSugar, expandFuncAnySugar, expandFuncConcatSugar, expandFuncFirstSugar, expandFuncLastSugar, expandFuncSumSugar, expandLoopSugar, foldSugar, forExprSugar, forLoopSugar, listComprehensionSugar, sliceSugar, whileExprSugar } from "./compiler_iterator"
+import { expandDotsSugar, expandFuncAllSugar, expandFuncAnySugar, expandFuncConcatSugar, expandFuncFirstSugar, expandFuncLastSugar, expandFuncSumSugar, foldSugar, forExprSugar, forLoopSugar, listComprehensionSugar, sliceSugar, whileExprSugar } from "./compiler_iterator"
 
 export const pushBytecode = <T extends BytecodeInstr>(out: BytecodeWriter, token: Token, instr: T) => {
   out.bytecode.locations.push(token.location);
@@ -280,7 +280,7 @@ export const BytecodeSecondOrder: ParseTreeTable = {
   for:      (out, node) => forLoopSugar(out, node),
   forexpr:  (out, node) => forExprSugar(out, node),
   whileexpr:(out, node) => whileExprSugar(out, node),
-  expand:   (out, node) => expandLoopSugar(out, node),
+  expand:   (out, node) => expandDotsSugar(out, node),
   fold:     (out, node) => foldSugar(out, node),
   listcomp: (out, node) => listComprehensionSugar(out, node),
   slice:    (out, node) => sliceSugar(out, node, null),

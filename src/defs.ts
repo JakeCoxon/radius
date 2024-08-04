@@ -265,6 +265,7 @@ export type ExpansionSelector = {
 }
 export type ExpansionCompilerState = {
   debugName: string,
+  location: SourceLocation,
   optimiseSimple?: boolean,
   loopBodyNode: ParseNode | null
   iteratorListIdentifier: ParseFreshIden,
