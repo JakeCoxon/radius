@@ -30,13 +30,8 @@ const setOptimiseSimpleIterator = (closure: Closure) => {
 const getLength = (token: Token, expr: ParseNode) => new ParseCall(token, new ParseCompilerIden(createAnonymousToken(''), 'lenfn'), [expr], [])
 
 export const forLoopSugar = (out: BytecodeWriter, node: ParseFor) => {
-  const bytecode = { code: [], locations: [] }
-  const iteratorListIdentifier = new ParseFreshIden(node.token, new FreshBindingToken('iterator_list'))
-  const expansion: ExpansionCompilerState = out.state.expansion = { debugName: 'forin', optimiseSimple: false,
-    loopBodyNode: null, selectors: [], iteratorListIdentifier, fold: null, setterSelector: null, filter: null }
-  
-  visitParseNode({ location: node.expr.token.location, bytecode, instructionTable: BytecodeSecondOrder, globalCompilerState: out.globalCompilerState, state: out.state }, node.expr)
-  out.state.expansion = null
+  const expansion = createExpansionState('forin', node.token.location)
+  const result = visitExpansion(out, expansion, node.expr)
   compilerAssert(!expansion.fold, "Fold not supported in for loop")
 
   const fnIden = node.left instanceof ParseIdentifier ? node.left : new ParseFreshIden(node.token, new FreshBindingToken('it'))
@@ -49,8 +44,7 @@ export const forLoopSugar = (out: BytecodeWriter, node: ParseFor) => {
   let iterator: ParseNode
   if (expansion.selectors.length > 0) {
     expansion.optimiseSimple = expansion.selectors.length === 1
-    expansion.loopBodyNode = new ParseBytecode(node.token, bytecode)
-    expansion.loopBodyNode = new ParseCall(node.token, fn, [expansion.loopBodyNode], [])
+    expansion.loopBodyNode = new ParseCall(node.token, fn, [result], [])
 
     iterator = compileExpansionToParseNode(out, expansion, node)
   } else {
@@ -595,7 +589,7 @@ export const expandFuncLastSugar = (out: BytecodeWriter, noteNode: ParseNote, ar
   const node = args[0]
   const expansion = createExpansionState('last', node.token.location)
   const result = visitExpansion(out, expansion, node)
-  expansion.optimiseSimple = true
+  expansion.optimiseSimple = expansion.selectors.length === 1 && !expansion.filter
 
   compilerAssert(!expansion.fold, "Fold not supported in this context")
 
@@ -613,7 +607,7 @@ export const expandFuncFirstSugar = (out: BytecodeWriter, noteNode: ParseNote, a
   const node = args[0]
   const expansion = createExpansionState('first', node.token.location)
   const result = visitExpansion(out, expansion, node)
-  expansion.optimiseSimple = true
+  expansion.optimiseSimple = expansion.selectors.length === 1 && !expansion.filter
 
   compilerAssert(!expansion.fold, "Fold not supported in this context")
 

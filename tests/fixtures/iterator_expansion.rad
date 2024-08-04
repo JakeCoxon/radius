@@ -235,6 +235,19 @@ fn test_if():
   
   (print(numbers[:]) if operator_mod(numbers[:], 2) == 0) ...
 
+  print("--")
+
+  for x in (numbers[:] if numbers[:] < 20):
+    print(x)
+
+  print("--")
+
+  assert(@first(numbers[:] if numbers[:] < 20) == 10)
+  assert(@last(numbers[:] if numbers[:] < 20) == 12)
+
+  cc1 :: @concat(numbers[:] if numbers[:] < 20, numbers[:] if numbers[:] > 20)
+  print(cc1[:]) ...
+
 fn main():
   test_fold()
   test_shorthand()
