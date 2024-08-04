@@ -1,4 +1,4 @@
-import { BytecodeDefault, BytecodeSecondOrder, compileClassTask, compileFunctionPrototype, createBytecodeVmAndExecuteTask, normalizeNumberType, numberTypeToConcrete, propagateLiteralType, propagatedLiteralAst, pushBytecode, pushGeneratedBytecode, visitParseNode } from "./compiler";
+import { BytecodeDefault, BytecodeSecondOrder, compileClassTask, compileFunctionPrototype, createBytecodeVmAndExecuteTask, normalizeNumberType, numberTypeToConcrete, propagateLiteralType, propagatedLiteralAst, pushBytecode, pushGeneratedBytecode, visitParseNode, visitParseNodeAndError } from "./compiler";
 import { externalBuiltinBindings } from "./compiler_sugar";
 import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, CallAst, IntType, Closure, UserCallAst, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition, ParseCall, TypeVariable, TypeMatcher, typeMatcherEquals, SourceLocation, ExternalTypeConstructor, ScopeParentSymbol, SubCompilerState, CompilerFunction, IntLiteralType, FloatLiteralType, FloatType, RawPointerType, AddressAst, BindingAst, UnknownObject, NeverType, CompilerFunctionCallContext, CompileTimeObjectType, CompTimeObjAst, ParseString, NamedArgAst, TypeCheckResult, u8Type, TypeCheckVar, ParseFreshIden, NumberAst, BoolAst, createStatements, ExternalFunction } from "./defs";
 import { Task, TaskDef, Unit } from "./tasks";
@@ -60,6 +60,7 @@ function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, args, typ
     func.headerPrototype = { name: `${func.debugName} header`, body: null!, initialInstructionTable: BytecodeDefault };
     func.headerPrototype.bytecode = { code: [], locations: [] }
     const out: BytecodeWriter = {
+      location: undefined!,
       bytecode: func.headerPrototype.bytecode,
       instructionTable: func.headerPrototype.initialInstructionTable,
       globalCompilerState: ctx.globalCompiler,
@@ -67,15 +68,15 @@ function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, args, typ
     }
     // visitParseNode(out, func.headerPrototype.body);
     func.params.forEach(({ name, type }, i) => {
-      if (type === null) return visitParseNode(out, new ParseNil(createAnonymousToken('')));
-      visitParseNode(out, type)
+      if (type === null) return visitParseNodeAndError(out, new ParseNil(createAnonymousToken('')));
+      visitParseNodeAndError(out, type)
       pushBytecode(out, type.token, { type: 'totype' })
     })
 
     pushGeneratedBytecode(out, { type: "tuple", count: func.params.length })
-    if (func.returnType === null) visitParseNode(out, new ParseNil(createAnonymousToken('')))
+    if (func.returnType === null) visitParseNodeAndError(out, new ParseNil(createAnonymousToken('')))
     else {
-      visitParseNode(out, func.returnType)
+      visitParseNodeAndError(out, func.returnType)
       pushBytecode(out, func.returnType.token, { type: 'totype' })
     }
     pushGeneratedBytecode(out, { type: "tuple", count: 2 })

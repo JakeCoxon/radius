@@ -11,16 +11,25 @@ export const pushBytecode = <T extends BytecodeInstr>(out: BytecodeWriter, token
 }
 
 export const visitParseNode = (out: BytecodeWriter, expr: ParseNode) => {
+  out.location = expr.token.location
   compilerAssert(expr.key, "$expr not found", { expr })
   const table = out.instructionTable
   const instrWriter = expectMap(table, expr.key, `Not implemented parser node $key in ${table === BytecodeDefault ? 'default' : 'second order'} table`)
   instrWriter(out, expr as any)
 }
+export const visitParseNodeAndError = (out: BytecodeWriter, expr: ParseNode) => {
+  try {
+    visitParseNode(out, expr);
+  } catch (e) {
+    if (e instanceof CompilerError) { (e.info as any).location = out.location }
+    throw e
+  }
+}
 export const visitAll = (out: BytecodeWriter, exprs: ParseNode[]) => {
   exprs.forEach(expr => visitParseNode(out, expr))
 }
 export const writeMeta = (out: BytecodeWriter, expr: ParseNode) => {
-  visitParseNode({ bytecode: out.bytecode, instructionTable: BytecodeDefault, globalCompilerState: out.globalCompilerState, state: out.state }, expr)
+  visitParseNode({ location: expr.token.location, bytecode: out.bytecode, instructionTable: BytecodeDefault, globalCompilerState: out.globalCompilerState, state: out.state }, expr)
 }
 export const pushGeneratedBytecode = <T extends BytecodeInstr>(out: BytecodeWriter, instr: T) => {
   out.bytecode.code.push(instr);
@@ -92,7 +101,7 @@ export const BytecodeDefault: ParseTreeTable = {
   },
 
   quote: (out, node) => {
-    visitParseNode({ bytecode: out.bytecode, instructionTable: BytecodeSecondOrder, globalCompilerState: out.globalCompilerState, state: out.state }, node.expr)
+    visitParseNode({ location: node.token.location, bytecode: out.bytecode, instructionTable: BytecodeSecondOrder, globalCompilerState: out.globalCompilerState, state: out.state }, node.expr)
   },
   
   let: (out, node) => {
@@ -539,12 +548,13 @@ export const compileFunctionPrototype = (ctx: TaskContext, prototype: FunctionPr
 
   prototype.bytecode = { code: [], locations: [] }
   const out: BytecodeWriter = {
+    location: undefined!,
     bytecode: prototype.bytecode,
     instructionTable: prototype.initialInstructionTable,
     globalCompilerState: ctx.globalCompiler,
     state: { labelBlock: null, expansion: null }
   }
-  visitParseNode(out, prototype.body);
+  visitParseNodeAndError(out, prototype.body)
   pushGeneratedBytecode(out, { type: "halt" })
 
   ctx.globalCompiler.logger.log(textColors.cyan(`Compiled ${prototype.name}`))
@@ -1491,12 +1501,13 @@ function topLevelClassDefinitionTask(ctx: TaskContext, decl: ParserClassDecl, sc
 
 const topLevelLetConst = (ctx: TaskContext, expr: ParseLetConst, rootScope: Scope) => {
   const out: BytecodeWriter = {
+    location: expr.token.location,
     bytecode: { code: [], locations: [] },
     instructionTable: BytecodeDefault,
     globalCompilerState: ctx.globalCompiler,
     state: { labelBlock: null, expansion: null }
   }
-  visitParseNode(out, expr.value);
+  visitParseNodeAndError(out, expr.value);
   pushGeneratedBytecode(out, { type: "halt" })
 
   ctx.globalCompiler.logger.log(textColors.cyan("Compiled top level let const"))
@@ -1518,12 +1529,13 @@ const topLevelLet = (ctx: TaskContext, expr: ParseLet, moduleScope: Scope) => {
   if (!expr.value) return Task.success()
 
   const out: BytecodeWriter = {
+    location: expr.token.location,
     bytecode: { code: [], locations: [] },
     instructionTable: BytecodeSecondOrder,
     globalCompilerState: ctx.globalCompiler,
     state: { labelBlock: null, expansion: null }
   }
-  visitParseNode(out, expr)
+  visitParseNodeAndError(out, expr)
   pushGeneratedBytecode(out, { type: "halt" })
 
   ctx.globalCompiler.logger.log(textColors.cyan("Compiled top level let"))
@@ -1596,12 +1608,13 @@ export const importModule = (ctx: TaskContext, importNode: ParseImport, existing
 
 export const topLevelComptimeTask = (ctx: TaskContext, expr: ParseNode, moduleScope: Scope) => {
   const out: BytecodeWriter = {
+    location: expr.token.location,
     bytecode: { code: [], locations: [] },
     instructionTable: BytecodeDefault,
     globalCompilerState: ctx.globalCompiler,
     state: { labelBlock: null, expansion: null }
   }
-  visitParseNode(out, expr)
+  visitParseNodeAndError(out, expr)
   pushGeneratedBytecode(out, { type: "halt" })
 
   ctx.globalCompiler.logger.log(textColors.cyan("Compiled top level comptime"))
