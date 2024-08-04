@@ -1,5 +1,5 @@
 import compiler for generator, concat, assert
-import range for Range
+import range for Range, ints
 
 type Person @struct:
   age: int
@@ -175,6 +175,12 @@ fn test_first():
   print(x)
   assert(x == 40)
 
+fn test_range():
+  rng := Range(10, 20)
+  print(rng[1:10:2]) ...
+
+  print(ints[1:10:2]) ...
+
 fn test_stuff():
 
   squares :: |yield|
@@ -209,4 +215,5 @@ fn main():
   test_people()
   test_last()
   test_first()
+  test_range()
   test_stuff()

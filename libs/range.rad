@@ -8,3 +8,5 @@ fn range_iterate!(f)(range: Range) -> void @inline:
   while i < range.end:
     f(i)
     i += 1
+
+ints := Range(0, 2147483647)
