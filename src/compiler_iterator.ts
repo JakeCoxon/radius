@@ -342,14 +342,6 @@ const expandZipIterator = (state: ExpansionZipState): Task<Ast, CompilerError> =
 
   const location = state.location
 
-  if (state.expansion.optimiseSimple) {
-    compilerAssert(state.iteratorList.length === 1, "optimiseSimple is set to true but expected one iterator")
-    compilerAssert(!state.setterSelector, "Shouldn't happen?")
-    const iterator1 = state.iteratorList.shift()!
-    const fnctx2: CompilerFunctionCallContext = { location: location, compilerState: state.compilerState, resultAst: undefined, typeCheckResult: undefined }
-    return createCallAstFromValue(fnctx2, iterator1.closure, [], [new CompTimeObjAst(VoidType, location, state.resultClosure)])
-  }
-
   if (state.iteratorList.length === 0 && state.setterSelector) {
 
     const setter = createArraySetterIterator(createAnonymousToken(''), state.compilerState, state.setterSelector)
@@ -481,6 +473,12 @@ const compileExpansionToParseNode = (out: BytecodeWriter, expansion: ExpansionCo
       const closure = iteratableToClosure(fnctx, node.token, obj, selector)
       return { closure, selector, lets }
     })
+
+    if (expansion.optimiseSimple) {
+      compilerAssert(iteratorList.length === 1, "optimiseSimple is set to true but expected one iterator")
+      compilerAssert(!expansion.setterSelector, "Shouldn't happen?")
+      return createCallAstFromValueAndPushValue(vm, iteratorList[0].closure, [], [new CompTimeObjAst(VoidType, vm.location, resultClosure)])
+    }
 
     const initialState: ExpansionZipState = { expansion, setterSelector: expansion.setterSelector, iteratorList, bindingValues: [], 
       lets: [], resultClosure, totalIterators: iteratorList.length, location: vm.location, compilerState: vm.context.subCompilerState }
