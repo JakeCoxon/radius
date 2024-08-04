@@ -10,3 +10,15 @@ fn main():
   assert(e == 5)
   assert(f == 6)
   assert(g == 7)
+
+  list := [(1, 2), (3, 4), (5, 6)]
+  for foo, bar in list:
+    print(foo, bar)
+  
+  print("---")
+
+  # rng := Range(0, 100)
+  rng := [1, 2, 3, 4, 5, 6, 7, 8, 9]
+  zip :: @concat((rng[:], rng[:] * 2, rng[1:]))
+  for a, b, c in zip:
+    print(a, b, c)

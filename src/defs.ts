@@ -39,6 +39,7 @@ const makeColor = (x: unknown) => {
 }
 
 export const isArray = (value: any): value is unknown[] => Array.isArray(value)
+export const filterNotNull = <T>(arr: (T | null | undefined)[]): T[] => arr.filter(x => x !== null && x !== undefined) as T[]
 
 export class Source {
   tokens: Token[]
@@ -146,7 +147,7 @@ export class ParseClass extends ParseNodeType {        key = 'class' as const;  
 export class ParseReturn extends ParseNodeType {       key = 'return' as const;       constructor(public token: Token, public expr: ParseNode | null) { super();} }
 export class ParseBreak extends ParseNodeType {        key = 'break' as const;        constructor(public token: Token, public name: ParseIdentifier | ParseFreshIden | null, public expr: ParseNode | null) { super();} }
 export class ParseContinue extends ParseNodeType {     key = 'continue' as const;     constructor(public token: Token, public name: ParseIdentifier | ParseFreshIden | null) { super();} }
-export class ParseFor extends ParseNodeType {          key = 'for' as const;          constructor(public token: Token, public identifier: ParseIdentifier, public expr: ParseNode, public body: ParseNode) { super();} }
+export class ParseFor extends ParseNodeType {          key = 'for' as const;          constructor(public token: Token, public left: ParseIdentifier | ParseTuple, public expr: ParseNode, public body: ParseNode) { super();} }
 export class ParseCast extends ParseNodeType {         key = 'cast' as const;         constructor(public token: Token, public expr: ParseNode, public as: ParseNode) { super();} }
 export class ParseOpEq extends ParseNodeType {         key = 'opeq' as const;         constructor(public token: Token, public left: ParseNode, public right: ParseNode) { super();} }
 export class ParseWhile extends ParseNodeType {        key = 'while' as const;        constructor(public token: Token, public condition: ParseNode, public body: ParseNode) { super();} }

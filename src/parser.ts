@@ -463,8 +463,17 @@ export const makeParser = (input: string, debugName: string) => {
   const trailingEndParen = <T>(x: T) => (expect(")", "Expected ')'"), x);
 
   const expectInExpr = () => (expect("in", "Expected 'in' after for identifier"), parseExpr())
+  const parseLeftSideMatch = () => {
+    let left: ParseIdentifier | ParseTuple = parseIdentifier();
+    if (match(",")) {
+      const list = [left, parseIdentifier()];
+      while (match(",")) list.push(parseIdentifier());
+      left = new ParseTuple(previous, list);
+    }
+    return left;
+  }
   const parseForStatement = () =>
-    new ParseFor(previous, parseIdentifier(), expectInExpr(), parseColonBlock("for list-expression"))
+    new ParseFor(previous, parseLeftSideMatch(), expectInExpr(), parseColonBlock("for list-expression"))
 
   const parseMetaStatement = (metaToken: Token) => {
     if (match("if"))    return new ParseMetaIf(metaToken, parseIf(previous, false));
