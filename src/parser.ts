@@ -325,7 +325,8 @@ export const makeParser = (input: string, debugName: string) => {
     let expr = parseMeta();
     if (match("...")) return new ParseExpand(previous, expr);
     else if (match("while")) return new ParseWhileExpr(previous, parseExpr(), expr);
-    else if (match("for"))   return new ParseForExpr(previous, parseIdentifier(), expectInExpr(), expr); // prettier-ignore
+    else if (match("for"))   return new ParseForExpr(previous, parseIdentifier(), expectInExpr(), expr);
+    else if (match("if"))    return new ParseIf(previous, true, parseExpr(), expr, null);
     return expr;
   };
   const parseExpr = parseDots;

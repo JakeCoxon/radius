@@ -515,7 +515,8 @@ export const BytecodeSecondOrder: ParseTreeTable = {
   },
 
   if: (out, node) => {
-    if (node.isExpr) compilerAssert(node.falseBody, "If-expression needs false branch")
+    // TODO: This is no longer possible because we use if-expr without else clause in iterators
+    // if (node.isExpr) compilerAssert(node.falseBody, "If-expression needs false branch")
     if (node.falseBody) visitParseNode(out, node.falseBody)
     visitParseNode(out, node.trueBody)
     visitParseNode(out, node.condition)
@@ -870,7 +871,8 @@ const instructions: InstructionMapping = {
     const trueBody = propagatedLiteralAst(expectAst(popStack(vm)))
     const falseBody = f ? propagatedLiteralAst(expectAst(popStack(vm))) : null
     const resultType = e && falseBody ? falseBody.type : VoidType
-    if (e) compilerAssert(falseBody && falseBody.type === trueBody.type, "If expression inferred to be of type $trueType but got $falseType", { trueType: trueBody.type, falseType: falseBody?.type })
+    // TODO: This is no longer possible because we use if-expr without else clause in iterators
+    // if (e) compilerAssert(falseBody && falseBody.type === trueBody.type, "If expression inferred to be of type $trueType but got $falseType", { trueType: trueBody.type, falseType: falseBody?.type })
     vm.stack.push(new IfAst(resultType, vm.location, cond, trueBody, falseBody))
   },
   evalfunc: (vm, { func }) => { return func(vm) },

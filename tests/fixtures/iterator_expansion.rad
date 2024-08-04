@@ -225,6 +225,14 @@ fn test_for_loop():
     print(a, b)
     if a >= 100:
       break
+
+fn test_if():
+
+  numbers := [40, 20, 10, 32, 12, 3124]
+  x := @sum(numbers[:] if numbers[:] > 20)
+  print(x)
+  assert(x == 3196)
+
 fn main():
   test_fold()
   test_shorthand()
@@ -240,3 +248,4 @@ fn main():
   test_range()
   test_stuff()
   test_for_loop()
+  test_if()

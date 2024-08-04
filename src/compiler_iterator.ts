@@ -33,7 +33,7 @@ export const forLoopSugar = (out: BytecodeWriter, node: ParseFor) => {
   const bytecode = { code: [], locations: [] }
   const iteratorListIdentifier = new ParseFreshIden(node.token, new FreshBindingToken('iterator_list'))
   const expansion: ExpansionCompilerState = out.state.expansion = { debugName: 'forin', optimiseSimple: false,
-    loopBodyNode: null, selectors: [], iteratorListIdentifier, fold: null, setterSelector: null }
+    loopBodyNode: null, selectors: [], iteratorListIdentifier, fold: null, setterSelector: null, filter: null }
   
   visitParseNode({ location: node.expr.token.location, bytecode, instructionTable: BytecodeSecondOrder, globalCompilerState: out.globalCompilerState, state: out.state }, node.expr)
   out.state.expansion = null
@@ -343,6 +343,7 @@ const expandZipIterator = (state: ExpansionZipState): Task<Ast, CompilerError> =
   const location = state.location
 
   if (state.iteratorList.length === 0 && state.setterSelector) {
+    compilerAssert(!state.expansion.filter, "Filter not implemented in setter yet")
 
     const setter = createArraySetterIterator(createAnonymousToken(''), state.compilerState, state.setterSelector)
 
@@ -458,6 +459,10 @@ const compileExpansionToParseNode = (out: BytecodeWriter, expansion: ExpansionCo
     })
     compilerAssert(expansion.loopBodyNode, "Expected loop body")
 
+    if (expansion.filter) {
+      expansion.loopBodyNode = new ParseIf(node.token, false, expansion.filter, expansion.loopBodyNode, null)
+    }
+
     const fnBody = new ParseStatements(createAnonymousToken(''), [expansion.loopBodyNode])
     const decl = createAnonymousParserFunctionDecl(`reduced${expansion.debugName}`, createAnonymousToken(''), fnParams, fnBody)
     const funcDef = insertFunctionDefinition(vm.context.subCompilerState.globalCompiler, decl)
@@ -512,7 +517,7 @@ export const expandLoopSugar = (out: BytecodeWriter, node: ParseExpand) => {
   const bytecode = { code: [], locations: [] }
   const iteratorListIdentifier = new ParseFreshIden(node.token, new FreshBindingToken('iterator_list'))
 
-  const expansion: ExpansionCompilerState = out.state.expansion = { debugName: '', loopBodyNode: null, selectors: [], iteratorListIdentifier, fold: null, setterSelector: null }
+  const expansion: ExpansionCompilerState = out.state.expansion = { debugName: '', loopBodyNode: null, selectors: [], iteratorListIdentifier, fold: null, setterSelector: null, filter: null }
   visitParseNode({ location: node.token.location, bytecode, instructionTable: BytecodeSecondOrder, globalCompilerState: out.globalCompilerState, state: out.state }, node.expr)
   out.state.expansion = null
 
@@ -530,7 +535,7 @@ export const expandFuncAllSugar = (out: BytecodeWriter, noteNode: ParseNote, arg
   const iteratorListIdentifier = new ParseFreshIden(node.token, new FreshBindingToken('iterator_list'))
 
   const expansion: ExpansionCompilerState = out.state.expansion = { debugName: 'all', optimiseSimple: true,
-    loopBodyNode: null, selectors: [], iteratorListIdentifier, fold: null, setterSelector: null }
+    loopBodyNode: null, selectors: [], iteratorListIdentifier, fold: null, setterSelector: null, filter: null }
   
   visitParseNode({ location: noteNode.token.location, bytecode, instructionTable: BytecodeSecondOrder, globalCompilerState: out.globalCompilerState, state: out.state }, node)
   out.state.expansion = null
@@ -556,7 +561,7 @@ export const expandFuncAnySugar = (out: BytecodeWriter, noteNode: ParseNote, arg
   const iteratorListIdentifier = new ParseFreshIden(node.token, new FreshBindingToken('iterator_list'))
 
   const expansion: ExpansionCompilerState = out.state.expansion = { debugName: 'any', optimiseSimple: true,
-    loopBodyNode: null, selectors: [], iteratorListIdentifier, fold: null, setterSelector: null }
+    loopBodyNode: null, selectors: [], iteratorListIdentifier, fold: null, setterSelector: null, filter: null }
   
   visitParseNode({ location: noteNode.token.location, bytecode, instructionTable: BytecodeSecondOrder, globalCompilerState: out.globalCompilerState, state: out.state }, node)
   out.state.expansion = null
@@ -576,17 +581,25 @@ export const expandFuncAnySugar = (out: BytecodeWriter, noteNode: ParseNote, arg
 }
 export const expandFuncSumSugar = (out: BytecodeWriter, noteNode: ParseNote, args: ParseNode[]) => {
   compilerAssert(!out.state.expansion, "Already in expansion state")
-  const node = args[0]
+  let node = args[0]
   const bytecode = { code: [], locations: [] }
   const iteratorListIdentifier = new ParseFreshIden(node.token, new FreshBindingToken('iterator_list'))
 
   const expansion: ExpansionCompilerState = out.state.expansion = { debugName: 'sum', optimiseSimple: true,
-    loopBodyNode: null, selectors: [], iteratorListIdentifier, fold: null, setterSelector: null }
+    loopBodyNode: null, selectors: [], iteratorListIdentifier, fold: null, setterSelector: null, filter: null }
   
+  if (node instanceof ParseIf) {
+    const bytecode = { code: [], locations: [] }
+    visitParseNode({ location: noteNode.token.location, bytecode, instructionTable: BytecodeSecondOrder, globalCompilerState: out.globalCompilerState, state: out.state }, node.condition)
+    expansion.filter = new ParseBytecode(node.token, bytecode)
+    node = node.trueBody
+  }
   visitParseNode({ location: noteNode.token.location, bytecode, instructionTable: BytecodeSecondOrder, globalCompilerState: out.globalCompilerState, state: out.state }, node)
   out.state.expansion = null
 
   compilerAssert(!expansion.fold, "Fold not supported in this context")
+
+  expansion.optimiseSimple = expansion.selectors.length === 1 && !expansion.filter
 
   expansion.fold = { iden: new ParseFreshIden(node.token, new FreshBindingToken('fold_iden')), initial: new ParseNumber((createAnonymousToken('0'))) }
   expansion.loopBodyNode = new ParseBytecode(node.token, bytecode)
@@ -602,7 +615,7 @@ export const expandFuncLastSugar = (out: BytecodeWriter, noteNode: ParseNote, ar
   const iteratorListIdentifier = new ParseFreshIden(node.token, new FreshBindingToken('iterator_list'))
 
   const expansion: ExpansionCompilerState = out.state.expansion = { debugName: 'last', optimiseSimple: true,
-    loopBodyNode: null, selectors: [], iteratorListIdentifier, fold: null, setterSelector: null }
+    loopBodyNode: null, selectors: [], iteratorListIdentifier, fold: null, setterSelector: null, filter: null }
   
   visitParseNode({ location: noteNode.token.location, bytecode, instructionTable: BytecodeSecondOrder, globalCompilerState: out.globalCompilerState, state: out.state }, node)
   out.state.expansion = null
@@ -625,7 +638,7 @@ export const expandFuncFirstSugar = (out: BytecodeWriter, noteNode: ParseNote, a
   const iteratorListIdentifier = new ParseFreshIden(node.token, new FreshBindingToken('iterator_list'))
 
   const expansion: ExpansionCompilerState = out.state.expansion = { debugName: 'first', optimiseSimple: true,
-    loopBodyNode: null, selectors: [], iteratorListIdentifier, fold: null, setterSelector: null }
+    loopBodyNode: null, selectors: [], iteratorListIdentifier, fold: null, setterSelector: null, filter: null }
   
   visitParseNode({ location: noteNode.token.location, bytecode, instructionTable: BytecodeSecondOrder, globalCompilerState: out.globalCompilerState, state: out.state }, node)
   out.state.expansion = null
@@ -701,7 +714,7 @@ export const expandFuncConcatSugar = (out: BytecodeWriter, noteNode: ParseNote, 
     const bytecode = { code: [], locations: [] }
     const iteratorListIdentifier = new ParseFreshIden(node.token, new FreshBindingToken('iterator_list'))
 
-    const expansion: ExpansionCompilerState = out.state.expansion = { debugName: "concat", loopBodyNode: null, selectors: [], iteratorListIdentifier, fold: null, setterSelector: null }
+    const expansion: ExpansionCompilerState = out.state.expansion = { debugName: "concat", loopBodyNode: null, selectors: [], iteratorListIdentifier, fold: null, setterSelector: null, filter: null }
     
     visitParseNode({ location: noteNode.token.location, bytecode, instructionTable: BytecodeSecondOrder, globalCompilerState: out.globalCompilerState, state: out.state }, node)
     out.state.expansion = null
