@@ -493,7 +493,7 @@ export const expandLoopSugar = (out: BytecodeWriter, node: ParseExpand) => {
   const iteratorListIdentifier = new ParseFreshIden(node.token, new FreshBindingToken('iterator_list'))
 
   const expansion: ExpansionCompilerState = out.state.expansion = { debugName: '', loopBodyNode: null, selectors: [], iteratorListIdentifier, fold: null, setterSelector: null }
-  visitParseNode({ bytecode, instructionTable: BytecodeSecondOrder, globalCompilerState: out.globalCompilerState, state: out.state }, node.expr)
+  visitParseNode({ location: node.token.location, bytecode, instructionTable: BytecodeSecondOrder, globalCompilerState: out.globalCompilerState, state: out.state }, node.expr)
   out.state.expansion = null
 
   expansion.loopBodyNode = new ParseBytecode(node.token, bytecode)
@@ -512,7 +512,7 @@ export const expandFuncAllSugar = (out: BytecodeWriter, noteNode: ParseNote, arg
   const expansion: ExpansionCompilerState = out.state.expansion = { debugName: 'all', optimiseSimple: true,
     loopBodyNode: null, selectors: [], iteratorListIdentifier, fold: null, setterSelector: null }
   
-  visitParseNode({ bytecode, instructionTable: BytecodeSecondOrder, globalCompilerState: out.globalCompilerState, state: out.state }, node)
+  visitParseNode({ location: noteNode.token.location, bytecode, instructionTable: BytecodeSecondOrder, globalCompilerState: out.globalCompilerState, state: out.state }, node)
   out.state.expansion = null
 
   compilerAssert(!expansion.fold, "Fold not supported in this context")
@@ -534,7 +534,7 @@ export const expandFuncAnySugar = (out: BytecodeWriter, noteNode: ParseNote, arg
   const expansion: ExpansionCompilerState = out.state.expansion = { debugName: 'any', optimiseSimple: true,
     loopBodyNode: null, selectors: [], iteratorListIdentifier, fold: null, setterSelector: null }
   
-  visitParseNode({ bytecode, instructionTable: BytecodeSecondOrder, globalCompilerState: out.globalCompilerState, state: out.state }, node)
+  visitParseNode({ location: noteNode.token.location, bytecode, instructionTable: BytecodeSecondOrder, globalCompilerState: out.globalCompilerState, state: out.state }, node)
   out.state.expansion = null
 
   compilerAssert(!expansion.fold, "Fold not supported in this context")
@@ -555,7 +555,7 @@ export const expandFuncSumSugar = (out: BytecodeWriter, noteNode: ParseNote, arg
   const expansion: ExpansionCompilerState = out.state.expansion = { debugName: 'sum', optimiseSimple: true,
     loopBodyNode: null, selectors: [], iteratorListIdentifier, fold: null, setterSelector: null }
   
-  visitParseNode({ bytecode, instructionTable: BytecodeSecondOrder, globalCompilerState: out.globalCompilerState, state: out.state }, node)
+  visitParseNode({ location: noteNode.token.location, bytecode, instructionTable: BytecodeSecondOrder, globalCompilerState: out.globalCompilerState, state: out.state }, node)
   out.state.expansion = null
 
   compilerAssert(!expansion.fold, "Fold not supported in this context")
@@ -576,7 +576,7 @@ export const expandFuncLastSugar = (out: BytecodeWriter, noteNode: ParseNote, ar
   const expansion: ExpansionCompilerState = out.state.expansion = { debugName: 'last', optimiseSimple: true,
     loopBodyNode: null, selectors: [], iteratorListIdentifier, fold: null, setterSelector: null }
   
-  visitParseNode({ bytecode, instructionTable: BytecodeSecondOrder, globalCompilerState: out.globalCompilerState, state: out.state }, node)
+  visitParseNode({ location: noteNode.token.location, bytecode, instructionTable: BytecodeSecondOrder, globalCompilerState: out.globalCompilerState, state: out.state }, node)
   out.state.expansion = null
 
   compilerAssert(!expansion.fold, "Fold not supported in this context")
@@ -599,7 +599,7 @@ export const expandFuncFirstSugar = (out: BytecodeWriter, noteNode: ParseNote, a
   const expansion: ExpansionCompilerState = out.state.expansion = { debugName: 'first', optimiseSimple: true,
     loopBodyNode: null, selectors: [], iteratorListIdentifier, fold: null, setterSelector: null }
   
-  visitParseNode({ bytecode, instructionTable: BytecodeSecondOrder, globalCompilerState: out.globalCompilerState, state: out.state }, node)
+  visitParseNode({ location: noteNode.token.location, bytecode, instructionTable: BytecodeSecondOrder, globalCompilerState: out.globalCompilerState, state: out.state }, node)
   out.state.expansion = null
 
   compilerAssert(!expansion.fold, "Fold not supported in this context")
@@ -675,7 +675,7 @@ export const expandFuncConcatSugar = (out: BytecodeWriter, noteNode: ParseNote, 
 
     const expansion: ExpansionCompilerState = out.state.expansion = { debugName: "concat", loopBodyNode: null, selectors: [], iteratorListIdentifier, fold: null, setterSelector: null }
     
-    visitParseNode({ bytecode, instructionTable: BytecodeSecondOrder, globalCompilerState: out.globalCompilerState, state: out.state }, node)
+    visitParseNode({ location: noteNode.token.location, bytecode, instructionTable: BytecodeSecondOrder, globalCompilerState: out.globalCompilerState, state: out.state }, node)
     out.state.expansion = null
 
     if (expansion.selectors.length === 0) {
