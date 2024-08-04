@@ -240,7 +240,7 @@ export const makeParser = (input: string, debugName: string) => {
     else if (match("["))     return parseList();
     else if (match("-"))     return new ParseOperator(previous, [parseLiteral()])
     else if (match("'"))     return new ParseSymbol(parseIdentifier().token);
-    else if (match("@"))     return new ParseNote(previous, parseExpr());
+    else if (match("@"))     return new ParseNote(previous, parseCall());
     else if (match("%{"))    return parseDict(previous)
     else if (match("{"))     return match("|") ? parseLambda() : throwExpectError("Not implemented")
     else if (match("block")) return new ParseBlock(previous, null, token?.value != ':' ? parseIdentifier() : null, parseColonBlockExpr('block'))

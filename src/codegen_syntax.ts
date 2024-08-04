@@ -120,10 +120,12 @@ const astWriter: SyntaxAstWriterTable = {
   },
 
   block: (writer, ast) => {
+    if (ast.binding) format(writer, "'$ ", ast.binding)
     writeExpr(writer, ast.body)
   },
   break: (writer, ast) => {
     format(writer, "break")
+    if (ast.binding) format(writer, " '$", ast.binding)
   },
   call: (writer, ast) => {
     format(writer, `$(`, ast.binding)

@@ -68,7 +68,7 @@ export const BytecodeDefault: ParseTreeTable = {
   identifier: (out, node) => pushBytecode(out, node.token, { type: "binding", name: node.token.value }), 
   operator:   (out, node) => (visitAll(out, node.exprs), pushBytecode(out, node.token, { type: 'operator', name: node.token.value, count: node.exprs.length })), 
   set:        (out, node) => (visitParseNode(out, node.value), pushBytecode(out, node.token, { type: 'setlocal', name: node.left instanceof ParseFreshIden ? node.left.freshBindingToken.identifier : node.left.token.value })), 
-  letconst:   (out, node) => (visitParseNode(out, node.value), pushBytecode(out, node.token, { type: 'letlocal', name: node.name.token.value, t: false, v: true })), 
+  letconst:   (out, node) => (visitParseNode(out, node.value), pushBytecode(out, node.token, { type: 'letlocal', name: node.name instanceof ParseFreshIden ? node.name.freshBindingToken.identifier : node.name.token.value, t: false, v: true })), 
   meta:       (out, node) => (visitParseNode(out, node.expr)),
   comptime:   (out, node) => (visitParseNode(out, node.expr)),
   not:        (out, node) => (visitParseNode(out, node.expr), pushBytecode(out, node.token, { type: 'not' })),
@@ -273,7 +273,7 @@ export const BytecodeSecondOrder: ParseTreeTable = {
   operator: (out, node) => (visitAll(out, node.exprs), pushBytecode(out, node.token, { type: 'operatorast', name: node.token.value, count: node.exprs.length })),
   meta:     (out, node) => (writeMeta(out, node.expr), pushBytecode(out, node.token, { type: 'toast' })),
   comptime: (out, node) => writeMeta(out, node.expr),
-  letconst: (out, node) => (writeMeta(out, node.value), pushBytecode(out, node.token, { type: 'letlocal', name: node.name.token.value, t: false, v: true })),
+  letconst: (out, node) => (writeMeta(out, node.value), pushBytecode(out, node.token, { type: 'letlocal', name: node.name instanceof ParseFreshIden ? node.name.freshBindingToken.identifier : node.name.token.value, t: false, v: true })),
   tuple:    (out, node) => (visitAll(out, node.exprs), pushBytecode(out, node.token, { type: 'tupleast', count: node.exprs.length })),
   not:      (out, node) => (visitParseNode(out, node.expr), pushBytecode(out, node.token, { type: 'notast' })),
 
@@ -466,6 +466,14 @@ export const BytecodeSecondOrder: ParseTreeTable = {
       visitAll(out, node.args);
       pushBytecode(out, node.token, { type: "callast", name: node.left.field.token.value, count: node.args.length + 1, tcount: node.typeArgs.length, method: true });
       return;
+    }
+    if (node.left instanceof ParseFunction) {
+      const name = new ParseFreshIden(node.token, new FreshBindingToken('tmpfn'))
+      visitParseNode(out, new ParseLetConst(node.token, name, node.left))
+      pushBytecode(out, node.token, { type: 'pop' })
+      visitAll(out, node.args)
+      pushBytecode(out, node.token, { type: "callast", name: name.freshBindingToken.identifier, count: node.args.length, tcount: 0 });
+      return
     }
     compilerAssert(false, "Call with non-identifier not implemented yet", { left: node.left})
   },

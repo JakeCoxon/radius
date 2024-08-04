@@ -22,6 +22,20 @@ baz :: |yield|
     yield(f)
     f *= 2
 
+squares :: |yield|
+  i := 0
+  while true:
+    yield(i * i)
+    i += 1
+
+factorial :: |yield|
+  i := 1
+  f := 1
+  while true:
+    yield(f)
+    f *= i
+    i += 1
+    
 consume :: |yield|
   while true:
     val := yield()
@@ -85,6 +99,9 @@ fn test_shorthand():
   w1 := @sum(bar[:])
   print(w1)
   assert(w1 == 204)
+
+  assert(@any(squares[:] == 81) == true)
+  assert(@all(factorial[:] < 1000) == false)
 
 fn test_concat():
 
@@ -181,21 +198,10 @@ fn test_range():
 
   print(ints[1:10:2]) ...
 
+  sum := @sum(ints[1:10:2])
+  assert(sum == 25)
+
 fn test_stuff():
-
-  squares :: |yield|
-    i := 0
-    while true:
-      yield(i * i)
-      i += 1
-
-  factorial :: |yield|
-    i := 1
-    f := 1
-    while true:
-      yield(f)
-      f *= i
-      i += 1
 
   # print(squares[5:10:2]) ...
   # print(squares[1:100:10]) ...
@@ -203,6 +209,22 @@ fn test_stuff():
   print(factorial[:20:4], factorial[1:10:2]) ...
   # print(@sum(squares[:10]))
 
+fn test_for_loop():
+
+  for a in ints[1:100:10]:
+    print(a)
+
+  print("--")
+
+  for a, b, c in (ints[:4], squares[:], factorial[:]):
+    print(a, b, c)
+
+  print("--")
+
+  for a, b in (squares[:], factorial[:]):
+    print(a, b)
+    if a >= 100:
+      break
 fn main():
   test_fold()
   test_shorthand()
@@ -217,3 +239,4 @@ fn main():
   test_first()
   test_range()
   test_stuff()
+  test_for_loop()

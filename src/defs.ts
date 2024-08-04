@@ -141,7 +141,7 @@ export class ParseOr extends ParseNodeType {           key = 'or' as const;     
 export class ParseAnd extends ParseNodeType {          key = 'and' as const;          constructor(public token: Token, public exprs: ParseNode[]) { super();} }
 export class ParseElse extends ParseNodeType {         key = 'else' as const;         constructor(public token: Token, public body: ParseNode) { super();} }
 export class ParseIf extends ParseNodeType {           key = 'if' as const;           constructor(public token: Token, public isExpr: boolean, public condition: ParseNode, public trueBody: ParseNode, public falseBody: ParseIf | ParseElse | null) { super();} }
-export class ParseLetConst extends ParseNodeType {     key = 'letconst' as const;     constructor(public token: Token, public name: ParseIdentifier, public value: ParseNode) { super();} }
+export class ParseLetConst extends ParseNodeType {     key = 'letconst' as const;     constructor(public token: Token, public name: ParseIdentifier | ParseFreshIden, public value: ParseNode) { super();} }
 export class ParseFunction extends ParseNodeType {     key = 'function' as const;     constructor(public token: Token, public functionDecl: ParserFunctionDecl) { super();} }
 export class ParseClass extends ParseNodeType {        key = 'class' as const;        constructor(public token: Token, public classDecl: ParserClassDecl) { super();} }
 export class ParseReturn extends ParseNodeType {       key = 'return' as const;       constructor(public token: Token, public expr: ParseNode | null) { super();} }
@@ -273,6 +273,7 @@ export type ExpansionCompilerState = {
   selectors: ExpansionSelector[]
 }
 export interface BytecodeWriter {
+  location: SourceLocation
   bytecode: {
     code: BytecodeInstr[]
     locations: SourceLocation[],
