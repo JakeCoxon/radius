@@ -22,7 +22,8 @@ type IteratorState = {
 }
 const createExpansionState = (debugName: string, location: SourceLocation): ExpansionCompilerState => {
   const iteratorListIdentifier = new ParseFreshIden(createAnonymousToken(''), new FreshBindingToken('iterator_list'))
-  return { debugName, loopBodyNode: null, selectors: [], iteratorListIdentifier, fold: null, setterSelector: null, filterNode: null, whileNode: null, optimiseSimple: false, location }
+  const breakIden = new ParseFreshIden(createAnonymousToken(''), new FreshBindingToken('break'))
+  return { debugName, loopBodyNode: null, selectors: [], iteratorListIdentifier, fold: null, setterSelector: null, filterNode: null, whileNode: null, optimiseSimple: false, breakIden, location }
 }
 const canOptimiseSimpleIterator = (closure: Closure) => {
   return (closure as any)._canOptimiseSimpleIterator
@@ -472,7 +473,6 @@ const compileExpansionToParseNode = (out: BytecodeWriter, expansion: ExpansionCo
   const letIteratorList = new ParseLet(node.token, expansion.iteratorListIdentifier, null, list)
 
   const metaList = new ParseMeta(node.token, letIteratorList)
-  const breakIden = new ParseFreshIden(node.token, new FreshBindingToken('break'))
 
   const finalAst = new ParseEvalFunc(createAnonymousToken(''), (vm: Vm) => {
 
@@ -490,7 +490,7 @@ const compileExpansionToParseNode = (out: BytecodeWriter, expansion: ExpansionCo
       expansion.loopBodyNode = new ParseIf(node.token, false, expansion.filterNode, expansion.loopBodyNode, null)
     }
     if (expansion.whileNode) {
-      const break_ = new ParseBreak(node.token, breakIden, null)
+      const break_ = new ParseBreak(node.token, expansion.breakIden, null)
       const cond = new ParseNot(createAnonymousToken(''), expansion.whileNode)
       const ifBreak = new ParseIf(node.token, false, cond, break_, null)
       expansion.loopBodyNode = new ParseStatements(node.token, [ifBreak, expansion.loopBodyNode])
@@ -533,7 +533,8 @@ const compileExpansionToParseNode = (out: BytecodeWriter, expansion: ExpansionCo
     final.push(expansion.fold.iden)
   }
 
-  return new ParseBlock(createAnonymousToken(''), 'break', breakIden, new ParseStatements(node.token, [...lets, ...final]))
+  const stmts = new ParseStatements(node.token, [...lets, ...final])
+  return new ParseBlock(createAnonymousToken(''), 'break', expansion.breakIden, stmts)
 }
 
 
@@ -555,13 +556,11 @@ export const expandFuncAllSugar = (out: BytecodeWriter, noteNode: ParseNote, arg
 
   expansion.fold = { iden: new ParseFreshIden(node.token, new FreshBindingToken('fold_iden')), initial: new ParseBoolean((createAnonymousToken('true'))) }
   const cond = new ParseNot(node.token, result)
-  const blockIden = new ParseFreshIden(node.token, new FreshBindingToken('block'))
   const set_ = new ParseSet(node.token, expansion.fold.iden, new ParseBoolean(createAnonymousToken('false')))
-  const break_ = new ParseBreak(node.token, blockIden, null)
+  const break_ = new ParseBreak(node.token, expansion.breakIden, null)
   expansion.loopBodyNode = new ParseIf(node.token, false, cond, new ParseStatements(noteNode.token, [set_, break_]), null)
 
-  const blockBody = compileExpansionToParseNode(out, expansion, node)
-  visitParseNode(out, new ParseBlock(node.token, 'break', blockIden, blockBody))
+  visitParseNode(out, compileExpansionToParseNode(out, expansion, node))
 }
 
 export const expandFuncAnySugar = (out: BytecodeWriter, noteNode: ParseNote, args: ParseNode[]) => {
@@ -574,13 +573,11 @@ export const expandFuncAnySugar = (out: BytecodeWriter, noteNode: ParseNote, arg
   compilerAssert(!expansion.fold, "Fold not supported in this context")
 
   expansion.fold = { iden: new ParseFreshIden(node.token, new FreshBindingToken('fold_iden')), initial: new ParseBoolean((createAnonymousToken('false'))) }
-  const blockIden = new ParseFreshIden(node.token, new FreshBindingToken('block'))
   const set_ = new ParseSet(node.token, expansion.fold.iden, new ParseBoolean(createAnonymousToken('true')))
-  const break_ = new ParseBreak(node.token, blockIden, null)
+  const break_ = new ParseBreak(node.token, expansion.breakIden, null)
   expansion.loopBodyNode = new ParseIf(node.token, false, cond, new ParseStatements(noteNode.token, [set_, break_]), null)
 
-  const blockBody = compileExpansionToParseNode(out, expansion, node)
-  visitParseNode(out, new ParseBlock(node.token, 'break', blockIden, blockBody))
+  visitParseNode(out, compileExpansionToParseNode(out, expansion, node))
 }
 export const expandFuncSumSugar = (out: BytecodeWriter, noteNode: ParseNote, args: ParseNode[]) => {
   compilerAssert(!out.state.expansion, "Already in expansion state")
@@ -626,15 +623,54 @@ export const expandFuncFirstSugar = (out: BytecodeWriter, noteNode: ParseNote, a
 
   const iden = new ParseFreshIden(node.token, new FreshBindingToken('first'))
   const set = new ParseSet(node.token, iden, result)
-  const blockName = new ParseFreshIden(node.token, new FreshBindingToken('block'))
   
-  expansion.loopBodyNode = new ParseStatements(node.token, [set, new ParseBreak(node.token, blockName, null)])
+  expansion.loopBodyNode = new ParseStatements(node.token, [set, new ParseBreak(node.token, expansion.breakIden, null)])
 
   // TODO: Only supports numbers at the moment
   const reduce = compileExpansionToParseNode(out, expansion, node)
-  const namedBlock = new ParseBlock(node.token, 'break', blockName, reduce)
   const let_ = new ParseLet(node.token, iden, null, new ParseNumber(createAnonymousToken('0')))
-  const value = new ParseStatements(node.token, [let_, namedBlock, iden])
+  const value = new ParseStatements(node.token, [let_, reduce, iden])
+  visitParseNode(out, value)
+}
+export const expandFuncMinSugar = (out: BytecodeWriter, noteNode: ParseNote, args: ParseNode[]) => {
+  compilerAssert(!out.state.expansion, "Already in expansion state")
+  const node = args[0]
+  const expansion = createExpansionState('min', node.token.location)
+  const result = visitExpansion(out, expansion, node)
+  expansion.optimiseSimple = expansion.selectors.length === 1 && !expansion.filterNode
+
+  compilerAssert(!expansion.fold, "Fold not supported in this context")
+
+  const iden = new ParseFreshIden(node.token, new FreshBindingToken('min'))
+  const comp = new ParseOperator(createAnonymousToken('<'), [result, iden])
+  const set_ = new ParseSet(node.token, iden, result)
+  expansion.loopBodyNode = new ParseIf(node.token, false, comp, set_, null)
+
+  // TODO: Only supports numbers at the moment
+  // TODO: Use optional types later
+  const reduce = compileExpansionToParseNode(out, expansion, node)
+  const let_ = new ParseLet(node.token, iden, null, new ParseNumber(createAnonymousToken('2147483647')))
+  const value = new ParseStatements(node.token, [let_, reduce, iden])
+  visitParseNode(out, value)
+}
+export const expandFuncMaxSugar = (out: BytecodeWriter, noteNode: ParseNote, args: ParseNode[]) => {
+  compilerAssert(!out.state.expansion, "Already in expansion state")
+  const node = args[0]
+  const expansion = createExpansionState('max', node.token.location)
+  const result = visitExpansion(out, expansion, node)
+  expansion.optimiseSimple = expansion.selectors.length === 1 && !expansion.filterNode
+
+  compilerAssert(!expansion.fold, "Fold not supported in this context")
+
+  const iden = new ParseFreshIden(node.token, new FreshBindingToken('max'))
+  const comp = new ParseOperator(createAnonymousToken('>'), [result, iden])
+  const set_ = new ParseSet(node.token, iden, result)
+  expansion.loopBodyNode = new ParseIf(node.token, false, comp, set_, null)
+
+  // TODO: Only supports numbers at the moment
+  const reduce = compileExpansionToParseNode(out, expansion, node)
+  const let_ = new ParseLet(node.token, iden, null, new ParseNumber(createAnonymousToken('0')))
+  const value = new ParseStatements(node.token, [let_, reduce, iden])
   visitParseNode(out, value)
 }
 

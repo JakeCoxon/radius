@@ -36,21 +36,10 @@ factorial :: |yield|
     f *= i
     i += 1
     
-consume :: |yield|
-  while true:
-    val := yield()
-    print(val)
-
-  
-consume2 :: |yield|
-  val := yield()
-  print("val 1", val)
-  val = yield()
-  print("val 2", val)
-  val = yield()
-  print("val 3", val)
-  val = yield()
-  print("val 4", val)
+fixed_iterator :: |yield|
+  yield(123)
+  yield(32)
+  yield(123)
 
 fn test_fold():
 
@@ -102,6 +91,17 @@ fn test_shorthand():
 
   assert(@any(squares[:] == 81) == true)
   assert(@all(factorial[:] < 1000) == false)
+
+fn test_min_max():
+  numbers := [40, 20, 10, 32, 12, 3124]
+  max := @max(numbers[:])
+  min := @min(numbers[:])
+  print(max, min)
+  assert(max == 3124)
+  assert(min == 10)
+
+  max2 := @max(fixed_iterator[:])
+  print(max2)
 
 fn test_concat():
 
@@ -282,6 +282,14 @@ fn test_template!(T)():
   x := @sum(numbers[:])
   print(x)
   
+fn test_flatmap():
+
+  cells := [[1,2,3], [4,5,6], [7,8,9]]
+
+  # foo :: @mapcat(cells[:])
+
+  # x := @sum(cells[:][:])
+
 
 fn main():
   test_fold()
@@ -292,6 +300,7 @@ fn main():
   test_concat4()
   test_concat5()
   test_concat6()
+  test_min_max()
   test_people()
   test_last()
   test_first()
@@ -303,3 +312,4 @@ fn main():
   test_template!int()
   test_template!float()
   test_while()
+  test_flatmap()

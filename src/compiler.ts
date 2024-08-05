@@ -2,7 +2,7 @@ import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst,
 import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, functionCompileTimeCompileTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, compileExportedFunctionTask } from "./compiler_functions";
 import { Event, Task, TaskDef, Unit, isTask, isTaskResult, withContext } from "./tasks";
 import { createCompilerModuleTask, createListConstructor, defaultMetaFunction, print } from "./compiler_sugar";
-import { expandDotsSugar, expandFuncAllSugar, expandFuncAnySugar, expandFuncConcatSugar, expandFuncFirstSugar, expandFuncLastSugar, expandFuncSumSugar, foldSugar, forExprSugar, forLoopSugar, listComprehensionSugar, sliceSugar, whileExprSugar } from "./compiler_iterator"
+import { expandDotsSugar, expandFuncAllSugar, expandFuncAnySugar, expandFuncConcatSugar, expandFuncFirstSugar, expandFuncLastSugar, expandFuncMaxSugar, expandFuncMinSugar, expandFuncSumSugar, foldSugar, forExprSugar, forLoopSugar, listComprehensionSugar, sliceSugar, whileExprSugar } from "./compiler_iterator"
 
 export const pushBytecode = <T extends BytecodeInstr>(out: BytecodeWriter, token: Token, instr: T) => {
   out.bytecode.locations.push(token.location);
@@ -306,6 +306,8 @@ export const BytecodeSecondOrder: ParseTreeTable = {
       if (node.expr.left.token.value === 'sum') return expandFuncSumSugar(out, node, node.expr.args)
       if (node.expr.left.token.value === 'last') return expandFuncLastSugar(out, node, node.expr.args)
       if (node.expr.left.token.value === 'first') return expandFuncFirstSugar(out, node, node.expr.args)
+      if (node.expr.left.token.value === 'min') return expandFuncMinSugar(out, node, node.expr.args)
+      if (node.expr.left.token.value === 'max') return expandFuncMaxSugar(out, node, node.expr.args)
       if (node.expr.left.token.value === 'concat') {
         compilerAssert(false, "Not available for this context", { node })
       }

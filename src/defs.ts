@@ -271,6 +271,7 @@ export type ExpansionCompilerState = {
   iteratorListIdentifier: ParseFreshIden,
   fold: { iden: ParseFreshIden, initial: ParseNode } | null,
   setterSelector: ExpansionSelector | null,
+  breakIden: ParseFreshIden,
   selectors: ExpansionSelector[],
   filterNode: ParseNode | null,
   whileNode: ParseNode | null,
