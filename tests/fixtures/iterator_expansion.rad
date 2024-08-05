@@ -41,6 +41,15 @@ fixed_iterator :: |yield|
   yield(32)
   yield(123)
 
+fn custom_iterator(x: Person, foo: int): |yield|
+  for i in Range(0, 10):
+    yield((x.age + i, foo))
+
+fn custom_iterator2(x: Person, foo: int): |yield|
+  for i in Range(0, 10):
+    yield(x.age + i + foo)
+
+
 fn test_fold():
 
   numbers := [40, 20, 10, 32, 12, 3124]
@@ -290,6 +299,20 @@ fn test_flatmap():
 
   # x := @sum(cells[:][:])
 
+fn test_custom_iterator():
+  person := Person(10)
+  it :: custom_iterator(person, 23)
+  for x, y in it:
+    print(x, y)
+
+  it2 :: custom_iterator2(person, 23)
+  f := @sum(it2[:])
+  assert(f == 375)
+
+  f2 := @sum((meta custom_iterator2(person, 23))[:])
+  assert(f2 == 375)
+
+  
 
 fn main():
   test_fold()
@@ -313,3 +336,4 @@ fn main():
   test_template!float()
   test_while()
   test_flatmap()
+  test_custom_iterator()
