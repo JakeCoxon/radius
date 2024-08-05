@@ -126,6 +126,7 @@ const astWriter: SyntaxAstWriterTable = {
   break: (writer, ast) => {
     format(writer, "break")
     if (ast.binding) format(writer, " '$", ast.binding)
+    if (ast.expr) format(writer, " with $", ast.expr)
   },
   call: (writer, ast) => {
     format(writer, `$(`, ast.binding)

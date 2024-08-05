@@ -1,5 +1,5 @@
 import { externalBuiltinBindings } from "./compiler_sugar";
-import { Ast, AstType, AstWriterTable, Binding, BindingAst, BlockAst, BoolType, CallAst, CompiledFunction, ConcreteClassType, ConstructorAst, DefaultConsAst, DoubleType, FileWriter, FloatType, FunctionType, GlobalCompilerState, IntType, ListTypeConstructor, LlvmFunctionWriter, LlvmWriter, NeverType, NumberAst, ParameterizedType, Pointer, PrimitiveType, RawPointerType, Register, SourceLocation, StatementsAst, StringType, Type, TypeField, UserCallAst, ValueFieldAst, VoidType, compilerAssert, isAst, isType, textColors, u64Type, u8Type } from "./defs";
+import { Ast, AstType, AstWriterTable, Binding, BindingAst, BlockAst, BoolType, CallAst, CompiledFunction, ConcreteClassType, ConstructorAst, DefaultConsAst, DoubleType, FileWriter, FloatType, FunctionType, GlobalCompilerState, IntType, LetAst, ListTypeConstructor, LlvmFunctionWriter, LlvmWriter, NeverType, NumberAst, ParameterizedType, Pointer, PrimitiveType, RawPointerType, Register, SetAst, SourceLocation, StatementsAst, StringType, Type, TypeField, UserCallAst, ValueFieldAst, VoidType, compilerAssert, isAst, isType, textColors, u64Type, u8Type } from "./defs";
 
 // Some useful commands
 //
@@ -261,7 +261,7 @@ const astWriter: LlvmAstWriterTable = {
     return { register: name }
   },
   if: (writer, ast) => {
-    const outName = ast.type !== VoidType ? createRegister("", VoidType) : undefined
+    const outName = ast.type !== VoidType && ast.type !== NeverType ? createRegister("", VoidType) : undefined
     const thenLabel = new Binding(`if_then`, VoidType)
     const endLabel = new Binding(`if_end`, VoidType)
     const elseLabel = ast.falseBody ? new Binding(`if_else`, VoidType) : endLabel
@@ -403,17 +403,24 @@ const astWriter: LlvmAstWriterTable = {
   },
 
   block: (writer, ast) => {
-    writer.blocks.push({ binding: ast.binding }) // not strictly necessary?
-    const result = writeExpr(writer, ast.body)
+    // Funky stuff with impliti returns, break with expression etc
+    // This could probably be a prepass before codegen, along with other stuff like interleave tracking
+    if (ast.breakExprBinding) writeExpr(writer, new LetAst(VoidType, ast.location, ast.breakExprBinding, new DefaultConsAst(ast.type, ast.location)))
+    writer.blocks.push({ binding: ast.binding, breakExprBinding: ast.breakExprBinding }) // not strictly necessary?
+    let result = null
+    const rewriteImplicitReturn = ast.breakExprBinding && ast.body.type !== VoidType && ast.body.type !== NeverType
+    if (!rewriteImplicitReturn) result = writeExpr(writer, ast.body)
+    else writeExpr(writer, new SetAst(VoidType, ast.location, ast.breakExprBinding!, ast.body))
     writer.blocks.pop()!
-    const blockEndLabel = ast.binding
-    format(writer, `  br label $\n\n`, blockEndLabel)
-    beginBasicBlock(writer, blockEndLabel)
-    return result
+    format(writer, `  br label $\n\n`, ast.binding)
+    beginBasicBlock(writer, ast.binding)
+    if (!ast.breakExprBinding) return result
+    return writeExpr(writer, new BindingAst(ast.type, ast.location, ast.breakExprBinding))
   },
   break: (writer, ast) => {
     const block = writer.blocks.findLast(x => x.binding === ast.binding)
     compilerAssert(block, "Programmer error. Expected block") // Programmer error
+    if (ast.expr && block.breakExprBinding) writeExpr(writer, new SetAst(VoidType, ast.location, block.breakExprBinding, ast.expr))
     format(writer, `  br label $\n`, ast.binding)
     return null
   },

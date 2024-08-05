@@ -840,7 +840,16 @@ const instructions: InstructionMapping = {
     vm.stack.push(new AndAst(BoolType, vm.location, [propagatedLiteralAst(a), propagatedLiteralAst(b)]))
   },
   whileast: (vm) =>               vm.stack.push(new WhileAst(VoidType, vm.location, expectAst(popStack(vm)), expectAst(popStack(vm)))),
-  returnast: (vm, { r }) =>       vm.stack.push(new ReturnAst(NeverType, vm.location, r ? propagatedLiteralAst(expectAst(popStack(vm))) : null)),
+  returnast: (vm, { r }) => {
+    const returnBreak = vm.context.subCompilerState.functionReturnBreakBlock?.binding
+    // Check if we're inlining a function, if so we need to break 
+    if (returnBreak) {
+      vm.stack.push(returnBreak, vm.stack.pop())
+      return instructions.breakast(vm, { type: 'breakast', named: true, v: !!r, breakType: 'break' })
+    }
+    const value = r ? propagatedLiteralAst(expectAst(popStack(vm))) : null
+    vm.stack.push(new ReturnAst(NeverType, vm.location, value))
+  },
   letast: (vm, { name, t, v }) => vm.stack.push(letLocalAst(vm, name, t ? expectType(popStack(vm)) : null, v ? expectAst(popStack(vm)) : null)),
   letmatchast: (vm, { t, v }) =>  {
     compilerAssert(!t, "Type not supported for tuple let")
@@ -872,7 +881,8 @@ const instructions: InstructionMapping = {
     const cond = propagatedLiteralAst(expectAst(popStack(vm)))
     const trueBody = propagatedLiteralAst(expectAst(popStack(vm)))
     const falseBody = f ? propagatedLiteralAst(expectAst(popStack(vm))) : null
-    const resultType = e && falseBody ? falseBody.type : VoidType
+    let resultType = e && falseBody ? falseBody.type : VoidType
+    if (trueBody.type === NeverType && (!falseBody || falseBody.type === NeverType)) resultType = NeverType // Propagate never type even if it's not an expression if
     // TODO: This is no longer possible because we use if-expr without else clause in iterators
     // if (e) compilerAssert(falseBody && falseBody.type === trueBody.type, "If expression inferred to be of type $trueType but got $falseType", { trueType: trueBody.type, falseType: falseBody?.type })
     vm.stack.push(new IfAst(resultType, vm.location, cond, trueBody, falseBody))
@@ -1105,13 +1115,15 @@ const instructions: InstructionMapping = {
     }
     compilerAssert(!name || name instanceof Binding, "Expected binding", { name })
     let block: LabelBlock
-    if (name) {
-      block = findLabelByBinding(vm.context.subCompilerState.labelBlock, name as Binding)
-      if (expr) {
-        if (block.type) compilerAssert(block.type === expr.type, "Block type is already inferred to be $blockType but got an expression of type $exprType", { blockType: block.type, exprType: expr.type })
-        block.type = expr.type
-      }
-    } else block = findLabelBlockByType(vm.context.subCompilerState.labelBlock, breakType);
+    if (name && name === vm.context.subCompilerState.functionReturnBreakBlock?.binding) 
+      block = vm.context.subCompilerState.functionReturnBreakBlock
+    else if (name) block = findLabelByBinding(vm.context.subCompilerState.labelBlock, name as Binding)
+    else block = findLabelBlockByType(vm.context.subCompilerState.labelBlock, breakType);
+    if (expr) {
+      if (block.type) compilerAssert(block.type === expr.type, "Block type is already inferred to be $blockType but got an expression of type $exprType", { blockType: block.type, exprType: expr.type })
+      block.type = expr.type
+      block.breakWithExpr = true
+    }
     compilerAssert(block.binding, "Expected binding")
     vm.stack.push(new BreakAst(NeverType, vm.location, block.binding, expr))
   },
@@ -1151,8 +1163,10 @@ const instructions: InstructionMapping = {
     compilerAssert(binding, "Expected binding", { labelBlock: labelBlock })
     const body = propagatedLiteralAst(expectAst(vm.stack.pop()))
     const blockType = labelBlock.type ?? body.type
+    // TODO: This should be NeverType instead of VoidType
     if (labelBlock.type) compilerAssert(labelBlock.type === VoidType || labelBlock.type === body.type, "Block type inferred to be of type $blockType but the result expression was type $bodyType", { blockType: labelBlock.type, bodyType: body.type })
-    vm.stack.push(new BlockAst(blockType, vm.location, binding, body))
+    const breakExprBinding = labelBlock.breakWithExpr ? new Binding(`${binding.name}_breakexpr`, body.type) : null
+    vm.stack.push(new BlockAst(blockType, vm.location, binding, breakExprBinding, body))
     vm.context.subCompilerState.labelBlock = labelBlock.parent
   },
 

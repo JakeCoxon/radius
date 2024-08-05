@@ -1,6 +1,6 @@
 import { BytecodeDefault, BytecodeSecondOrder, compileClassTask, compileFunctionPrototype, createBytecodeVmAndExecuteTask, normalizeNumberType, numberTypeToConcrete, propagateLiteralType, propagatedLiteralAst, pushBytecode, pushGeneratedBytecode, visitParseNode, visitParseNodeAndError } from "./compiler";
 import { externalBuiltinBindings } from "./compiler_sugar";
-import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, CallAst, IntType, Closure, UserCallAst, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition, ParseCall, TypeVariable, TypeMatcher, typeMatcherEquals, SourceLocation, ExternalTypeConstructor, ScopeParentSymbol, SubCompilerState, CompilerFunction, IntLiteralType, FloatLiteralType, FloatType, RawPointerType, AddressAst, BindingAst, UnknownObject, NeverType, CompilerFunctionCallContext, CompileTimeObjectType, CompTimeObjAst, ParseString, NamedArgAst, TypeCheckResult, u8Type, TypeCheckVar, ParseFreshIden, NumberAst, BoolAst, createStatements, ExternalFunction } from "./defs";
+import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, CallAst, IntType, Closure, UserCallAst, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition, ParseCall, TypeVariable, TypeMatcher, typeMatcherEquals, SourceLocation, ExternalTypeConstructor, ScopeParentSymbol, SubCompilerState, CompilerFunction, IntLiteralType, FloatLiteralType, FloatType, RawPointerType, AddressAst, BindingAst, UnknownObject, NeverType, CompilerFunctionCallContext, CompileTimeObjectType, CompTimeObjAst, ParseString, NamedArgAst, TypeCheckResult, u8Type, TypeCheckVar, ParseFreshIden, NumberAst, BoolAst, createStatements, ExternalFunction, BlockAst, LabelBlock } from "./defs";
 import { Task, TaskDef, Unit } from "./tasks";
 
 
@@ -264,9 +264,12 @@ function functionInlineTask(ctx: TaskContext, { location, func, typeArgs, parent
   const inlineInto = ctx.subCompilerState
   const templateScope = createScope({}, parentScope)
   const subCompilerState = pushSubCompilerState(ctx, { debugName: `${func.debugName} inline`, lexicalParent, scope: templateScope })
+  const breakBlock = subCompilerState.functionReturnBreakBlock = new LabelBlock(null, "return", 'break', new Binding('returnBreak', NeverType))
   subCompilerState.inlineIntoCompiler = inlineInto
   subCompilerState.labelBlock = lexicalParent.labelBlock
   subCompilerState.nextLabelBlockDepth = inlineInto.nextLabelBlockDepth
+  // TODO: Should this have functionCompiler set to self? Make a test case
+
   const { concreteTypes } = result
 
   const args = result.sortedArgs
@@ -311,7 +314,15 @@ function functionInlineTask(ctx: TaskContext, { location, func, typeArgs, parent
       compilerAssert(isAst(ast), "Expected ast got $ast", { ast });
 
       ctx.globalCompiler.logger.log(textColors.cyan(`Compiled inline ${func.debugName}`))
-      return Task.of(createStatements(location, [...statements, ast]))
+      // TODO: This is basically what endblockast instruction does. can we fuse it?
+      let type = propagatedLiteralAst(ast).type
+      if (breakBlock.type) {
+        compilerAssert(type === NeverType || type === breakBlock.type, "Expected types to match $x $y", { ast, x: type, y: breakBlock.type })
+        type = breakBlock.type
+      }
+      const stmts = createStatements(location, [...statements, ast])
+      const breakExprBinding = breakBlock.breakWithExpr ? new Binding('breakExpr', type) : null
+      return Task.of(new BlockAst(type, location, breakBlock.binding!, breakExprBinding, stmts))
     })
   )
 

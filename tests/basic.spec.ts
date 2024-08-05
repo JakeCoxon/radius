@@ -164,6 +164,23 @@ test('inline', async () => {
   }
 })
 
+test('inline_return', async () => {
+  const testObject = createTest({ 
+    moduleName: 'inline_return',
+    globalOptions,
+    inputPath: `${import.meta.dir}/fixtures/inline_return.rad`,
+  })
+  try {
+    const input = await Bun.file(testObject.inputPath).text()
+    runCompilerTest(input, { testObject })
+    await writeSyntaxFile(testObject)
+    await writeLlvmBytecodeFile(testObject)
+    await executeNativeExecutable(testObject)
+  } finally {
+    testObject.close()
+  }
+})
+
 test('inline_shadow', async () => {
   const testObject = createTest({ 
     moduleName: 'inline_shadow',

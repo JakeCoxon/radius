@@ -434,7 +434,7 @@ export class StatementsAst extends AstRoot {    key = 'statements' as const;    
 export class WhileAst extends AstRoot {         key = 'while' as const;          constructor(public type: Type, public location: SourceLocation, public condition: Ast, public body: Ast) { super() } }
 export class ReturnAst extends AstRoot {        key = 'return' as const;         constructor(public type: Type, public location: SourceLocation, public expr: Ast | null) { super() } }
 export class BreakAst extends AstRoot {         key = 'break' as const;          constructor(public type: Type, public location: SourceLocation, public binding: Binding, public expr: Ast | null) { super() } }
-export class BlockAst extends AstRoot {         key = 'block' as const;          constructor(public type: Type, public location: SourceLocation, public binding: Binding, public body: Ast) { super() } }
+export class BlockAst extends AstRoot {         key = 'block' as const;          constructor(public type: Type, public location: SourceLocation, public binding: Binding, public breakExprBinding: Binding | null, public body: Ast) { super() } }
 export class FieldAst extends AstRoot {         key = 'field' as const;          constructor(public type: Type, public location: SourceLocation, public left: Ast, public field: TypeField) { super() } }
 export class ValueFieldAst extends AstRoot {    key = 'valuefield' as const;     constructor(public type: Type, public location: SourceLocation, public left: BindingAst, public fieldPath: TypeField[]) { super() } }
 export class SetFieldAst extends AstRoot {      key = 'setfield' as const;       constructor(public type: Type, public location: SourceLocation, public left: Ast, public field: TypeField, public value: Ast) { super() } }
@@ -821,6 +821,9 @@ export type Vm = {
 export class LabelBlock {
   public completion: ((value: unknown) => void)[] = []
   public type: Type | null = null;
+  // Does a break with an expression occur?
+  // If so it needs to pass to BlockAst to compile differently in LLVM
+  public breakWithExpr: boolean = false;
   constructor(
     public parent: LabelBlock | null,
     public name: string | null,
@@ -833,6 +836,8 @@ export class LoopObject {
 }
 
 export const findLabelBlockByType = (labelBlock: LabelBlock | null, breakType: BreakType | null) => {
+  // TODO: This should not find blocks that are outside of our current function,
+  // whereas findLabelByBinding should
   let block = labelBlock
   while (block) {
     if (block.breakType === breakType) return block
@@ -959,7 +964,6 @@ export const createDefaultGlobalCompiler = () => {
   return globalCompiler
 }
 
-
 export class SubCompilerState {
   constructor(
     public debugName: string,
@@ -979,6 +983,7 @@ export class SubCompilerState {
   nextLabelBlockDepth: number = 0; // Just used for debug labelling
   globalCompiler: GlobalCompilerState
   moduleCompiler: SubCompilerState
+  functionReturnBreakBlock: LabelBlock | undefined
 
   [Inspect.custom](depth: any, options: any, inspect: any) {
     if (depth <= 1) return options.stylize(`[CompilerState ${this.debugName}]`, 'special');
@@ -1093,6 +1098,7 @@ export type LlvmFunctionWriter = {
   // locals: { binding: Binding, slot: number, scopeIndex: number }[]
   blocks: { 
     binding: Binding, 
+    breakExprBinding: Binding | null,
 
     // We have to do some bookkeeping here to handle
     // interleave blocks since we do codgen in a single

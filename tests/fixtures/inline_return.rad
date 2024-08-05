@@ -1,0 +1,27 @@
+
+fn bar!(T)() -> int @inline:
+  x := 43
+  return x + 32
+  
+fn foo(i: int) -> int @inline:
+  if i < 3:
+    return bar!(int)()
+  else:
+    return bar!(int)()
+  
+fn baz(i: int) -> int @inline:
+  if i > 3:
+    return foo(i)
+  32 # Implicit return must set breakExprBinding
+
+fn main():
+  print("Before")
+  z := bar!(123)()
+  print("After")
+
+  print(z)
+
+  f := foo(2)
+  print(f)
+  
+  print(baz(1))
