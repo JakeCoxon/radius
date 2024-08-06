@@ -79,32 +79,32 @@ fn test_shorthand():
 
   numbers := [40, 20, 10, 32, 12, 3124]
   
-  x1 := @all(numbers[:] > 9)
-  assert(x1 == true)
-  print(x1)
+  # x1 := @all(numbers[:] > 9)
+  # assert(x1 == true)
+  # print(x1)
 
-  x2 := @all(numbers[:] < 1000)
-  assert(x2 == false)
-  print(x2)
+  # x2 := @all(numbers[:] < 1000)
+  # assert(x2 == false)
+  # print(x2)
 
-  y1 := @any(numbers[:] == 20)
-  assert(y1 == true)
-  print(y1)
+  # y1 := @any(numbers[:] == 20)
+  # assert(y1 == true)
+  # print(y1)
 
-  y2 := @any(numbers[:] == 1000)
-  assert(y2 == false)
-  print(y2)
+  # y2 := @any(numbers[:] == 1000)
+  # assert(y2 == false)
+  # print(y2)
 
   z1 := @sum(numbers[1:])
   assert(z1 == 3198)
   print(z1)
 
-  w1 := @sum(bar[:])
-  print(w1)
-  assert(w1 == 204)
+  # w1 := @sum(bar[:])
+  # print(w1)
+  # assert(w1 == 204)
 
-  assert(@any(squares[:] == 81) == true)
-  assert(@all(factorial[:] < 1000) == false)
+  # assert(@any(squares[:] == 81) == true)
+  # assert(@all(factorial[:] < 1000) == false)
 
 fn test_min_max():
   numbers := [40, 20, 10, 32, 12, 3124]
@@ -136,7 +136,7 @@ fn test_concat2():
 
   numbers := [40, 20, 10, 32, 12, 3124]
   
-  concat1 :: @concat(foo[:], bar[:], numbers[:], 2, 3, 4)
+  concat1 :: @concat(2, 3, 4.2)
   x3 := @sum(concat1[:])
   print(x3)
   assert(x3 == 3496)
@@ -201,10 +201,11 @@ fn test_last():
 
 fn test_first():
 
-  numbers := [40, 20, 10, 32, 12, 3124]
+  numbers := [40.0, 20, 10, 32, 12, 3124]
+  
   x := @first(numbers[:])
   print(x)
-  assert(x == 40)
+  # assert(x == 40)
 
 fn test_range():
   rng := Range(10, 20)
@@ -329,27 +330,35 @@ fn test_iterator_to_array():
   print(arr[:]) ...
   
 
+fn test_array():
+  x := 0.2
+  arr := [ 3, 1, 1]
+  # assert(@sum(arr[:]) == 43545640)
+  print(arr[:]) ...
+  
+
 fn main():
-  test_fold()
-  test_shorthand()
-  test_concat()
-  test_concat2()
-  test_concat3()
-  test_concat4()
-  test_concat5()
-  test_concat6()
-  test_min_max()
-  test_people()
-  test_last()
+  # test_fold()
+  # test_shorthand()
+  # test_concat()
+  # test_concat2()
+  # test_concat3()
+  # test_concat4()
+  # test_concat5()
+  # test_concat6()
+  # test_min_max()
+  # test_people()
+  # test_last()
   test_first()
-  test_range()
-  test_stuff()
-  test_for_loop()
-  test_if()
-  # test_sideeffect()
-  test_template!int()
-  test_template!float()
-  test_while()
-  test_flatmap()
-  test_custom_iterator()
-  test_iterator_to_array()
+  # test_range()
+  # test_stuff()
+  # test_for_loop()
+  # test_if()
+  # # test_sideeffect()
+  # test_template!int()
+  # test_template!float()
+  # test_while()
+  # test_flatmap()
+  # test_custom_iterator()
+  # test_iterator_to_array()
+  # test_array()

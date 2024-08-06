@@ -1,6 +1,6 @@
 import { BytecodeSecondOrder, compileFunctionPrototype, getCommonType, getOperatorTable, loadModule, popStack, popValues, propagateLiteralType, propagatedLiteralAst, pushBytecode, resolveScope, unknownToAst, visitParseNode } from "./compiler"
 import { compileExportedFunctionTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, insertFunctionDefinition } from "./compiler_functions"
-import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, UserCallAst, hashValues, NeverType, IfAst, BoolType, VoidAst, LoopObject, CompileTimeObjectType, u64Type, FunctionDefinition, ParserFunctionDecl, StatementsAst, isTypeScalar, IntLiteralType, FloatLiteralType, isAst, isType, isTypeCheckError, InterleaveAst, ContinueInterAst, CompTimeObjAst, ParseEvalFunc, SetAst, DefaultConsAst, WhileAst, BoolAst, isArray, ExpansionSelector, ParseNote, ExpansionCompilerState, ParseBoolean, ParseOr, ParseBreak, filterNotNull, ParseTuple, ParseNot, ParseLetConst } from "./defs"
+import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, UserCallAst, hashValues, NeverType, IfAst, BoolType, VoidAst, LoopObject, CompileTimeObjectType, u64Type, FunctionDefinition, ParserFunctionDecl, StatementsAst, isTypeScalar, IntLiteralType, FloatLiteralType, isAst, isType, isTypeCheckError, InterleaveAst, ContinueInterAst, CompTimeObjAst, ParseEvalFunc, SetAst, DefaultConsAst, WhileAst, BoolAst, isArray, ExpansionSelector, ParseNote, ExpansionCompilerState, ParseBoolean, ParseOr, ParseBreak, filterNotNull, ParseTuple, ParseNot, ParseLetConst, ParseConcurrency, ParseCompTime } from "./defs"
 import { Event, Task, TaskDef, isTask } from "./tasks"
 
 
@@ -158,15 +158,17 @@ const createConstructor = (vm: Vm, constructor: ArrayConstructorCompiler) => {
     })
   )
 }
-const arrayConstructorFinish = (vm: Vm, constructor: ArrayConstructorCompiler) => {
+
+const arrayConstructorFinish = new ExternalFunction('arrayConstructorFinish', VoidType, (ctx, values) => {
+  const [constructor] = values;
+  compilerAssert(constructor instanceof ArrayConstructorCompiler, "Expected array constructor", { constructor })
   compilerAssert(constructor.arrayConstructor, "Expected array constructor", { constructor })
-  const location = vm.location
   const binding = constructor.constructorBinding
   compilerAssert(binding, "Expected list binding", { constructor })
-  const let_ = new LetAst(VoidType, location, binding, constructor.arrayConstructor)
-  const bindingAst = new BindingAst(binding.type, location, binding)
-  vm.stack.push(createStatements(location, [let_, ...constructor.calls, bindingAst]))
-}
+  const let_ = new LetAst(VoidType, ctx.location, binding, constructor.arrayConstructor)
+  const bindingAst = new BindingAst(binding.type, ctx.location, binding)
+  return createStatements(ctx.location, [let_, ...constructor.calls, bindingAst])
+})
 
 export const listConstructorSugar = (out: BytecodeWriter, node: ParseList) => {
   const listConstructorIden = new ParseFreshIden(node.token, new FreshBindingToken('list'))
@@ -203,23 +205,9 @@ export const listConstructorSugar = (out: BytecodeWriter, node: ParseList) => {
       return new ParseFunction(node.token, fn)
     }
   }).filter(x => x) as ParseFunction[]
-  
-  const compilation = (vm: Vm) => {
-    const values = popValues(vm, fns.length).reverse()
-    const constructor = popStack(vm)
-    compilerAssert(constructor instanceof ArrayConstructorCompiler, "Expected array constructor", { constructor })
 
-    const fnctx: CompilerFunctionCallContext = { location: node.token.location, compilerState: vm.context.subCompilerState, resultAst: undefined, typeCheckResult: undefined }
-    const compileFns = values.map((fn, i) => createCallAstFromValue(fnctx, fn, [], []))
-    const compileFnsTask = Task.concurrency<unknown, CompilerError>([...compileFns])
-    return compileFnsTask.chainFn((task, _) => {
-      compilerAssert(constructor instanceof ArrayConstructorCompiler, "Expected array constructor", { constructor })
-      arrayConstructorFinish(vm, constructor)
-      return Task.success()
-    })
-  }
-
-  visitParseNode(out, new ParseEvalFunc(node.token, compilation, [...fns], [listConstructorIden]))
+  visitParseNode(out, new ParseCompTime(node.token, new ParseConcurrency(node.token, fns)))
+  visitParseNode(out, new ParseMeta(node.token, new ParseCall(node.token, new ParseValue(node.token, arrayConstructorFinish), [listConstructorIden], [])))
 }
 
 
@@ -739,16 +727,50 @@ export const expandFuncFirstSugar = (out: BytecodeWriter, noteNode: ParseNote, a
 
   compilerAssert(!expansion.fold, "Fold not supported in this context")
 
-  const iden = new ParseFreshIden(node.token, new FreshBindingToken('first'))
-  const set = new ParseSet(node.token, iden, result)
-  
-  expansion.loopBodyNode = new ParseStatements(node.token, [set, new ParseBreak(node.token, expansion.breakIden, null)])
+  const objIden = new ParseFreshIden(node.token, new FreshBindingToken('obj'))
+  // const iden = new ParseFreshIden(node.token, new FreshBindingToken('first'))
+  const tcResult = new ParseEvalFunc(createAnonymousToken(''), (vm: Vm) => {
+    const value = vm.stack.pop()
+    const obj = vm.stack.pop() as any
+    compilerAssert(isAst(value), "Expected ast", { value, obj })
+    obj.type = value.type
+    obj.binding = new Binding("", value.type)
+    vm.stack.push(new SetAst(VoidType, node.token.location, obj.binding, value))
+    // compilerAssert(false, "Not implemented", { obj, value })
+    // return Task.of(null)
+  }, [new ParseQuote(node.token, result)], [objIden]);
+  const set = new ParseStatements(node.token, [
+    new ParseMeta(node.token, tcResult)
+  ])
+  const break_ = new ParseBreak(node.token, expansion.breakIden, null)
+  expansion.loopBodyNode = new ParseStatements(node.token, [set, break_])
 
   // TODO: Only supports numbers at the moment
   const reduce = compileExpansionToParseNode(out, expansion, node)
-  const let_ = new ParseLet(node.token, iden, null, new ParseNumber(createAnonymousToken('0')))
-  const value = new ParseStatements(node.token, [let_, reduce, iden])
-  visitParseNode(out, value)
+  // const let_ = new ParseLet(node.token, iden, null, new ParseNumber(createAnonymousToken('0')))
+  const letobj = new ParseLetConst(node.token, objIden, new ParseEvalFunc(createAnonymousToken(''), (vm: Vm) => {
+    // compilerAssert(false, "Not implemented", { stack: vm.stack })
+    vm.stack.push({ thing: 1 })
+  }, [], []))
+  const stmts = new ParseStatements(node.token, [letobj, reduce])
+  // const thing = new ParseMeta(node.token, new ParseCall(createAnonymousToken(''), new ParseIdentifier(createAnonymousToken('thing')), [], []
+  visitParseNode(out, new ParseEvalFunc(node.token, (vm) => {
+    const obj = vm.stack.pop()
+    const stmts = vm.stack.pop()
+    compilerAssert(isAst(stmts), "Expected ast", { stmts })
+    const binding = obj.binding
+    compilerAssert(binding instanceof Binding, "Expected binding", { obj })
+
+    const newStmts = createStatements(vm.location, [
+      new LetAst(binding.type, vm.location, binding, new DefaultConsAst(binding.type, vm.location)),
+      stmts,
+      new BindingAst(binding.type, vm.location, binding)
+    ])
+
+    vm.stack.push(newStmts)
+    // compilerAssert(false, "Not implemented", { stmts, obj })
+
+  }, [stmts, objIden], []))
 }
 export const expandFuncMinSugar = (out: BytecodeWriter, noteNode: ParseNote, args: ParseNode[]) => {
   compilerAssert(!out.state.expansion, "Already in expansion state")
