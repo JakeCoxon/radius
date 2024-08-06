@@ -35,6 +35,11 @@ factorial :: |yield|
     yield(f)
     f *= i
     i += 1
+
+fn range2d(x: int, y: int): |yield|
+  for j in Range(0, y):
+    for i in Range(0, x):
+      yield((i, j))
     
 fixed_iterator :: |yield|
   yield(123)
@@ -312,6 +317,16 @@ fn test_custom_iterator():
   f2 := @sum((meta custom_iterator2(person, 23))[:])
   assert(f2 == 375)
 
+
+fn test_iterator_to_array():
+  arr := [
+    3,
+    factorial[:5] ...,
+    factorial[10:12] ...,
+    1, 2
+  ]
+  assert(@sum(arr[:]) == 43545640)
+  print(arr[:]) ...
   
 
 fn main():
@@ -337,3 +352,4 @@ fn main():
   test_while()
   test_flatmap()
   test_custom_iterator()
+  test_iterator_to_array()

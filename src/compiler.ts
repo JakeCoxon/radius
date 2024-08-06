@@ -2,7 +2,7 @@ import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst,
 import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, functionCompileTimeCompileTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, compileExportedFunctionTask } from "./compiler_functions";
 import { Event, Task, TaskDef, Unit, isTask, isTaskResult, withContext } from "./tasks";
 import { createCompilerModuleTask, createListConstructor, defaultMetaFunction, print } from "./compiler_sugar";
-import { expandDotsSugar, expandFuncAllSugar, expandFuncAnySugar, expandFuncConcatSugar, expandFuncFirstSugar, expandFuncLastSugar, expandFuncMaxSugar, expandFuncMinSugar, expandFuncSumSugar, foldSugar, forExprSugar, forLoopSugar, listComprehensionSugar, sliceSugar, whileExprSugar } from "./compiler_iterator"
+import { expandDotsSugar, expandFuncAllSugar, expandFuncAnySugar, expandFuncConcatSugar, expandFuncFirstSugar, expandFuncLastSugar, expandFuncMaxSugar, expandFuncMinSugar, expandFuncSumSugar, foldSugar, forExprSugar, forLoopSugar, listComprehensionSugar, listConstructorSugar, sliceSugar, whileExprSugar } from "./compiler_iterator"
 
 export const pushBytecode = <T extends BytecodeInstr>(out: BytecodeWriter, token: Token, instr: T) => {
   out.bytecode.locations.push(token.location);
@@ -419,7 +419,8 @@ export const BytecodeSecondOrder: ParseTreeTable = {
     compilerAssert(false, "Not implemented 'postcall'", { node })
   },
 
-  list: (out, node) => (visitAll(out, node.exprs), pushBytecode(out, node.token, { type: 'listast', count: node.exprs.length })),
+  list: (out, node) => listConstructorSugar(out, node),
+    //(visitAll(out, node.exprs), pushBytecode(out, node.token, { type: 'listast', count: node.exprs.length })),
 
   and: (out, node) => (visitAll(out, node.exprs), pushBytecode(out, node.token, { type: "andast", count: node.exprs.length })),
   or: (out, node) =>  (visitAll(out, node.exprs), pushBytecode(out, node.token, { type: "orast", count: node.exprs.length })),
