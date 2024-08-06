@@ -603,11 +603,11 @@ export function createBytecodeVmAndExecuteTask(ctx: TaskContext, subCompilerStat
   );
 };
 
-const popValues = (vm: Vm, num: number) => {
+export const popValues = (vm: Vm, num: number) => {
   compilerAssert(vm.stack.length >= num, `Expected ${num} values on stack got ${vm.stack.length}`)
   return Array.from(new Array(num)).map(() => vm.stack.pop()).reverse() 
 };
-const popStack = (vm: Vm) => {
+export const popStack = (vm: Vm) => {
   compilerAssert(vm.stack.length > 0, `Expected 1 value on stack got ${vm.stack.length}`)
   return vm.stack.pop();
 };
@@ -1450,7 +1450,7 @@ export function compileClassTask(ctx: TaskContext, { classDef, typeArgs }: { cla
   
 }
 
-const getCommonType = (types: Type[]): Type => {
+export const getCommonType = (types: Type[]): Type => {
   if (types.some(x => x === FloatLiteralType || x === FloatType)) {
     compilerAssert(types.every(x => x === IntLiteralType || x === FloatLiteralType || x === FloatType), "Expected types to be the same for list literal")
     return FloatType

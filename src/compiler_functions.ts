@@ -310,7 +310,6 @@ function functionInlineTask(ctx: TaskContext, { location, func, typeArgs, parent
   return (
     TaskDef(createBytecodeVmAndExecuteTask, subCompilerState, func.templatePrototype.bytecode!, templateScope)
     .chainFn((task, ast) => {
-
       compilerAssert(isAst(ast), "Expected ast got $ast", { ast });
 
       ctx.globalCompiler.logger.log(textColors.cyan(`Compiled inline ${func.debugName}`))
@@ -325,7 +324,6 @@ function functionInlineTask(ctx: TaskContext, { location, func, typeArgs, parent
       return Task.of(new BlockAst(type, location, breakBlock.binding!, breakExprBinding, stmts))
     })
   )
-
 }
 
 export type CompileTimeFunctionCallArg = {
