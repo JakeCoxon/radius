@@ -170,6 +170,27 @@ const arrayConstructorFinish = new ExternalFunction('arrayConstructorFinish', Vo
   return createStatements(ctx.location, [let_, ...constructor.calls, bindingAst])
 })
 
+const appendValuePartialFn = (() => {
+  const token = createAnonymousToken('')
+  const consIdenParam = new ParseIdentifier(createAnonymousToken('cons'))
+  const exprParam = new ParseIdentifier(createAnonymousToken('expr'))
+
+  const exprQuote = new ParseQuote(token, exprParam)
+  const iden = new ParseFreshIden(token, new FreshBindingToken('elem'))
+  const let_ = new ParseLet(token, iden, null, exprQuote)
+  const call = new ParseCall(token, new ParseValue(token, arrayConstructorTypeCheck), [consIdenParam, iden], [])
+  const call2 = new ParseCall(token, new ParseValue(token, arrayConstructorCreateAppend), [consIdenParam, iden], [])
+  const call3 = new ParseCall(token, new ParseValue(token, arrayConstructorAddAppendCall), [consIdenParam, call2], [])
+  const meta_ = new ParseMeta(token, new ParseStatements(token, [let_, call, call3]))
+  const decl = createAnonymousParserFunctionDecl('appendValue', token, [], meta_)
+
+  const params: ParserFunctionParameter[] = [
+    { name: consIdenParam, storage: null, type: null },
+    { name: exprParam, storage: null, type: null }
+  ]
+  return createAnonymousParserFunctionDecl('appendValuePartial', token, params, new ParseFunction(token, decl))
+})()
+
 export const listConstructorSugar = (out: BytecodeWriter, node: ParseList) => {
   const listConstructorIden = new ParseFreshIden(node.token, new FreshBindingToken('list'))
   const numExprs = node.exprs.length
@@ -193,16 +214,7 @@ export const listConstructorSugar = (out: BytecodeWriter, node: ParseList) => {
       const fn = createAnonymousParserFunctionDecl('appendIterator', node.token, [], meta_)
       return new ParseFunction(node.token, fn)
     } else {
-      const exprQuote = new ParseQuote(node.token, expr)
-      const iden = new ParseFreshIden(node.token, new FreshBindingToken('elem'))
-      const let_ = new ParseLet(node.token, iden, null, exprQuote)
-      const call = new ParseCall(node.token, new ParseValue(node.token, arrayConstructorTypeCheck), [listConstructorIden, iden], [])
-      const call2 = new ParseCall(node.token, new ParseValue(node.token, arrayConstructorCreateAppend), [listConstructorIden, iden], [])
-      const call3 = new ParseCall(node.token, new ParseValue(node.token, arrayConstructorAddAppendCall), [listConstructorIden, call2], [])
-      const meta_ = new ParseMeta(node.token, new ParseStatements(node.token, [let_, call, call3]))
-
-      const fn = createAnonymousParserFunctionDecl('appendValue', node.token, [], meta_)
-      return new ParseFunction(node.token, fn)
+      return new ParseCall(node.token, new ParseFunction(node.token, appendValuePartialFn), [listConstructorIden, new ParseQuote(node.token, expr)], [])
     }
   }).filter(x => x) as ParseFunction[]
 

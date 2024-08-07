@@ -204,7 +204,7 @@ export type BytecodeInstr =
   { type: 'dictast', count: number } |
   { type: 'closure', id: number } |
   { type: 'call', name: string, count: number, tcount: number } |
-  { type: 'callobj', callable: unknown, count: number, tcount: number } |
+  { type: 'callobj', count: number, tcount: number } |
   { type: 'compilerfn', name: string, count: number, tcount: number } |
   { type: 'return', r: boolean } |
   { type: 'namedarg' } |

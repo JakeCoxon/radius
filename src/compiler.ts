@@ -123,7 +123,8 @@ export const BytecodeDefault: ParseTreeTable = {
     visitAll(out, node.typeArgs)
     visitAll(out, node.args);
     if (node.left instanceof ParseValue) { // Internal desugar results in a fixed value sometimes
-      pushBytecode(out, node.token, { type: "callobj", callable: node.left.value, count: node.args.length, tcount: node.typeArgs.length })
+      visitParseNode(out, node.left)
+      pushBytecode(out, node.token, { type: "callobj", count: node.args.length, tcount: node.typeArgs.length })
       return;
     }
     if (node.left instanceof ParseIdentifier) {
@@ -136,6 +137,11 @@ export const BytecodeDefault: ParseTreeTable = {
     }
     if (node.left instanceof ParseField) {
       compilerAssert(false, "Call with field not implemented yet", { node })
+      return;
+    }
+    if (node.left instanceof ParseFunction) {
+      visitParseNode(out, node.left)
+      pushBytecode(out, node.token, { type: "callobj", count: node.args.length, tcount: node.typeArgs.length })
       return;
     }
     compilerAssert(false, "Call with non-identifier not implemented yet", { left: node.left})
@@ -1229,7 +1235,8 @@ const instructions: InstructionMapping = {
       })
     )
   },
-  callobj: (vm, { callable, count, tcount }) => {
+  callobj: (vm, { count, tcount }) => {
+    const callable = popStack(vm)
     const values = popValues(vm, count);
     const typeArgs = popValues(vm, tcount || 0);
     return TaskDef(callFunctionFromValueTask, vm, callable, typeArgs, values)
