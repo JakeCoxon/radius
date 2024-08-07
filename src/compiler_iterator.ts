@@ -718,6 +718,37 @@ export const expandFuncLastSugar = (out: BytecodeWriter, noteNode: ParseNote, ar
   const value = new ParseStatements(node.token, [let_, reduce, iden])
   visitParseNode(out, value)
 }
+
+export class DeferredLetBinding {
+  type: Type
+  binding: Binding | null
+  constructor() {}
+}
+
+const createDeferObject = new ExternalFunction('createDeferObject', CompileTimeObjectType, (ctx, values) => {
+  return new CompTimeObjAst(CompileTimeObjectType, ctx.location, new DeferredLetBinding())
+})
+const deferToSetAst = new ExternalFunction('deferToSetAst', VoidType, (ctx, values) => {
+  let [value, defer] = values
+  if (defer instanceof CompTimeObjAst) defer = defer.value
+  compilerAssert(defer instanceof DeferredLetBinding, "Expected deferred let binding", { defer })
+  compilerAssert(isAst(value), "Expected ast", { value, defer })
+  defer.type = value.type
+  defer.binding = new Binding("", value.type)
+  return new SetAst(VoidType, ctx.location, defer.binding, value)
+})
+const deferToBindingAst = new ExternalFunction('deferToBindingAst', VoidType, (ctx, values) => {
+  let [stmts, defer] = values
+  if (defer instanceof CompTimeObjAst) defer = defer.value
+  compilerAssert(defer instanceof DeferredLetBinding, "Expected deferred let binding", { defer })
+  compilerAssert(isAst(stmts), "Expected ast", { stmts, defer })
+  const binding = defer.binding
+  compilerAssert(binding, "Expected binding", { defer })
+  const let_ = new LetAst(binding.type, ctx.location, binding, new DefaultConsAst(binding.type, ctx.location))
+  const bindingAst = new BindingAst(binding.type, ctx.location, binding)
+  return createStatements(ctx.location, [let_, stmts, bindingAst])
+})
+
 export const expandFuncFirstSugar = (out: BytecodeWriter, noteNode: ParseNote, args: ParseNode[]) => {
   compilerAssert(!out.state.expansion, "Already in expansion state")
   const node = args[0]
@@ -727,50 +758,20 @@ export const expandFuncFirstSugar = (out: BytecodeWriter, noteNode: ParseNote, a
 
   compilerAssert(!expansion.fold, "Fold not supported in this context")
 
-  const objIden = new ParseFreshIden(node.token, new FreshBindingToken('obj'))
-  // const iden = new ParseFreshIden(node.token, new FreshBindingToken('first'))
-  const tcResult = new ParseEvalFunc(createAnonymousToken(''), (vm: Vm) => {
-    const value = vm.stack.pop()
-    const obj = vm.stack.pop() as any
-    compilerAssert(isAst(value), "Expected ast", { value, obj })
-    obj.type = value.type
-    obj.binding = new Binding("", value.type)
-    vm.stack.push(new SetAst(VoidType, node.token.location, obj.binding, value))
-    // compilerAssert(false, "Not implemented", { obj, value })
-    // return Task.of(null)
-  }, [new ParseQuote(node.token, result)], [objIden]);
-  const set = new ParseStatements(node.token, [
-    new ParseMeta(node.token, tcResult)
-  ])
+  const deferIden = new ParseFreshIden(node.token, new FreshBindingToken('obj'))
+  const tcResult = new ParseCall(createAnonymousToken(''),
+    new ParseValue(node.token, deferToSetAst), [new ParseQuote(node.token, result), deferIden], [])
+  const set = new ParseMeta(node.token, tcResult)
   const break_ = new ParseBreak(node.token, expansion.breakIden, null)
   expansion.loopBodyNode = new ParseStatements(node.token, [set, break_])
 
-  // TODO: Only supports numbers at the moment
   const reduce = compileExpansionToParseNode(out, expansion, node)
-  // const let_ = new ParseLet(node.token, iden, null, new ParseNumber(createAnonymousToken('0')))
-  const letobj = new ParseLetConst(node.token, objIden, new ParseEvalFunc(createAnonymousToken(''), (vm: Vm) => {
-    // compilerAssert(false, "Not implemented", { stack: vm.stack })
-    vm.stack.push({ thing: 1 })
-  }, [], []))
+  const letobj = new ParseLetConst(node.token, deferIden, new ParseCall(createAnonymousToken(''), new ParseValue(node.token, createDeferObject), [], []))
   const stmts = new ParseStatements(node.token, [letobj, reduce])
-  // const thing = new ParseMeta(node.token, new ParseCall(createAnonymousToken(''), new ParseIdentifier(createAnonymousToken('thing')), [], []
-  visitParseNode(out, new ParseEvalFunc(node.token, (vm) => {
-    const obj = vm.stack.pop()
-    const stmts = vm.stack.pop()
-    compilerAssert(isAst(stmts), "Expected ast", { stmts })
-    const binding = obj.binding
-    compilerAssert(binding instanceof Binding, "Expected binding", { obj })
-
-    const newStmts = createStatements(vm.location, [
-      new LetAst(binding.type, vm.location, binding, new DefaultConsAst(binding.type, vm.location)),
-      stmts,
-      new BindingAst(binding.type, vm.location, binding)
-    ])
-
-    vm.stack.push(newStmts)
-    // compilerAssert(false, "Not implemented", { stmts, obj })
-
-  }, [stmts, objIden], []))
+  const call_ = new ParseCall(createAnonymousToken(''), new ParseValue(node.token, deferToBindingAst), [
+    new ParseQuote(createAnonymousToken(''), stmts), new ParseQuote(createAnonymousToken(''), deferIden)], [])
+  const resultBinding = new ParseMeta(createAnonymousToken(''), call_)
+  visitParseNode(out, resultBinding)
 }
 export const expandFuncMinSugar = (out: BytecodeWriter, noteNode: ParseNote, args: ParseNode[]) => {
   compilerAssert(!out.state.expansion, "Already in expansion state")

@@ -205,6 +205,11 @@ fn test_first():
   
   x := @first(numbers[:])
   print(x)
+
+  people := [Person(10), Person(20), Person(30), Person(40), Person(50)]
+  p := @first(people[1:])
+
+  print(p.age)
   # assert(x == 40)
 
 fn test_range():
