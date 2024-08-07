@@ -1017,7 +1017,7 @@ export function bytecodeToString(bytecodeProgram: BytecodeProgram) {
   const instr = (instr: BytecodeInstr) => {
     const { type, ...args } = instr;
     const values = Object.entries(args)
-      .map(([k, v]) => `${k}: ${typeof v === 'function' ? '<function>' : v}`)
+      .map(([k, v]) => `${k}: ${typeof v === 'function' ? '<function>' : typeof v === 'string' ? v : Inspect(v)}`)
       .join(", ");
     return `${type.padStart("beginblockast".length, " ")}  ${values}`;
   };
