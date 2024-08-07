@@ -756,34 +756,44 @@ const deferToBindingAst = new ExternalFunction('deferToBindingAst', VoidType, (c
   return createStatements(ctx.location, [defer.letAst, stmts, bindingAst])
 })
 
-const createDefaultLetFromType = new ExternalFunction('createDefaultLetFromType', VoidType, (ctx, values) => {
+const createFreshLet = new ExternalFunction('createFreshLet', VoidType, (ctx, values) => {
   let [value] = values
   compilerAssert(isAst(value), "Expected ast", { value })
   const binding = new Binding("defer", value.type)
-  const let_ = new LetAst(binding.type, ctx.location, binding, new DefaultConsAst(binding.type, ctx.location))
-  return let_
+  return new LetAst(binding.type, ctx.location, binding, value)
 })
 
-const deferredLetHelper = (token: Token, result: ParseNode) => {
-  const deferIden = new ParseFreshIden(token, new FreshBindingToken('obj'))
-  return {
-    setter: () => {
-      const toLet_ = new ParseCall(token, 
-        new ParseValue(token, createDefaultLetFromType), [new ParseQuote(token, result)], [])
-      const tcResult = new ParseCall(createAnonymousToken(''),
-        new ParseValue(token, deferAssignSet), [toLet_, deferIden], [])
-      const call_ = new ParseCall(createAnonymousToken(''),
-        new ParseValue(token, deferToSetAst), [new ParseQuote(token, result), deferIden], [])
-      return new ParseStatements(token, [new ParseCompTime(token, tcResult), new ParseMeta(token, call_),])
-    },
-    result: (original: ParseNode) => {
-      const letobj = new ParseLetConst(token, deferIden, new ParseCall(createAnonymousToken(''), new ParseValue(token, createDeferObject), [], []))
-      const stmts = new ParseStatements(token, [letobj, original])
-      const call_ = new ParseCall(createAnonymousToken(''), new ParseValue(token, deferToBindingAst), [
-        new ParseQuote(createAnonymousToken(''), stmts), new ParseQuote(createAnonymousToken(''), deferIden)], [])
-      return new ParseMeta(createAnonymousToken(''), call_)
-    }
-  }
+const createDefaultFromType = new ExternalFunction('createDefaultFromType', VoidType, (ctx, values) => {
+  let [type] = values
+  compilerAssert(isType(type), "Expected type", { type })
+  return new DefaultConsAst(type, ctx.location)
+})
+
+const typeOf = new ExternalFunction('typeOf', VoidType, (ctx, values) => {
+  let [value] = values
+  compilerAssert(isAst(value), "Expected ast", { value })
+  return value.type
+})
+
+const deferredHelperSetter = (token: Token, deferIden: ParseFreshIden, result: ParseNode) => {
+  const typeOf_ = new ParseCall(token, new ParseValue(token, typeOf), [new ParseQuote(token, result)], [])
+  const default_ = new ParseCall(token, 
+    new ParseValue(token, createDefaultFromType), [typeOf_], [])
+  const toLet_ = new ParseCall(token, 
+    new ParseValue(token, createFreshLet), [default_], [])
+  const tcResult = new ParseCall(createAnonymousToken(''),
+    new ParseValue(token, deferAssignSet), [toLet_, deferIden], [])
+  const call_ = new ParseCall(createAnonymousToken(''),
+    new ParseValue(token, deferToSetAst), [new ParseQuote(token, result), deferIden], [])
+  return new ParseStatements(token, [new ParseCompTime(token, tcResult), new ParseMeta(token, call_),])
+}
+
+const deferredHelperResult = (token: Token, deferIden: ParseFreshIden, original: ParseNode) => {
+  const letobj = new ParseLetConst(token, deferIden, new ParseCall(createAnonymousToken(''), new ParseValue(token, createDeferObject), [], []))
+  const stmts = new ParseStatements(token, [letobj, original])
+  const call_ = new ParseCall(createAnonymousToken(''), new ParseValue(token, deferToBindingAst), [
+    new ParseQuote(createAnonymousToken(''), stmts), new ParseQuote(createAnonymousToken(''), deferIden)], [])
+  return new ParseMeta(createAnonymousToken(''), call_)
 }
 
 export const expandFuncFirstSugar = (out: BytecodeWriter, noteNode: ParseNote, args: ParseNode[]) => {
@@ -795,11 +805,12 @@ export const expandFuncFirstSugar = (out: BytecodeWriter, noteNode: ParseNote, a
 
   compilerAssert(!expansion.fold, "Fold not supported in this context")
 
-  const deferredLet_ = deferredLetHelper(node.token, result)
+  const deferIden = new ParseFreshIden(node.token, new FreshBindingToken('defer'))
   const break_ = new ParseBreak(node.token, expansion.breakIden, null)
-  expansion.loopBodyNode = new ParseStatements(node.token, [deferredLet_.setter(), break_])
+  const deferSet_ = deferredHelperSetter(node.token, deferIden, result)
+  expansion.loopBodyNode = new ParseStatements(node.token, [deferSet_, break_])
   const reduce = compileExpansionToParseNode(out, expansion, node)
-  visitParseNode(out, deferredLet_.result(reduce))
+  visitParseNode(out, deferredHelperResult(node.token, deferIden, reduce))
 }
 export const expandFuncMinSugar = (out: BytecodeWriter, noteNode: ParseNote, args: ParseNode[]) => {
   compilerAssert(!out.state.expansion, "Already in expansion state")
