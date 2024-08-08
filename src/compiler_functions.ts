@@ -304,8 +304,9 @@ function functionInlineTask(ctx: TaskContext, { location, func, typeArgs, parent
   
   func.typeParams.forEach((typeParam, i) => {
     compilerAssert(typeParam instanceof ParseIdentifier, "Not implemented")
-    const typeArg = typeArgs[i] || result.substitutions[typeParam.token.value]
-    compilerAssert(typeArg, "Type arg not found $name", { name: typeParam.token.value, typeArgs })
+    let typeArg = typeArgs[i]
+    if (typeArg === undefined) typeArg = result.substitutions[typeParam.token.value]
+    compilerAssert(typeArg !== undefined, "Type arg not found $name", { name: typeParam.token.value, typeArgs })
     templateScope[typeParam.token.value] = typeArg
   });
 
@@ -314,7 +315,7 @@ function functionInlineTask(ctx: TaskContext, { location, func, typeArgs, parent
     .chainFn((task, ast) => {
       compilerAssert(isAst(ast), "Expected ast got $ast", { ast });
 
-      ctx.globalCompiler.logger.log(textColors.cyan(`Compiled inline ${func.debugName}`))
+      // ctx.globalCompiler.logger.log(textColors.cyan(`Compiled inline ${func.debugName}`))
       // TODO: This is basically what endblockast instruction does. can we fuse it?
       let type = propagatedLiteralAst(ast).type
       if (breakBlock.type) {

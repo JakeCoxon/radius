@@ -334,6 +334,9 @@ fn test_iterator_to_array():
   assert(@sum(arr[:]) == 43545640)
   print(arr[:]) ...
   
+fn test_slice():
+  c :: @concat(factorial[2:8:2])
+  assert(@sum(c[:]) == 746)
 
 fn test_array():
   x := 0.2
@@ -367,3 +370,4 @@ fn main():
   test_custom_iterator()
   test_iterator_to_array()
   test_array()
+  test_slice()

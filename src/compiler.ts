@@ -127,8 +127,9 @@ export const BytecodeDefault: ParseTreeTable = {
       pushBytecode(out, node.token, { type: "callobj", count: node.args.length, tcount: node.typeArgs.length })
       return;
     }
-    if (node.left instanceof ParseIdentifier) {
-      pushBytecode(out, node.token, { type: "call", name: node.left.token.value, count: node.args.length, tcount: node.typeArgs.length }); 
+    if (node.left instanceof ParseIdentifier || node.left instanceof ParseFreshIden) {
+      const name = node.left instanceof ParseFreshIden ? node.left.freshBindingToken.identifier : node.left.token.value
+      pushBytecode(out, node.token, { type: "call", name, count: node.args.length, tcount: node.typeArgs.length }); 
       return;
     }
     if (node.left instanceof ParseCompilerIden) {
@@ -482,8 +483,9 @@ export const BytecodeSecondOrder: ParseTreeTable = {
       const name = new ParseFreshIden(node.token, new FreshBindingToken('tmpfn'))
       visitParseNode(out, new ParseLetConst(node.token, name, node.left))
       pushBytecode(out, node.token, { type: 'pop' })
+      node.typeArgs.forEach(x => writeMeta(out, x));
       visitAll(out, node.args)
-      pushBytecode(out, node.token, { type: "callast", name: name.freshBindingToken.identifier, count: node.args.length, tcount: 0 });
+      pushBytecode(out, node.token, { type: "callast", name: name.freshBindingToken.identifier, count: node.args.length, tcount: node.typeArgs.length });
       return
     }
     compilerAssert(false, "Call with non-identifier not implemented yet", { left: node.left})
@@ -737,7 +739,7 @@ const letLocalAst = (vm: Vm, name: string, type: Type | null, value: Ast | null)
   compilerAssert(type || value, "Expected type or initial value for let binding $name", { name });
   compilerAssert(!Object.hasOwn(vm.scope, name), `Already defined $name`, { name });
   let inferType = type || value!.type
-  compilerAssert(inferType !== VoidType, "Expected type for local $name but got $inferType", { name, inferType })
+  compilerAssert(inferType !== VoidType, "Expected type for local $name but got $inferType", { name, inferType, value })
   inferType = propagateLiteralType(inferType, value)
   const binding = new Binding(name, inferType)
   setScopeValueAndResolveEvents(vm.scope, name, binding) // This is for globals usually. Locals should be in order
