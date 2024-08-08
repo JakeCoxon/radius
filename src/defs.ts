@@ -72,7 +72,7 @@ export type ParserFunctionParameter = {
 }
 // These are reference types that id will be filled in later.
 export type ParserFunctionDecl = {
-  id: number | undefined, debugName: string, anonymous?: boolean,
+  debugName: string, anonymous?: boolean,
   token: Token, functionMetaName: ParseIdentifier | null,
   name: ParseIdentifier | null, typeParams: ParseNode[], params: ParserFunctionParameter[], 
   returnType: ParseNode | null, body: ParseNode | null, keywords: ParseNode[],
@@ -863,6 +863,7 @@ export type Logger = { log: (...args: any[]) => void }
 export type GlobalCompilerState = {
   compiledFunctions: Map<Binding, CompiledFunction>;
   functionDefinitions: FunctionDefinition[],
+  functionDefinitionsByDeclaration: Map<ParserFunctionDecl, FunctionDefinition>,
   classDefinitions: ClassDefinition[],
   moduleLoader: ModuleLoader
   methods: WeakMap<Scope, [TypeConstructor, Closure][]>,
@@ -933,6 +934,7 @@ export const createDefaultGlobalCompiler = () => {
   const globalCompiler: GlobalCompilerState = {
     compiledFunctions: new Map(),
     functionDefinitions: [],
+    functionDefinitionsByDeclaration: new Map(),
     classDefinitions: [],
     allWaitingEvents: [],
     globalLets: [],

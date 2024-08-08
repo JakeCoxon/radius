@@ -1717,7 +1717,6 @@ export const runTopLevelTask = (ctx: TaskContext, stmts: ParseStatements, module
 
 const createInitializerFunctionTask = (ctx: TaskContext) => {
   const decl: ParserFunctionDecl = {
-    id: undefined,
     debugName: `<initializer>`,
     token: createAnonymousToken(''), functionMetaName: null, name: null, typeParams: [], params: [],
     keywords: [], anonymous: true, returnType: null, body: null, annotations: [], variadic: false
@@ -1743,7 +1742,6 @@ const createInitializerFunctionTask = (ctx: TaskContext) => {
 
 const createEntryFunctionTask = (ctx: TaskContext) => {
   const decl: ParserFunctionDecl = {
-    id: undefined,
     debugName: `<entry>`,
     token: createAnonymousToken(''), functionMetaName: null, name: null, typeParams: [], params: [],
     keywords: [], anonymous: true, returnType: null, body: null, annotations: [], variadic: false
