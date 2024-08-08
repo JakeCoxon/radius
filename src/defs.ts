@@ -72,7 +72,7 @@ export type ParserFunctionParameter = {
 }
 // These are reference types that id will be filled in later.
 export type ParserFunctionDecl = {
-  id: number | undefined, debugName: string, anonymous?: boolean,
+  debugName: string, anonymous?: boolean,
   token: Token, functionMetaName: ParseIdentifier | null,
   name: ParseIdentifier | null, typeParams: ParseNode[], params: ParserFunctionParameter[], 
   returnType: ParseNode | null, body: ParseNode | null, keywords: ParseNode[],
@@ -173,6 +173,7 @@ export class ParseFreshIden extends ParseNodeType {    key = 'freshiden' as cons
 export class ParseConstructor extends ParseNodeType {  key = 'constructor' as const;  constructor(public token: Token, public type: ParseNode, public args: ParseNode[]) { super();} }
 export class ParseCompilerIden extends ParseNodeType { key = 'compileriden' as const; constructor(public token: Token, public value: string) { super();} }
 export class ParseEvalFunc extends ParseNodeType {     key = 'evalfunc' as const;     constructor(public token: Token, public func: (vm: Vm) => void | Task<unknown, CompilerError>, public args: ParseNode[], public typeArgs: ParseNode[]) { super();} }
+export class ParseConcurrency extends ParseNodeType {  key = 'concurrency' as const;  constructor(public token: Token, public fns: ParseNode[]) { super();} }
 
 export type ParseNode = ParseStatements | ParseLet | ParseSet | ParseOperator | ParseIdentifier | 
   ParseNumber | ParseMeta | ParseCompTime | ParseLetConst | ParseCall | ParseList | ParseOr | ParseAnd | 
@@ -180,7 +181,8 @@ export type ParseNode = ParseStatements | ParseLet | ParseSet | ParseOperator | 
   ParseOpEq | ParseWhile | ParseWhileExpr | ParseForExpr | ParseNot | ParseField | ParseExpand | ParseListComp |
   ParseDict | ParsePostCall | ParseSymbol | ParseNote | ParseSlice | ParseSubscript | ParseTuple | ParseClass |
   ParseNil | ParseBoolean | ParseElse | ParseMetaIf | ParseMetaFor | ParseMetaWhile | ParseBlock | ParseImport | 
-  ParseCompilerIden | ParseValue | ParseConstructor | ParseQuote | ParseBytecode | ParseFreshIden | ParseFold | ParseNamedArg | ParseEvalFunc
+  ParseCompilerIden | ParseValue | ParseConstructor | ParseQuote | ParseBytecode | ParseFreshIden | ParseFold | 
+  ParseNamedArg | ParseEvalFunc | ParseConcurrency
 
 // Void types mean that in secondOrder compilation, the AST doesn't return an AST
 export const isParseVoid = (ast: ParseNode) => ast.key == 'letconst' || ast.key === 'function' || ast.key === 'class' || ast.key === 'comptime' || ast.key === 'metawhile';
@@ -202,7 +204,7 @@ export type BytecodeInstr =
   { type: 'dictast', count: number } |
   { type: 'closure', id: number } |
   { type: 'call', name: string, count: number, tcount: number } |
-  { type: 'callobj', callable: unknown, count: number, tcount: number } |
+  { type: 'callobj', count: number, tcount: number } |
   { type: 'compilerfn', name: string, count: number, tcount: number } |
   { type: 'return', r: boolean } |
   { type: 'namedarg' } |
@@ -244,6 +246,7 @@ export type BytecodeInstr =
   { type: 'jump', address: number } |
   { type: 'jumpf', address: number } |
   { type: 'evalfunc', func: (vm: Vm) => void | Task<unknown, CompilerError> } |
+  { type: 'concurrency', count: number } |
   { type: 'halt' }
 
 
@@ -860,6 +863,7 @@ export type Logger = { log: (...args: any[]) => void }
 export type GlobalCompilerState = {
   compiledFunctions: Map<Binding, CompiledFunction>;
   functionDefinitions: FunctionDefinition[],
+  functionDefinitionsByDeclaration: Map<ParserFunctionDecl, FunctionDefinition>,
   classDefinitions: ClassDefinition[],
   moduleLoader: ModuleLoader
   methods: WeakMap<Scope, [TypeConstructor, Closure][]>,
@@ -930,6 +934,7 @@ export const createDefaultGlobalCompiler = () => {
   const globalCompiler: GlobalCompilerState = {
     compiledFunctions: new Map(),
     functionDefinitions: [],
+    functionDefinitionsByDeclaration: new Map(),
     classDefinitions: [],
     allWaitingEvents: [],
     globalLets: [],
@@ -1014,7 +1019,7 @@ export function bytecodeToString(bytecodeProgram: BytecodeProgram) {
   const instr = (instr: BytecodeInstr) => {
     const { type, ...args } = instr;
     const values = Object.entries(args)
-      .map(([k, v]) => `${k}: ${typeof v === 'function' ? '<function>' : v}`)
+      .map(([k, v]) => `${k}: ${typeof v === 'function' ? '<function>' : typeof v === 'string' ? v : Inspect(v)}`)
       .join(", ");
     return `${type.padStart("beginblockast".length, " ")}  ${values}`;
   };
