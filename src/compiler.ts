@@ -74,6 +74,7 @@ export const BytecodeDefault: ParseTreeTable = {
   not:        (out, node) => (visitParseNode(out, node.expr), pushBytecode(out, node.token, { type: 'not' })),
 
   evalfunc: (out, node) => (node.typeArgs.map(x => writeMeta(out, x)), visitAll(out, node.args), pushBytecode(out, node.token, { type: "evalfunc", func: node.func })),
+  concurrency: (out, node) => (visitAll(out, node.fns), pushBytecode(out, node.token, { type: 'concurrency', count: node.fns.length })),
 
   note: (out, node) => {
     if (node.expr instanceof ParseCall) {
@@ -122,7 +123,8 @@ export const BytecodeDefault: ParseTreeTable = {
     visitAll(out, node.typeArgs)
     visitAll(out, node.args);
     if (node.left instanceof ParseValue) { // Internal desugar results in a fixed value sometimes
-      pushBytecode(out, node.token, { type: "callobj", callable: node.left.value, count: node.args.length, tcount: node.typeArgs.length })
+      visitParseNode(out, node.left)
+      pushBytecode(out, node.token, { type: "callobj", count: node.args.length, tcount: node.typeArgs.length })
       return;
     }
     if (node.left instanceof ParseIdentifier) {
@@ -135,6 +137,11 @@ export const BytecodeDefault: ParseTreeTable = {
     }
     if (node.left instanceof ParseField) {
       compilerAssert(false, "Call with field not implemented yet", { node })
+      return;
+    }
+    if (node.left instanceof ParseFunction) {
+      visitParseNode(out, node.left)
+      pushBytecode(out, node.token, { type: "callobj", count: node.args.length, tcount: node.typeArgs.length })
       return;
     }
     compilerAssert(false, "Call with non-identifier not implemented yet", { left: node.left})
@@ -298,6 +305,7 @@ export const BytecodeSecondOrder: ParseTreeTable = {
   },
 
   evalfunc: (out, node) => (node.typeArgs.map(x => writeMeta(out, x)), visitAll(out, node.args), pushBytecode(out, node.token, { type: "evalfunc", func: node.func })),
+  concurrency: (out, node) => (visitAll(out, node.fns), pushBytecode(out, node.token, { type: 'concurrency', count: node.fns.length })),
 
   note: (out, node) => {
     if (node.expr instanceof ParseCall) {
@@ -586,9 +594,10 @@ export function createBytecodeVmAndExecuteTask(ctx: TaskContext, subCompilerStat
   return (
     TaskDef(executeVmTask, { vm })
     .mapRejected(error => {
-      if (error.info) {
-        if (!(error.info as any).location) (error.info as any).location = vm.location;
-        (error.info as any).subCompilerState = subCompilerState
+      const info = error.info as any
+      if (info) {
+        if (!info.location) info.location = vm.location;
+        if (!info.subCompilerState) info.subCompilerState = subCompilerState
       }
       return error
     })
@@ -889,6 +898,11 @@ const instructions: InstructionMapping = {
     vm.stack.push(new IfAst(resultType, vm.location, cond, trueBody, falseBody))
   },
   evalfunc: (vm, { func }) => { return func(vm) },
+  concurrency: (vm, { count }) => {
+    const values = popValues(vm, count).reverse()
+    const fnctx: CompilerFunctionCallContext = { location: vm.location, compilerState: vm.context.subCompilerState, resultAst: undefined, typeCheckResult: undefined }
+    return Task.concurrency(values.map(x => createCallAstFromValue(fnctx, x, [], [])))
+  },
   listast: (vm, { count }) => {
     const values = expectAsts(popValues(vm, count))
     const elementType = getCommonType(values.map(x => x.type))
@@ -1032,6 +1046,7 @@ const instructions: InstructionMapping = {
     return TaskDef(resolveScope, vm.scope, name).chainFn((task, binding) => {
       compilerAssert(binding instanceof Binding, "Expected binding got $binding", { binding })
       const ast = propagatedLiteralAst(expectAst(popStack(vm)))
+      compilerAssert(binding.type === ast.type, "Type mismatch got $got expected $expected", { got: ast.type, expected: binding.type })
       vm.stack.push(new SetAst(VoidType, vm.location, binding, ast))
       return Task.success()
     });
@@ -1220,7 +1235,8 @@ const instructions: InstructionMapping = {
       })
     )
   },
-  callobj: (vm, { callable, count, tcount }) => {
+  callobj: (vm, { count, tcount }) => {
+    const callable = popStack(vm)
     const values = popValues(vm, count);
     const typeArgs = popValues(vm, tcount || 0);
     return TaskDef(callFunctionFromValueTask, vm, callable, typeArgs, values)
@@ -1333,7 +1349,10 @@ function executeVmTask(ctx: TaskContext, { vm } : { vm: Vm }, p: void): Task<Uni
     try {
       res = instr(vm, current);
     } catch(ex) {
-      if (ex instanceof CompilerError) Object.assign(ex.info, { ip: vm.ip, current, location: vm.location, subCompilerState: vm.context.subCompilerState })
+      if (ex instanceof CompilerError) {
+        if (!ex.info) ex.info = {}
+        Object.assign(ex.info, { ip: vm.ip, current, location: vm.location, subCompilerState: vm.context.subCompilerState }, ex.info)
+      }
       throw ex;
     }
 
@@ -1698,7 +1717,6 @@ export const runTopLevelTask = (ctx: TaskContext, stmts: ParseStatements, module
 
 const createInitializerFunctionTask = (ctx: TaskContext) => {
   const decl: ParserFunctionDecl = {
-    id: undefined,
     debugName: `<initializer>`,
     token: createAnonymousToken(''), functionMetaName: null, name: null, typeParams: [], params: [],
     keywords: [], anonymous: true, returnType: null, body: null, annotations: [], variadic: false
@@ -1724,7 +1742,6 @@ const createInitializerFunctionTask = (ctx: TaskContext) => {
 
 const createEntryFunctionTask = (ctx: TaskContext) => {
   const decl: ParserFunctionDecl = {
-    id: undefined,
     debugName: `<entry>`,
     token: createAnonymousToken(''), functionMetaName: null, name: null, typeParams: [], params: [],
     keywords: [], anonymous: true, returnType: null, body: null, annotations: [], variadic: false

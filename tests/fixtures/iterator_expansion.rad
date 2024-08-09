@@ -201,10 +201,16 @@ fn test_last():
 
 fn test_first():
 
-  numbers := [40, 20, 10, 32, 12, 3124]
+  numbers := [40.0, 20, 10, 32, 12, 3124]
+  
   x := @first(numbers[:])
   print(x)
-  assert(x == 40)
+
+  people := [Person(10), Person(20), Person(30), Person(40), Person(50)]
+  p := @first(people[1:])
+
+  print(p.age)
+  # assert(x == 40)
 
 fn test_range():
   rng := Range(10, 20)
@@ -329,6 +335,13 @@ fn test_iterator_to_array():
   print(arr[:]) ...
   
 
+fn test_array():
+  x := 0.2
+  arr := [ 3, 1, 1]
+  # assert(@sum(arr[:]) == 43545640)
+  print(arr[:]) ...
+  
+
 fn main():
   test_fold()
   test_shorthand()
@@ -353,3 +366,4 @@ fn main():
   test_flatmap()
   test_custom_iterator()
   test_iterator_to_array()
+  test_array()

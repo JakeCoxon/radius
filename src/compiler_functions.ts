@@ -5,18 +5,20 @@ import { Task, TaskDef, Unit } from "./tasks";
 
 
 export const insertFunctionDefinition = (compilerState: GlobalCompilerState, decl: ParserFunctionDecl) => {
-  if (decl.id !== undefined) return compilerState.functionDefinitions[decl.id];
+  const existing = compilerState.functionDefinitionsByDeclaration.get(decl)
+  if (existing) return existing
 
-  decl.id = compilerState.functionDefinitions.length;
+  const id = compilerState.functionDefinitions.length;
   const keywords = decl.keywords.map(x => x instanceof ParseNote ? x.expr.token.value : x.token.value)
   const inline = !!decl.anonymous || keywords.includes('inline')
   const funcDef = new FunctionDefinition(
-    decl.id, decl.debugName,
+    id, decl.debugName,
     decl.name, decl.typeParams, decl.params,
     decl.returnType, decl.body,
     inline, decl.annotations)
   funcDef.variadic = decl.variadic
   funcDef.keywords.push(...keywords)
+  compilerState.functionDefinitionsByDeclaration.set(decl, funcDef)
 
   if (funcDef.keywords.includes("external")) {
     compilerAssert(decl.name, "Expected name")
