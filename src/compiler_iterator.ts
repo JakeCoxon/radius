@@ -631,47 +631,56 @@ const visitExpansion = (out: BytecodeWriter, expansion: ExpansionCompilerState, 
 
 const compileExpansionToParseNode = (out: BytecodeWriter, expansion: ExpansionCompilerState, node: ParseNode) => {
 
-  const list = new ParseList(node.token, expansion.selectors.map(x => new ParseQuote(node.token, x.node)))
+  const list = new ParseList(node.token, expansion.selectors.map(selector => {
+
+    return new ParseEvalFunc(node.token, (vm) => {
+      const iterable = vm.stack.pop()
+      compilerAssert(isAst(iterable), "Expected ast", { iterable })
+      const fnctx: CompilerFunctionCallContext = { location: vm.location, compilerState: vm.context.subCompilerState, resultAst: undefined, typeCheckResult: undefined }
+      const iterator = iteratableToCallable(fnctx, node.token, iterable, selector)
+      vm.stack.push(iterator)
+      return
+    }, [new ParseQuote(node.token, selector.node)], [])
+  }))
   const letIteratorList = new ParseLet(node.token, expansion.iteratorListIdentifier, null, list)
 
   const metaList = new ParseMeta(node.token, letIteratorList)
+
+  // Set up result closure. Can we put this in global scope so we don't generate it every time?
+    
+  const fnParams: ParserFunctionParameter[] = expansion.selectors.map(selector => {
+    return { name: selector.elemIdentifier, storage: null, type: null }
+  })
+
+  compilerAssert(expansion.loopBodyNode, "Expected loop body")
+
+  if (expansion.filterNode) {
+    expansion.loopBodyNode = new ParseIf(node.token, false, expansion.filterNode, expansion.loopBodyNode, null)
+  }
+  if (expansion.whileNode) {
+    const break_ = new ParseBreak(node.token, expansion.breakIden, null)
+    const cond = new ParseNot(createAnonymousToken(''), expansion.whileNode)
+    const ifBreak = new ParseIf(node.token, false, cond, break_, null)
+    expansion.loopBodyNode = new ParseStatements(node.token, [ifBreak, expansion.loopBodyNode])
+  }
+  
+  const fnBody = new ParseStatements(createAnonymousToken(''), [expansion.loopBodyNode])
+  const decl = createAnonymousParserFunctionDecl(`${expansion.debugName}_reduced`, createAnonymousToken(''), fnParams, fnBody)
+  const resultFn = new ParseFunction(node.token, decl)
 
   const finalAst = new ParseEvalFunc(createAnonymousToken(''), (vm: Vm) => {
 
     const iteratorObjList = vm.stack.pop() as unknown
     compilerAssert(isArray(iteratorObjList))
 
-    // Set up result closure. Can we put this in global scope so we don't generate it every time?
+    const resultClosure = vm.stack.pop() as unknown
+    compilerAssert(resultClosure instanceof Closure, "Expected closure", { resultClosure })
     
-    const fnParams: ParserFunctionParameter[] = expansion.selectors.map(selector => {
-      return { name: selector.elemIdentifier, storage: null, type: null }
-    })
-    compilerAssert(expansion.loopBodyNode, "Expected loop body")
-
-    if (expansion.filterNode) {
-      expansion.loopBodyNode = new ParseIf(node.token, false, expansion.filterNode, expansion.loopBodyNode, null)
-    }
-    if (expansion.whileNode) {
-      const break_ = new ParseBreak(node.token, expansion.breakIden, null)
-      const cond = new ParseNot(createAnonymousToken(''), expansion.whileNode)
-      const ifBreak = new ParseIf(node.token, false, cond, break_, null)
-      expansion.loopBodyNode = new ParseStatements(node.token, [ifBreak, expansion.loopBodyNode])
-    }
-
-    const fnBody = new ParseStatements(createAnonymousToken(''), [expansion.loopBodyNode])
-    const decl = createAnonymousParserFunctionDecl(`${expansion.debugName}_reduced`, createAnonymousToken(''), fnParams, fnBody)
-    const funcDef = insertFunctionDefinition(vm.context.subCompilerState.globalCompiler, decl)
-    let resultClosure = new Closure(funcDef, vm.context.subCompilerState.scope, vm.context.subCompilerState)
-    setOptimiseSimpleIterator(resultClosure)
-
-    const iteratorList: IteratorState[] = iteratorObjList.map((obj, i) => {
+    const iteratorList: IteratorState[] = iteratorObjList.map((closure, i) => {
       const selector = expansion.selectors[i]
       compilerAssert(!selector.setterIdentifier, "Shouldn't happen") // setterIdentifier is only used in state.setterSelector
-      const lets: ParseNode[] = []
-      compilerAssert(isAst(obj), "Expected ast", { obj })
-      const fnctx: CompilerFunctionCallContext = { location: vm.location, compilerState: vm.context.subCompilerState, resultAst: undefined, typeCheckResult: undefined }
-      const closure = iteratableToCallable(fnctx, node.token, obj, selector)
-      return { closure, selector, lets }
+      compilerAssert(isCompilerCallable(closure), "Expected closure", { closure })
+      return { closure, selector }
     })
 
     if (expansion.optimiseSimple) {
@@ -686,7 +695,7 @@ const compileExpansionToParseNode = (out: BytecodeWriter, expansion: ExpansionCo
     return expandZipIterator(initialState).chainFn((task, ast) => {
       vm.stack.push(ast); return Task.success()
     })
-  }, [], [expansion.iteratorListIdentifier])
+  }, [], [resultFn, expansion.iteratorListIdentifier])
 
   const lets: ParseNode[] = [metaList]
   const final: ParseNode[] = [finalAst]
