@@ -42,6 +42,7 @@ export const BytecodeDefault: ParseTreeTable = {
   forexpr:   (out, node) => compilerAssert(false, "Not implemented 'forexpr' in BytecodeDefault"),
   whileexpr: (out, node) => compilerAssert(false, "Not implemented 'whileexpr' in BytecodeDefault"),
   expand:    (out, node) => compilerAssert(false, "Not implemented 'expand' in BytecodeDefault"),
+  void:      (out, node) => compilerAssert(false, "Not implemented 'void' in BytecodeDefault"),
   
   slice:     (out, node) => compilerAssert(false, "Not implemented 'slice' in BytecodeDefault"),
   class:     (out, node) => compilerAssert(false, "Not implemented 'class' in BytecodeDefault"),
@@ -277,6 +278,7 @@ export const BytecodeSecondOrder: ParseTreeTable = {
   number:   (out, node) => pushBytecode(out, node.token, { type: "numberast", value: node.token.value }),
   string:   (out, node) => pushBytecode(out, node.token, { type: "stringast", value: node.string }),
   boolean:  (out, node) => pushBytecode(out, node.token, { type: "boolast", value: node.token.value !== 'false' }),
+  void:     (out, node) => pushBytecode(out, node.token, { type: "voidast" }),
 
   operator: (out, node) => (visitAll(out, node.exprs), pushBytecode(out, node.token, { type: 'operatorast', name: node.token.value, count: node.exprs.length })),
   meta:     (out, node) => (writeMeta(out, node.expr), pushBytecode(out, node.token, { type: 'toast' })),
@@ -853,6 +855,7 @@ const instructions: InstructionMapping = {
     const [a, b] = expectAsts(popValues(vm, count))
     vm.stack.push(new AndAst(BoolType, vm.location, [propagatedLiteralAst(a), propagatedLiteralAst(b)]))
   },
+  voidast: (vm) => vm.stack.push(new VoidAst(VoidType, vm.location)),
   whileast: (vm) =>               vm.stack.push(new WhileAst(VoidType, vm.location, expectAst(popStack(vm)), expectAst(popStack(vm)))),
   returnast: (vm, { r }) => {
     const returnBreak = vm.context.subCompilerState.functionReturnBreakBlock?.binding

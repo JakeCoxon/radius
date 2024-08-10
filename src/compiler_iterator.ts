@@ -1,6 +1,6 @@
 import { BytecodeSecondOrder, compileFunctionPrototype, getCommonType, getOperatorTable, loadModule, popStack, popValues, propagateLiteralType, propagatedLiteralAst, pushBytecode, resolveScope, unknownToAst, visitParseNode } from "./compiler"
 import { compileExportedFunctionTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, insertFunctionDefinition } from "./compiler_functions"
-import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, UserCallAst, hashValues, NeverType, IfAst, BoolType, VoidAst, LoopObject, CompileTimeObjectType, u64Type, FunctionDefinition, ParserFunctionDecl, StatementsAst, isTypeScalar, IntLiteralType, FloatLiteralType, isAst, isType, isTypeCheckError, InterleaveAst, ContinueInterAst, CompTimeObjAst, ParseEvalFunc, SetAst, DefaultConsAst, WhileAst, BoolAst, isArray, ExpansionSelector, ParseNote, ExpansionCompilerState, ParseBoolean, ParseOr, ParseBreak, filterNotNull, ParseTuple, ParseNot, ParseLetConst, ParseConcurrency, ParseCompTime, ParseNil, CompilerCallable, isCompilerCallable } from "./defs"
+import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, UserCallAst, hashValues, NeverType, IfAst, BoolType, VoidAst, LoopObject, CompileTimeObjectType, u64Type, FunctionDefinition, ParserFunctionDecl, StatementsAst, isTypeScalar, IntLiteralType, FloatLiteralType, isAst, isType, isTypeCheckError, InterleaveAst, ContinueInterAst, CompTimeObjAst, ParseEvalFunc, SetAst, DefaultConsAst, WhileAst, BoolAst, isArray, ExpansionSelector, ParseNote, ExpansionCompilerState, ParseBoolean, ParseOr, ParseBreak, filterNotNull, ParseTuple, ParseNot, ParseLetConst, ParseConcurrency, ParseCompTime, ParseNil, CompilerCallable, isCompilerCallable, ParseVoid } from "./defs"
 import { Event, Task, TaskDef, isTask } from "./tasks"
 
 
@@ -629,6 +629,18 @@ const visitExpansion = (out: BytecodeWriter, expansion: ExpansionCompilerState, 
   return expansion.loopBodyNode = new ParseBytecode(node.token, bytecode)
 }
 
+const compileExpansionToParseNodeTrans = (out: BytecodeWriter, expansion: ExpansionCompilerState, node: ParseNode, trans: any) => {
+
+  const reducer = {
+    b: () => compileExpansionToParseNode(out, expansion, node),
+    c: expansion.loopBodyNode,
+  }
+  const final = trans(reducer)
+  expansion.loopBodyNode = final.c
+  return final.b()
+  
+}
+
 const compileExpansionToParseNode = (out: BytecodeWriter, expansion: ExpansionCompilerState, node: ParseNode) => {
 
   const list = new ParseList(node.token, expansion.selectors.map(selector => {
@@ -840,25 +852,32 @@ const typeOf = new ExternalFunction('typeOf', VoidType, (ctx, values) => {
   return value.type
 })
 
-const deferredHelperSetter = (token: Token, deferIden: ParseFreshIden, result: ParseNode) => {
-  const typeOf_ = new ParseCall(token, new ParseValue(token, typeOf), [new ParseQuote(token, result)], [])
-  const default_ = new ParseCall(token, 
-    new ParseValue(token, createDefaultFromType), [typeOf_], [])
-  const toLet_ = new ParseCall(token, 
-    new ParseValue(token, createFreshLet), [default_], [])
-  const tcResult = new ParseCall(createAnonymousToken(''),
-    new ParseValue(token, deferAssignSet), [toLet_, deferIden], [])
-  const call_ = new ParseCall(createAnonymousToken(''),
-    new ParseValue(token, deferToSetAst), [new ParseQuote(token, result), deferIden], [])
-  return new ParseStatements(token, [new ParseCompTime(token, tcResult), new ParseMeta(token, call_),])
+const callV = (token: Token, value: unknown, args: ParseNode[], typeArgs: ParseNode[]) => {
+  return new ParseCall(token, new ParseValue(token, value), args, [])
 }
 
-const deferredHelperResult = (token: Token, deferIden: ParseFreshIden, original: ParseNode) => {
-  const letobj = new ParseLetConst(token, deferIden, new ParseCall(createAnonymousToken(''), new ParseValue(token, createDeferObject), [], []))
-  const stmts = new ParseStatements(token, [letobj, original])
-  const call_ = new ParseCall(createAnonymousToken(''), new ParseValue(token, deferToBindingAst), [
-    new ParseQuote(createAnonymousToken(''), stmts), new ParseQuote(createAnonymousToken(''), deferIden)], [])
-  return new ParseMeta(createAnonymousToken(''), call_)
+const transDefer = (reducer: any) => {
+  const { b, c } = reducer
+  const token = createAnonymousToken('')
+
+  const originalResult = c
+  const deferIden = new ParseFreshIden(token, new FreshBindingToken('defer'))
+  const typeOf_ = callV(token, typeOf, [new ParseQuote(token, originalResult)], [])
+  const default_ = callV(token, createDefaultFromType, [typeOf_], [])
+  const toLet_ = callV(token, createFreshLet, [default_], [])
+  const tcResult = callV(token, deferAssignSet, [toLet_, deferIden], [])
+  const call_ = callV(token, deferToSetAst, [new ParseQuote(token, originalResult), deferIden], [])
+  const newC = new ParseStatements(token, [new ParseCompTime(token, tcResult), new ParseMeta(token, call_)])
+
+  const newB = () => {
+    const original = b()
+    const letobj = new ParseLetConst(token, deferIden, new ParseCall(createAnonymousToken(''), new ParseValue(token, createDeferObject), [], []))
+    const stmts = new ParseStatements(token, [letobj, original])
+    const call_ = callV(token, deferToBindingAst, [new ParseQuote(token, stmts), new ParseQuote(token, deferIden)], [])
+    return new ParseMeta(createAnonymousToken(''), call_)
+  }
+  
+  return { b: newB, c: newC }
 }
 
 export const expandFuncFirstSugar = (out: BytecodeWriter, noteNode: ParseNote, args: ParseNode[]) => {
@@ -870,13 +889,17 @@ export const expandFuncFirstSugar = (out: BytecodeWriter, noteNode: ParseNote, a
 
   compilerAssert(!expansion.fold, "Fold not supported in this context")
 
-  const deferIden = new ParseFreshIden(node.token, new FreshBindingToken('defer'))
-  const break_ = new ParseBreak(node.token, expansion.breakIden, null)
-  const deferSet_ = deferredHelperSetter(node.token, deferIden, result)
-  expansion.loopBodyNode = new ParseStatements(node.token, [deferSet_, break_])
-  const reduce = compileExpansionToParseNode(out, expansion, node)
-  visitParseNode(out, deferredHelperResult(node.token, deferIden, reduce))
+  const trans = (reducer: any) => {
+    const { b, c } = transDefer(reducer)
+    const break_ = new ParseBreak(node.token, expansion.breakIden, null)
+    const newC = new ParseStatements(node.token, [c, break_])
+    return { b: b, c: newC }
+  }
+  
+  const reduce = compileExpansionToParseNodeTrans(out, expansion, node, trans)
+  visitParseNode(out, reduce)
 }
+
 export const expandFuncMinSugar = (out: BytecodeWriter, noteNode: ParseNote, args: ParseNode[]) => {
   compilerAssert(!out.state.expansion, "Already in expansion state")
   const node = args[0]

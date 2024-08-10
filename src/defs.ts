@@ -118,6 +118,7 @@ class ParseNodeType {
   }
 }
 
+export class ParseVoid extends ParseNodeType {         key = 'void' as const;         constructor(public token: Token) { super();} }
 export class ParseIdentifier extends ParseNodeType {   key = 'identifier' as const;   constructor(public token: Token) { super();} }
 export class ParseSymbol extends ParseNodeType {       key = 'symbol' as const;       constructor(public token: Token) { super();} }
 export class ParseNil extends ParseNodeType {          key = 'nil' as const;          constructor(public token: Token) { super();} }
@@ -182,7 +183,7 @@ export type ParseNode = ParseStatements | ParseLet | ParseSet | ParseOperator | 
   ParseDict | ParsePostCall | ParseSymbol | ParseNote | ParseSlice | ParseSubscript | ParseTuple | ParseClass |
   ParseNil | ParseBoolean | ParseElse | ParseMetaIf | ParseMetaFor | ParseMetaWhile | ParseBlock | ParseImport | 
   ParseCompilerIden | ParseValue | ParseConstructor | ParseQuote | ParseBytecode | ParseFreshIden | ParseFold | 
-  ParseNamedArg | ParseEvalFunc | ParseConcurrency
+  ParseNamedArg | ParseEvalFunc | ParseConcurrency | ParseVoid
 
 // Void types mean that in secondOrder compilation, the AST doesn't return an AST
 export const isParseVoid = (ast: ParseNode) => ast.key == 'letconst' || ast.key === 'function' || ast.key === 'class' || ast.key === 'comptime' || ast.key === 'metawhile';
@@ -247,6 +248,7 @@ export type BytecodeInstr =
   { type: 'jumpf', address: number } |
   { type: 'evalfunc', func: (vm: Vm) => void | Task<unknown, CompilerError> } |
   { type: 'concurrency', count: number } |
+  { type: 'voidast' } |
   { type: 'halt' }
 
 
