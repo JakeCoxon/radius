@@ -639,6 +639,11 @@ export class CompilerFunction {
   }
 }
 
+export type CompilerCallable = ExternalFunction | CompilerFunction | Closure
+export const isCompilerCallable = (value: unknown): value is CompilerCallable => {
+  return value instanceof ExternalFunction || value instanceof CompilerFunction || value instanceof Closure
+}
+
 export const NeverType =        new PrimitiveType("never",         { sizeof: 0, fields: [], metaobject: Object.create(null), isReferenceType: false })
 export const VoidType =         new PrimitiveType("void",          { sizeof: 0, fields: [], metaobject: Object.create(null), isReferenceType: false })
 export const IntType =          new PrimitiveType("int",           { sizeof: 4, fields: [], metaobject: Object.create(null), isReferenceType: false })
