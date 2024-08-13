@@ -222,7 +222,6 @@ export const listConstructorSugar = (out: BytecodeWriter, node: ParseList) => {
   visitParseNode(out, new ParseMeta(node.token, new ParseCall(node.token, new ParseValue(node.token, arrayConstructorFinish), [listConstructorIden], [])))
 }
 
-
 const createArrayIterator = (token: Token, subCompilerState: SubCompilerState, selector: { node: ParseNode, start: ParseNode | null, end: ParseNode | null, step: ParseNode | null, setterIdentifier: ParseNode | null, indexIdentifier: ParseFreshIden | null }) => {
 
   const yieldParam = new ParseFreshIden(token, new FreshBindingToken('yield'))
@@ -253,7 +252,7 @@ const createArrayIterator = (token: Token, subCompilerState: SubCompilerState, s
   return { closure, yieldParam, indexIdentifier, subscriptIterator }
 }
 
-const createArraySetterIterator = (token: Token, subCompilerState: SubCompilerState, selector: { node: ParseNode, start: ParseNode | null, end: ParseNode | null, step: ParseNode | null, setterIdentifier: ParseNode | null, indexIdentifier: ParseFreshIden | null }) => {
+const createArraySetterIterator2 = (token: Token, selector: { node: ParseNode, start: ParseNode | null, end: ParseNode | null, step: ParseNode | null, setterIdentifier: ParseNode | null, indexIdentifier: ParseFreshIden | null }) => {
   
   const yieldParam = new ParseFreshIden(token, new FreshBindingToken('yield'))
   const valueIdentifier = new ParseFreshIden(token, new FreshBindingToken('value'))
@@ -278,10 +277,7 @@ const createArraySetterIterator = (token: Token, subCompilerState: SubCompilerSt
   const loop = new ParseWhile(token, condNode, whileStmts)
 
   const fnBody = new ParseStatements(createAnonymousToken(''), [letIndexNode, letLengthNode, loop])
-  const decl = createAnonymousParserFunctionDecl(`array_setter_iterator`, createAnonymousToken(''), fnParams, fnBody)
-  const funcDef = insertFunctionDefinition(subCompilerState.globalCompiler, decl)
-  const closure = new Closure(funcDef, subCompilerState.scope, subCompilerState)
-  return { closure, yieldParam, indexIdentifier, subscriptIterator, valueIdentifier }
+  return createAnonymousParserFunctionDecl(`array_setter_iterator`, createAnonymousToken(''), fnParams, fnBody)
 }
 
 
@@ -493,6 +489,7 @@ const interleaveHelper = () => {
     return new InterleaveAst(VoidType, location, interleaveBinding, entryLabels, otherLabels, a, b)
   }
   const createSetter = (location: SourceLocation, value: Ast) => {
+    propagatedLiteralAst(value)
     const entryParam = getOrCreateParamBinding(value.type)
     return new SetAst(VoidType, location, entryParam, value)
   }
@@ -500,80 +497,6 @@ const interleaveHelper = () => {
     createEntryLabel, createElseLabel, continueEntry, continueOther, waitForEntryBinding, 
     getOrCreateParamBinding, createSetter, buildAst
   }
-}
-
-
-const expandZipIterator = (state: ExpansionZipState): Task<Ast, CompilerError> => {
-
-  const location = state.location
-
-  if (state.iteratorList.length === 0 && state.setterSelector) {
-    compilerAssert(!state.expansion.filterNode, "Filter not implemented in setter yet")
-
-    const setter = createArraySetterIterator(createAnonymousToken(''), state.compilerState, state.setterSelector)
-
-    const finalProducer = new CompilerFunction("finalproducer", (ctx, typeArgs, args) => {
-      const fnctx2: CompilerFunctionCallContext = { location, compilerState: state.compilerState, resultAst: undefined, typeCheckResult: undefined }
-      return (
-        createCallAstFromValue(fnctx2, state.resultClosure, [], state.bindingValues)
-        .chainFn((task, value) => {
-          return Task.of(createStatements(location, [...state.lets, value]))
-        })
-      )
-    })
-
-    const fnctx2: CompilerFunctionCallContext = { location, compilerState: state.compilerState, resultAst: undefined, typeCheckResult: undefined }
-    return createCallAstFromValue(fnctx2, setter.closure, [], [new CompTimeObjAst(VoidType, location, finalProducer)])
-  }
-
-  else if (state.iteratorList.length === 0) {
-    // Generates the following loop using all the expansion zip state lets and bindingValues
-    // while true:
-    //   elem_a := yield_a()
-    //   elem_b := yield_b()
-    //   ...
-    //   resultClosure(elem_a, elem_b, ...)
-
-    const fnctx2: CompilerFunctionCallContext = { location, compilerState: state.compilerState, resultAst: undefined, typeCheckResult: undefined }
-    return (
-      createCallAstFromValue(fnctx2, state.resultClosure, [], state.bindingValues)
-      .chainFn((task, result) => {
-        const stmts = createStatements(location, [...state.lets, result])
-        const whileAst = new WhileAst(VoidType, location, new BoolAst(BoolType, location, true), stmts)
-        return Task.of(whileAst)
-      })
-    )
-  }
-
-  const iterator1 = state.iteratorList.shift()
-
-  const consume1 = (yieldedValue: Ast): Task<Ast, CompilerError> => {
-
-    const binding = new Binding("", yieldedValue.type)
-    const bindingAst = new BindingAst(binding.type, location, binding)
-
-    const letAst = new LetAst(VoidType, location, binding, yieldedValue)
-    state.bindingValues.push(bindingAst)
-    state.lets.push(letAst)
-
-    return expandZipIterator(state)
-  }
-
-  const produce1 = (yieldFn: (value: Ast) => Task<Ast, CompilerError>): Task<Ast, CompilerError> => {
-    const fn2 = new CompilerFunction("fn2", (ctx, typeArgs, args) => {
-      const [bindingAst] = args
-      // compilerAssert(false, "Not implemented", { ctx, typeArgs, args })
-      return yieldFn(bindingAst)
-    })
-    const fnctx2: CompilerFunctionCallContext = { location: location, compilerState: state.compilerState, resultAst: undefined, typeCheckResult: undefined }
-    compilerAssert(iterator1)
-    return createCallAstFromValue(fnctx2, iterator1.closure, [], [new CompTimeObjAst(VoidType, location, fn2)])
-  }
-
-  const fnctx2: CompilerFunctionCallContext = { location, compilerState: state.compilerState, resultAst: undefined, typeCheckResult: undefined }
-
-  return generatorInternal(fnctx2, consume1, produce1)
-
 }
 
 const iteratableToCallable = (ctx: CompilerFunctionCallContext, token: Token, iteratable: Ast, selector: ExpansionSelector) => {
@@ -643,27 +566,6 @@ const compileExpansionToParseNodeTrans = (out: BytecodeWriter, expansion: Expans
 
 const compileExpansionToParseNode = (out: BytecodeWriter, expansion: ExpansionCompilerState, node: ParseNode) => {
 
-  const list = new ParseList(node.token, expansion.selectors.map(selector => {
-
-    return new ParseEvalFunc(node.token, (vm) => {
-      const iterable = vm.stack.pop()
-      compilerAssert(isAst(iterable), "Expected ast", { iterable })
-      const fnctx: CompilerFunctionCallContext = { location: vm.location, compilerState: vm.context.subCompilerState, resultAst: undefined, typeCheckResult: undefined }
-      const iterator = iteratableToCallable(fnctx, node.token, iterable, selector)
-      vm.stack.push(iterator)
-      return
-    }, [new ParseQuote(node.token, selector.node)], [])
-  }))
-  const letIteratorList = new ParseLet(node.token, expansion.iteratorListIdentifier, null, list)
-
-  const metaList = new ParseMeta(node.token, letIteratorList)
-
-  // Set up result closure. Can we put this in global scope so we don't generate it every time?
-    
-  const fnParams: ParserFunctionParameter[] = expansion.selectors.map(selector => {
-    return { name: selector.elemIdentifier, storage: null, type: null }
-  })
-
   compilerAssert(expansion.loopBodyNode, "Expected loop body")
 
   if (expansion.filterNode) {
@@ -675,42 +577,51 @@ const compileExpansionToParseNode = (out: BytecodeWriter, expansion: ExpansionCo
     const ifBreak = new ParseIf(node.token, false, cond, break_, null)
     expansion.loopBodyNode = new ParseStatements(node.token, [ifBreak, expansion.loopBodyNode])
   }
-  
-  const fnBody = new ParseStatements(createAnonymousToken(''), [expansion.loopBodyNode])
-  const decl = createAnonymousParserFunctionDecl(`${expansion.debugName}_reduced`, createAnonymousToken(''), fnParams, fnBody)
-  const resultFn = new ParseFunction(node.token, decl)
 
-  const finalAst = new ParseEvalFunc(createAnonymousToken(''), (vm: Vm) => {
+  const zipCallables = expansion.selectors.map(selector => {
+    return new ParseEvalFunc(node.token, (vm) => {
+      const iterator = vm.stack.pop()
+      compilerAssert(isAst(iterator), "Expected ast", { iterator })
+      const fnctx: CompilerFunctionCallContext = { location: vm.location, compilerState: vm.context.subCompilerState, resultAst: undefined, typeCheckResult: undefined }
+      const callable = iteratableToCallable(fnctx, node.token, iterator, selector)
+      vm.stack.push(callable)
+      return 
+    }, [new ParseQuote(node.token, selector.node)], [])
+  })
 
-    const iteratorObjList = vm.stack.pop() as unknown
-    compilerAssert(isArray(iteratorObjList))
+  const setterResult = (stmts: ParseNode[]) => {
+    const setter = createArraySetterIterator2(createAnonymousToken(''), expansion.setterSelector!)
+    const stmtsNode = new ParseStatements(node.token, [...stmts, expansion.loopBodyNode!])
+    const decl = createAnonymousParserFunctionDecl(`${expansion.debugName}_setter`, createAnonymousToken(''), [], stmtsNode)
+    return new ParseCall(node.token, new ParseFunction(node.token, setter), [new ParseFunction(node.token, decl)], [])
+  }
 
-    const resultClosure = vm.stack.pop() as unknown
-    compilerAssert(resultClosure instanceof Closure, "Expected closure", { resultClosure })
-    
-    const iteratorList: IteratorState[] = iteratorObjList.map((closure, i) => {
-      const selector = expansion.selectors[i]
-      compilerAssert(!selector.setterIdentifier, "Shouldn't happen") // setterIdentifier is only used in state.setterSelector
-      compilerAssert(isCompilerCallable(closure), "Expected closure", { closure })
-      return { closure, selector }
-    })
+  const whileResult = (stmts: ParseNode[]) => {
+    const stmtsNode = new ParseStatements(node.token, [...stmts, expansion.loopBodyNode!])
+    return new ParseWhile(node.token, new ParseBoolean(createAnonymousToken('true')), stmtsNode)
+  }
 
-    if (expansion.optimiseSimple) {
-      compilerAssert(iteratorList.length === 1, "optimiseSimple is set to true but expected one iterator")
-      compilerAssert(!expansion.setterSelector, "Shouldn't happen?")
-      return createCallAstFromValueAndPushValue(vm, iteratorList[0].closure, [], [new CompTimeObjAst(VoidType, vm.location, resultClosure)])
-    }
+  const zipResult = expansion.setterSelector ? setterResult : whileResult
 
-    const initialState: ExpansionZipState = { expansion, setterSelector: expansion.setterSelector, iteratorList, bindingValues: [], 
-      lets: [], resultClosure, totalIterators: iteratorList.length, location: vm.location, compilerState: vm.context.subCompilerState }
+  const zips = expansion.selectors.map((selector, i) => {
+    return { callable: zipCallables[i], elemIden: selector.elemIdentifier }
+  })
 
-    return expandZipIterator(initialState).chainFn((task, ast) => {
-      vm.stack.push(ast); return Task.success()
-    })
-  }, [], [resultFn, expansion.iteratorListIdentifier])
+  let loopNode: ParseNode
+  if (zips.length === 1) {
+    const declParams: ParserFunctionParameter[] = [{ name: zips[0].elemIden, storage: null, type: null }]
+    const decl1 = createAnonymousParserFunctionDecl(`${expansion.debugName}_consume`, createAnonymousToken(''), declParams, expansion.loopBodyNode)
+    const consume = new ParseFunction(node.token, decl1)
+    const consumer = new ParseFreshIden(node.token, new FreshBindingToken('consumer'))
+    const letConsumer = new ParseLetConst(node.token, consumer, zips[0].callable)
+    const call_ = new ParseCall(node.token, consumer, [consume], [])
+    loopNode = new ParseStatements(node.token, [letConsumer, call_])
+  } else {
+    loopNode = zipHelper(expansion.debugName, zips, zipResult)
+  }
 
-  const lets: ParseNode[] = [metaList]
-  const final: ParseNode[] = [finalAst]
+  const lets: ParseNode[] = []
+  const final: ParseNode[] = [loopNode]
   if (expansion.fold) {
     lets.push(new ParseLet(node.token, expansion.fold.iden, null, expansion.fold.initial))
     final.push(expansion.fold.iden)
@@ -720,6 +631,45 @@ const compileExpansionToParseNode = (out: BytecodeWriter, expansion: ExpansionCo
   return new ParseBlock(createAnonymousToken(''), 'break', expansion.breakIden, stmts)
 }
 
+
+const generatorHelper = (debugName: string, consumeParam: ParseFreshIden, consumer: ParseNode, produceParam: ParseFreshIden, producer: ParseNode) => {
+  const token = createAnonymousToken('')
+
+  const bparams: ParserFunctionParameter[] = [{ name: consumeParam, type: null, storage: null }]
+  const b1 = createAnonymousParserFunctionDecl(`${debugName}_zip_consumer`, token, bparams, consumer)
+  const b = new ParseFunction(token, b1)
+
+  const cparams: ParserFunctionParameter[] = [{ name: produceParam, type: null, storage: null }]
+  const c1 = createAnonymousParserFunctionDecl(`${debugName}_zip_producer`, token, cparams, producer)
+  const c = new ParseFunction(token, c1)
+
+  return new ParseMeta(token, new ParseCall(createAnonymousToken(''), new ParseValue(createAnonymousToken(''), generator2), [b, c], []))
+}
+
+const createConsumerProducer = (token: Token, callable: ParseNode, produceFn: ParseNode) => {
+  const name = new ParseFreshIden(token, new FreshBindingToken('callable'))
+  const call_ = new ParseCall(token, name, [produceFn], [])
+  return new ParseStatements(token, [new ParseLetConst(token, name, callable), call_])
+}
+
+
+type ZipIterator = { callable: ParseNode, elemIden: ParseFreshIden }
+
+const zipHelper = (debugName: string, zips: ZipIterator[], result: (stmts: ParseNode[]) => ParseNode, index: number = 0, letStmts: ParseNode[] = []): ParseNode => {
+  const token = createAnonymousToken('')
+
+  if (index === zips.length) return result(letStmts)
+
+  const { elemIden, callable } = zips[index]
+  const consumeParam1 = new ParseFreshIden(token, new FreshBindingToken('consume'))
+  const produceParam1 = new ParseFreshIden(token, new FreshBindingToken('produce'))
+
+  const let_ = new ParseLet(token, elemIden, null, new ParseCall(token, consumeParam1, [], []))
+  
+  const innerProducer = zipHelper(debugName, zips, result, index + 1, [...letStmts, let_])
+  const consumerProducer = createConsumerProducer(token, callable, produceParam1)
+  return generatorHelper(`${debugName}_zip${index}`, consumeParam1, innerProducer, produceParam1, consumerProducer)
+}
 
 export const expandDotsSugar = (out: BytecodeWriter, node: ParseExpand) => {
   const expansion = createExpansionState('loop', node.token.location)
@@ -1128,4 +1078,23 @@ export const generator = new CompilerFunction("generator", (ctx, typeArgs, args)
     return createCallAstFromValue(fnctx2, produceFn, [], [new CompTimeObjAst(VoidType, ctx.location, fn2)])
   })
 
+})
+
+const generator2 = new ExternalFunction("generator2", VoidType, (ctx, values) => {
+
+  const [consumeFn, produceFn] = values
+
+  return generatorInternal(ctx, (ast) => {
+    const fnctx1: CompilerFunctionCallContext = { location: ctx.location, compilerState: ctx.compilerState, resultAst: undefined, typeCheckResult: undefined }
+    const fn1 = new CompilerFunction("consume", (ctx, typeArgs, args) => Task.of(ast))
+    return createCallAstFromValue(fnctx1, consumeFn, [], [new CompTimeObjAst(VoidType, ctx.location, fn1)])
+  }, (yieldFn) => {
+    const fn2 = new CompilerFunction("produce", (ctx, typeArgs, args) => {
+      const [bindingAst] = args
+      compilerAssert(isAst(bindingAst))
+      return yieldFn(bindingAst)
+    })
+    const fnctx2: CompilerFunctionCallContext = { location: ctx.location, compilerState: ctx.compilerState, resultAst: undefined, typeCheckResult: undefined }
+    return createCallAstFromValue(fnctx2, produceFn, [], [new CompTimeObjAst(VoidType, ctx.location, fn2)])
+  })
 })
