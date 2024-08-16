@@ -608,7 +608,7 @@ const compileExpansionToParseNode = (out: BytecodeWriter, expansion: ExpansionCo
   })
 
   let loopNode: ParseNode
-  if (zips.length === 1) {
+  if (zips.length === 1 && !expansion.setterSelector) {
     const declParams: ParserFunctionParameter[] = [{ name: zips[0].elemIden, storage: null, type: null }]
     const decl1 = createAnonymousParserFunctionDecl(`${expansion.debugName}_consume`, createAnonymousToken(''), declParams, expansion.loopBodyNode)
     const consume = new ParseFunction(node.token, decl1)
@@ -674,7 +674,10 @@ const zipHelper = (debugName: string, zips: ZipIterator[], result: (stmts: Parse
 export const expandDotsSugar = (out: BytecodeWriter, node: ParseExpand) => {
   const expansion = createExpansionState('loop', node.token.location)
   let result = visitExpansion(out, expansion, node.expr)
-  if (expansion.fold) expansion.loopBodyNode = new ParseSet(node.token, expansion.fold.iden, result)
+  if (expansion.fold) {
+    const set_ = new ParseSet(node.token, expansion.fold.iden, result)
+    expansion.loopBodyNode = new ParseStatements(node.token, [set_, expansion.fold.iden])
+  }
   visitParseNode(out, compileExpansionToParseNode(out, expansion, node))
 }
 

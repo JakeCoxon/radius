@@ -84,9 +84,17 @@ fn test_fold_setter():
   print(count3)
   assert(count3 == 45)
 
-  numbers[:] = 0 ...
-  assert(@sum(numbers[:]) == 0)
+fn test_setters():
+  numbers := [40, 20, 10, 32, 12, 3124]
 
+  numbers[:] = 1 ...
+  assert(@sum(numbers[:]) == 6)
+
+  numbers[:] = [1, 2, 3][:] ...
+  assert(@sum(numbers[:]) == 9)
+
+  numbers[:] = fold(0) + 1 ...
+  assert(@sum(numbers[:]) == 21)
 
 fn test_shorthand():
 
@@ -367,6 +375,7 @@ fn test_foo():
 fn main():
   test_fold()
   test_fold_setter()
+  test_setters()
   test_shorthand()
   test_concat()
   test_concat2()
