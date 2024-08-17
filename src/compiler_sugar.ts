@@ -1,6 +1,6 @@
 import { BytecodeSecondOrder, compileFunctionPrototype, getOperatorTable, loadModule, propagateLiteralType, propagatedLiteralAst, pushBytecode, resolveScope, unknownToAst, visitParseNode } from "./compiler"
 import { compileExportedFunctionTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, insertFunctionDefinition } from "./compiler_functions"
-import { concat, generator } from "./compiler_iterator"
+import { concat } from "./compiler_iterator"
 import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, UserCallAst, hashValues, NeverType, IfAst, BoolType, VoidAst, LoopObject, CompileTimeObjectType, u64Type, FunctionDefinition, ParserFunctionDecl, StatementsAst, isTypeScalar, IntLiteralType, FloatLiteralType, isAst, isType, isTypeCheckError, InterleaveAst, ContinueInterAst, CompTimeObjAst, ParseEvalFunc, SetAst, DefaultConsAst, WhileAst, BoolAst, isArray, ExpansionSelector, ParseNote, ExpansionCompilerState, ParseBoolean, ParseOr, ParseBreak, isTypeInteger } from "./defs"
 import { Event, Task, TaskDef, isTask } from "./tasks"
 
@@ -358,6 +358,30 @@ export const static_length = new ExternalFunction('static_length', VoidType, (ct
   return static_length
 })
 
+export const createDefaultFromType = new ExternalFunction('createDefaultFromType', VoidType, (ctx, values) => {
+  let [type] = values
+  compilerAssert(isType(type), "Expected type", { type })
+  return new DefaultConsAst(type, ctx.location)
+})
+export const maxOfType = new ExternalFunction('maxOfType', VoidType, (ctx, values) => {
+  let [type] = values
+  compilerAssert(isType(type), "Expected type", { type })
+  compilerAssert(type.typeInfo.metaobject['max'], "Type does not have a max value", { type })
+  return new NumberAst(type, ctx.location, type.typeInfo.metaobject['max'] as number)
+})
+export const minOfType = new ExternalFunction('maxOfType', VoidType, (ctx, values) => {
+  let [type] = values
+  compilerAssert(isType(type), "Expected type", { type })
+  compilerAssert(type.typeInfo.metaobject['min'], "Type does not have a min value", { type })
+  return new NumberAst(type, ctx.location, type.typeInfo.metaobject['min'] as number)
+})
+
+export const typeOf = new ExternalFunction('typeOf', VoidType, (ctx, values) => {
+  let [value] = values
+  compilerAssert(isAst(value), "Expected ast", { value })
+  return value.type
+})
+
 const add_external_library = new ExternalFunction("add_external_library", VoidType, (ctx: CompilerFunctionCallContext, args) => {
   compilerAssert(typeof args[0] == 'string', "Expected string")
   ctx.compilerState.globalCompiler.externalCompilerOptions.libraries.push(args[0])
@@ -440,7 +464,7 @@ export const createCompilerModuleTask = (ctx: TaskContext): Task<Module, Compile
     unsafe_subscript, unsafe_set_subscript, operator_bitshift_left, operator_bitshift_right,
     operator_bitwise_and, operator_bitwise_or, rawptr: RawPointerType, add_external_library, add_macos_framework, assert, never: NeverType,
     get_current_loop, ctobj: CompileTimeObjectType, operator_mod, overloaded, static_length, assert_compile_error, initializer_function, add_export,
-    generator, concat })
+    concat })
   const subCompilerState = pushSubCompilerState(ctx, { debugName: `compiler module`, lexicalParent: undefined, scope: moduleScope })
   const module = new Module('compiler', subCompilerState, null!)
   return Task.of(module)

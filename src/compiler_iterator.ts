@@ -1,6 +1,7 @@
 import { BytecodeSecondOrder, compileFunctionPrototype, getCommonType, getOperatorTable, loadModule, popStack, popValues, propagateLiteralType, propagatedLiteralAst, pushBytecode, resolveScope, unknownToAst, visitParseNode } from "./compiler"
 import { compileExportedFunctionTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, insertFunctionDefinition } from "./compiler_functions"
-import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, UserCallAst, hashValues, NeverType, IfAst, BoolType, VoidAst, LoopObject, CompileTimeObjectType, u64Type, FunctionDefinition, ParserFunctionDecl, StatementsAst, isTypeScalar, IntLiteralType, FloatLiteralType, isAst, isType, isTypeCheckError, InterleaveAst, ContinueInterAst, CompTimeObjAst, ParseEvalFunc, SetAst, DefaultConsAst, WhileAst, BoolAst, isArray, ExpansionSelector, ParseNote, ExpansionCompilerState, ParseBoolean, ParseOr, ParseBreak, filterNotNull, ParseTuple, ParseNot, ParseLetConst, ParseConcurrency, ParseCompTime, ParseNil, CompilerCallable, isCompilerCallable, ParseVoid } from "./defs"
+import { createDefaultFromType, maxOfType, minOfType, typeOf } from "./compiler_sugar"
+import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, UserCallAst, hashValues, NeverType, IfAst, BoolType, VoidAst, LoopObject, CompileTimeObjectType, u64Type, FunctionDefinition, ParserFunctionDecl, StatementsAst, isTypeScalar, IntLiteralType, FloatLiteralType, isAst, isType, isTypeCheckError, InterleaveAst, ContinueInterAst, CompTimeObjAst, ParseEvalFunc, SetAst, DefaultConsAst, WhileAst, BoolAst, isArray, ExpansionSelector, ParseNote, ExpansionCompilerState, ParseBoolean, ParseOr, ParseBreak, filterNotNull, ParseTuple, ParseNot, ParseLetConst, ParseConcurrency, ParseCompTime, ParseNil, CompilerCallable, isCompilerCallable, ParseVoid, GlobalCompilerState } from "./defs"
 import { Event, Task, TaskDef, isTask } from "./tasks"
 
 const createExpansionState = (debugName: string, location: SourceLocation): ExpansionCompilerState => {
@@ -388,7 +389,7 @@ const createIteratorSliceIterator = (token: Token, subCompilerState: SubCompiler
     const ctx: CompilerFunctionCallContext = { location: token.location, compilerState: subCompilerState, resultAst: undefined, typeCheckResult: undefined }
 
     const yieldA = (
-      interleave.waitForEntryBinding()
+      interleave.waitForEntryBinding(ctx.compilerState.globalCompiler)
       .chainFn((task, entryParam) => {
         const fnctx1: CompilerFunctionCallContext = { location: ctx.location, compilerState: ctx.compilerState, resultAst: undefined, typeCheckResult: undefined }
         const fn1 = new CompilerFunction('consume', (ctx, typeArgs, args) => {
@@ -414,7 +415,7 @@ const createIteratorSliceIterator = (token: Token, subCompilerState: SubCompiler
     const yieldB = createCallAstFromValue(fnctx2, iterator, [], [new CompTimeObjAst(VoidType, ctx.location, fn2)])
 
     return (
-      Task.concurrency<unknown, CompilerError>([yieldA, yieldB, interleave.waitForEntryBinding()])
+      Task.concurrency<unknown, CompilerError>([yieldA, yieldB, interleave.waitForEntryBinding(ctx.compilerState.globalCompiler)])
       .chainFn((task, args) => {
         const [a, b, entryParam] = args
         compilerAssert(isAst(a))
@@ -468,7 +469,11 @@ const interleaveHelper = () => {
   }
   const continueEntry = (location: SourceLocation) => new ContinueInterAst(VoidType, location, interleaveBinding, createEntryLabel())
   const continueOther = (location: SourceLocation) => new ContinueInterAst(VoidType, location, interleaveBinding, createElseLabel())
-  const waitForEntryBinding = () => Task.waitFor(entryParamEvent)
+  const waitForEntryBinding = (globalCompiler: GlobalCompilerState) => {
+    globalCompiler.allWaitingEvents.push(entryParamEvent)
+    return Task.waitFor(entryParamEvent)
+      .mapRejected(err => { compilerAssert(false, "Binding not resolved in generator", { interleaveBinding }) })
+  }
   const buildAst = (location: SourceLocation, a: Ast, b: Ast) => {
     return new InterleaveAst(VoidType, location, interleaveBinding, entryLabels, otherLabels, a, b)
   }
@@ -613,16 +618,13 @@ const compileExpansionToParseNode = (out: BytecodeWriter, expansion: ExpansionCo
 
 const generatorHelper = (debugName: string, consumeParam: ParseFreshIden, consumer: ParseNode, produceParam: ParseFreshIden, producer: ParseNode) => {
   const token = createAnonymousToken('')
-
   const bparams: ParserFunctionParameter[] = [{ name: consumeParam, type: null, storage: null }]
-  const b1 = createAnonymousParserFunctionDecl(`${debugName}_zip_consumer`, token, bparams, consumer)
-  const b = new ParseFunction(token, b1)
-
+  const consumerFn = createAnonymousParserFunctionDecl(`${debugName}_consumer`, token, bparams, consumer)
   const cparams: ParserFunctionParameter[] = [{ name: produceParam, type: null, storage: null }]
-  const c1 = createAnonymousParserFunctionDecl(`${debugName}_zip_producer`, token, cparams, producer)
-  const c = new ParseFunction(token, c1)
+  const producerFn = createAnonymousParserFunctionDecl(`${debugName}_producer`, token, cparams, producer)
 
-  return new ParseMeta(token, new ParseCall(createAnonymousToken(''), new ParseValue(createAnonymousToken(''), generator2), [b, c], []))
+  const callArgs = [new ParseFunction(token, consumerFn), new ParseFunction(token, producerFn)]
+  return new ParseMeta(token, new ParseCall(createAnonymousToken(''), new ParseValue(createAnonymousToken(''), generator), callArgs, []))
 }
 
 const createConsumerProducer = (token: Token, callable: ParseNode, produceFn: ParseNode) => {
@@ -674,30 +676,6 @@ const createFreshLet = new ExternalFunction('createFreshLet', VoidType, (ctx, va
   compilerAssert(isAst(value), "Expected ast", { value })
   const binding = new Binding("defer", value.type)
   return new LetAst(binding.type, ctx.location, binding, value)
-})
-
-const createDefaultFromType = new ExternalFunction('createDefaultFromType', VoidType, (ctx, values) => {
-  let [type] = values
-  compilerAssert(isType(type), "Expected type", { type })
-  return new DefaultConsAst(type, ctx.location)
-})
-const maxOfType = new ExternalFunction('maxOfType', VoidType, (ctx, values) => {
-  let [type] = values
-  compilerAssert(isType(type), "Expected type", { type })
-  compilerAssert(type.typeInfo.metaobject['max'], "Type does not have a max value", { type })
-  return new NumberAst(type, ctx.location, type.typeInfo.metaobject['max'] as number)
-})
-const minOfType = new ExternalFunction('maxOfType', VoidType, (ctx, values) => {
-  let [type] = values
-  compilerAssert(isType(type), "Expected type", { type })
-  compilerAssert(type.typeInfo.metaobject['min'], "Type does not have a min value", { type })
-  return new NumberAst(type, ctx.location, type.typeInfo.metaobject['min'] as number)
-})
-
-const typeOf = new ExternalFunction('typeOf', VoidType, (ctx, values) => {
-  let [value] = values
-  compilerAssert(isAst(value), "Expected ast", { value })
-  return value.type
 })
 
 const callV = (token: Token, value: unknown, args: ParseNode[], typeArgs: ParseNode[]) => {
@@ -863,54 +841,6 @@ export const expandFuncMaxSugar = (out: BytecodeWriter, noteNode: ParseNote, arg
   visitParseNode(out, compileExpansionToParseNode(out, expansion, node))
 }
 
-
-export const generatorInternal = (
-  ctx: CompilerFunctionCallContext, 
-  consumeFn: (yieldedValue: Ast) => Task<Ast, CompilerError>, 
-  produceFn: (yieldFn: (value: Ast) => Task<Ast, CompilerError>) => Task<Ast, CompilerError>
-): Task<Ast, CompilerError> => {
-
-  const interleave = interleaveHelper()
-
-  const yieldA = (
-    interleave.waitForEntryBinding()
-    .chainFn((task, entryParam) => {
-      const stmts = createStatements(ctx.location, [
-        interleave.continueEntry(ctx.location),
-        new BindingAst(entryParam.type, ctx.location, entryParam)
-      ])
-      return consumeFn(stmts)
-    })
-  ); 
-  const yieldFn = (value: Ast): Task<Ast, CompilerError> => {
-    compilerAssert(isAst(value))
-    const stmts = createStatements(ctx.location, [
-      interleave.createSetter(ctx.location, value),
-      interleave.continueOther(ctx.location)])
-    return Task.of(stmts)
-  }
-  const yieldB = produceFn(yieldFn)
-
-  return (
-    Task.concurrency<unknown, CompilerError>([yieldA, yieldB, interleave.waitForEntryBinding()])
-    .chainFn((task, args) => {
-      const [a, b, entryParam] = args
-      compilerAssert(isAst(a))
-      compilerAssert(isAst(b))
-      compilerAssert(ctx.location)
-      compilerAssert(entryParam instanceof Binding)
-      return Task.of(
-        new StatementsAst(VoidType, ctx.location, [
-          new LetAst(VoidType, ctx.location, entryParam, new DefaultConsAst(entryParam.type, ctx.location)),
-          interleave.buildAst(ctx.location, a, b)
-        ])
-      )
-    })
-  )
-}
-
-
-
 export const expandFuncConcatSugar = (out: BytecodeWriter, noteNode: ParseNote, args: ParseNode[]) => {
   const token = noteNode.token
   const nodes: ParseNode[] = []
@@ -943,115 +873,84 @@ export const expandFuncConcatSugar = (out: BytecodeWriter, noteNode: ParseNote, 
 
 export const concat = new ExternalFunction("concat", VoidType, (ctx, values_) => {
 
-  const closureBody = (valueBinding: unknown): Task<Ast, CompilerError> => {
-    compilerAssert(valueBinding instanceof CompTimeObjAst)
-    const outFn = valueBinding.value
-    compilerAssert(outFn instanceof Closure || outFn instanceof CompilerFunction, "Expected function", { valueBinding })
+  const token = createAnonymousToken('')
+  const yieldParam = new ParseFreshIden(token, new FreshBindingToken('yield'))
+  const params: ParserFunctionParameter[] = [{ name: yieldParam, type: null, storage: null }]
 
-    // TODO: Try and support optimised CompilerFunctions
-    if (outFn instanceof Closure && canOptimiseSimpleIterator(outFn)) {
-      const iteratorCalls = values_.map((closure, i) => {
-        const fnctx1: CompilerFunctionCallContext = { location: ctx.location, compilerState: ctx.compilerState, resultAst: undefined, typeCheckResult: undefined }
+  const consumeParam1 = new ParseFreshIden(token, new FreshBindingToken('consume'))
+  const produceParam1 = new ParseFreshIden(token, new FreshBindingToken('produce'))
+  
+  // TODO: Clean up this code. Don't push closures directly in the bytecode. Don't call unknownToAst
+  // Parameters should be bindings
 
-        if (!(closure instanceof Closure)) { // Support for constant values
-          const value = unknownToAst(ctx.location, closure)
-          return createCallAstFromValue(fnctx1, outFn, [], [propagatedLiteralAst(value)])
-        }
-        return createCallAstFromValue(fnctx1, closure, [], [new CompTimeObjAst(VoidType, ctx.location, outFn)])
-      })
-      return Task.all(iteratorCalls).chainFn((task, callAsts) => {
-        callAsts.forEach(x => compilerAssert(isAst(x)))
-        return Task.of(new StatementsAst(VoidType, ctx.location, callAsts))
-      })
-    }
-
-    const interleave = interleaveHelper()
-
-    const iteratorCalls = values_.map((closure, i) => {
-      if (!(closure instanceof Closure)) { // Support for constant values
-        const value = unknownToAst(ctx.location, closure)
-        return Task.of(createStatements(ctx.location, [
-          interleave.createSetter(ctx.location, propagatedLiteralAst(value)),
-          interleave.continueEntry(ctx.location),
-        ]))
-      }
-
-      const yieldA = new CompilerFunction("yieldA", (ctx, typeArgs, args) => {
-        const [valueAst] = args
-        compilerAssert(isAst(valueAst), "Expected AST", { valueAst })
-        return Task.of(createStatements(ctx.location, [
-          interleave.createSetter(ctx.location, valueAst),
-          interleave.continueEntry(ctx.location),
-        ]))
-      })
-      const fnctx1: CompilerFunctionCallContext = { location: ctx.location, compilerState: ctx.compilerState, resultAst: undefined, typeCheckResult: undefined }
-      return createCallAstFromValue(fnctx1, closure, [], [new CompTimeObjAst(VoidType, ctx.location, yieldA)])
-    })
-
-    const callC = (
-      interleave.waitForEntryBinding()
-      .chainFn((task, entryParam) => {
-        const fnctx: CompilerFunctionCallContext = { location: ctx.location, compilerState: ctx.compilerState, resultAst: undefined, typeCheckResult: undefined }
-        return (
-          createCallAstFromValue(fnctx, outFn, [], [new BindingAst(entryParam.type, ctx.location, entryParam)])
-          .chainFn((task, arg) => {
-            const cont = interleave.continueOther(ctx.location)
-            const stmts = createStatements(ctx.location, [arg, cont])
-            const loop = new WhileAst(VoidType, ctx.location, new BoolAst(BoolType, ctx.location, true), stmts)
-            return Task.of(loop)
-          })
-        )
-      })
-    )
-
-    return (
-      Task.concurrency<unknown, CompilerError>([callC, interleave.waitForEntryBinding(), ...iteratorCalls])
-      .chainFn((task, args) => {
-        const [resultFn, entryParam, ...callAsts] = args
-
-        callAsts.forEach(x => compilerAssert(isAst(x)))
-        compilerAssert(isAst(resultFn))
-        compilerAssert(entryParam instanceof Binding)
-        compilerAssert(ctx.location)
-
-        const entryStmts = createStatements(ctx.location, callAsts as Ast[])
-        const stmts = createStatements(ctx.location, [
-          new LetAst(VoidType, ctx.location, entryParam, new DefaultConsAst(entryParam.type, ctx.location)),
-          interleave.buildAst(ctx.location, entryStmts, resultFn)
-        ])
-
-        return Task.of(stmts)
-        
-      })
-    )
-    
+  const callClosure = (callable: Closure) => {
+    const name = new ParseFreshIden(token, new FreshBindingToken('callable'))
+    const call_ = new ParseCall(token, name, [produceParam1], [])
+    return new ParseStatements(token, [new ParseLetConst(token, name, new ParseValue(token, callable)), call_])
   }
-  return new CompilerFunction("concat", (ctx, typeArgs, args) => closureBody(args[0]))
+  const innerProducer = new ParseStatements(token, values_.map(value => {
+    if (value instanceof Closure) return callClosure(value)
+    const v = unknownToAst(token.location, value)
+    const call_ = new ParseCall(token, produceParam1, [new ParseValue(token, v)], [])
+    return call_
+  }))
+
+  const call2_ = new ParseCall(token, yieldParam, [new ParseCall(token, consumeParam1, [], [])], [])
+  const consumer = new ParseWhile(token, new ParseBoolean(createAnonymousToken('true')), call2_)
+  const body = generatorHelper(`concat`, consumeParam1, consumer, produceParam1, innerProducer)
+
+  const decl = createAnonymousParserFunctionDecl("concat", createAnonymousToken(''), params, body)
+  const funcDef = insertFunctionDefinition(ctx.compilerState.globalCompiler, decl)
+  return new Closure(funcDef, ctx.compilerState.scope, ctx.compilerState)
 })
 
-export const generator = new CompilerFunction("generator", (ctx, typeArgs, args) => {
-  const consumeFn = args[0] instanceof CompTimeObjAst ? args[0].value : undefined
-  const produceFn = args[1] instanceof CompTimeObjAst ? args[1].value : undefined
-  compilerAssert(consumeFn instanceof Closure, "Expected function", { consumeFn })
-  compilerAssert(produceFn instanceof Closure, "Expected function", { produceFn })
 
-  return generatorInternal(ctx, (ast) => {
-    const fnctx1: CompilerFunctionCallContext = { location: ctx.location, compilerState: ctx.compilerState, resultAst: undefined, typeCheckResult: undefined }
-    const fn1 = new CompilerFunction("consume", (ctx, typeArgs, args) => Task.of(ast))
-    return createCallAstFromValue(fnctx1, consumeFn, [], [new CompTimeObjAst(VoidType, ctx.location, fn1)])
-  }, (yieldFn) => {
-    const fn2 = new CompilerFunction("produce", (ctx, typeArgs, args) => {
-      const [bindingAst] = args
-      compilerAssert(isAst(bindingAst))
-      return yieldFn(bindingAst)
+const generatorInternal = (
+  ctx: CompilerFunctionCallContext, 
+  consumeFn: (yieldedValue: Ast) => Task<Ast, CompilerError>, 
+  produceFn: (yieldFn: (value: Ast) => Task<Ast, CompilerError>) => Task<Ast, CompilerError>
+): Task<Ast, CompilerError> => {
+
+  const interleave = interleaveHelper()
+
+  const yieldA = (
+    interleave.waitForEntryBinding(ctx.compilerState.globalCompiler)
+    .chainFn((task, entryParam) => {
+      const stmts = createStatements(ctx.location, [
+        interleave.continueEntry(ctx.location),
+        new BindingAst(entryParam.type, ctx.location, entryParam)
+      ])
+      return consumeFn(stmts)
     })
-    const fnctx2: CompilerFunctionCallContext = { location: ctx.location, compilerState: ctx.compilerState, resultAst: undefined, typeCheckResult: undefined }
-    return createCallAstFromValue(fnctx2, produceFn, [], [new CompTimeObjAst(VoidType, ctx.location, fn2)])
-  })
+  ); 
+  const yieldFn = (value: Ast): Task<Ast, CompilerError> => {
+    compilerAssert(isAst(value))
+    const stmts = createStatements(ctx.location, [
+      interleave.createSetter(ctx.location, value),
+      interleave.continueOther(ctx.location)])
+    return Task.of(stmts)
+  }
+  const yieldB = produceFn(yieldFn)
 
-})
+  return (
+    Task.concurrency<unknown, CompilerError>([yieldA, yieldB, interleave.waitForEntryBinding(ctx.compilerState.globalCompiler)])
+    .chainFn((task, args) => {
+      const [a, b, entryParam] = args
+      compilerAssert(isAst(a))
+      compilerAssert(isAst(b))
+      compilerAssert(ctx.location)
+      compilerAssert(entryParam instanceof Binding)
+      return Task.of(
+        new StatementsAst(VoidType, ctx.location, [
+          new LetAst(VoidType, ctx.location, entryParam, new DefaultConsAst(entryParam.type, ctx.location)),
+          interleave.buildAst(ctx.location, a, b)
+        ])
+      )
+    })
+  )
+}
 
-const generator2 = new ExternalFunction("generator2", VoidType, (ctx, values) => {
+const generator = new ExternalFunction("generator", VoidType, (ctx, values) => {
 
   const [consumeFn, produceFn] = values
 
@@ -1062,7 +961,7 @@ const generator2 = new ExternalFunction("generator2", VoidType, (ctx, values) =>
   }, (yieldFn) => {
     const fn2 = new CompilerFunction("produce", (ctx, typeArgs, args) => {
       const [bindingAst] = args
-      compilerAssert(isAst(bindingAst))
+      compilerAssert(isAst(bindingAst), "Expected AST", { bindingAst })
       return yieldFn(bindingAst)
     })
     const fnctx2: CompilerFunctionCallContext = { location: ctx.location, compilerState: ctx.compilerState, resultAst: undefined, typeCheckResult: undefined }
