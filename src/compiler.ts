@@ -392,6 +392,11 @@ export const BytecodeSecondOrder: ParseTreeTable = {
     } else if (node.left instanceof ParseSlice) {
       sliceSugar(out, node.left, node.value)
       return
+    } else if (node.left instanceof ParseMeta) {
+      visitParseNode(out, node.left)
+      visitParseNode(out, node.value)
+      pushBytecode(out, node.token, { type: 'setmetaast' })
+      return
     }
     compilerAssert(false, "Not implemented", { node })
   },
@@ -1057,6 +1062,14 @@ const instructions: InstructionMapping = {
       vm.stack.push(new SetAst(VoidType, vm.location, binding, ast))
       return Task.success()
     });
+  },
+  setmetaast: (vm, {}) => { // Allow meta evaluating left side of assignment
+    const right = propagatedLiteralAst(expectAst(popStack(vm)))
+    const left = expectAst(popStack(vm))
+    compilerAssert(left instanceof BindingAst, "Expected binding got $left", { left })
+    compilerAssert(left.type === right.type, "Type mismatch got $got expected $expected", { got: right.type, expected: left.type })
+    vm.stack.push(new SetAst(VoidType, vm.location, left.binding, right))
+    return Task.success()
   },
   fieldast: (vm, { name }) => {
     const left = expectAst(popStack(vm))

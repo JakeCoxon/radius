@@ -3,27 +3,11 @@ import { compileExportedFunctionTask, createCallAstFromValue, createCallAstFromV
 import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, UserCallAst, hashValues, NeverType, IfAst, BoolType, VoidAst, LoopObject, CompileTimeObjectType, u64Type, FunctionDefinition, ParserFunctionDecl, StatementsAst, isTypeScalar, IntLiteralType, FloatLiteralType, isAst, isType, isTypeCheckError, InterleaveAst, ContinueInterAst, CompTimeObjAst, ParseEvalFunc, SetAst, DefaultConsAst, WhileAst, BoolAst, isArray, ExpansionSelector, ParseNote, ExpansionCompilerState, ParseBoolean, ParseOr, ParseBreak, filterNotNull, ParseTuple, ParseNot, ParseLetConst, ParseConcurrency, ParseCompTime, ParseNil, CompilerCallable, isCompilerCallable, ParseVoid } from "./defs"
 import { Event, Task, TaskDef, isTask } from "./tasks"
 
-
-type ExpansionZipState = {
-  expansion: ExpansionCompilerState,
-  setterSelector: ExpansionSelector | null,
-  iteratorList: IteratorState[],
-  totalIterators: number,
-  bindingValues: BindingAst[],
-  lets: Ast[],
-  resultClosure: Closure,
-  location: SourceLocation,
-  compilerState: SubCompilerState,
-  
-}
-type IteratorState = {
-  closure: CompilerCallable,
-  selector: ExpansionSelector
-}
 const createExpansionState = (debugName: string, location: SourceLocation): ExpansionCompilerState => {
   const iteratorListIdentifier = new ParseFreshIden(createAnonymousToken(''), new FreshBindingToken('iterator_list'))
   const breakIden = new ParseFreshIden(createAnonymousToken(''), new FreshBindingToken('break'))
-  return { debugName, loopBodyNode: null, selectors: [], iteratorListIdentifier, fold: null, setterSelector: null, filterNode: null, whileNode: null, optimiseSimple: false, breakIden, location }
+  const metaResultIden = new ParseFreshIden(createAnonymousToken(''), new FreshBindingToken('result_expr'))
+  return { debugName, loopBodyNode: null, selectors: [], iteratorListIdentifier, fold: null, setterSelector: null, filterNode: null, whileNode: null, optimiseSimple: false, breakIden, location, lets: [], metaResult: metaResultIden, metaResultIden, loopBodyMeta: [] }
 }
 const canOptimiseSimpleIterator = (closure: Closure) => {
   return (closure as any)._canOptimiseSimpleIterator
@@ -552,18 +536,6 @@ const visitExpansion = (out: BytecodeWriter, expansion: ExpansionCompilerState, 
   return expansion.loopBodyNode = new ParseBytecode(node.token, bytecode)
 }
 
-const compileExpansionToParseNodeTrans = (out: BytecodeWriter, expansion: ExpansionCompilerState, node: ParseNode, trans: any) => {
-
-  const reducer = {
-    b: () => compileExpansionToParseNode(out, expansion, node),
-    c: expansion.loopBodyNode,
-  }
-  const final = trans(reducer)
-  expansion.loopBodyNode = final.c
-  return final.b()
-  
-}
-
 const compileExpansionToParseNode = (out: BytecodeWriter, expansion: ExpansionCompilerState, node: ParseNode) => {
 
   compilerAssert(expansion.loopBodyNode, "Expected loop body")
@@ -576,6 +548,9 @@ const compileExpansionToParseNode = (out: BytecodeWriter, expansion: ExpansionCo
     const cond = new ParseNot(createAnonymousToken(''), expansion.whileNode)
     const ifBreak = new ParseIf(node.token, false, cond, break_, null)
     expansion.loopBodyNode = new ParseStatements(node.token, [ifBreak, expansion.loopBodyNode])
+  }
+  if (expansion.loopBodyMeta.length) {
+    expansion.loopBodyNode = new ParseMeta(node.token, new ParseStatements(node.token, [...expansion.loopBodyMeta, new ParseQuote(node.token, expansion.loopBodyNode)]))
   }
 
   const zipCallables = expansion.selectors.map(selector => {
@@ -620,7 +595,7 @@ const compileExpansionToParseNode = (out: BytecodeWriter, expansion: ExpansionCo
     loopNode = zipHelper(expansion.debugName, zips, zipResult)
   }
 
-  const lets: ParseNode[] = []
+  const lets: ParseNode[] = [...expansion.lets]
   const final: ParseNode[] = [loopNode]
   if (expansion.fold) {
     lets.push(new ParseLet(node.token, expansion.fold.iden, null, expansion.fold.initial))
@@ -628,7 +603,11 @@ const compileExpansionToParseNode = (out: BytecodeWriter, expansion: ExpansionCo
   }
 
   const stmts = new ParseStatements(node.token, [...lets, ...final])
-  return new ParseBlock(createAnonymousToken(''), 'break', expansion.breakIden, stmts)
+  const block =  new ParseBlock(createAnonymousToken(''), 'break', expansion.breakIden, stmts)
+  return new ParseMeta(node.token, new ParseStatements(node.token, [
+    new ParseLet(node.token, expansion.metaResultIden, null, new ParseQuote(node.token, block)),
+    expansion.metaResult
+  ]))
 }
 
 
@@ -730,25 +709,6 @@ export const expandFuncSumSugar = (out: BytecodeWriter, noteNode: ParseNote, arg
 
   visitParseNode(out, compileExpansionToParseNode(out, expansion, node))
 }
-export const expandFuncLastSugar = (out: BytecodeWriter, noteNode: ParseNote, args: ParseNode[]) => {
-  compilerAssert(!out.state.expansion, "Already in expansion state")
-  const node = args[0]
-  const expansion = createExpansionState('last', node.token.location)
-  const result = visitExpansion(out, expansion, node)
-  expansion.optimiseSimple = expansion.selectors.length === 1 && !expansion.filterNode
-
-  compilerAssert(!expansion.fold, "Fold not supported in this context")
-
-  const iden = new ParseFreshIden(node.token, new FreshBindingToken('last'))
-  expansion.loopBodyNode = new ParseSet(node.token, iden, result)
-  
-  // TODO: Only supports numbers at the moment
-  const reduce = compileExpansionToParseNode(out, expansion, node)
-  const let_ = new ParseLet(node.token, iden, null, new ParseNumber(createAnonymousToken('0')))
-  const value = new ParseStatements(node.token, [let_, reduce, iden])
-  visitParseNode(out, value)
-}
-
 export class DeferredLetBinding {
   type: Type
   binding: Binding | null
@@ -765,17 +725,10 @@ const deferAssignSet = new ExternalFunction('deferAssignSet', VoidType, (ctx, va
   compilerAssert(defer instanceof DeferredLetBinding, "Expected deferred let binding", { defer })
   compilerAssert(isAst(value), "Expected ast", { value, defer })
   compilerAssert(value instanceof LetAst, "Expected let ast", { value, defer })
-  Object.assign(defer, { letAst: value, type: value.type, binding: value.binding })
+  if (!defer.letAst) Object.assign(defer, { letAst: value, type: value.type, binding: value.binding })
+  compilerAssert(defer.type === value.type, "Type mismatch", { defer, value })
 })
-const deferToSetAst = new ExternalFunction('deferToSetAst', VoidType, (ctx, values) => {
-  let [value, defer] = values
-  if (defer instanceof CompTimeObjAst) defer = defer.value
-  compilerAssert(isAst(value), "Expected ast", { value, defer })
-  compilerAssert(defer instanceof DeferredLetBinding, "Expected deferred let binding", { defer })
-  compilerAssert(defer.binding, "Expected binding", { defer })
-  return new SetAst(VoidType, ctx.location, defer.binding, value)
-})
-const deferToBindingAst = new ExternalFunction('deferToBindingAst', VoidType, (ctx, values) => {
+const deferToResultAst = new ExternalFunction('deferToResultAst', VoidType, (ctx, values) => {
   let [stmts, defer] = values
   if (defer instanceof CompTimeObjAst) defer = defer.value
   compilerAssert(defer instanceof DeferredLetBinding, "Expected deferred let binding", { defer })
@@ -784,6 +737,14 @@ const deferToBindingAst = new ExternalFunction('deferToBindingAst', VoidType, (c
   compilerAssert(binding, "Expected binding", { defer })
   const bindingAst = new BindingAst(binding.type, ctx.location, binding)
   return createStatements(ctx.location, [defer.letAst, stmts, bindingAst])
+})
+const deferToBinding = new ExternalFunction('deferToBinding', VoidType, (ctx, values) => {
+  let [defer] = values
+  if (defer instanceof CompTimeObjAst) defer = defer.value
+  compilerAssert(defer instanceof DeferredLetBinding, "Expected deferred let binding", { defer })
+  const binding = defer.binding
+  compilerAssert(binding, "Expected binding", { defer })
+  return new BindingAst(binding.type, ctx.location, binding)
 })
 
 const createFreshLet = new ExternalFunction('createFreshLet', VoidType, (ctx, values) => {
@@ -798,6 +759,18 @@ const createDefaultFromType = new ExternalFunction('createDefaultFromType', Void
   compilerAssert(isType(type), "Expected type", { type })
   return new DefaultConsAst(type, ctx.location)
 })
+const maxOfType = new ExternalFunction('maxOfType', VoidType, (ctx, values) => {
+  let [type] = values
+  compilerAssert(isType(type), "Expected type", { type })
+  compilerAssert(type.typeInfo.metaobject['max'], "Type does not have a max value", { type })
+  return new NumberAst(type, ctx.location, type.typeInfo.metaobject['max'] as number)
+})
+const minOfType = new ExternalFunction('maxOfType', VoidType, (ctx, values) => {
+  let [type] = values
+  compilerAssert(isType(type), "Expected type", { type })
+  compilerAssert(type.typeInfo.metaobject['min'], "Type does not have a min value", { type })
+  return new NumberAst(type, ctx.location, type.typeInfo.metaobject['min'] as number)
+})
 
 const typeOf = new ExternalFunction('typeOf', VoidType, (ctx, values) => {
   let [value] = values
@@ -808,29 +781,24 @@ const typeOf = new ExternalFunction('typeOf', VoidType, (ctx, values) => {
 const callV = (token: Token, value: unknown, args: ParseNode[], typeArgs: ParseNode[]) => {
   return new ParseCall(token, new ParseValue(token, value), args, [])
 }
-
-const transDefer = (reducer: any) => {
-  const { b, c } = reducer
-  const token = createAnonymousToken('')
-
-  const originalResult = c
-  const deferIden = new ParseFreshIden(token, new FreshBindingToken('defer'))
+const createTypeOf = (token: Token, value: ParseNode) => {
+  return callV(token, typeOf, [new ParseQuote(token, value)], [])
+}
+const createDefaultOf = (token: Token, originalResult: ParseNode) => {
   const typeOf_ = callV(token, typeOf, [new ParseQuote(token, originalResult)], [])
-  const default_ = callV(token, createDefaultFromType, [typeOf_], [])
-  const toLet_ = callV(token, createFreshLet, [default_], [])
-  const tcResult = callV(token, deferAssignSet, [toLet_, deferIden], [])
-  const call_ = callV(token, deferToSetAst, [new ParseQuote(token, originalResult), deferIden], [])
-  const newC = new ParseStatements(token, [new ParseCompTime(token, tcResult), new ParseMeta(token, call_)])
+  return callV(token, createDefaultFromType, [typeOf_], [])
+}
 
-  const newB = () => {
-    const original = b()
-    const letobj = new ParseLetConst(token, deferIden, new ParseCall(createAnonymousToken(''), new ParseValue(token, createDeferObject), [], []))
-    const stmts = new ParseStatements(token, [letobj, original])
-    const call_ = callV(token, deferToBindingAst, [new ParseQuote(token, stmts), new ParseQuote(token, deferIden)], [])
-    return new ParseMeta(createAnonymousToken(''), call_)
-  }
+const createDeferTypeCheckingIden = (expansion: ExpansionCompilerState, debugName: string, defaultNode: ParseNode) => {
+  const token = createAnonymousToken('')
+  const deferIden = new ParseFreshIden(token, new FreshBindingToken(debugName))
+  const createDefer = new ParseCall(createAnonymousToken(''), new ParseValue(token, createDeferObject), [], [])
+  expansion.lets.push(new ParseLetConst(token, deferIden, createDefer))
   
-  return { b: newB, c: newC }
+  const toLet_ = callV(token, createFreshLet, [defaultNode], [])
+  expansion.loopBodyMeta.push(callV(token, deferAssignSet, [toLet_, deferIden], []))
+  expansion.metaResult = callV(token, deferToResultAst, [new ParseQuote(token, expansion.metaResult), new ParseQuote(token, deferIden)], [])
+  return new ParseMeta(token, callV(token, deferToBinding, [new ParseQuote(token, deferIden)], []))
 }
 
 export const expandFuncFirstSugar = (out: BytecodeWriter, noteNode: ParseNote, args: ParseNode[]) => {
@@ -842,15 +810,25 @@ export const expandFuncFirstSugar = (out: BytecodeWriter, noteNode: ParseNote, a
 
   compilerAssert(!expansion.fold, "Fold not supported in this context")
 
-  const trans = (reducer: any) => {
-    const { b, c } = transDefer(reducer)
-    const break_ = new ParseBreak(node.token, expansion.breakIden, null)
-    const newC = new ParseStatements(node.token, [c, break_])
-    return { b: b, c: newC }
-  }
-  
-  const reduce = compileExpansionToParseNodeTrans(out, expansion, node, trans)
-  visitParseNode(out, reduce)
+  const iden = createDeferTypeCheckingIden(expansion, 'first', createDefaultOf(node.token, result))
+  const break_ = new ParseBreak(node.token, expansion.breakIden, null)
+  const set_ = new ParseSet(node.token, iden, result)
+  expansion.loopBodyNode = new ParseStatements(node.token, [set_, break_])
+  visitParseNode(out, compileExpansionToParseNode(out, expansion, node))
+}
+
+export const expandFuncLastSugar = (out: BytecodeWriter, noteNode: ParseNote, args: ParseNode[]) => {
+  compilerAssert(!out.state.expansion, "Already in expansion state")
+  const node = args[0]
+  const expansion = createExpansionState('last', node.token.location)
+  const result = visitExpansion(out, expansion, node)
+  expansion.optimiseSimple = expansion.selectors.length === 1 && !expansion.filterNode
+
+  compilerAssert(!expansion.fold, "Fold not supported in this context")
+
+  const iden = createDeferTypeCheckingIden(expansion, 'last', createDefaultOf(node.token, result))
+  expansion.loopBodyNode = new ParseSet(node.token, iden, result)
+  visitParseNode(out, compileExpansionToParseNode(out, expansion, node))
 }
 
 export const expandFuncMinSugar = (out: BytecodeWriter, noteNode: ParseNote, args: ParseNode[]) => {
@@ -862,18 +840,14 @@ export const expandFuncMinSugar = (out: BytecodeWriter, noteNode: ParseNote, arg
 
   compilerAssert(!expansion.fold, "Fold not supported in this context")
 
-  const iden = new ParseFreshIden(node.token, new FreshBindingToken('min'))
+  const initial = callV(node.token, maxOfType, [createTypeOf(node.token, result)], [])
+  const iden = createDeferTypeCheckingIden(expansion, 'min', initial)
   const comp = new ParseOperator(createAnonymousToken('<'), [result, iden])
   const set_ = new ParseSet(node.token, iden, result)
   expansion.loopBodyNode = new ParseIf(node.token, false, comp, set_, null)
-
-  // TODO: Only supports numbers at the moment
-  // TODO: Use optional types later
-  const reduce = compileExpansionToParseNode(out, expansion, node)
-  const let_ = new ParseLet(node.token, iden, null, new ParseNumber(createAnonymousToken('2147483647')))
-  const value = new ParseStatements(node.token, [let_, reduce, iden])
-  visitParseNode(out, value)
+  visitParseNode(out, compileExpansionToParseNode(out, expansion, node))
 }
+
 export const expandFuncMaxSugar = (out: BytecodeWriter, noteNode: ParseNote, args: ParseNode[]) => {
   compilerAssert(!out.state.expansion, "Already in expansion state")
   const node = args[0]
@@ -882,17 +856,13 @@ export const expandFuncMaxSugar = (out: BytecodeWriter, noteNode: ParseNote, arg
   expansion.optimiseSimple = expansion.selectors.length === 1 && !expansion.filterNode
 
   compilerAssert(!expansion.fold, "Fold not supported in this context")
-
-  const iden = new ParseFreshIden(node.token, new FreshBindingToken('max'))
+  
+  const initial = callV(node.token, minOfType, [createTypeOf(node.token, result)], [])
+  const iden = createDeferTypeCheckingIden(expansion, 'max', initial)
   const comp = new ParseOperator(createAnonymousToken('>'), [result, iden])
   const set_ = new ParseSet(node.token, iden, result)
   expansion.loopBodyNode = new ParseIf(node.token, false, comp, set_, null)
-
-  // TODO: Only supports numbers at the moment
-  const reduce = compileExpansionToParseNode(out, expansion, node)
-  const let_ = new ParseLet(node.token, iden, null, new ParseNumber(createAnonymousToken('0')))
-  const value = new ParseStatements(node.token, [let_, reduce, iden])
-  visitParseNode(out, value)
+  visitParseNode(out, compileExpansionToParseNode(out, expansion, node))
 }
 
 

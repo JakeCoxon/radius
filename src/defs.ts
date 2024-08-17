@@ -81,7 +81,6 @@ export type ParserFunctionDecl = {
 export const createAnonymousParserFunctionDecl = (debugName: string, sourceToken: Token, params: ParserFunctionParameter[], body: ParseNode) => {
   const decl: ParserFunctionDecl = {
     debugName: debugName,
-    id: undefined,
     params: params,
     name: null,
     body: body,
@@ -227,6 +226,7 @@ export type BytecodeInstr =
   { type: 'staticsubscriptast' } |
   { type: 'setsubscriptast' } |
   { type: 'subscript' } |
+  { type: 'setmetaast' } |
   { type: 'operatorast', name: string, count: number } |
   { type: 'constructorast', count: number } |
   { type: 'toast' } |
@@ -272,9 +272,13 @@ export type ExpansionCompilerState = {
   debugName: string,
   location: SourceLocation,
   optimiseSimple?: boolean,
-  loopBodyNode: ParseNode | null
+  loopBodyNode: ParseNode | null,
+  loopBodyMeta: ParseNode[],
   iteratorListIdentifier: ParseFreshIden,
   fold: { iden: ParseFreshIden, initial: ParseNode } | null,
+  lets: ParseNode[],
+  metaResult: ParseNode,
+  metaResultIden: ParseFreshIden,
   setterSelector: ExpansionSelector | null,
   breakIden: ParseFreshIden,
   selectors: ExpansionSelector[],
@@ -648,14 +652,14 @@ export const isCompilerCallable = (value: unknown): value is CompilerCallable =>
 
 export const NeverType =        new PrimitiveType("never",         { sizeof: 0, fields: [], metaobject: Object.create(null), isReferenceType: false })
 export const VoidType =         new PrimitiveType("void",          { sizeof: 0, fields: [], metaobject: Object.create(null), isReferenceType: false })
-export const IntType =          new PrimitiveType("int",           { sizeof: 4, fields: [], metaobject: Object.create(null), isReferenceType: false })
-export const u64Type =          new PrimitiveType("u64",           { sizeof: 4, fields: [], metaobject: Object.create(null), isReferenceType: false })
-export const u8Type =           new PrimitiveType("u8",            { sizeof: 1, fields: [], metaobject: Object.create(null), isReferenceType: false })
+export const IntType =          new PrimitiveType("int",           { sizeof: 4, fields: [], metaobject: Object.assign(Object.create(null), { init: 0, min: -Math.pow(2, 31), max: Math.pow(2, 31) - 1 }), isReferenceType: false })
+export const u64Type =          new PrimitiveType("u64",           { sizeof: 4, fields: [], metaobject: Object.assign(Object.create(null), { init: 0, min: -Math.pow(2, 63), max: Math.pow(2, 63) - 1 }), isReferenceType: false })
+export const u8Type =           new PrimitiveType("u8",            { sizeof: 1, fields: [], metaobject: Object.assign(Object.create(null), { init: 0, min: 0, max: 255 }), isReferenceType: false })
 export const IntLiteralType =   new PrimitiveType("int_literal",   { sizeof: 4, fields: [], metaobject: Object.create(null), isReferenceType: false })
 export const FloatLiteralType = new PrimitiveType("float_literal", { sizeof: 4, fields: [], metaobject: Object.create(null), isReferenceType: false })
-export const BoolType =         new PrimitiveType("bool",          { sizeof: 1, fields: [], metaobject: Object.create(null), isReferenceType: false })
-export const FloatType =        new PrimitiveType("float",         { sizeof: 4, fields: [], metaobject: Object.create(null), isReferenceType: false })
-export const DoubleType =       new PrimitiveType("double",        { sizeof: 8, fields: [], metaobject: Object.create(null), isReferenceType: false })
+export const BoolType =         new PrimitiveType("bool",          { sizeof: 1, fields: [], metaobject: Object.assign(Object.create(null), { init: false, min: 0, max: 1 }), isReferenceType: false })
+export const FloatType =        new PrimitiveType("float",         { sizeof: 4, fields: [], metaobject: Object.assign(Object.create(null), { init: 0.0, min: -Math.pow(2, 31), max: Math.pow(2, 31) - 1 }), isReferenceType: false })
+export const DoubleType =       new PrimitiveType("double",        { sizeof: 8, fields: [], metaobject: Object.assign(Object.create(null), { init: 0.0, min: -Math.pow(2, 63), max: Math.pow(2, 63) - 1 }), isReferenceType: false })
 export const FunctionType =     new PrimitiveType("function",      { sizeof: 0, fields: [], metaobject: Object.create(null), isReferenceType: false })
 export const RawPointerType =   new PrimitiveType("rawptr",        { sizeof: 8, fields: [], metaobject: Object.create(null), isReferenceType: false })
 export const AstType =          new PrimitiveType("ast",           { sizeof: 0, fields: [], metaobject: Object.create(null), isReferenceType: false })

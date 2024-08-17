@@ -138,6 +138,10 @@ fn test_min_max():
   max2 := @max(fixed_iterator[:])
   print(max2)
 
+  numbers2 := [23.1, 23.2, 23.3, 23.4]
+  max3 := @max(numbers2[:])
+  assert(max3 == 23.4)
+
 fn test_concat():
 
   numbers := [40, 20, 10, 32, 12, 3124]
@@ -220,18 +224,24 @@ fn test_last():
   print(x)
   assert(x == 3124)
 
-fn test_first():
+fn test_first_last():
 
   numbers := [40.0, 20, 10, 32, 12, 3124]
   
   x := @first(numbers[:])
   print(x)
+  assert(x == 40)
+
+  # y := @last(numbers[:])
+  # print(y)
+  # assert(y == 3124)
 
   people := [Person(10), Person(20), Person(30), Person(40), Person(50)]
   p := @first(people[1:])
+  assert(p.age == 20)
 
-  print(p.age)
-  # assert(x == 40)
+  # p2 := @last(people[:])
+  # assert(p2.age == 50)
 
 fn test_range():
   rng := Range(10, 20)
@@ -241,6 +251,7 @@ fn test_range():
 
   sum := @sum(ints[1:10:2])
   assert(sum == 25)
+  
 
 fn test_stuff():
 
@@ -386,7 +397,7 @@ fn main():
   test_min_max()
   test_people()
   test_last()
-  test_first()
+  test_first_last()
   test_range()
   test_stuff()
   test_for_loop()
