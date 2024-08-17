@@ -372,16 +372,13 @@ fn test_slice():
 
 fn test_array():
   x := 0.2
-  arr := [ 3, 1, 1]
-  # assert(@sum(arr[:]) == 43545640)
-  print(arr[:]) ...
-  
+  arr := [x, 1, 1]
+  assert(@sum(arr[:]) == 2.2)
 
-fn test_foo():
-  asd := [1,2,3]
-  # print(asd[:]) ...
-  print(asd[:] + foo[:]) ...
-  # foo_interleave()
+fn test_float_sum():
+  asd := [1,2,3.2]
+  s := @sum(asd[:] + float(foo[:]))
+  assert(s == 9.2)
 
 fn main():
   test_fold()
@@ -411,4 +408,4 @@ fn main():
   test_iterator_to_array()
   test_array()
   test_slice()
-  test_foo()
+  test_float_sum()
