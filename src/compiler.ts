@@ -1491,11 +1491,11 @@ export function compileClassTask(ctx: TaskContext, { classDef, typeArgs }: { cla
 
 export const getCommonType = (types: Type[]): Type => {
   if (types.some(x => x === FloatLiteralType || x === FloatType)) {
-    compilerAssert(types.every(x => x === IntLiteralType || x === FloatLiteralType || x === FloatType), "Expected types to be the same for list literal")
+    compilerAssert(types.every(x => x === IntLiteralType || x === FloatLiteralType || x === FloatType), "Expected types to be the same for list literal", { types })
     return FloatType
   }
   if (types.some(x => x === IntLiteralType || x === IntType)) {
-    compilerAssert(types.every(x => x === IntLiteralType || x === IntType), "Expected types to be the same for list literal")
+    compilerAssert(types.every(x => x === IntLiteralType || x === IntType), "Expected types to be the same for list literal", { types })
     return IntType
   }
   compilerAssert(types.every(x => x === types[0]), "Expected types to be the same")

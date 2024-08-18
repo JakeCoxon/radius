@@ -170,6 +170,49 @@ const appendValuePartialFn = (() => {
   return createAnonymousParserFunctionDecl('appendValuePartial', token, params, new ParseFunction(token, decl))
 })()
 
+const appendValuePartialIfFn = (() => {
+  const token = createAnonymousToken('')
+  const consIdenParam = new ParseIdentifier(createAnonymousToken('cons'))
+  const exprParam = new ParseIdentifier(createAnonymousToken('expr'))
+  const condParam = new ParseIdentifier(createAnonymousToken('cond'))
+
+  const exprQuote = new ParseQuote(token, exprParam)
+  const iden = new ParseFreshIden(token, new FreshBindingToken('elem'))
+  const let_ = new ParseLet(token, iden, null, exprQuote)
+  const call = new ParseCall(token, new ParseValue(token, arrayConstructorTypeCheck), [consIdenParam, iden], [])
+
+  const call2 = new ParseMeta(token, new ParseCall(token, new ParseValue(token, arrayConstructorCreateAppend), [consIdenParam, iden], []))
+  const cond = new ParseQuote(token, new ParseIf(token, false, condParam, call2, null))
+  const call3 = new ParseCall(token, new ParseValue(token, arrayConstructorAddAppendCall), [consIdenParam, cond], [])
+  const meta_ = new ParseMeta(token, new ParseStatements(token, [let_, call, call3]))
+  const decl = createAnonymousParserFunctionDecl('appendValue', token, [], meta_)
+
+  // TODO: Create partial higher-order function ?
+  const params: ParserFunctionParameter[] = [
+    { name: consIdenParam, storage: null, type: null },
+    { name: exprParam, storage: null, type: null },
+    { name: condParam, storage: null, type: null }
+  ]
+  return createAnonymousParserFunctionDecl('appendValuePartial', token, params, new ParseFunction(token, decl))
+})()
+
+const compileListConstructorExpand = (out: BytecodeWriter, node: ParseExpand, listConstructorIden: ParseFreshIden) => {
+  const expansion = createExpansionState('loop', node.token.location)
+  const result = visitExpansion(out, expansion, node.expr)
+  const iden = new ParseFreshIden(node.token, new FreshBindingToken('elem'))
+  const exprQuote = new ParseQuote(node.token, result)
+  const let_ = new ParseLet(node.token, iden, null, exprQuote)
+  const call = new ParseCall(node.token, new ParseValue(node.token, arrayConstructorTypeCheck), [listConstructorIden, iden], [])
+  const call2 = new ParseCall(node.token, new ParseValue(node.token, arrayConstructorCreateAppend), [listConstructorIden, iden], [])
+  expansion.loopBodyNode = new ParseMeta(node.token, new ParseStatements(node.token, [let_, call, call2]))
+  const expand = compileExpansionToParseNode(out, expansion, node)
+  const expandQuote = new ParseQuote(node.token, expand)
+  const call3 = new ParseCall(node.token, new ParseValue(node.token, arrayConstructorAddAppendCall), [listConstructorIden, expandQuote], [])
+  const meta_ = new ParseMeta(node.token, call3)
+  const fn = createAnonymousParserFunctionDecl('append_iterator', node.token, [], meta_)
+  return new ParseFunction(node.token, fn)
+}
+
 export const listConstructorSugar = (out: BytecodeWriter, node: ParseList) => {
   const listConstructorIden = new ParseFreshIden(node.token, new FreshBindingToken('list'))
   const numExprs = node.exprs.length
@@ -178,20 +221,9 @@ export const listConstructorSugar = (out: BytecodeWriter, node: ParseList) => {
   pushBytecode(out, node.token, { type: 'pop' })
   const fns = node.exprs.map(expr => {
     if (expr instanceof ParseExpand) {
-      const expansion = createExpansionState('loop', node.token.location)
-      let result = visitExpansion(out, expansion, expr.expr)
-      const iden = new ParseFreshIden(node.token, new FreshBindingToken('elem'))
-      const exprQuote = new ParseQuote(node.token, result)
-      const let_ = new ParseLet(node.token, iden, null, exprQuote)
-      const call = new ParseCall(node.token, new ParseValue(node.token, arrayConstructorTypeCheck), [listConstructorIden, iden], [])
-      const call2 = new ParseCall(node.token, new ParseValue(node.token, arrayConstructorCreateAppend), [listConstructorIden, iden], [])
-      expansion.loopBodyNode = new ParseMeta(node.token, new ParseStatements(node.token, [let_, call, call2]))
-      const expand = compileExpansionToParseNode(out, expansion, node)
-      const expandQuote = new ParseQuote(node.token, expand)
-      const call3 = new ParseCall(node.token, new ParseValue(node.token, arrayConstructorAddAppendCall), [listConstructorIden, expandQuote], [])
-      const meta_ = new ParseMeta(node.token, call3)
-      const fn = createAnonymousParserFunctionDecl('appendIterator', node.token, [], meta_)
-      return new ParseFunction(node.token, fn)
+      return compileListConstructorExpand(out, expr, listConstructorIden)
+    } else if (expr instanceof ParseIf && !expr.falseBody) { // Could have a seperate type for this
+      return new ParseCall(node.token, new ParseFunction(node.token, appendValuePartialIfFn), [listConstructorIden, new ParseQuote(node.token, expr.trueBody), new ParseQuote(node.token, expr.condition)], [])
     } else {
       return new ParseCall(node.token, new ParseFunction(node.token, appendValuePartialFn), [listConstructorIden, new ParseQuote(node.token, expr)], [])
     }

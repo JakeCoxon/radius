@@ -371,6 +371,9 @@ fn test_iterator_to_array():
 
   arr3 := [factorial[:5] if factorial[:5] > 5 ...]
   assert(@sum(arr3[:]) == 30)
+
+  arr4 := [1, 2, 3, 5 if false]
+  assert(@sum(arr4[:]) == 6)
   
 fn test_slice():
   c :: @concat(factorial[2:8:2])
