@@ -10,12 +10,6 @@ const createExpansionState = (debugName: string, location: SourceLocation): Expa
   const metaResultIden = new ParseFreshIden(createAnonymousToken(''), new FreshBindingToken('result_expr'))
   return { debugName, loopBodyNode: null, selectors: [], iteratorListIdentifier, fold: null, setterSelector: null, filterNode: null, whileNode: null, optimiseSimple: false, breakIden, location, lets: [], metaResult: metaResultIden, metaResultIden, loopBodyMeta: [] }
 }
-const canOptimiseSimpleIterator = (closure: Closure) => {
-  return (closure as any)._canOptimiseSimpleIterator
-}
-const setOptimiseSimpleIterator = (closure: Closure) => {
-  (closure as any)._canOptimiseSimpleIterator = true
-}
 
 const getLength = (token: Token, expr: ParseNode) => new ParseCall(token, new ParseCompilerIden(createAnonymousToken(''), 'lenfn'), [expr], [])
 
@@ -609,10 +603,8 @@ const compileExpansionToParseNode = (out: BytecodeWriter, expansion: ExpansionCo
 
   const stmts = new ParseStatements(node.token, [...lets, ...final])
   const block =  new ParseBlock(createAnonymousToken(''), 'break', expansion.breakIden, stmts)
-  return new ParseMeta(node.token, new ParseStatements(node.token, [
-    new ParseLet(node.token, expansion.metaResultIden, null, new ParseQuote(node.token, block)),
-    expansion.metaResult
-  ]))
+  const metaLet = new ParseLet(node.token, expansion.metaResultIden, null, new ParseQuote(node.token, block))
+  return new ParseMeta(node.token, new ParseStatements(node.token, [metaLet, expansion.metaResult]))
 }
 
 
@@ -891,8 +883,7 @@ export const concat = new ExternalFunction("concat", VoidType, (ctx, values_) =>
   const innerProducer = new ParseStatements(token, values_.map(value => {
     if (value instanceof Closure) return callClosure(value)
     const v = unknownToAst(token.location, value)
-    const call_ = new ParseCall(token, produceParam1, [new ParseValue(token, v)], [])
-    return call_
+    return new ParseCall(token, produceParam1, [new ParseValue(token, v)], [])
   }))
 
   const call2_ = new ParseCall(token, yieldParam, [new ParseCall(token, consumeParam1, [], [])], [])

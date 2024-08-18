@@ -578,7 +578,7 @@ export class Closure {
   constructor(public func: FunctionDefinition, public scope: Scope, public lexicalParent: SubCompilerState) {}
 
   [Inspect.custom](depth: any, options: any, inspect: any) {
-    if (depth <= 1) return options.stylize(`[${this.constructor.name}]`, 'special');
+    if (depth <= 1) return options.stylize(`[${this.constructor.name} ${this.func.debugName}]`, 'special');
     const newOptions = Object.assign({}, options, {
       ast: true,
       depth: options.depth === null ? null : options.depth - 1,
@@ -1030,7 +1030,7 @@ export function bytecodeToString(bytecodeProgram: BytecodeProgram) {
   const instr = (instr: BytecodeInstr) => {
     const { type, ...args } = instr;
     const values = Object.entries(args)
-      .map(([k, v]) => `${k}: ${typeof v === 'function' ? '<function>' : typeof v === 'string' ? v : Inspect(v)}`)
+      .map(([k, v]) => `${k}: ${typeof v === 'function' ? '<function>' : typeof v === 'string' ? v : Inspect(v, { depth: 1})}`)
       .join(", ");
     return `${type.padStart("beginblockast".length, " ")}  ${values}`;
   };

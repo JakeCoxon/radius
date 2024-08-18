@@ -30,7 +30,7 @@ const runTestInner = (
   queue.enqueue(root)
 
   let i
-  const STEPS = 100000
+  const STEPS = 1_000_000
   for (i = 0; i < STEPS; i++) {
     if (queue.list.length === 0) {
       if (root._state !== 'completed') {
