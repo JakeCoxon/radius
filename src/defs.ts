@@ -1002,7 +1002,7 @@ export class SubCompilerState {
   functionReturnBreakBlock: LabelBlock | undefined
 
   [Inspect.custom](depth: any, options: any, inspect: any) {
-    if (depth <= 1) return options.stylize(`[CompilerState ${this.debugName}]`, 'special');
+    if (depth <= 1 || true) return options.stylize(`[CompilerState ${this.debugName}]`, 'special');
     const mini = depth < options.depth;
     const newOptions = Object.assign({}, options, {
       depth: mini ? 1 : options.depth === null ? null : options.depth - 1,

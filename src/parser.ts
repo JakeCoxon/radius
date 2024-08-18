@@ -306,12 +306,11 @@ export const makeParser = (input: string, debugName: string) => {
   
   const parseNot = (): ParseNode => match("!")  ? new ParseNot(previous, parseNot()) : parseCall();
 
-  const parseAs = () => {        let left = parseNot();     while (match("as!") || match("as"))   left = new ParseCast(previous, left, parseNot());          return left; };
+  const parseAs = () => {        let left = parseNot();      while (match("as!") || match("as"))   left = new ParseCast(previous, left, parseNot());          return left; };
   const parseFactor = () => {    let left = parseAs();       while (match("*") || match("/"))      left = new ParseOperator(previous, [left, parseAs()]);      return left; };
   const parseSum = () => {       let left = parseFactor();   while (match("+") || match("-"))      left = new ParseOperator(previous, [left, parseFactor()]);  return left; };
 
-  const matchEquality = () =>
-    match("<") || match("<=") || match(">") || match(">=") || match("==") || match("!=");
+  const matchEquality = () => match("<") || match("<=") || match(">") || match(">=") || match("==") || match("!=");
   const parseEquality = () => {  let left = parseSum();      while (matchEquality())               left = new ParseOperator(previous, [left, parseSum()]);     return left; };
 
   const parseAnd = () => {     let left = parseEquality();   while (match("and"))    left = new ParseAnd(previous, [left, parseEquality()]);  return left; };
@@ -321,12 +320,16 @@ export const makeParser = (input: string, debugName: string) => {
 
   const parseAssignExpr = parseMeta; // parseAssignExpr excludes expansion dots
 
-  const parseDots = (): ParseNode => {
+  const parseComprehension = (): ParseNode => {
     let expr = parseMeta();
-    if (match("...")) return new ParseExpand(previous, expr);
-    else if (match("while")) return new ParseWhileExpr(previous, parseExpr(), expr);
+    if (match("while")) return new ParseWhileExpr(previous, parseComprehension(), expr);
     else if (match("for"))   return new ParseForExpr(previous, parseIdentifier(), expectInExpr(), expr);
-    else if (match("if"))    return new ParseIf(previous, true, parseExpr(), expr, null);
+    else if (match("if"))    return new ParseIf(previous, true, parseComprehension(), expr, null);
+    return expr;
+  }
+  const parseDots = (): ParseNode => {
+    let expr = parseComprehension();
+    if (match("...")) return new ParseExpand(previous, expr);
     return expr;
   };
   const parseExpr = parseDots;
@@ -553,7 +556,6 @@ export const makeParser = (input: string, debugName: string) => {
 
 const createNamedFunc = (state: any, token: Token, functionMetaName: ParseIdentifier | null, name: ParseIdentifier, typeParams: ParseNode[], params: ParserFunctionParameter[], returnType: ParseNode | null, keywords: ParseNode[], body: ParseNode | null) => {
   const decl: ParserFunctionDecl = {
-    id: undefined,
     debugName: `${name.token.value}`,
     token: token, functionMetaName, name, typeParams, params,
     keywords, returnType, body, annotations: [], variadic: false
@@ -564,7 +566,6 @@ const createNamedFunc = (state: any, token: Token, functionMetaName: ParseIdenti
 
 const createAnonymousFunc = (state: any, token: Token, params: ParserFunctionParameter[], keywords: ParseNode[], returnType: ParseNode | null, body: ParseStatements) => {
   const decl: ParserFunctionDecl = {
-    id: undefined,
     debugName: `<anonymous line ${token.location.line}>`,
     token: token, functionMetaName: null, name: null, typeParams: [], params,
     keywords, anonymous: true, returnType, body, annotations: [], variadic: false
