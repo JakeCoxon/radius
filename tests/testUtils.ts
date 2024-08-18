@@ -12,6 +12,7 @@ import { exec } from 'node:child_process';
 import { writeSyntax } from '../src/codegen_syntax';
 
 const runTestInner = (
+  testObject: TestObject,
   queue: Queue,
   input: string,
   filepath: string,
@@ -46,6 +47,7 @@ const runTestInner = (
     compilerAssert(false, 'Exhausted. maybe an infinite loop', { root })
   }
   compilerAssert(root._success, 'Expected success', { root })
+  testObject.logger.log('Completed in num steps:', i)
 }
 
 export const createModuleLoader = (importPaths: string[]) => {
@@ -131,7 +133,7 @@ export const runCompilerTest = (
   globalCompiler.externalCompilerOptions.globalOptions = testObject.globalOptions
 
   try {
-    runTestInner(queue, input, `${testObject.moduleName}.rad`, globalCompiler)
+    runTestInner(testObject, queue, input, `${testObject.moduleName}.rad`, globalCompiler)
 
     globalCompiler.compiledFunctions.forEach((func) => {
       writer.write(func.functionDefinition.debugName)

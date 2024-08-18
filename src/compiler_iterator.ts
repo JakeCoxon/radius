@@ -353,85 +353,41 @@ const createIteratorSliceLoopPartialFn = (() => {
   }
 })()
 
-const createIteratorSliceLoop = (ctx: CompilerFunctionCallContext, token: Token, subCompilerState: SubCompilerState, consume: CompilerCallable, originalYieldFn: CompilerCallable, selector: { node: ParseNode, start: ParseNode | null, end: ParseNode | null, step: ParseNode | null, setterIdentifier: ParseNode | null, indexIdentifier: ParseFreshIden | null }) => {
-
-  // TODO: Make this inlined
+const createIteratorSliceLoop = (token: Token, selector: ExpansionSelector) => {
 
   const consumeParam2 = new ParseFreshIden(token, new FreshBindingToken('consume'))
   const yieldParam2 = new ParseFreshIden(token, new FreshBindingToken('yield'))
-  const fnParams2: ParserFunctionParameter[] = [{ name: consumeParam2, storage: null, type: null }, { name: yieldParam2, storage: null, type: null }]
+
   const start = new ParseMeta(token, selector.start ? selector.start : new ParseNil(createAnonymousToken('')))
   const end = new ParseMeta(token, selector.end ? selector.end : new ParseNil(createAnonymousToken('')))
   const step = new ParseMeta(token, selector.step ? selector.step : new ParseNil(createAnonymousToken('')))
   const closureCall = new ParseCall(token, new ParseFunction(createAnonymousToken(''), createIteratorSliceLoopPartialFn), [consumeParam2, yieldParam2], [start, end, step])
 
   const fnBody2 = new ParseStatements(createAnonymousToken(''), [closureCall])
-  const decl2 = createAnonymousParserFunctionDecl(`array_iterator_slice_loop`, createAnonymousToken(''), fnParams2, fnBody2)
-  const funcDef2 = insertFunctionDefinition(subCompilerState.globalCompiler, decl2)
-  const closure2 = new Closure(funcDef2, subCompilerState.scope, subCompilerState)
-
-  return createCallAstFromValue(ctx, closure2, [], [new CompTimeObjAst(VoidType, ctx.location, consume), new CompTimeObjAst(VoidType, ctx.location, originalYieldFn)])
+  const fnParams2: ParserFunctionParameter[] = [{ name: consumeParam2, storage: null, type: null }, { name: yieldParam2, storage: null, type: null }]
+  return createAnonymousParserFunctionDecl(`array_iterator_slice_loop`, createAnonymousToken(''), fnParams2, fnBody2)
 }
 
-const createIteratorSliceIterator = (token: Token, subCompilerState: SubCompilerState, selector: { node: ParseNode, start: ParseNode | null, end: ParseNode | null, step: ParseNode | null, setterIdentifier: ParseNode | null, indexIdentifier: ParseFreshIden | null }, iterator: CompilerCallable): CompilerCallable => {
+const createIteratorSliceIterator = (token: Token, subCompilerState: SubCompilerState, selector: ExpansionSelector, iterator: CompilerCallable) => {
+  const yieldParam = new ParseFreshIden(token, new FreshBindingToken('yield'))
+  const params: ParserFunctionParameter[] = [{ name: yieldParam, type: null, storage: null }]
 
-  const newIteratorClosure = (iteratorArg: Ast): Task<Ast, CompilerError> => {
-    compilerAssert(isAst(iteratorArg))
-    const originalYieldFn = iteratorArg instanceof CompTimeObjAst ? iteratorArg.value : iteratorArg
-    compilerAssert(originalYieldFn instanceof Closure || originalYieldFn instanceof CompilerFunction, "Expected function")
-    const interleave = interleaveHelper()
-    const ctx: CompilerFunctionCallContext = { location: token.location, compilerState: subCompilerState, resultAst: undefined, typeCheckResult: undefined }
+  // TODO: Can this be implemented as a higher-order function that takes a closure
+  // and converts it to a iterleave generator?
 
-    const yieldA = (
-      interleave.waitForEntryBinding(ctx.compilerState.globalCompiler)
-      .chainFn((task, entryParam) => {
-        const fnctx1: CompilerFunctionCallContext = { location: ctx.location, compilerState: ctx.compilerState, resultAst: undefined, typeCheckResult: undefined }
-        const fn1 = new CompilerFunction('consume', (ctx, typeArgs, args) => {
-          const stmts = createStatements(ctx.location, [
-            interleave.continueEntry(ctx.location),
-            new BindingAst(entryParam.type, ctx.location, entryParam)
-          ])
-          return Task.of(stmts)
-        })
-        return createIteratorSliceLoop(fnctx1, token, ctx.compilerState, fn1, originalYieldFn, selector)
-      })
-    );
+  const consumeParam1 = new ParseFreshIden(token, new FreshBindingToken('consume'))
+  const produceParam1 = new ParseFreshIden(token, new FreshBindingToken('produce'))
 
-    const fn2 = new CompilerFunction('produce', (ctx, typeArgs, args) => {
-      const [bindingAst] = args
-      compilerAssert(isAst(bindingAst))
-      const stmts = createStatements(ctx.location, [
-        interleave.createSetter(ctx.location, bindingAst),
-        interleave.continueOther(ctx.location)])
-      return Task.of(stmts)
-    })
-    const fnctx2: CompilerFunctionCallContext = { location: ctx.location, compilerState: ctx.compilerState, resultAst: undefined, typeCheckResult: undefined }
-    const yieldB = createCallAstFromValue(fnctx2, iterator, [], [new CompTimeObjAst(VoidType, ctx.location, fn2)])
+  const decl2 = createIteratorSliceLoop(token, selector)
+  const consumer = new ParseCall(token, new ParseFunction(token, decl2), [consumeParam1, yieldParam], [])
+  
+  const producer = new ParseCall(token, new ParseValue(token, iterator), [produceParam1], [])
 
-    return (
-      Task.concurrency<unknown, CompilerError>([yieldA, yieldB, interleave.waitForEntryBinding(ctx.compilerState.globalCompiler)])
-      .chainFn((task, args) => {
-        const [a, b, entryParam] = args
-        compilerAssert(isAst(a))
-        compilerAssert(isAst(b))
-        compilerAssert(ctx.location)
-        compilerAssert(entryParam instanceof Binding)
-        return Task.of(
-          new StatementsAst(VoidType, ctx.location, [
-            new LetAst(VoidType, ctx.location, entryParam, new DefaultConsAst(entryParam.type, ctx.location)),
-            interleave.buildAst(ctx.location, a, b)
-          ])
-        )
-      })
-    )
-  }
+  const body = generatorHelper(`iterator_slice`, consumeParam1, consumer, produceParam1, producer)
 
-  const closure = new CompilerFunction('iteratorslice', (ctx, typeArgs, args) => {
-    return newIteratorClosure(expectAst(args[0]))
-  })
-
-  return closure;
-
+  const decl = createAnonymousParserFunctionDecl("iterator_slice", createAnonymousToken(''), params, body)
+  const funcDef = insertFunctionDefinition(subCompilerState.globalCompiler, decl)
+  return new Closure(funcDef, subCompilerState.scope, subCompilerState)
 }
 
 

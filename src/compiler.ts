@@ -486,7 +486,7 @@ export const BytecodeSecondOrder: ParseTreeTable = {
       pushBytecode(out, node.token, { type: "callast", name: node.left.field.token.value, count: node.args.length + 1, tcount: node.typeArgs.length, method: true });
       return;
     }
-    if (node.left instanceof ParseFunction) {
+    if (node.left instanceof ParseFunction || node.left instanceof ParseValue) {
       const name = new ParseFreshIden(node.token, new FreshBindingToken('tmpfn'))
       visitParseNode(out, new ParseLetConst(node.token, name, node.left))
       pushBytecode(out, node.token, { type: 'pop' })
