@@ -82,6 +82,21 @@ export const listComprehensionSugar = (out: BytecodeWriter, node: ParseListComp)
   const call = new ParseCall(node.token, new ParseIdentifier(createAnonymousToken('transduce')), [list], [trx, reducer])
   visitParseNode(out, call)
 }
+
+
+const callV = (token: Token, value: unknown, args: ParseNode[], typeArgs: ParseNode[]) => {
+  return new ParseCall(token, new ParseValue(token, value), args, [])
+}
+const createTypeOf = (token: Token, value: ParseNode) => {
+  return callV(token, typeOf, [new ParseQuote(token, value)], [])
+}
+const createDefaultOf = (token: Token, originalResult: ParseNode) => {
+  const typeOf_ = callV(token, typeOf, [new ParseQuote(token, originalResult)], [])
+  return callV(token, createDefaultFromType, [typeOf_], [])
+}
+
+
+
 class ArrayConstructorCompiler {
   calls: Ast[] = []
   constructorBinding: Binding | null = null
@@ -157,9 +172,9 @@ const appendValuePartialFn = (() => {
   const exprQuote = new ParseQuote(token, exprParam)
   const iden = new ParseFreshIden(token, new FreshBindingToken('elem'))
   const let_ = new ParseLet(token, iden, null, exprQuote)
-  const call = new ParseCall(token, new ParseValue(token, arrayConstructorTypeCheck), [consIdenParam, iden], [])
-  const call2 = new ParseCall(token, new ParseValue(token, arrayConstructorCreateAppend), [consIdenParam, iden], [])
-  const call3 = new ParseCall(token, new ParseValue(token, arrayConstructorAddAppendCall), [consIdenParam, call2], [])
+  const call = callV(token, arrayConstructorTypeCheck, [consIdenParam, iden], [])
+  const call2 = callV(token, arrayConstructorCreateAppend, [consIdenParam, iden], [])
+  const call3 = callV(token, arrayConstructorAddAppendCall, [consIdenParam, call2], [])
   const meta_ = new ParseMeta(token, new ParseStatements(token, [let_, call, call3]))
   const decl = createAnonymousParserFunctionDecl('appendValue', token, [], meta_)
 
@@ -179,11 +194,11 @@ const appendValuePartialIfFn = (() => {
   const exprQuote = new ParseQuote(token, exprParam)
   const iden = new ParseFreshIden(token, new FreshBindingToken('elem'))
   const let_ = new ParseLet(token, iden, null, exprQuote)
-  const call = new ParseCall(token, new ParseValue(token, arrayConstructorTypeCheck), [consIdenParam, iden], [])
+  const call = callV(token, arrayConstructorTypeCheck, [consIdenParam, iden], [])
 
-  const call2 = new ParseMeta(token, new ParseCall(token, new ParseValue(token, arrayConstructorCreateAppend), [consIdenParam, iden], []))
+  const call2 = new ParseMeta(token, callV(token, arrayConstructorCreateAppend, [consIdenParam, iden], []))
   const cond = new ParseQuote(token, new ParseIf(token, false, condParam, call2, null))
-  const call3 = new ParseCall(token, new ParseValue(token, arrayConstructorAddAppendCall), [consIdenParam, cond], [])
+  const call3 = callV(token, arrayConstructorAddAppendCall, [consIdenParam, cond], [])
   const meta_ = new ParseMeta(token, new ParseStatements(token, [let_, call, call3]))
   const decl = createAnonymousParserFunctionDecl('appendValue', token, [], meta_)
 
@@ -197,17 +212,17 @@ const appendValuePartialIfFn = (() => {
 })()
 
 const compileListConstructorExpand = (out: BytecodeWriter, node: ParseExpand, listConstructorIden: ParseFreshIden) => {
-  const expansion = createExpansionState('loop', node.token.location)
+  const expansion = createExpansionState('listConstructorExpand', node.token.location)
   const result = visitExpansion(out, expansion, node.expr)
   const iden = new ParseFreshIden(node.token, new FreshBindingToken('elem'))
   const exprQuote = new ParseQuote(node.token, result)
   const let_ = new ParseLet(node.token, iden, null, exprQuote)
-  const call = new ParseCall(node.token, new ParseValue(node.token, arrayConstructorTypeCheck), [listConstructorIden, iden], [])
-  const call2 = new ParseCall(node.token, new ParseValue(node.token, arrayConstructorCreateAppend), [listConstructorIden, iden], [])
+  const call = callV(node.token, arrayConstructorTypeCheck, [listConstructorIden, iden], [])
+  const call2 = callV(node.token, arrayConstructorCreateAppend, [listConstructorIden, iden], [])
   expansion.loopBodyNode = new ParseMeta(node.token, new ParseStatements(node.token, [let_, call, call2]))
   const expand = compileExpansionToParseNode(out, expansion, node)
   const expandQuote = new ParseQuote(node.token, expand)
-  const call3 = new ParseCall(node.token, new ParseValue(node.token, arrayConstructorAddAppendCall), [listConstructorIden, expandQuote], [])
+  const call3 = callV(node.token, arrayConstructorAddAppendCall, [listConstructorIden, expandQuote], [])
   const meta_ = new ParseMeta(node.token, call3)
   const fn = createAnonymousParserFunctionDecl('append_iterator', node.token, [], meta_)
   return new ParseFunction(node.token, fn)
@@ -219,6 +234,7 @@ export const listConstructorSugar = (out: BytecodeWriter, node: ParseList) => {
   const call_ = new ParseCall(node.token, new ParseValue(node.token, createArrayConstructorCompiler), [new ParseNumber(createAnonymousToken(numExprs))], [])
   visitParseNode(out, new ParseLetConst(node.token, listConstructorIden, call_))
   pushBytecode(out, node.token, { type: 'pop' })
+  // TODO: Can this be rewritten in a way that doesn't require using arrayConstructor functions everywhere
   const fns = node.exprs.map(expr => {
     if (expr instanceof ParseExpand) {
       return compileListConstructorExpand(out, expr, listConstructorIden)
@@ -657,17 +673,6 @@ const createFreshLet = new ExternalFunction('createFreshLet', VoidType, (ctx, va
   const binding = new Binding("defer", value.type)
   return new LetAst(binding.type, ctx.location, binding, value)
 })
-
-const callV = (token: Token, value: unknown, args: ParseNode[], typeArgs: ParseNode[]) => {
-  return new ParseCall(token, new ParseValue(token, value), args, [])
-}
-const createTypeOf = (token: Token, value: ParseNode) => {
-  return callV(token, typeOf, [new ParseQuote(token, value)], [])
-}
-const createDefaultOf = (token: Token, originalResult: ParseNode) => {
-  const typeOf_ = callV(token, typeOf, [new ParseQuote(token, originalResult)], [])
-  return callV(token, createDefaultFromType, [typeOf_], [])
-}
 
 const createDeferTypeCheckingIden = (expansion: ExpansionCompilerState, defaultNode: ParseNode) => {
   const token = createAnonymousToken('')

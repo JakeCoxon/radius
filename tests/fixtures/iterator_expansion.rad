@@ -285,8 +285,7 @@ fn test_if():
   print(x)
   assert(x == 3222)
   
-  # TODO: Syntax?
-  (print(numbers[:]) if operator_mod(numbers[:], 2) == 0) ...
+  print(numbers[:]) if operator_mod(numbers[:], 2) == 0 ...
 
   print("--")
 
@@ -308,8 +307,7 @@ fn test_while():
   print(x)
   assert(x == 114)
 
-  # TODO: Syntax?
-  (print(factorial[:]) while numbers[:] < 100) ...
+  print(factorial[:]) while numbers[:] < 100 ...
 
   for x in (numbers[:] while numbers[:] < 100):
     print(x)
