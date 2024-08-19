@@ -15,7 +15,9 @@ const getLength = (token: Token, expr: ParseNode) => new ParseCall(token, new Pa
 
 export const forLoopSugar = (out: BytecodeWriter, node: ParseFor) => {
   const expansion = createExpansionState('forin', node.token.location)
-  const result = visitExpansion(out, expansion, node.expr)
+
+  // We can create a for loop expression inside an expansion state, but it itself cannot be expanded
+  const result = !out.state.expansion ? visitExpansion(out, expansion, node.expr) : null
   compilerAssert(!expansion.fold, "Fold not supported in for loop")
 
   const fnIden = node.left instanceof ParseIdentifier ? node.left : new ParseFreshIden(node.token, new FreshBindingToken('it'))
@@ -26,7 +28,7 @@ export const forLoopSugar = (out: BytecodeWriter, node: ParseFor) => {
   const fn = new ParseFunction(node.token, decl)
 
   let iterator: ParseNode
-  if (expansion.selectors.length > 0) {
+  if (result && expansion.selectors.length > 0) {
     expansion.optimiseSimple = expansion.selectors.length === 1
     expansion.loopBodyNode = new ParseCall(node.token, fn, [result], [])
 
@@ -211,7 +213,32 @@ const appendValuePartialIfFn = (() => {
   return createAnonymousParserFunctionDecl('appendValuePartial', token, params, new ParseFunction(token, decl))
 })()
 
+
+const compileListConstructorForExpr = (out: BytecodeWriter, node: ParseForExpr, listConstructorIden: ParseFreshIden) => {
+  // TODO: This can collapse into compileListConstructorExpand. It should also handle if expressions
+  // (And while?). Try to make a data structure that can handle all these cases
+
+  const iden = new ParseFreshIden(node.token, new FreshBindingToken('elem'))
+  const exprQuote = new ParseQuote(node.token, node.body)
+  const let_ = new ParseLet(node.token, iden, null, exprQuote)
+  const call = callV(node.token, arrayConstructorTypeCheck, [listConstructorIden, iden], [])
+  const call2 = callV(node.token, arrayConstructorCreateAppend, [listConstructorIden, iden], [])
+
+  const body = new ParseMeta(node.token, new ParseStatements(node.token, [let_, call, call2]))
+  const for_ = new ParseFor(node.token, node.left, node.expr, body)
+
+  const quote = new ParseQuote(node.token, for_)
+  const call3 = callV(node.token, arrayConstructorAddAppendCall, [listConstructorIden, quote], [])
+  const meta_ = new ParseMeta(node.token, call3)
+  const fn = createAnonymousParserFunctionDecl('append_for_expr', node.token, [], meta_)
+  return new ParseFunction(node.token, fn)
+}
+
+
 const compileListConstructorExpand = (out: BytecodeWriter, node: ParseExpand, listConstructorIden: ParseFreshIden) => {
+  if (node.expr instanceof ParseForExpr) {
+    return compileListConstructorForExpr(out, node.expr, listConstructorIden)
+  }
   const expansion = createExpansionState('listConstructorExpand', node.token.location)
   const result = visitExpansion(out, expansion, node.expr)
   const iden = new ParseFreshIden(node.token, new FreshBindingToken('elem'))

@@ -372,6 +372,12 @@ fn test_iterator_to_array():
 
   arr4 := [1, 2, 3, 5 if false]
   assert(@sum(arr4[:]) == 6)
+
+fn test_for_expr_array():
+
+  r :: range2d(4, 3)
+  arr := [x + x * y for x, y in r ...]
+  assert(@sum(arr[:]) == 36)
   
 fn test_slice():
   c :: @concat(factorial[2:8:2])
@@ -413,6 +419,7 @@ fn main():
   test_flatmap()
   test_custom_iterator()
   test_iterator_to_array()
+  test_for_expr_array()
   test_array()
   test_slice()
   test_float_sum()

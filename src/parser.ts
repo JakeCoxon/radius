@@ -323,7 +323,7 @@ export const makeParser = (input: string, debugName: string) => {
   const parseComprehension = (): ParseNode => {
     let expr = parseMeta();
     if (match("while")) return new ParseWhileExpr(previous, parseComprehension(), expr);
-    else if (match("for"))   return new ParseForExpr(previous, parseIdentifier(), expectInExpr(), expr);
+    else if (match("for"))   return new ParseForExpr(previous, parseLeftSideMatch(), expectInExpr(), expr);
     else if (match("if"))    return new ParseIf(previous, true, parseComprehension(), expr, null);
     return expr;
   }
@@ -459,14 +459,15 @@ export const makeParser = (input: string, debugName: string) => {
     let expr = parseExpressionStatement2();
     if (match("..."))        expr = new ParseExpand(previous, expr);
     else if (match("while")) expr = new ParseWhileExpr(previous, parseExpr(), expr);
-    else if (match("for"))   expr = new ParseForExpr(previous, parseIdentifier(), expectInExpr(), expr);
+    else if (match("for"))   expr = new ParseForExpr(previous, parseLeftSideMatch(), expectInExpr(), expr);
     else if (match("if"))    expr = new ParseIf(previous, false, parseExpr(), expr, null);
     return trailingNewline(expr);
   };
   const trailingNewline = <T>(x: T) => (expect(matchType("NEWLINE"), "Expected newline"), x);
   const trailingEndParen = <T>(x: T) => (expect(")", "Expected ')'"), x);
 
-  const expectInExpr = () => (expect("in", "Expected 'in' after for identifier"), parseExpr())
+  // Expr after in must be lower precedence than expansion dots
+  const expectInExpr = () => (expect("in", "Expected 'in' after for identifier"), parseAssignExpr())
   const parseLeftSideMatch = () => {
     let left: ParseIdentifier | ParseTuple = parseIdentifier();
     if (match(",")) {
