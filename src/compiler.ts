@@ -911,7 +911,8 @@ const instructions: InstructionMapping = {
     const cond = propagatedLiteralAst(expectAst(popStack(vm)))
     const trueBody = propagatedLiteralAst(expectAst(popStack(vm)))
     const falseBody = f ? propagatedLiteralAst(expectAst(popStack(vm))) : null
-    let resultType = e && falseBody ? falseBody.type : VoidType
+    let resultType: Type = VoidType
+    if (e && falseBody) resultType = trueBody.type === NeverType ? falseBody.type : trueBody.type
     if (trueBody.type === NeverType && (!falseBody || falseBody.type === NeverType)) resultType = NeverType // Propagate never type even if it's not an expression if
     // TODO: This is no longer possible because we use if-expr without else clause in iterators
     // if (e) compilerAssert(falseBody && falseBody.type === trueBody.type, "If expression inferred to be of type $trueType but got $falseType", { trueType: trueBody.type, falseType: falseBody?.type })

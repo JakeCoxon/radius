@@ -19,13 +19,19 @@ fn main():
   print(x)
   print(y)
 
-  z := x orelse 69
-  w := y orelse 100
+  z := x.orelse 69
+  w := y.orelse 100
   print(z + w)
+
 
   if x.is_some:
     print(x)
   else:
     print("None", x)
+
+
+  u := x.orelse return
+  print(u)
+  print("Should not print")
 
   # print(x)

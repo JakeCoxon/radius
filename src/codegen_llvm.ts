@@ -272,20 +272,22 @@ const astWriter: LlvmAstWriterTable = {
     beginBasicBlock(writer, thenLabel)
     const trueResult = writeExpr(writer, toStatements(ast.trueBody))
     thenFinalLabel = writer.currentBlockLabel // Nested control flow have have changed current block
-    if (outName) thenVal = toRegister(writer, trueResult)
+    if (outName && ast.trueBody.type !== NeverType) thenVal = toRegister(writer, trueResult)
     format(writer, `  br label $\n\n`, endLabel)
 
     if (ast.falseBody) {
       beginBasicBlock(writer, elseLabel)
       const falseResult = writeExpr(writer, toStatements(ast.falseBody))
       elseFinalLabel = writer.currentBlockLabel // Nested control flow have have changed current block
-      if (outName) elseVal = toRegister(writer, falseResult)
+      if (outName && ast.falseBody.type !== NeverType) elseVal = toRegister(writer, falseResult)
       format(writer, `  br label $\n\n`, endLabel)
     }
 
     beginBasicBlock(writer, endLabel)
 
     if (!outName) return null
+    if (thenVal && !elseVal) return { register: thenVal }
+    if (!thenVal && elseVal) return { register: elseVal }
     compilerAssert(thenVal && elseVal && elseFinalLabel, "Expected 'then' and 'else' branch")
     format(writer, `  $ = phi $ [ $, $ ], [ $, $ ]\n`, outName, ast.type, thenVal, thenFinalLabel, elseVal, elseFinalLabel)
     return { register: outName }

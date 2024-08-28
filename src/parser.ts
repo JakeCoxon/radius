@@ -245,6 +245,9 @@ export const makeParser = (input: string, debugName: string) => {
     else if (match("{"))     return match("|") ? parseLambda() : throwExpectError("Not implemented")
     else if (match("block")) return new ParseBlock(previous, null, token?.value != ':' ? parseIdentifier() : null, parseColonBlockExpr('block'))
     else if (match("ifx"))   return parseIf(previous, true, "if condition")
+    else if (match("return")) return new ParseReturn(previous, null)
+    else if (match("break")) return parseBreak(previous)
+    else if (match("continue")) return parseContinue(previous)
     else if (matchType("STRING")) return new ParseString(previous, previous.value.slice(1, -1))
     else if (matchType("NUMBER")) return parseNumberLiteral();
     else if (matchType("SPECIALNUMBER")) return parseNumberLiteral();
@@ -295,7 +298,11 @@ export const makeParser = (input: string, debugName: string) => {
     while (true) {
       if (match("("))        left = new ParseCall(previous, left, parseArgs(), []);
       else if (match("["))   left = parseSlice(false, left);
-      else if (match("."))   left = match("[") ? parseSlice(true, left) : parseFieldAccess(left)
+      else if (match(".")) {
+        if (match("[")) left = parseSlice(true, left);
+        else if (match("orelse")) left = new ParseOrElse(previous, left, parseExpr());
+        else left = parseFieldAccess(left)
+      }
       else if (match("!"))   left = parseFunctionTypeArguments(previous, left);
       else if (match("{"))   left = match("|") ? parsePostCall(left) : (compilerAssert(false, "Not implemented") as never)
       else if (prevSignificantNewlines && match("|"))
@@ -306,8 +313,7 @@ export const makeParser = (input: string, debugName: string) => {
   
   const parseNot = (): ParseNode => match("!")  ? new ParseNot(previous, parseNot()) : parseCall();
 
-  const parseOrElse = () => {    let left = parseNot();      while (match("orelse"))               left = new ParseOrElse(previous, left, parseNot());         return left; };
-  const parseIs = () => {        let left = parseOrElse();   while (match("is"))                   left = new ParseIs(previous, left, parseOrElse());          return left; };
+  const parseIs = () => {        let left = parseNot();      while (match("is"))                   left = new ParseIs(previous, left, parseNot());             return left; };
   const parseAs = () => {        let left = parseIs();       while (match("as!") || match("as"))   left = new ParseCast(previous, left, parseIs());            return left; };
   const parseFactor = () => {    let left = parseAs();       while (match("*") || match("/"))      left = new ParseOperator(previous, [left, parseAs()]);      return left; };
   const parseSum = () => {       let left = parseFactor();   while (match("+") || match("-"))      left = new ParseOperator(previous, [left, parseFactor()]);  return left; };
