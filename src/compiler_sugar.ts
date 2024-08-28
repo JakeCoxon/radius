@@ -1,7 +1,7 @@
 import { BytecodeSecondOrder, callFunctionFromValueTask, compileFunctionPrototype, createParameterizedExternalType, getOperatorTable, loadModule, propagateLiteralType, propagatedLiteralAst, pushBytecode, resolveScope, unknownToAst, visitParseNode } from "./compiler"
 import { compileExportedFunctionTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, insertFunctionDefinition } from "./compiler_functions"
 import { concat } from "./compiler_iterator"
-import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, UserCallAst, hashValues, NeverType, IfAst, BoolType, VoidAst, LoopObject, CompileTimeObjectType, u64Type, FunctionDefinition, ParserFunctionDecl, StatementsAst, isTypeScalar, IntLiteralType, FloatLiteralType, isAst, isType, isTypeCheckError, InterleaveAst, ContinueInterAst, CompTimeObjAst, ParseEvalFunc, SetAst, DefaultConsAst, WhileAst, BoolAst, isArray, ExpansionSelector, ParseNote, ExpansionCompilerState, ParseBoolean, ParseOr, ParseBreak, isTypeInteger, OptionTypeConstructor, ParseIs, filterNotNull, ParseLetConst, ParseCast, VariantCastAst, ExternalTypeConstructor, NoneTypeConstructor, SomeTypeConstructor, typesEqual, GlobalCompilerState } from "./defs"
+import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, UserCallAst, hashValues, NeverType, IfAst, BoolType, VoidAst, LoopObject, CompileTimeObjectType, u64Type, FunctionDefinition, ParserFunctionDecl, StatementsAst, isTypeScalar, IntLiteralType, FloatLiteralType, isAst, isType, isTypeCheckError, InterleaveAst, ContinueInterAst, CompTimeObjAst, ParseEvalFunc, SetAst, DefaultConsAst, WhileAst, BoolAst, isArray, ExpansionSelector, ParseNote, ExpansionCompilerState, ParseBoolean, ParseOr, ParseBreak, isTypeInteger, OptionTypeConstructor, ParseIs, filterNotNull, ParseLetConst, ParseCast, VariantCastAst, ExternalTypeConstructor, NoneTypeConstructor, SomeTypeConstructor, typesEqual, GlobalCompilerState, ParseOrElse, ParseField } from "./defs"
 import { Event, Task, TaskDef, isTask } from "./tasks"
 
 const rangeLoop = (token: Token, iden: ParseIdentifier | ParseFreshIden, start: ParseNode, end: ParseNode, body: ParseNode) => {
@@ -510,8 +510,8 @@ const unsafeEnumCast = new CompilerFunction("unsafeEnumCast", (ctx, typeArgs, ar
 export const smartCastSugar = (out: BytecodeWriter, node: ParseIf) => {
   compilerAssert(node.condition instanceof ParseIs, "Expected is", { node })
   const testType = node.condition.type
-  compilerAssert(node.condition.expr instanceof ParseIdentifier, "Expected identifier", { node })
-  const name = node.condition.expr.token
+  compilerAssert(node.condition.expr instanceof ParseIdentifier || node.condition.expr instanceof ParseFreshIden, "Expected identifier", { node })
+  const name = node.condition.expr
   const condExpr = new ParseQuote(node.token, node.condition.expr)
 
   const testTypeIden = new ParseFreshIden(node.token, new FreshBindingToken('testtype'))
@@ -524,9 +524,10 @@ export const smartCastSugar = (out: BytecodeWriter, node: ParseIf) => {
   const call = new ParseCall(node.token, new ParseValue(node.token, getTypeIndex), [condExprIden], [testTypeIden])
   const letIndex = new ParseLetConst(node.token, indexIden, new ParseQuote(node.token, call))
   
-  const cond = new ParseOperator(createAnonymousToken('=='), [indexIden, new ParseNumber(createAnonymousToken('1'))])
-  const cast = new ParseCall(node.token, new ParseValue(node.token, unsafeEnumCast), [new ParseIdentifier(name)], [testType])
-  const letCast = new ParseLet(node.token, new ParseIdentifier(name), null, cast)
+  const tag = new ParseField(node.token, name, new ParseIdentifier(createAnonymousToken('tag')))
+  const cond = new ParseOperator(createAnonymousToken('=='), [tag, indexIden])
+  const cast = new ParseCall(node.token, new ParseValue(node.token, unsafeEnumCast), [name], [testType])
+  const letCast = new ParseLet(node.token, name, null, cast)
   const trueBody = new ParseBlock(node.token, null, null, new ParseStatements(node.token, [letCast, node.trueBody]))
 
   visitParseNode(out, letTestType)
@@ -538,7 +539,27 @@ export const smartCastSugar = (out: BytecodeWriter, node: ParseIf) => {
   if (node.falseBody) visitParseNode(out, node.falseBody)
   visitParseNode(out, trueBody)
   visitParseNode(out, cond)
-  pushBytecode(out, node.token, { type: "ifast", f: !!node.falseBody, e: node.isExpr });
+  pushBytecode(out, node.token, { type: "ifast", f: !!node.falseBody, e: node.isExpr })
+}
+
+const getSomeTypeConstructor = new ExternalFunction('getSomeTypeConstructor', VoidType, (ctx, args) => {
+  return SomeTypeConstructor
+})
+
+export const orElseSugar = (out: BytecodeWriter, node: ParseOrElse) => {
+  const letIden = new ParseFreshIden(node.token, new FreshBindingToken('orelse'))
+  const letNode = new ParseLet(node.token, letIden, null, node.expr)
+  const testNode = new ParseIs(node.token, letIden, new ParseCall(node.token, new ParseValue(node.token, getSomeTypeConstructor), [], []))
+  const valueNode = new ParseField(node.token, letIden, new ParseIdentifier(createAnonymousToken('value')))
+  const if_ = new ParseIf(node.token, true, testNode, valueNode, new ParseElse(node.token, node.orElse))
+  pushBytecode(out, node.token, { type: 'pushqs' })
+  visitParseNode(out, letNode)
+  pushBytecode(out, node.token, { type: 'appendq' })
+  pushBytecode(out, node.token, { type: 'pop' })
+  smartCastSugar(out, if_)
+  pushBytecode(out, node.token, { type: 'appendq' })
+  pushBytecode(out, node.token, { type: 'pop' })
+  pushBytecode(out, node.token, { type: 'popqs' })
 }
 
 export const metaLetIn = (token: Token, node: ParseNode, f: (iden: ParseFreshIden) => ParseNode[]) => {
