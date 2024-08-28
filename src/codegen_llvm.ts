@@ -809,14 +809,11 @@ const getDataTypeName = (writer: LlvmWriter, obj: Type): string => {
   const fields = obj.typeInfo.fields.map(x => getTypeName(writer, x.fieldType)) // May be recursive so do it before emitting
 
   writer.outputHeaders.push(`${name} = type { `)
-  let sizeof = 0
   obj.typeInfo.fields.forEach((field, i) => {
     if (i !== 0) writer.outputHeaders.push(', ')
     writer.outputHeaders.push(fields[i])
-    sizeof += field.fieldType.typeInfo.sizeof
   })
-  const remainSize = obj.typeInfo.sizeof - sizeof
-  if (remainSize > 0) writer.outputHeaders.push(`, [${remainSize} x i8]`)
+  if (obj.typeInfo.variantPadding) writer.outputHeaders.push(`, [${obj.typeInfo.variantPadding} x i8]`)
   writer.outputHeaders.push(` }\n`)
 
   return name

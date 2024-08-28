@@ -524,6 +524,7 @@ export interface TypeInfo {
   metaobject: UnknownObject
   isReferenceType: boolean,
   sizeof: number
+  variantPadding?: number
 }
 export class TypeRoot {}
 export class PrimitiveType extends TypeRoot {
@@ -690,7 +691,8 @@ export const ListTypeConstructor: ExternalTypeConstructor = new ExternalTypeCons
 export const NoneTypeConstructor: ExternalTypeConstructor = new ExternalTypeConstructor("None", (compiler, argTypes) => {
   compilerAssert(argTypes.length === 1, "Expected one type arg", { argTypes })
   const sizeof = argTypes[0].typeInfo.sizeof + IntType.typeInfo.sizeof
-  const type = new ParameterizedType(NoneTypeConstructor, argTypes, { sizeof, fields: [], metaobject: Object.create(null), isReferenceType: false });
+  const variantPadding = argTypes[0].typeInfo.sizeof
+  const type = new ParameterizedType(NoneTypeConstructor, argTypes, { sizeof, variantPadding, fields: [], metaobject: Object.create(null), isReferenceType: false });
   type.typeInfo.metaobject.isEnumVariant = true
   type.typeInfo.metaobject.enumConstructorVariantOf = OptionTypeConstructor
   type.typeInfo.metaobject.enumVariantIndex = 0
@@ -714,7 +716,8 @@ export const OptionTypeConstructor: ExternalTypeConstructor = new ExternalTypeCo
   compilerAssert(argTypes.length === 1, "Expected one type arg", { argTypes })
 
   const sizeof = argTypes[0].typeInfo.sizeof + IntType.typeInfo.sizeof
-  const opttype = new ParameterizedType(OptionTypeConstructor, argTypes, { sizeof, fields: [], metaobject: Object.create(null), isReferenceType: false });
+  const variantPadding = argTypes[0].typeInfo.sizeof
+  const opttype = new ParameterizedType(OptionTypeConstructor, argTypes, { sizeof, variantPadding, fields: [], metaobject: Object.create(null), isReferenceType: false });
 
   opttype.typeInfo.metaobject.isEnum = true
   opttype.typeInfo.fields.push(new TypeField(SourceLocation.anon, "tag", opttype, 0, IntType))
