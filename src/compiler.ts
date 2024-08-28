@@ -1,7 +1,7 @@
-import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol, ScopeParentSymbol, isPlainObject, ParseLet, ParseList, ParseExpand, ParseBlock, findLabelByBinding, ParseSubscript, ParseNumber, ParseQuote, ParseWhile, ParseOperator, ParseBytecode, ParseOpEq, ParseSet, ParseFreshIden, UnknownObject, ParseNote, DefaultConsAst, RawPointerType, ValueFieldAst, SetValueFieldAst, FloatLiteralType, IntLiteralType, CompilerFunction, DerefAst, SetDerefAst, ParseSlice, CompilerFunctionCallContext, NeverType, LoopObject, CompTimeObjAst, CompileTimeObjectType, NamedArgAst, TypeCheckVar, TypeCheckConfig, u8Type, u64Type, isTypeScalar, FreshBindingToken, isCompilerCallable } from "./defs";
+import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol, ScopeParentSymbol, isPlainObject, ParseLet, ParseList, ParseExpand, ParseBlock, findLabelByBinding, ParseSubscript, ParseNumber, ParseQuote, ParseWhile, ParseOperator, ParseBytecode, ParseOpEq, ParseSet, ParseFreshIden, UnknownObject, ParseNote, DefaultConsAst, RawPointerType, ValueFieldAst, SetValueFieldAst, FloatLiteralType, IntLiteralType, CompilerFunction, DerefAst, SetDerefAst, ParseSlice, CompilerFunctionCallContext, NeverType, LoopObject, CompTimeObjAst, CompileTimeObjectType, NamedArgAst, TypeCheckVar, TypeCheckConfig, u8Type, u64Type, isTypeScalar, FreshBindingToken, isCompilerCallable, ParseIs } from "./defs";
 import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, functionCompileTimeCompileTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, compileExportedFunctionTask } from "./compiler_functions";
 import { Event, Task, TaskDef, Unit, isTask, isTaskResult, withContext } from "./tasks";
-import { createCompilerModuleTask, createListConstructor, defaultMetaFunction, print } from "./compiler_sugar";
+import { createCompilerModuleTask, createListConstructor, defaultMetaFunction, print, smartCastSugar } from "./compiler_sugar";
 import { expandDotsSugar, expandFuncAllSugar, expandFuncAnySugar, expandFuncConcatSugar, expandFuncFirstSugar, expandFuncLastSugar, expandFuncMaxSugar, expandFuncMinSugar, expandFuncSumSugar, foldSugar, forExprSugar, forLoopSugar, listComprehensionSugar, listConstructorSugar, sliceSugar, whileExprSugar } from "./compiler_iterator"
 
 export const pushBytecode = <T extends BytecodeInstr>(out: BytecodeWriter, token: Token, instr: T) => {
@@ -38,6 +38,7 @@ export const pushGeneratedBytecode = <T extends BytecodeInstr>(out: BytecodeWrit
 }
 
 export const BytecodeDefault: ParseTreeTable = {
+  is:        (out, node) => compilerAssert(false, "Not implemented 'is' in BytecodeDefault"),
   cast:      (out, node) => compilerAssert(false, "Not implemented 'cast' in BytecodeDefault"),
   forexpr:   (out, node) => compilerAssert(false, "Not implemented 'forexpr' in BytecodeDefault"),
   whileexpr: (out, node) => compilerAssert(false, "Not implemented 'whileexpr' in BytecodeDefault"),
@@ -262,6 +263,7 @@ export const BytecodeDefault: ParseTreeTable = {
 };
 
 export const BytecodeSecondOrder: ParseTreeTable = {
+  is:        (out, node) => compilerAssert(false, "Not implemented 'is'"),
   cast:      (out, node) => compilerAssert(false, "Not implemented 'cast'"),
   symbol:    (out, node) => compilerAssert(false, "Not implemented 'symbol'"),
   class:     (out, node) => compilerAssert(false, "Not implemented 'class'"),
@@ -537,6 +539,8 @@ export const BytecodeSecondOrder: ParseTreeTable = {
   if: (out, node) => {
     // TODO: This is no longer possible because we use if-expr without else clause in iterators
     // if (node.isExpr) compilerAssert(node.falseBody, "If-expression needs false branch")
+
+    if (node.condition instanceof ParseIs) return smartCastSugar(out, node)
     if (node.falseBody) visitParseNode(out, node.falseBody)
     visitParseNode(out, node.trueBody)
     visitParseNode(out, node.condition)
@@ -772,7 +776,7 @@ export function resolveScope(ctx: TaskContext, scope: Scope, name: string): Task
   })
 }
 
-function callFunctionFromValueTask(ctx: TaskContext, vm: Vm, func: unknown, typeArgs: unknown[], values: unknown[]): Task<Unit, CompilerError> {
+export function callFunctionFromValueTask(ctx: TaskContext, vm: Vm, func: unknown, typeArgs: unknown[], values: unknown[]): Task<Unit, CompilerError> {
   if (func instanceof ExternalFunction) {
     const fnctx: CompilerFunctionCallContext = { location: vm.location, compilerState: ctx.subCompilerState, resultAst: undefined, typeCheckResult: undefined }
     compilerAssert(typeArgs.length === 0, "Not supported", { typeArgs })
@@ -819,8 +823,10 @@ function callFunctionFromValueTask(ctx: TaskContext, vm: Vm, func: unknown, type
       vm.stack.push(new TypeMatcher(func, typeArgs, typeVars))
       return Task.success();
     }
-    vm.stack.push(createParameterizedExternalType(ctx.globalCompiler, func, typeArgs))
-    return Task.success()
+    return (
+      createParameterizedExternalType(ctx.globalCompiler, func, typeArgs)
+      .chainFn((task, type) => { vm.stack.push(type); return Task.success() })
+    )
   }
   compilerAssert(!(func instanceof FunctionDefinition), "$func is not handled", { func })
   compilerAssert(false, "$func is not a function", { func })
@@ -907,6 +913,7 @@ const instructions: InstructionMapping = {
     if (trueBody.type === NeverType && (!falseBody || falseBody.type === NeverType)) resultType = NeverType // Propagate never type even if it's not an expression if
     // TODO: This is no longer possible because we use if-expr without else clause in iterators
     // if (e) compilerAssert(falseBody && falseBody.type === trueBody.type, "If expression inferred to be of type $trueType but got $falseType", { trueType: trueBody.type, falseType: falseBody?.type })
+    compilerAssert(cond.type === BoolType, "Expected bool got $type", { type: cond.type })
     vm.stack.push(new IfAst(resultType, vm.location, cond, trueBody, falseBody))
   },
   evalfunc: (vm, { func }) => { return func(vm) },
@@ -1188,6 +1195,7 @@ const instructions: InstructionMapping = {
   beginblockast: (vm, { breakType, name }) => {
     const index = vm.context.subCompilerState.nextLabelBlockDepth ++
     const binding = new Binding(`${name ?? ''}_labelbreak${index}`, VoidType);
+    vm.scope = createScope({}, vm.scope)
     if (name) vm.scope[name] = binding
     vm.context.subCompilerState.labelBlock = new LabelBlock(vm.context.subCompilerState.labelBlock, null, breakType, binding)
   },
@@ -1204,6 +1212,8 @@ const instructions: InstructionMapping = {
     const breakExprBinding = labelBlock.breakWithExpr ? new Binding(`${binding.name}_breakexpr`, body.type) : null
     vm.stack.push(new BlockAst(blockType, vm.location, binding, breakExprBinding, body))
     vm.context.subCompilerState.labelBlock = labelBlock.parent
+    compilerAssert(vm.scope[ScopeParentSymbol], "Expected parent scope")
+    vm.scope = vm.scope[ScopeParentSymbol]
   },
 
   binding: (vm, { name }) => {
@@ -1218,7 +1228,10 @@ const instructions: InstructionMapping = {
     if (type instanceof TypeVariable) return vm.stack.push(type)
     if (type instanceof TypeMatcher) return vm.stack.push(type)
     if (type instanceof Tuple) {
-      return vm.stack.push(createParameterizedExternalType(vm.context.globalCompiler, TupleTypeConstructor, type.values))
+      return (
+        createParameterizedExternalType(vm.context.globalCompiler, TupleTypeConstructor, type.values)
+        .chainFn((task, type) => { vm.stack.push(type); return Task.success() })
+      )
     }
     if (type instanceof ClassDefinition) {
       if (type.concreteType) return vm.stack.push(type.concreteType)
@@ -1324,9 +1337,14 @@ const instructions: InstructionMapping = {
   tupleast: (vm, { count }) => {
     let values = expectAsts(popValues(vm, count))
     const argTypes = values.map(x => x.type)
-    const type = createParameterizedExternalType(vm.context.globalCompiler, TupleTypeConstructor, argTypes)
-    values = values.map(x => propagatedLiteralAst(x))
-    vm.stack.push(new ConstructorAst(type, vm.location, values))
+    return (
+      createParameterizedExternalType(vm.context.globalCompiler, TupleTypeConstructor, argTypes)
+      .chainFn((task, type) => {
+        values = values.map(x => propagatedLiteralAst(x))
+        vm.stack.push(new ConstructorAst(type, vm.location, values))
+        return Task.success()
+      })
+    )
   },
   pushqs: (vm) => vm.context.subCompilerState.quoteStack.push([]),
   popqs: (vm) => {
@@ -1501,7 +1519,7 @@ export const getCommonType = (types: Type[]): Type => {
   compilerAssert(types.every(x => x === types[0]), "Expected types to be the same")
   return types[0];
 }
-const createParameterizedExternalType = (globalCompiler: GlobalCompilerState, typeConstructor: ExternalTypeConstructor, argTypes: unknown[]): Type => {
+export const createParameterizedExternalType = (globalCompiler: GlobalCompilerState, typeConstructor: ExternalTypeConstructor, argTypes: unknown[]): Task<Type, CompilerError> => {
   const newArgTypes = argTypes.map(value => {
     // TODO: Do this more rigorously?
     if (isType(value)) {
@@ -1513,8 +1531,12 @@ const createParameterizedExternalType = (globalCompiler: GlobalCompilerState, ty
     if (value instanceof Tuple) compilerAssert(false, "Not implemented yet")
     compilerAssert(false, "Expected types got $expected", { value }); 
   })
-  const newType = typeConstructor.createType(newArgTypes)
-  return globalCompiler.typeTable.getOrInsert(newType)
+  return (
+    typeConstructor.createType(globalCompiler, newArgTypes)
+    .chainFn((task, type) => {
+      return Task.of(globalCompiler.typeTable.getOrInsert(type))
+    })
+  )
 }
 
 function topLevelFunctionDefinitionTask(ctx: TaskContext, funcDecl: ParserFunctionDecl, scope: Scope) {

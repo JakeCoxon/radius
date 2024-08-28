@@ -359,7 +359,7 @@ const astWriter: LlvmAstWriterTable = {
       jumpPointer: jumpPointerElse, returnPointer: jumpPointerEntry,
       interleaveCurrentLabels: ast.entryLabels, 
       interleaveLabels: ast.elseLabels, unreachable }
-    writer.blocks.push({ binding: ast.binding, interleave })
+    writer.blocks.push({ binding: ast.binding, interleave, breakExprBinding: null })
 
     writeExpr(writer, ast.entryBlock)
     format(writer, `  br label $\n\n`, interleaveEnd)
@@ -584,6 +584,25 @@ const astWriter: LlvmAstWriterTable = {
     const fields = ast.type.typeInfo.fields.map(x => new DefaultConsAst(x.fieldType, ast.location))
     return writeExpr(writer, new ConstructorAst(ast.type, ast.location, fields))
   },
+  enumvalue: (writer, ast) => {
+    const tag = new NumberAst(IntType, ast.location, ast.variantType.typeInfo.metaobject.enumVariantIndex as number)
+    const args = [tag, ...ast.args]
+
+    const fromPointer = allocaHelper(writer, createPointer("", ast.type))
+    const pointer = createPointer("", ast.type)
+    const constructor = new ConstructorAst(ast.variantType, ast.location, args)
+    // format(writer, "  $ = $\n", pointer, constructor)
+    format(writer, "  store $ $, $ $\n", ast.variantType, constructor, 'ptr', fromPointer)
+    format(writer, "  $ = bitcast $* $ to $*\n", pointer, ast.variantType, fromPointer, ast.type)
+    return { pointer }
+  },
+  variantcast: (writer, ast) => {
+    const fromPointer = allocaHelper(writer, createPointer("", ast.type))
+    const pointer = createPointer("", ast.type)
+    format(writer, "  store $ $, $ $\n", ast.enumType, ast.expr, 'ptr', fromPointer)
+    format(writer, "  $ = bitcast $* $ to $*\n", pointer, ast.enumType, fromPointer, ast.type)
+    return { pointer }
+  },
   list: (writer, ast) => {
     compilerAssert(false, "Not implemented 'list'", { ast })
   },
@@ -790,10 +809,14 @@ const getDataTypeName = (writer: LlvmWriter, obj: Type): string => {
   const fields = obj.typeInfo.fields.map(x => getTypeName(writer, x.fieldType)) // May be recursive so do it before emitting
 
   writer.outputHeaders.push(`${name} = type { `)
+  let sizeof = 0
   obj.typeInfo.fields.forEach((field, i) => {
     if (i !== 0) writer.outputHeaders.push(', ')
     writer.outputHeaders.push(fields[i])
+    sizeof += field.fieldType.typeInfo.sizeof
   })
+  const remainSize = obj.typeInfo.sizeof - sizeof
+  if (remainSize > 0) writer.outputHeaders.push(`, [${remainSize} x i8]`)
   writer.outputHeaders.push(` }\n`)
 
   return name

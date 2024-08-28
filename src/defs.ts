@@ -1,3 +1,4 @@
+import { createParameterizedExternalType } from "./compiler";
 import { Event, Task } from "./tasks";
 
 export type UnknownObject = {[key:string]:unknown}
@@ -148,6 +149,7 @@ export class ParseReturn extends ParseNodeType {       key = 'return' as const; 
 export class ParseBreak extends ParseNodeType {        key = 'break' as const;        constructor(public token: Token, public name: ParseIdentifier | ParseFreshIden | null, public expr: ParseNode | null) { super();} }
 export class ParseContinue extends ParseNodeType {     key = 'continue' as const;     constructor(public token: Token, public name: ParseIdentifier | ParseFreshIden | null) { super();} }
 export class ParseFor extends ParseNodeType {          key = 'for' as const;          constructor(public token: Token, public left: ParseIdentifier | ParseTuple, public expr: ParseNode, public body: ParseNode) { super();} }
+export class ParseIs extends ParseNodeType {           key = 'is' as const;           constructor(public token: Token, public expr: ParseNode, public type: ParseNode) { super();} }
 export class ParseCast extends ParseNodeType {         key = 'cast' as const;         constructor(public token: Token, public expr: ParseNode, public as: ParseNode) { super();} }
 export class ParseOpEq extends ParseNodeType {         key = 'opeq' as const;         constructor(public token: Token, public left: ParseNode, public right: ParseNode) { super();} }
 export class ParseWhile extends ParseNodeType {        key = 'while' as const;        constructor(public token: Token, public condition: ParseNode, public body: ParseNode) { super();} }
@@ -182,7 +184,7 @@ export type ParseNode = ParseStatements | ParseLet | ParseSet | ParseOperator | 
   ParseDict | ParsePostCall | ParseSymbol | ParseNote | ParseSlice | ParseSubscript | ParseTuple | ParseClass |
   ParseNil | ParseBoolean | ParseElse | ParseMetaIf | ParseMetaFor | ParseMetaWhile | ParseBlock | ParseImport | 
   ParseCompilerIden | ParseValue | ParseConstructor | ParseQuote | ParseBytecode | ParseFreshIden | ParseFold | 
-  ParseNamedArg | ParseEvalFunc | ParseConcurrency | ParseVoid
+  ParseNamedArg | ParseEvalFunc | ParseConcurrency | ParseVoid | ParseIs
 
 // Void types mean that in secondOrder compilation, the AST doesn't return an AST
 export const isParseVoid = (ast: ParseNode) => ast.key == 'letconst' || ast.key === 'function' || ast.key === 'class' || ast.key === 'comptime' || ast.key === 'metawhile';
@@ -454,6 +456,8 @@ export class SubscriptAst extends AstRoot {     key = 'subscript' as const;     
 export class SetSubscriptAst extends AstRoot {  key = 'setsubscript' as const;   constructor(public type: Type, public location: SourceLocation, public left: Ast, public right: Ast, public value: Ast) { super() } }
 export class NotAst extends AstRoot {           key = 'not' as const;            constructor(public type: Type, public location: SourceLocation, public expr: Ast) { super() } }
 export class ConstructorAst extends AstRoot {   key = 'constructor' as const;    constructor(public type: Type, public location: SourceLocation, public args: Ast[]) { super() } }
+export class EnumValueAst extends AstRoot   {   key = 'enumvalue' as const;      constructor(public type: Type, public location: SourceLocation, public variantType: Type, public args: Ast[]) { super() } }
+export class VariantCastAst extends AstRoot   { key = 'variantcast' as const;    constructor(public type: Type, public location: SourceLocation, public enumType: Type, public expr: Ast) { super() } }
 export class DefaultConsAst extends AstRoot {   key = 'defaultcons' as const;    constructor(public type: Type, public location: SourceLocation) { super() } }
 export class AddressAst extends AstRoot {       key = 'address' as const;        constructor(public type: Type, public location: SourceLocation, public binding: Binding) { super() } }
 export class DerefAst extends AstRoot {         key = 'deref' as const;          constructor(public type: Type, public location: SourceLocation, public left: BindingAst, public fieldPath: TypeField[]) { super() } }
@@ -466,7 +470,7 @@ export class ContinueInterAst extends AstRoot { key = 'continueinter' as const; 
 export type Ast = NumberAst | LetAst | SetAst | OperatorAst | IfAst | ListAst | CallAst | AndAst | UserCallAst |
   OrAst | StatementsAst | WhileAst | ReturnAst | SetFieldAst | VoidAst | CastAst | SubscriptAst | ConstructorAst |
   BindingAst | StringAst | NotAst | FieldAst | BlockAst | BreakAst | BoolAst | CastAst | DefaultConsAst | ValueFieldAst |
-  SetValueFieldAst | SetSubscriptAst | AddressAst | DerefAst | SetDerefAst | CompTimeObjAst | NamedArgAst | InterleaveAst | ContinueInterAst
+  SetValueFieldAst | SetSubscriptAst | AddressAst | DerefAst | SetDerefAst | CompTimeObjAst | NamedArgAst | InterleaveAst | ContinueInterAst | EnumValueAst | VariantCastAst
 export const isAst = (value: unknown): value is Ast => value instanceof AstRoot;
 
 export class Tuple {
@@ -563,7 +567,7 @@ export class TypeMatcher {
 }
 export class ExternalTypeConstructor {
   metaobject: {} = Object.create(null)
-  constructor(public typeName: string, public createType: (argTypes: Type[]) => ParameterizedType) { }
+  constructor(public typeName: string, public createType: (globalCompiler: GlobalCompilerState, argTypes: Type[]) => Task<ParameterizedType, CompilerError>) { }
   get shortName() { return this.typeName }
   [Inspect.custom](depth: any, options: any, inspect: any) {
     return options.stylize(`[ExternalTypeConstructor ${this.typeName}]`, 'special');
@@ -594,6 +598,7 @@ export const ScopeParentSymbol = Symbol('ScopeParentSymbol')
 export type Scope = UnknownObject & {
   _scope: true,
   [ScopeEventsSymbol]: {[key:string]:Event<unknown, CompilerError>}
+  [ScopeParentSymbol]: Scope | undefined
 }
 const ScopePrototype = Object.assign(Object.create(null), {
   [Inspect.custom](depth: any, options: any, inspect: any) {
@@ -672,22 +677,71 @@ export const StringType = (() => {
   return type;
 })()
 
-export const ListTypeConstructor: ExternalTypeConstructor = new ExternalTypeConstructor("List", (argTypes) => {
+export const ListTypeConstructor: ExternalTypeConstructor = new ExternalTypeConstructor("List", (compiler, argTypes) => {
   compilerAssert(argTypes.length === 1, "Expected one type arg", { argTypes })
   const type = new ParameterizedType(ListTypeConstructor, argTypes, { sizeof: 0, fields: [], metaobject: Object.create(null), isReferenceType: false });
   type.typeInfo.fields.push(new TypeField(SourceLocation.anon, "length", type, 0, IntType))
   type.typeInfo.fields.push(new TypeField(SourceLocation.anon, "capacity", type, 1, IntType))
   type.typeInfo.fields.push(new TypeField(SourceLocation.anon, "data", type, 2, RawPointerType))
-  return type;
+  return Task.of(type);
 })
-export const TupleTypeConstructor: ExternalTypeConstructor = new ExternalTypeConstructor("Tuple", (argTypes) => {
+
+
+export const NoneTypeConstructor: ExternalTypeConstructor = new ExternalTypeConstructor("None", (compiler, argTypes) => {
+  compilerAssert(argTypes.length === 1, "Expected one type arg", { argTypes })
+  const sizeof = argTypes[0].typeInfo.sizeof + IntType.typeInfo.sizeof
+  const type = new ParameterizedType(NoneTypeConstructor, argTypes, { sizeof, fields: [], metaobject: Object.create(null), isReferenceType: false });
+  type.typeInfo.metaobject.isEnumVariant = true
+  type.typeInfo.metaobject.enumConstructorVariantOf = OptionTypeConstructor
+  type.typeInfo.metaobject.enumVariantIndex = 0
+  type.typeInfo.fields.push(new TypeField(SourceLocation.anon, "tag", type, 0, IntType))
+  return Task.of(type)
+})
+
+export const SomeTypeConstructor: ExternalTypeConstructor = new ExternalTypeConstructor("Some", (compiler, argTypes) => {
+  compilerAssert(argTypes.length === 1, "Expected one type arg", { argTypes })
+  const sizeof = argTypes[0].typeInfo.sizeof + IntType.typeInfo.sizeof
+  const type = new ParameterizedType(SomeTypeConstructor, argTypes, { sizeof, fields: [], metaobject: Object.create(null), isReferenceType: false });
+  type.typeInfo.metaobject.isEnumVariant = true
+  type.typeInfo.metaobject.enumConstructorVariantOf = OptionTypeConstructor
+  type.typeInfo.metaobject.enumVariantIndex = 1
+  type.typeInfo.fields.push(new TypeField(SourceLocation.anon, "tag", type, 0, IntType))
+  type.typeInfo.fields.push(new TypeField(SourceLocation.anon, "value", type, 1, argTypes[0]))
+  return Task.of(type)
+})
+
+export const OptionTypeConstructor: ExternalTypeConstructor = new ExternalTypeConstructor("Option", (compiler, argTypes) => {
+  compilerAssert(argTypes.length === 1, "Expected one type arg", { argTypes })
+
+  const sizeof = argTypes[0].typeInfo.sizeof + IntType.typeInfo.sizeof
+  const opttype = new ParameterizedType(OptionTypeConstructor, argTypes, { sizeof, fields: [], metaobject: Object.create(null), isReferenceType: false });
+
+  opttype.typeInfo.metaobject.isEnum = true
+  opttype.typeInfo.fields.push(new TypeField(SourceLocation.anon, "tag", opttype, 0, IntType))
+
+  return (
+    createParameterizedExternalType(compiler, SomeTypeConstructor, argTypes)
+    .chainFn((task, someType) => {
+      return (
+        createParameterizedExternalType(compiler, NoneTypeConstructor, argTypes)
+        .chainFn((task, noneType) => {
+          opttype.typeInfo.metaobject.variants = [someType, noneType]
+          opttype.typeInfo.metaobject.Some = someType
+          opttype.typeInfo.metaobject.None = noneType
+          return Task.of(opttype)
+        })
+      )
+    })
+  )
+})
+export const TupleTypeConstructor: ExternalTypeConstructor = new ExternalTypeConstructor("Tuple", (compiler, argTypes) => {
   const type = new ParameterizedType(TupleTypeConstructor, argTypes, { sizeof: 0, fields: [], metaobject: Object.create(null), isReferenceType: false });
   // TODO: Add getter for length
   // type.typeInfo.fields.push(new TypeField(SourceLocation.anon, "length", type, 0, IntType))
   argTypes.forEach((argType, i) => {
     type.typeInfo.fields.push(new TypeField(SourceLocation.anon, `_${i+1}`, type, i, argType))
   })
-  return type;
+  return Task.of(type)
 })
 
 export const isTypeInteger = (type: Type) => type === IntType || type === u64Type || type === u8Type
@@ -730,7 +784,7 @@ class TypeTable {
 }
 
 // Don't use directly, use type table to see if types are equal
-const typesEqual = (t1: unknown, t2: any): boolean => {
+export const typesEqual = (t1: unknown, t2: any): boolean => {
   if (Object.getPrototypeOf(t1) !== Object.getPrototypeOf(t2)) return false;
   if (t1 instanceof ExternalTypeConstructor) return t1 === t2;
   if (!isType(t1)) {

@@ -467,7 +467,7 @@ export function createCallAstFromValue(ctx: CompilerFunctionCallContext, value: 
     )
   }
 
-  compilerAssert(false, "Not supported value $value", { value })
+  compilerAssert(false, "Not supported value $value", { value, typeArgs, args })
 
 }
 

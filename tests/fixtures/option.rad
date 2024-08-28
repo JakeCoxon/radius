@@ -1,0 +1,25 @@
+import compiler for Option, Some, None, some, none
+
+fn is_some!(T)(x: Option!T) -> bool @inline:
+  if x is Some:
+    return true
+  return false
+
+fn main():
+  x := none!int()
+  y := some!int(10)
+
+  if x is Some:
+    print(x.value + 123)
+  else:
+    print("None")
+
+  print(x)
+  print(y)
+
+  if x.is_some:
+    print(x)
+  else:
+    print("None", x)
+
+  # print(x)

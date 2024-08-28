@@ -29,6 +29,23 @@ test('superbasic', async () => {
   }
 })
 
+test('option', async () => {
+  const testObject = createTest({ 
+    moduleName: 'option',
+    globalOptions,
+    inputPath: `${import.meta.dir}/fixtures/option.rad`,
+  })
+  try {
+    const input = await Bun.file(testObject.inputPath).text()
+    runCompilerTest(input, { testObject })
+    await writeSyntaxFile(testObject)
+    await writeLlvmBytecodeFile(testObject)
+    await executeNativeExecutable(testObject)
+  } finally {
+    testObject.close()
+  }
+})
+
 test('basic', async () => {
   const testObject = createTest({ 
     moduleName: 'basic',
