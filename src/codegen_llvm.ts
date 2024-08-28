@@ -584,18 +584,6 @@ const astWriter: LlvmAstWriterTable = {
     const fields = ast.type.typeInfo.fields.map(x => new DefaultConsAst(x.fieldType, ast.location))
     return writeExpr(writer, new ConstructorAst(ast.type, ast.location, fields))
   },
-  enumvalue: (writer, ast) => {
-    const tag = new NumberAst(IntType, ast.location, ast.variantType.typeInfo.metaobject.enumVariantIndex as number)
-    const args = [tag, ...ast.args]
-
-    const fromPointer = allocaHelper(writer, createPointer("", ast.type))
-    const pointer = createPointer("", ast.type)
-    const constructor = new ConstructorAst(ast.variantType, ast.location, args)
-    // format(writer, "  $ = $\n", pointer, constructor)
-    format(writer, "  store $ $, $ $\n", ast.variantType, constructor, 'ptr', fromPointer)
-    format(writer, "  $ = bitcast $* $ to $*\n", pointer, ast.variantType, fromPointer, ast.type)
-    return { pointer }
-  },
   variantcast: (writer, ast) => {
     const fromPointer = allocaHelper(writer, createPointer("", ast.type))
     const pointer = createPointer("", ast.type)
@@ -674,7 +662,7 @@ const format = (writer: Writable, format: string, ...args: (string | number | Ty
       const reg = toRegister(funcWriter, writeExpr(funcWriter, v))
       return generateName(writer.writer, reg)
     }
-    compilerAssert(false, "Not supported in format", { v, str: String(v) })
+    compilerAssert(false, "Not supported in format", { format, v, str: String(v) })
   })
   writer.currentOutput.push(s)
 }

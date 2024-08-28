@@ -228,16 +228,8 @@ const astWriter: SyntaxAstWriterTable = {
     // return { register: ast.binding as Register }
 
   },
-  enumvalue: (writer, ast) => {
-    format(writer, `$(`, ast.type);
-    [ast.variantIndex, ...ast.args].forEach((arg, i) => {
-      format(writer, "$", arg)
-      if (i < ast.args.length + 1 - 1) format(writer, ", ")
-    })
-    format(writer, `)`)
-  },
   variantcast: (writer, ast) => {
-    format(writer, `@variantcast($, $)`, ast.expr, ast.variantIndex)
+    format(writer, `@variantcast($, $)`, ast.expr, ast.type)
   },
   void: (writer, ast) => {
     format(writer, `# nothing`)

@@ -1,4 +1,4 @@
-import compiler for Option, Some, None, some, none
+import compiler for Option, Some, None
 
 fn is_some!(T)(x: Option!T) -> bool @inline:
   if x is Some:
@@ -6,8 +6,10 @@ fn is_some!(T)(x: Option!T) -> bool @inline:
   return false
 
 fn main():
-  x := none!int()
-  y := some!int(10)
+  x := None!int()
+  y := Some!int(10)
+
+  x = Some!int(32)
 
   if x is Some:
     print(x.value + 123)

@@ -1,6 +1,6 @@
-import { BytecodeDefault, BytecodeSecondOrder, compileClassTask, compileFunctionPrototype, createBytecodeVmAndExecuteTask, normalizeNumberType, numberTypeToConcrete, propagateLiteralType, propagatedLiteralAst, pushBytecode, pushGeneratedBytecode, visitParseNode, visitParseNodeAndError } from "./compiler";
-import { externalBuiltinBindings } from "./compiler_sugar";
-import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, CallAst, IntType, Closure, UserCallAst, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition, ParseCall, TypeVariable, TypeMatcher, typeMatcherEquals, SourceLocation, ExternalTypeConstructor, ScopeParentSymbol, SubCompilerState, CompilerFunction, IntLiteralType, FloatLiteralType, FloatType, RawPointerType, AddressAst, BindingAst, UnknownObject, NeverType, CompilerFunctionCallContext, CompileTimeObjectType, CompTimeObjAst, ParseString, NamedArgAst, TypeCheckResult, u8Type, TypeCheckVar, ParseFreshIden, NumberAst, BoolAst, createStatements, ExternalFunction, BlockAst, LabelBlock } from "./defs";
+import { BytecodeDefault, BytecodeSecondOrder, callFunctionFromValueTask, compileClassTask, compileFunctionPrototype, createBytecodeVmAndExecuteTask, normalizeNumberType, numberTypeToConcrete, propagateLiteralType, propagatedLiteralAst, pushBytecode, pushGeneratedBytecode, visitParseNode, visitParseNodeAndError } from "./compiler";
+import { createEnumVariantAst, externalBuiltinBindings, getEnumOf } from "./compiler_sugar";
+import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, CallAst, IntType, Closure, UserCallAst, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition, ParseCall, TypeVariable, TypeMatcher, typeMatcherEquals, SourceLocation, ExternalTypeConstructor, ScopeParentSymbol, SubCompilerState, CompilerFunction, IntLiteralType, FloatLiteralType, FloatType, RawPointerType, AddressAst, BindingAst, UnknownObject, NeverType, CompilerFunctionCallContext, CompileTimeObjectType, CompTimeObjAst, ParseString, NamedArgAst, TypeCheckResult, u8Type, TypeCheckVar, ParseFreshIden, NumberAst, BoolAst, createStatements, ExternalFunction, BlockAst, LabelBlock, ConstructorAst, VariantCastAst } from "./defs";
 import { Task, TaskDef, Unit } from "./tasks";
 
 
@@ -463,6 +463,33 @@ export function createCallAstFromValue(ctx: CompilerFunctionCallContext, value: 
           return ast
         })
         return Task.of(new UserCallAst(returnType, location, binding, mappedArgs))
+      })
+    )
+  }
+
+  if (value instanceof ExternalTypeConstructor) {
+    return (
+
+      TaskDef(callFunctionFromValueTask, ctx.compilerState.vm, value, typeArgs, [])
+      .chainFn((task, value) => {
+        const type = ctx.compilerState.vm.stack.pop()
+        compilerAssert(isType(type), "Expected type got $type", { type })
+        if (type.typeInfo.metaobject.isEnumVariant) {
+          return (
+            getEnumOf(ctx.compilerState.globalCompiler, type)
+            .chainFn((task, enumVariantOf) => {
+              const variantIndex = type.typeInfo.metaobject.enumVariantIndex
+              compilerAssert(typeof variantIndex === 'number', "Expected number", { type, meta: type.typeInfo.metaobject })
+              const num = new NumberAst(IntType, location, variantIndex)
+              args.forEach(x => propagatedLiteralAst(x))
+              // TODO: Properly check arg types
+              const cons = new ConstructorAst(type, location, [num, ...args])
+              const cast = new VariantCastAst(enumVariantOf, location, type, cons)
+              return Task.of(cast)
+            })
+          )
+        }
+        compilerAssert(false, "Not implemented", { type })
       })
     )
   }
