@@ -6,6 +6,11 @@ fn is_some!(T)(x: Option!T) -> bool @inline:
   return false
 
 fn main():
+  a : Option!int
+
+  a = 78
+  b : Option!int = 124
+
   x := None!int()
   y := Some!int(10)
 
@@ -23,6 +28,11 @@ fn main():
   w := y.orelse 100
   print(z + w)
 
+  # asd := { x? + y? }.orelse 3
+
+  # x := {
+  #   x? + y?
+  # } if true else 0
 
   if x.is_some:
     print(x)

@@ -562,6 +562,11 @@ export const orElseSugar = (out: BytecodeWriter, node: ParseOrElse) => {
   pushBytecode(out, node.token, { type: 'popqs' })
 }
 
+export const optionCastSugar = (vm: Vm, ast: Ast, type: Type): Task<Ast, CompilerError> => {
+  const ctx: CompilerFunctionCallContext = { location: vm.location, compilerState: vm.context.subCompilerState, resultAst: undefined, typeCheckResult: undefined }
+  return createCallAstFromValue(ctx, SomeTypeConstructor, [ast.type], [ast])
+}
+
 export const metaLetIn = (token: Token, node: ParseNode, f: (iden: ParseFreshIden) => ParseNode[]) => {
   const iden = new ParseFreshIden(token, new FreshBindingToken('let_in'))
   const let_ = new ParseLetConst(token, iden, node)
