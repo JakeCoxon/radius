@@ -1,4 +1,4 @@
-import { ParseAnd, ParseNode, ParseBreak, ParseCall, ParseCast, ParseCompTime, ParseContinue, ParseDict, ParseExpand, ParseField, ParseFor, ParseForExpr, ParseIf, ParseLet, ParseLetConst, ParseList, ParseListComp, ParseMeta, ParseNot, ParseNumber, ParseOpEq, ParseOperator, ParseOr, ParseReturn, ParseSet, ParseStatements, ParseString, ParseIdentifier, ParseWhile, ParseWhileExpr, ParserFunctionDecl, Token, compilerAssert, ParsePostCall, ParseSymbol, ParseNote, ParseSlice, ParseSubscript, ParserClassDecl, ParseClass, ParseFunction, createToken, ParseBoolean, ParseElse, ParseMetaIf, ParseMetaFor, ParseBlock, ParseImport, ParsedModule, Source, ParseMetaWhile, ParseTuple, ParseImportName, ParseFold, ParserFunctionParameter, ParseNamedArg } from "./defs";
+import { ParseAnd, ParseNode, ParseBreak, ParseCall, ParseCast, ParseCompTime, ParseContinue, ParseDict, ParseExpand, ParseField, ParseFor, ParseForExpr, ParseIf, ParseLet, ParseLetConst, ParseList, ParseListComp, ParseMeta, ParseNot, ParseNumber, ParseOpEq, ParseOperator, ParseOr, ParseReturn, ParseSet, ParseStatements, ParseString, ParseIdentifier, ParseWhile, ParseWhileExpr, ParserFunctionDecl, Token, compilerAssert, ParsePostCall, ParseSymbol, ParseNote, ParseSlice, ParseSubscript, ParserClassDecl, ParseClass, ParseFunction, createToken, ParseBoolean, ParseElse, ParseMetaIf, ParseMetaFor, ParseBlock, ParseImport, ParsedModule, Source, ParseMetaWhile, ParseTuple, ParseImportName, ParseFold, ParserFunctionParameter, ParseNamedArg, ParseIterator } from "./defs";
 
 const regexes = {
   KEYWORD:
@@ -10,7 +10,7 @@ const regexes = {
   COMMENT: /^#[^\n]+/,
   OPENPAREN: /^(?:[\[\{\(]|%{)/,
   CLOSEPAREN: /^[\]\}\)]/,
-  PUNCTUATION: /^(?:==|!=|:=|<=|>=|\+=|\-=|\*=|\/=|::|->|\|\>|\.\.\.|@@|[@!:,=<>\-+\.*\/'\|])/,
+  PUNCTUATION: /^(?:==|!=|:=|<=|>=|\+=|\-=|\*=|\/=|::|->|\|\>|\.\.\.|@@|@\[|[@!:,=<>\-+\.*\/'\|])/,
   NEWLINE: /^\n/,
   WHITESPACE: /^[ ]+/ // Not newline
 }
@@ -227,6 +227,13 @@ export const makeParser = (input: string, debugName: string) => {
     expect("}", "Expected '}' after dict value");
     return new ParseDict(dictToken, pairs);
   };
+  const parseIterator = (iteratorToken: Token): ParseNode => {
+    if (match("]")) return new ParseIterator(iteratorToken, [])
+    const list = [parseExpr()];
+    while (match(",")) list.push(parseExpr());
+    expect("]", "Expected ']' after iterator value");
+    return new ParseIterator(iteratorToken, list);
+  }
 
   const parseFold = (foldToken: Token) => {
     expect("(", "Expected '(' after fold")
@@ -242,6 +249,7 @@ export const makeParser = (input: string, debugName: string) => {
     else if (match("'"))     return new ParseSymbol(parseIdentifier().token);
     else if (match("@"))     return new ParseNote(previous, parseCall());
     else if (match("%{"))    return parseDict(previous)
+    else if (match("@["))    return parseIterator(previous)
     else if (match("{"))     return match("|") ? parseLambda() : throwExpectError("Not implemented")
     else if (match("block")) return new ParseBlock(previous, null, token?.value != ':' ? parseIdentifier() : null, parseColonBlockExpr('block'))
     else if (match("ifx"))   return parseIf(previous, true, "if condition")

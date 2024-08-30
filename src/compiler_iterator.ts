@@ -1,7 +1,7 @@
 import { BytecodeSecondOrder, compileFunctionPrototype, getCommonType, getOperatorTable, loadModule, popStack, popValues, propagateLiteralType, propagatedLiteralAst, pushBytecode, resolveScope, unknownToAst, visitParseNode } from "./compiler"
 import { compileExportedFunctionTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, insertFunctionDefinition } from "./compiler_functions"
 import { createDefaultFromType, maxOfType, minOfType, typeOf } from "./compiler_sugar"
-import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, UserCallAst, hashValues, NeverType, IfAst, BoolType, VoidAst, LoopObject, CompileTimeObjectType, u64Type, FunctionDefinition, ParserFunctionDecl, StatementsAst, isTypeScalar, IntLiteralType, FloatLiteralType, isAst, isType, isTypeCheckError, InterleaveAst, ContinueInterAst, CompTimeObjAst, ParseEvalFunc, SetAst, DefaultConsAst, WhileAst, BoolAst, isArray, ExpansionSelector, ParseNote, ExpansionCompilerState, ParseBoolean, ParseOr, ParseBreak, filterNotNull, ParseTuple, ParseNot, ParseLetConst, ParseConcurrency, ParseCompTime, ParseNil, CompilerCallable, isCompilerCallable, ParseVoid, GlobalCompilerState } from "./defs"
+import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, UserCallAst, hashValues, NeverType, IfAst, BoolType, VoidAst, LoopObject, CompileTimeObjectType, u64Type, FunctionDefinition, ParserFunctionDecl, StatementsAst, isTypeScalar, IntLiteralType, FloatLiteralType, isAst, isType, isTypeCheckError, InterleaveAst, ContinueInterAst, CompTimeObjAst, ParseEvalFunc, SetAst, DefaultConsAst, WhileAst, BoolAst, isArray, ExpansionSelector, ParseNote, ExpansionCompilerState, ParseBoolean, ParseOr, ParseBreak, filterNotNull, ParseTuple, ParseNot, ParseLetConst, ParseConcurrency, ParseCompTime, ParseNil, CompilerCallable, isCompilerCallable, ParseVoid, GlobalCompilerState, ParseIterator } from "./defs"
 import { Event, Task, TaskDef, isTask } from "./tasks"
 
 const createExpansionState = (debugName: string, location: SourceLocation): ExpansionCompilerState => {
@@ -853,6 +853,44 @@ export const expandFuncMaxSugar = (out: BytecodeWriter, noteNode: ParseNote, arg
   visitParseNode(out, compileExpansionToParseNode(out, expansion, node))
 }
 
+
+export const expandIteratorSugar = (out: BytecodeWriter, iteratorNode: ParseIterator) => {
+  const token = iteratorNode.token
+  const nodes: ParseNode[] = []
+  for (const expr of iteratorNode.exprs) {
+    if (expr instanceof ParseExpand) {
+      const node = expr.expr
+
+      const expansion = createExpansionState('iterator', node.token.location)
+      const result = visitExpansion(out, expansion, node)
+
+      if (expansion.selectors.length === 0) {
+        nodes.push(node) // TDDO: DOes this compile node twice?
+        continue
+      }
+
+      compilerAssert(!expansion.fold, "Fold not supported in this context")
+
+      const param = new ParseFreshIden(node.token, new FreshBindingToken('yieldFn'))
+      expansion.loopBodyNode = new ParseCall(createAnonymousToken(''), param, [result], [])
+      expansion.optimiseSimple = expansion.selectors.length === 1 // TODO: Check this is correct in all cases
+      expansion.debugName = `concat${nodes.length}`
+
+      const expansionParseNode = compileExpansionToParseNode(out, expansion, node)
+
+      const func = createAnonymousParserFunctionDecl("iterate", 
+        createAnonymousToken(''), [{ name: param, type: null, storage: null }], expansionParseNode)
+
+      nodes.push(new ParseFunction(token, func))
+    } else {
+      nodes.push(expr)
+    }
+  }
+
+  visitParseNode(out, new ParseMeta(token, 
+    new ParseCall(token, new ParseValue(token, concat), nodes, [])))
+}
+
 export const expandFuncConcatSugar = (out: BytecodeWriter, noteNode: ParseNote, args: ParseNode[]) => {
   const token = noteNode.token
   const nodes: ParseNode[] = []
@@ -861,7 +899,7 @@ export const expandFuncConcatSugar = (out: BytecodeWriter, noteNode: ParseNote, 
     const result = visitExpansion(out, expansion, node)
 
     if (expansion.selectors.length === 0) {
-      nodes.push(node)
+      nodes.push(node) // TDDO: DOes this compile node twice?
       continue
     }
 
@@ -882,6 +920,7 @@ export const expandFuncConcatSugar = (out: BytecodeWriter, noteNode: ParseNote, 
 
   visitParseNode(out, new ParseCall(token, new ParseValue(token, concat), nodes, []))
 }
+
 
 export const concat = new ExternalFunction("concat", VoidType, (ctx, values_) => {
 
