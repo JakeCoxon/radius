@@ -45,4 +45,22 @@ fn main():
 
   named_func(bar=1, foo=2)
 
+  asdffs := { 2 + 3 + 4 } + 1
+  asdffs2 := { 
+    ff := 2 + 3 + 4
+    ff + 32
+  } + 1
+
+  gf := { 123? + 123? }.orelse 30
+
+  x := [ a? + b? ...]
+
+  x := @[
+      a[:]? + b[:]? ...
+  ]
+  x := @[{
+    foo := a? + b?
+    foo + 32
+  }.orelse 0 ...]
+
   # hello

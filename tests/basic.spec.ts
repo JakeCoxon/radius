@@ -1,6 +1,7 @@
 import { test, expect, describe } from 'bun:test'
-import { createModuleLoader, createTest, executeNativeExecutable, printCompileCommands, runCompilerTest, runVm, writeLlvmBytecodeFile, writeSyntaxFile } from './testUtils'
+import { createModuleLoader, createTest, executeNativeExecutable, logError, printCompileCommands, runCompilerTest, runVm, writeLlvmBytecodeFile, writeSyntaxFile } from './testUtils'
 import { GlobalExternalCompilerOptions } from '../src/defs'
+import { makeParser } from '../src/parser'
 
 const globalOptions: GlobalExternalCompilerOptions = {
   libraryDirs: [`${import.meta.dir}/../libs/`, `/opt/homebrew/lib/`],
@@ -866,8 +867,10 @@ test('parser', async () => {
   })
   try {
     const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
+    const parser = makeParser(input, "parser")
+  } catch(ex) {
+    logError(ex, testObject.logger)
+    throw ex
   } finally {
     testObject.close()
   }

@@ -193,7 +193,7 @@ export const runCompilerTest = (
   return { prints, globalCompiler }
 }
 
-const logError = (ex: Error, logger: Logger) => {
+export const logError = (ex: Error, logger: Logger) => {
   if (ex instanceof Error) {
     // if (ex.stack) logger.log(ex.stack)
     logger.log(ex.toString())
