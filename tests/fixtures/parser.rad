@@ -22,21 +22,21 @@ fn named_func(foo: int, bar: int) -> int:
 
 fn main():
 
-  new_vec := MyVec(30, 40)
-  new_person := Person("Another Person", 100)
+  let new_vec = MyVec(30, 40)
+  let new_person = Person("Another Person", 100)
 
-  asdf := thing()
+  let asdf = thing()
 
-  tup := (23, float(67), new_person, new_vec)
+  let tup = (23, float(67), new_person, new_vec)
 
   foo(tup)
 
-  list := [MyVec(30, 40), MyVec(1, 2), MyVec(3, 6)]
+  let list = [MyVec(30, 40), MyVec(1, 2), MyVec(3, 6)]
 
-  x := list[0].x + list[1].y
+  let x = list[0].x + list[1].y
   print(x)
 
-  list2 := [
+  let list2 = [
     Person("Person1", 101), 
     Person("Person2", 102), 
     Person("Person3", 103)]
@@ -45,21 +45,28 @@ fn main():
 
   named_func(bar=1, foo=2)
 
-  asdffs := { 2 + 3 + 4 } + 1
-  asdffs2 := { 
-    ff := 2 + 3 + 4
+  let asdffs = { 2 + 3 + 4 } + 1
+  let asdffs2 = { 
+    let ff = 2 + 3 + 4
     ff + 32
   } + 1
 
-  gf := { 123? + 123? }.orelse 30
+  let gf = { 123? + 123? }.orelse 30
 
-  x := [ a? + b? ...]
+  let x = 32
+  let y: int = 123
+  const asd = 23 + 3135
 
-  x := @[
+  let (x, Some(a, b), y) = (1, (2, 3), 4)
+    # orelse return 30
+
+  let x = [ a? + b? ...]
+
+  let x = @[
       a[:]? + b[:]? ...
   ]
-  x := @[{
-    foo := a? + b?
+  let x = @[{
+    let foo = a? + b?
     foo + 32
   }.orelse 0 ...]
 
