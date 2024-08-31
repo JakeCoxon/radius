@@ -58,7 +58,14 @@ fn main():
   const asd = 23 + 3135
 
   let (x, Some(a, b), y) = (1, (2, 3), 4)
-    # orelse return 30
+  orelse return 30
+
+  let thing = 23.match {
+    Some(a):
+      print(a)
+      123
+    None: 232
+  }.foo.bar
 
   let x = [ a? + b? ...]
 

@@ -1,8 +1,8 @@
-import { ParseAnd, ParseNode, ParseBreak, ParseCall, ParseCast, ParseCompTime, ParseContinue, ParseDict, ParseExpand, ParseField, ParseFor, ParseForExpr, ParseIf, ParseLet, ParseLetConst, ParseList, ParseListComp, ParseMeta, ParseNot, ParseNumber, ParseOpEq, ParseOperator, ParseOr, ParseReturn, ParseSet, ParseStatements, ParseString, ParseIdentifier, ParseWhile, ParseWhileExpr, ParserFunctionDecl, Token, compilerAssert, ParsePostCall, ParseSymbol, ParseNote, ParseSlice, ParseSubscript, ParserClassDecl, ParseClass, ParseFunction, createToken, ParseBoolean, ParseElse, ParseMetaIf, ParseMetaFor, ParseBlock, ParseImport, ParsedModule, Source, ParseMetaWhile, ParseTuple, ParseImportName, ParseFold, ParserFunctionParameter, ParseNamedArg, ParseIs, ParseOrElse, ParseIterator, ParseQuestion, ParseCase } from "./defs";
+import { ParseAnd, ParseNode, ParseBreak, ParseCall, ParseCast, ParseCompTime, ParseContinue, ParseDict, ParseExpand, ParseField, ParseFor, ParseForExpr, ParseIf, ParseLet, ParseLetConst, ParseList, ParseListComp, ParseMeta, ParseNot, ParseNumber, ParseOpEq, ParseOperator, ParseOr, ParseReturn, ParseSet, ParseStatements, ParseString, ParseIdentifier, ParseWhile, ParseWhileExpr, ParserFunctionDecl, Token, compilerAssert, ParsePostCall, ParseSymbol, ParseNote, ParseSlice, ParseSubscript, ParserClassDecl, ParseClass, ParseFunction, createToken, ParseBoolean, ParseElse, ParseMetaIf, ParseMetaFor, ParseBlock, ParseImport, ParsedModule, Source, ParseMetaWhile, ParseTuple, ParseImportName, ParseFold, ParserFunctionParameter, ParseNamedArg, ParseIs, ParseOrElse, ParseIterator, ParseQuestion, ParseCase, ParseMatch } from "./defs";
 
 const regexes = {
   KEYWORD:
-    /^(?:and|as\!|as|break|class|continue|comptime|const|def|defn|elif|else|fn|for|if|ifx|in|lambda|let|meta|null|or|orelse|pass|return|try|while|with|type|interface|import|block|fold|ref)(?=\W)/, // note (?=\W)
+    /^(?:and|as\!|as|break|class|continue|comptime|const|def|defn|elif|else|fn|for|if|ifx|in|is|lambda|let|match|meta|null|or|orelse|pass|return|try|while|with|type|interface|import|block|fold|ref)(?=\W)/, // note (?=\W)
   IDENTIFIER: /^[a-zA-Z_][a-zA-Z_0-9]*/,
   STRING: /^(?:"(?:[^"\\]|\\.)*")/,
   SPECIALNUMBER: /^0o[0-7]+|^0x[0-9a-fA-F_]+|^0b[01_]+/,
@@ -65,7 +65,7 @@ const makeAdvancedLexer = (source: Source) => {
   let tokens: Token[] = [];
   let previous: Token
 
-  let lineStart = true
+  let lineSeparate = false
   const indents = [0]
   const parenStack = [] as string[]
 
@@ -81,26 +81,29 @@ const makeAdvancedLexer = (source: Source) => {
       if (!token) break
 
       if (token.type === "NEWLINE") {
-        if (state.significantNewlines) yield token
-        lineStart = true
+        lineSeparate = true
         continue
       }
 
-      if (state.significantNewlines && lineStart) {
+      if (state.significantNewlines && lineSeparate) {
         const numSpaces = token.location.column
 
         if (numSpaces > indents[indents.length - 1]) {
           indents.push(numSpaces);
           yield createTokenWithLocation("INDENT", '', token.location.line, token.location.column)
+          lineSeparate = false
         }
         while (numSpaces < indents[indents.length - 1]) {
           indents.pop();
+          yield createTokenWithLocation("ENDSTMT", "", previous.location.line, previous.location.column)
           yield createTokenWithLocation("DEDENT", '', token.location.line, token.location.column)
-          yield createTokenWithLocation("NEWLINE", '', token.location.line, token.location.column)
         }
       }
 
-      lineStart = false
+      if (state.significantNewlines && lineSeparate) {
+        yield createTokenWithLocation("ENDSTMT", "", previous.location.line, previous.location.column)
+      }
+      lineSeparate = false
 
       if (token.value === "|") {
         if (parenStack.at(-1) === "|") parenStack.pop()
@@ -118,15 +121,16 @@ const makeAdvancedLexer = (source: Source) => {
     }
 
     while (indents.length > 1) {
-      yield createTokenWithLocation("NEWLINE", "", previous.location.line, previous.location.column)
+      yield createTokenWithLocation("ENDSTMT", "", previous.location.line, previous.location.column)
       yield createTokenWithLocation("DEDENT", "", previous.location.line, previous.location.column)
       indents.pop()
     }
-    yield createTokenWithLocation("NEWLINE", "", previous.location.line, previous.location.column)
+    yield createTokenWithLocation("ENDSTMT", "", previous.location.line, previous.location.column)
   }
   const gen = advancedGenerator()
   const getToken = () => {
     const token = gen.next().value
+    // console.log(token)
     previous = token!
     return token
   }
@@ -150,7 +154,6 @@ export const makeParser = (input: string, debugName: string) => {
     prevSignificantNewlines = lexer.state.significantNewlines;
     previous = token!;
     token = lexer.getToken();
-    if (previous?.type === "NEWLINE") while (token?.type === "NEWLINE") token = lexer.getToken();
   };
 
   const throwExpectError = (error: string, info: any = {}) => {
@@ -243,6 +246,11 @@ export const makeParser = (input: string, debugName: string) => {
     return new ParseFold(foldToken, expr)
   }
 
+  const parseReturnExpr = (returnToken: Token) => {
+    const expr = token?.type === 'ENDSTMT' ? null : parseExpr()
+    return new ParseReturn(returnToken, expr)
+  }
+
   const parseLiteral = (): ParseNode => {
     if (match("("))          return parseParens(previous);
     else if (match("["))     return parseList();
@@ -254,7 +262,7 @@ export const makeParser = (input: string, debugName: string) => {
     else if (match("{"))     return match("|") ? parseLambda() : parseBraceBlockExpr("{")
     else if (match("block")) return new ParseBlock(previous, null, token?.value != ':' ? parseIdentifier() : null, parseColonBlockExpr('block'))
     else if (match("ifx"))   return parseIf(previous, true, "if condition")
-    else if (match("return")) return new ParseReturn(previous, null)
+    else if (match("return")) return parseReturnExpr(previous);
     else if (match("break")) return parseBreak(previous)
     else if (match("continue")) return parseContinue(previous)
     else if (matchType("STRING")) return new ParseString(previous, previous.value.slice(1, -1))
@@ -298,6 +306,25 @@ export const makeParser = (input: string, debugName: string) => {
     return new ParseCall(callToken, left, args, typeArgs)
   };
 
+  const parseMatch = (matchToken: Token, expr: ParseNode): ParseNode => {
+    expect("{", "Expected '{' after match expression");
+    expect(matchType("INDENT"), "Expected indent after match");
+    const parseMatchBlock = () => {
+      const token = expect(":", "Expected ':'");
+      if (matchType("INDENT")) return trailingStatement(parseMultilineBlock(token));
+      else return trailingStatement(parseExpr());
+    }
+    const parseCase = () => {
+      return [parseLeftSideMatch(), parseMatchBlock()] as [ParseIdentifier | ParseTuple | ParseCase, ParseNode]
+    }
+    const cases = [parseCase()];
+    while (token?.type !== 'DEDENT') cases.push(parseCase());
+    expect(matchType("DEDENT"), "Expected dedent after match cases");
+    expect(matchType("ENDSTMT"), "Expected end of statement after match cases"); // Hmm ?
+    expect("}", "Expected '}' after match cases");
+    return new ParseMatch(matchToken, expr, cases);
+  }
+
   const parseFieldAccess = (left: ParseNode) => new ParseField(previous, left, parseIdentifier())
   const parsePostCall = (left: ParseNode) => new ParsePostCall(previous, left, parseLambda())
 
@@ -310,6 +337,7 @@ export const makeParser = (input: string, debugName: string) => {
       else if (match(".")) {
         if (match("[")) left = parseSlice(true, left);
         else if (match("orelse")) left = new ParseOrElse(previous, left, parseExpr());
+        else if (match("match"))  left = parseMatch(previous, left);
         else left = parseFieldAccess(left)
       }
       else if (match("!"))   left = parseFunctionTypeArguments(previous, left);
@@ -366,23 +394,21 @@ export const makeParser = (input: string, debugName: string) => {
   };
   const parseBraceBlockExpr = (afterMessage: string): ParseBlock => {
     const token = previous;
-    if (!matchType("NEWLINE")) return new ParseBlock(token, null, null, new ParseStatements(token, [trailingEndBrace(parseExpr())]))
-    return new ParseBlock(token, null, null, trailingEndBrace(trailingNewline(parseMultilineBlock(token))))
+    if (!matchType("INDENT")) return new ParseBlock(token, null, null, new ParseStatements(token, [trailingEndBrace(parseExpr())]))
+    return new ParseBlock(token, null, null, trailingEndBrace(trailingStatement(parseMultilineBlock(token))))
   }
   const parseColonBlockExpr = (afterMessage: string): ParseStatements => {
-    expect(":", `Expected ':' after ${afterMessage}`);
-    const token = previous;
-    if (!matchType("NEWLINE")) return new ParseStatements(token, [parseExpr()]);
+    const token = expect(":", `Expected ':' after ${afterMessage}`);
+    previous;
+    if (!matchType("INDENT")) return new ParseStatements(token, [parseExpr()]);
     return parseMultilineBlock(token)
   };
   const parseColonBlock = (afterMessage: string): ParseStatements => {
-    expect(":", `Expected ':' after ${afterMessage}`);
-    const token = previous;
-    if (!matchType("NEWLINE")) return new ParseStatements(token, [parseExpr()]);
-    return trailingNewline(parseMultilineBlock(token));
+    const token = expect(":", `Expected ':' after ${afterMessage}`);
+    if (!matchType("INDENT")) return new ParseStatements(token, [parseExpr()]);
+    return trailingStatement(parseMultilineBlock(token));
   };
   const parseMultilineBlock = (token: Token) => {
-    expect(matchType("INDENT"), "Expected indent");
     const lines = parseLines();
     expect(matchType("DEDENT"), "Expected dedent");
     return new ParseStatements(token, lines);
@@ -407,11 +433,11 @@ export const makeParser = (input: string, debugName: string) => {
     const parseFunctionParamListParen = () => (expect("(", `Expected '(' after function name`), parseFunctionParamList(")"))
 
     const parseBody = () => {
-      if (matchType("NEWLINE")) return null;
+      if (matchType("ENDSTMT")) return null;
       expect(":", "Expected ':'");
       const token = previous;
-      if (matchType("NEWLINE")) return trailingNewline(parseMultilineBlock(token));
-      else return trailingNewline(parseExpr());
+      if (matchType("INDENT")) return trailingStatement(parseMultilineBlock(token));
+      else return trailingStatement(parseExpr());
     }
 
     return createNamedFunc(state, previous, parseOptionalMetaName(), 
@@ -486,23 +512,25 @@ export const makeParser = (input: string, debugName: string) => {
     else if (match("while")) expr = new ParseWhileExpr(previous, parseExpr(), expr);
     else if (match("for"))   expr = new ParseForExpr(previous, parseLeftSideMatch(), expectInExpr(), expr);
     else if (match("if"))    expr = new ParseIf(previous, false, parseExpr(), expr, null);
-    return trailingNewline(expr);
+    return trailingStatement(expr);
   };
 
   const parseLetStatement = () => {
     const left = parseLeftSideMatch();
     const type = match(":") ? parseExpr() : null;
     const value = match("=") ? parseAssignExpr() : null;
-    return trailingNewline(new ParseLet(previous, left, type, value))
+    const let_ = trailingStatement(new ParseLet(previous, left, type, value))
+    if (!match("orelse")) return let_
+    return new ParseOrElse(previous, let_, parseExpressionStatement())
   }
   const parseLetConstStatement = () => {
     const left = parseLeftSideMatch();
     expect("=", "Expected '=' after const identifier");
     const value = parseAssignExpr()
-    return trailingNewline(new ParseLetConst(previous, left as any, value))
+    return trailingStatement(new ParseLetConst(previous, left as any, value))
   }
   
-  const trailingNewline = <T>(x: T) => (expect(matchType("NEWLINE"), "Expected newline"), x);
+  const trailingStatement = <T>(x: T) => (expect(matchType("ENDSTMT"), "Expected end of statement"), x);
   const trailingEndBrace = <T>(x: T) => (expect(match("}"), "Expected '}'"), x);
   const trailingEndParen = <T>(x: T) => (expect(")", "Expected ')'"), x);
 
@@ -539,7 +567,7 @@ export const makeParser = (input: string, debugName: string) => {
     if (match("while")) return new ParseMetaWhile(metaToken, parseWhile());
     return new ParseMeta(previous, parseStatement());
   }
-  const parseOptionalExpr = () => matchType("NEWLINE") ? null : trailingNewline(parseExpr())
+  const parseOptionalExpr = () => matchType("NEWLINE") ? null : trailingStatement(parseExpr())
 
   const parseImport = (importToken: Token) => {
     const module = parseIdentifier()
@@ -554,22 +582,22 @@ export const makeParser = (input: string, debugName: string) => {
       idents.push(parseImportName())
       while (match(",")) idents.push(parseImportName())
     }
-    return trailingNewline(new ParseImport(importToken, module, rename, idents))
+    return trailingStatement(new ParseImport(importToken, module, rename, idents))
   }
   const parseBreak = (breakToken: Token) => {
     if (matchType("NEWLINE")) return new ParseBreak(breakToken, null, null)
     const iden = parseIdentifier()
-    if (!match("with")) return trailingNewline(new ParseBreak(breakToken, iden, null))
-    return trailingNewline(new ParseBreak(breakToken, iden, parseExpr()))
+    if (!match("with")) return trailingStatement(new ParseBreak(breakToken, iden, null))
+    return trailingStatement(new ParseBreak(breakToken, iden, parseExpr()))
   }
   const parseContinue = (continueToken: Token) => {
     if (matchType("NEWLINE")) return new ParseContinue(continueToken, null)
     const iden = parseIdentifier()
-    return trailingNewline(new ParseContinue(continueToken, iden))
+    return trailingStatement(new ParseContinue(continueToken, iden))
   }
   const parseAnnotation = () => {
     const annotation = parseExpr()
-    expect("\n", "Expected newline after annotation")
+    expect(matchType("ENDSTMT"), "Expected end of statement after annotation")
     const stmt = parseStatement()
     compilerAssert(stmt instanceof ParseFunction, "Not implemented for statement type")
     stmt.functionDecl.annotations.push(annotation)

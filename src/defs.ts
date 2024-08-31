@@ -60,7 +60,9 @@ export type Token = { value: string, type: string, location: SourceLocation }
 
 export const TokenRoot = {
   [Inspect.custom](depth: any, options: any, inspect: any) {
-    return options.stylize(`[Token ${this.value.replace(/\n/g, '\\n')}]`, 'string');
+    const str = this.value.replace(/\n/g, '\\n')
+    if (str == '') return options.stylize(`[Token ${this.type}]`, 'string');
+    return options.stylize(`[Token ${str}]`, 'string');
   }
 }
 export const createToken = (source: Source, value: any, type = "NONE"): Token => Object.assign(Object.create(TokenRoot), { value, type, location: new SourceLocation(0, 0, source) });
@@ -164,6 +166,7 @@ export class ParseDict extends ParseNodeType {         key = 'dict' as const;   
 export class ParsePostCall extends ParseNodeType {     key = 'postcall' as const;     constructor(public token: Token, public expr: ParseNode, public arg: ParseNode) { super();} }
 export class ParseSlice extends ParseNodeType {        key = 'slice' as const;        constructor(public token: Token, public expr: ParseNode, public start: ParseNode | null, public end: ParseNode | null, public step: ParseNode | null, public isStatic: boolean) { super();} }
 export class ParseCase extends ParseNodeType {         key = 'case' as const;         constructor(public token: Token, public name: ParseIdentifier, public exprs: ParseNode[]) { super();} }
+export class ParseMatch extends ParseNodeType {        key = 'match' as const;        constructor(public token: Token, public expr: ParseNode, public cases: [ParseIdentifier | ParseTuple | ParseCase, ParseNode][]) { super();} }
 export class ParseSubscript extends ParseNodeType {    key = 'subscript' as const;    constructor(public token: Token, public expr: ParseNode, public subscript: ParseNode, public isStatic: boolean) { super();} }
 export class ParseTuple extends ParseNodeType {        key = 'tuple' as const;        constructor(public token: Token, public exprs: ParseNode[]) { super();} }
 export class ParseBlock extends ParseNodeType {        key = 'block' as const;        constructor(public token: Token, public breakType: BreakType | null, public name: ParseIdentifier | ParseFreshIden | null, public statements: ParseStatements) { super();} }
@@ -188,7 +191,7 @@ export type ParseNode = ParseStatements | ParseLet | ParseSet | ParseOperator | 
   ParseDict | ParsePostCall | ParseSymbol | ParseNote | ParseSlice | ParseSubscript | ParseTuple | ParseClass |
   ParseNil | ParseBoolean | ParseElse | ParseMetaIf | ParseMetaFor | ParseMetaWhile | ParseBlock | ParseImport | 
   ParseCompilerIden | ParseValue | ParseConstructor | ParseQuote | ParseBytecode | ParseFreshIden | ParseFold | 
-  ParseNamedArg | ParseEvalFunc | ParseConcurrency | ParseVoid | ParseIs | ParseOrElse | ParseQuestion | ParseIterator | ParseCase
+  ParseNamedArg | ParseEvalFunc | ParseConcurrency | ParseVoid | ParseIs | ParseOrElse | ParseQuestion | ParseIterator | ParseCase | ParseMatch
 
 // Void types mean that in secondOrder compilation, the AST doesn't return an AST
 export const isParseVoid = (ast: ParseNode) => ast.key == 'letconst' || ast.key === 'function' || ast.key === 'class' || ast.key === 'comptime' || ast.key === 'metawhile';
