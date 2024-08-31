@@ -14,11 +14,11 @@ to_iterator :: |thing|
 #   {|yield_outer: iter|
 #     while true:
 #       iterator_a({|consume| 
-#         elem := consume()
+let #         elem = consume()
 #         yield_outer(elem)
 #       })
 #       iterator_b({|consume| 
-#         elem := consume()
+let #         elem = consume()
 #         yield_outer(elem)
 #       })
 #   }
@@ -26,17 +26,17 @@ to_iterator :: |thing|
 # concat2 :: |iterator_a, iterator_b|
 #   {|yield_outer: yielder|
 #     while true:
-#       elem_a := consume(iterator_a)
+let #       elem_a = consume(iterator_a)
 #       yield_outer(elem_a)
-#       elem_b := consume(iterator_b)
+let #       elem_b = consume(iterator_b)
 #       yield_outer(elem_b)
 #   }
 # a
 # concat2 :: {|iterator_a: iter, iterator_b: iter| -> |outer: yielder|
 #   while true:
-#     elem_a := iterator_a()
+let #     elem_a = iterator_a()
 #     outer(elem_a)
-#     elem_b := iterator_b()
+let #     elem_b = iterator_b()
 #     outer(elem_b)
 # }
 # a
@@ -48,7 +48,7 @@ concat2 :: |iterator_a, iterator_b|
   {|yield_outer|
     generator({|consume| 
       while true:
-        elem := consume()
+        let elem = consume()
         yield_outer(elem)
     }, {|yield|
       iterator_a(yield)
@@ -60,8 +60,8 @@ concat2 :: |iterator_a, iterator_b|
 # zip2 :: {|iterator_a: Iterator, iterator_b: Iterator|
 #   {|yield_outer|
 #     while true:
-#       elem_a := consume(iterator_a)
-#       elem_b := consume(iterator_b)
+let #       elem_a = consume(iterator_a)
+let #       elem_b = consume(iterator_b)
 #       yield_outer((elem_a, elem_b))
 #   }
 # }
@@ -71,8 +71,8 @@ zip2 :: |iterator_a, iterator_b|
     generator({|consume_b|
       generator({|consume_a| 
         while true:
-          elem_a := consume_a()
-          elem_b := consume_b()
+          let elem_a = consume_a()
+          let elem_b = consume_b()
           yield_outer((elem_a, elem_b))
       }, iterator_a)
     }, iterator_b)
@@ -82,10 +82,10 @@ zip2 :: |iterator_a, iterator_b|
 interpose :: |iterator, value|
   {|yield_outer|
     generator({|consume| 
-      elem := consume()
+      let elem = consume()
       yield_outer(elem)
       while true:
-        elem2 := consume()
+        let elem2 = consume()
         yield_outer(value)
         yield_outer(elem2)
     }, iterator)
@@ -96,9 +96,9 @@ interleave :: |iterator_a, iterator_b|
     generator({|consume_a| 
       generator({|consume_b| 
         while true:
-          elem_a := consume_a()
+          let elem_a = consume_a()
           yield_outer(elem_a)
-          elem_b := consume_b()
+          let elem_b = consume_b()
           yield_outer(elem_b)
       }, iterator_b)
     }, iterator_a)
@@ -108,16 +108,16 @@ interleave_infinite :: |iterator_a, iterator_b|
   {|yield_outer|
 
     # Track which one is complete
-    complete_a := false
-    complete_b := false
+    let complete_a = false
+    let complete_b = false
 
     generator({|consume_a| 
       generator({|consume_b| 
         while !complete_a or !complete_b:
-          elem_a := consume_a()
+          let elem_a = consume_a()
           if !complete_a:
             yield_outer(elem_a) # TODO: yield is repeated!
-          elem_b := consume_b()
+          let elem_b = consume_b()
           if !complete_b:
             yield_outer(elem_b) # TODO: yield is repeated!
       }, {|yield_c|
@@ -141,10 +141,10 @@ interleave_infinite :: |iterator_a, iterator_b|
 #   generator!({|yield_a| 
 #     generator!({|yield_b| 
 #       while true:
-#         complete_a, elem_a := yield_a()
+let #         complete_a, elem_a = yield_a()
 #         if !complete_a: yield_outer(elem_a)
 
-#         complete_b, elem_b := yield_b()
+let #         complete_b, elem_b = yield_b()
 #         if !complete_b: yield_outer(elem_b)
 
 #         if !complete_a and !complete_b: break
@@ -170,14 +170,14 @@ bamp :: |yield|
     yield(i * i * i)
 
 baz :: |yield|
-  f := 1
+  let f = 1
   while true:
     yield(f)
     f *= 2
 
 custom_consume :: |yield|
   while true:
-    val := yield()
+    let val = yield()
     print(val)
 
 
@@ -196,11 +196,11 @@ fn main():
 fn test_basic():
 
   generator({|consume| 
-    elem1 := consume()
+    let elem1 = consume()
     print(elem1)
-    elem2 := consume()
+    let elem2 = consume()
     print(elem2)
-    elem3 := consume()
+    let elem3 = consume()
     print(elem3)
   }, {|yield|
     yield(1)
@@ -212,26 +212,26 @@ fn test_concat2():
 
 
   foo1 :: |yield|
-    i := 0
+    let i = 0
     while i < 3:
       yield(i)
       i += 1
 
   bar1 :: |yield|
-    j := 0
+    let j = 0
     while j < 5:
       yield(j)
       j += 1
       
   foo_then_bar :: concat2(foo1, bar1)
-  # num := 0
+  let # num = 0
   for x in foo_then_bar:
     print(x)
     # num += x
   # assert(num == 249)
   
 fn test_normal_concat():
-  num := 0
+  let num = 0
   for i in Range(0, 10):
     num += i
   for i in Range(1, 9):
@@ -242,7 +242,7 @@ fn test_concat2_concat2():
 
 
   foo_bar_bamp :: concat2(concat2(foo, bar), bamp)
-  num := 0
+  let num = 0
   for y in foo_bar_bamp:
     num += y
   assert(num == 1545)
@@ -250,7 +250,7 @@ fn test_concat2_concat2():
 fn test_zip2():
 
   zip_foo_bar :: zip2(foo, bar)
-  num := 0
+  let num = 0
   for tup in zip_foo_bar:
     num += tup._1 * tup._2
 
@@ -265,7 +265,7 @@ fn test_zip2():
 #     1, 2, 3
 #   ]
   
-#   num := 0
+# let   num = 0
 #   for tup in zip_foo_bar:
 #     num += tup._1 * tup._2
 
@@ -274,7 +274,7 @@ fn test_zip2():
 fn test_interpose():
 
   interposed :: interpose(foo, 1000)
-  num := 0
+  let num = 0
   for x2 in interposed:
     num += x2
   assert(num == 9045)
@@ -282,25 +282,25 @@ fn test_interpose():
 fn test_interleave():
   
   interleaved :: interleave(foo, bar)
-  num := 0
+  let num = 0
   for x3 in interleaved:
     num += x3
   assert(num == 240)
   
 fn test_interleave_to_iterator():
 
-  thing := [10, 20, 30]
+  let thing = [10, 20, 30]
   interleaved2 :: interleave(to_iterator(thing), bar)
-  num := 0
+  let num = 0
   for x4 in interleaved2:
     num += x4
   assert(num == 74)
 
 # fn test_interleave_infinite():
 
-#   thing := [10, 20, 30]
+# let   thing = [10, 20, 30]
 #   interleaved3 :: interleave_infinite(to_iterator(thing), bar)
-#   num := 0
+# let   num = 0
 #   for x5 in interleaved3:
 #     num += x5
 #   assert(num == 264)

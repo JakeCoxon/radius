@@ -2,7 +2,7 @@ import compiler for assert
 
 fn main():
 
-  a, (b, c), (d, (e, f), g) := (1, (2, float(3)), (4, (5, float(6)), 7))
+  let a, (b, c), (d, (e, f), g) = (1, (2, float(3)), (4, (5, float(6)), 7))
   assert(a == 1)
   assert(b == 2)
   assert(c == 3)
@@ -11,14 +11,19 @@ fn main():
   assert(f == 6)
   assert(g == 7)
 
-  list := [(1, 2), (3, 4), (5, 6)]
+  let (t, w) = (2, 3)
+  assert(t == 2)
+  assert(w == 3)
+    
+
+  let list = [(1, 2), (3, 4), (5, 6)]
   for foo, bar in list:
     print(foo, bar)
   
   print("---")
 
   # rng := Range(0, 100)
-  rng := [1, 2, 3, 4, 5, 6, 7, 8, 9]
-  zip :: @concat((rng[:], rng[:] * 2, rng[1:]))
+  let rng = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+  const zip = @concat((rng[:], rng[:] * 2, rng[1:]))
   for a, b, c in zip:
     print(a, b, c)

@@ -1,10 +1,10 @@
 fn foo(z: int):
-  if 2:
+  if 2 > 0:
     return
   print("OK")
 
 fn bam() -> int:
-  if 2:
+  if 2 == 2:
     return 2
   return 8
 

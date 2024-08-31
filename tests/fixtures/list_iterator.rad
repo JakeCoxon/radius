@@ -1,11 +1,11 @@
 fn main():
-  lst := [1,2,3]
+  let lst = [1,2,3]
   print(lst.length)
   print(lst[0])
 
   # All three should produce the same AST
   
-  i := 0
+  let i = 0
   while i < lst.length:
     print(lst[i])
     i += 1

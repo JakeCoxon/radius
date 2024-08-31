@@ -9,8 +9,8 @@ fn mul(y) -> any:
 
 fn main():
 
-  z := 41
-  baz :: compose3(
+  let z = 41
+  const baz = compose3(
     mul(10),
     add(34),
     mul(2)

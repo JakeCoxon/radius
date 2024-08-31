@@ -7,6 +7,6 @@ fn foo!(T)(thing: T):
 
 fn main():
 
-  t : Thing!int
+  let t: Thing!int
 
   foo(t)

@@ -1,5 +1,5 @@
-foo2 :: foo + 3
-foo :: thing4(5)
+const foo2 = foo + 3
+const foo = thing4(5)
 
 
 fn thing(x: int) -> int:

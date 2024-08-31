@@ -1,6 +1,6 @@
 fn main():
 
-  x := 32
+  let x = 32
 
   fn thing():
     print(x)

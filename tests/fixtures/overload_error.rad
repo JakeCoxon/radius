@@ -13,7 +13,7 @@ fn calculate_xywh(x: float, y: float, w: float, h: float) -> float:
 fn calculate_xywh2(x: float, y: float, w: float, h: float) -> float:
   x + y + 100 * w + 200 * h
 
-calculate :: overloaded([
+const calculate = overloaded([
   calculate_xywh, calculate_xywh2])
 
 fn foo():

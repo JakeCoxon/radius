@@ -8,5 +8,5 @@ fn foo(thing: Thing, z: int):
 
 fn main():
 
-  things := [Thing(1, 2), Thing(3, 2)]
+  let things = [Thing(1, 2), Thing(3, 2)]
   print(things[0].x + things[1].y)

@@ -1,13 +1,13 @@
 type Thing:
-  x : int
+  let x : int
 
-  __iterate :: iterate
+  const __iterate = iterate
 
 fn iterate!(f)(thing: Thing) @inline: 
   f(32 + thing.x)
 
 fn main():
-  thing := Thing(200)
+  let thing = Thing(200)
 
   for x in thing:
     print(x)

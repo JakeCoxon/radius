@@ -1,6 +1,6 @@
 
 fn bar!(T)() -> int @inline:
-  x := 43
+  let x = 43
   return x + 32
   
 fn foo(i: int) -> int @inline:
@@ -16,12 +16,12 @@ fn baz(i: int) -> int @inline:
 
 fn main():
   print("Before")
-  z := bar!(123)()
+  let z = bar!(123)()
   print("After")
 
   print(z)
 
-  f := foo(2)
+  let f = foo(2)
   print(f)
   
   print(baz(1))

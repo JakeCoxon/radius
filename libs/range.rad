@@ -1,12 +1,12 @@
 type Range @struct:
   start: int
   end: int
-  __iterate :: range_iterate
+  const __iterate = range_iterate
 
 fn range_iterate!(f)(range: Range) -> void @inline:
-  i := range.start
+  let i = range.start
   while i < range.end:
     f(i)
     i += 1
 
-ints := Range(0, 2147483647)
+let ints = Range(0, 2147483647)

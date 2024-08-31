@@ -25,15 +25,15 @@ fn foo_list!(E)(a: MyList!E):
 
 fn main():
 
-  foo :: {|x| x + 1}
+  const foo = {|x| x + 1}
 
   foo(1)
 
-  my_list: MyList!int
+  let my_list: MyList!int
   my_list.elem = 32
   foo_list!int(my_list)
 
-  thing: Thing
+  let thing: Thing
   print(thing.x + 32)
   foothing(thing)
 
@@ -43,4 +43,4 @@ fn main():
   famz!int(200)
   famz!bool(true)
 
-  thing2 := Thing(1, float(2))
+  let thing2 = Thing(1, float(2))

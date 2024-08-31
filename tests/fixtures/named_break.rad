@@ -1,15 +1,15 @@
 fn foo():
 
   block cool_block:
-    x := 32
+    let x = 32
     print(x)
     if x > 0:
       break cool_block
 
     print("nope")
 
-  foo := block cool_block2:
-    y := 32
+  let foo = block cool_block2:
+    let y = 32
     if y > 0:
       break cool_block2 with 40
 

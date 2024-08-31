@@ -1,6 +1,6 @@
 
-foo2 :: foo + 3
-foo :: thing4(5)
+const foo2 = foo + 3
+const foo = thing4(5)
 
 
 fn thing(x: int) -> int:
@@ -31,13 +31,13 @@ fn foop(a: int, b: int):
   else:
     print(3)
 
-  zzz := 3
-  z : int = 2
-  x : int = ifx z: 2 else: 2
+  let zzz = 3
+  let z : int = 2
+  let x : int = ifx z > 0: 2 else: 2
 
   print(21) if !(2 == 2)
 
-  i := 0
+  let i = 0
   while true:
     i = i + 1
     if i > 10:
@@ -54,7 +54,7 @@ fn foop(a: int, b: int):
   meta if true:
     print("this is meta if")
 
-  foo1 :: {|x| x + 1}
+  const foo1 = {|x| x + 1}
 
   foo1(1)
   fam!2(1)
@@ -63,7 +63,7 @@ fn foop(a: int, b: int):
   famz!int(200)
   famz!bool(true)
 
-  my_list := [1, 2 + 3, 3 + 9]
+  let my_list = [1, 2 + 3, 3 + 9]
   
   print(meta thing(12))
 
@@ -72,8 +72,8 @@ fn foop(a: int, b: int):
 fn main():
   print(2 + 42 * thing(12))
 
-  x := float(200)
+  let x = float(200)
   print(x + float(200))
 
-  y := meta foop(2, 1)
+  let y = meta foop(2, 1)
   foop(2, 1)

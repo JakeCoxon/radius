@@ -1,9 +1,9 @@
 import compiler
 
 fn main():
-  a := 32
-  ptr := malloc(a)
-  f := compiler.unsafe_subscript!int(ptr, 2)
+  let a = 32
+  let ptr = malloc(a)
+  let f = compiler.unsafe_subscript!int(ptr, 2)
   print(f + 1)
 
   compiler.unsafe_set_subscript(ptr, 2, 100)

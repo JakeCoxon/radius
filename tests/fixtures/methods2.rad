@@ -11,7 +11,7 @@ fn bam(thing: Thing) @method:
 
 fn main():
 
-  thing := Thing(0, 0)
+  let thing = Thing(0, 0)
 
   thing.x = 1
   thing.y = 10
@@ -20,6 +20,6 @@ fn main():
   thing.foo(200)
   thing.bam
 
-  fam :: {|x| x + 100}
+  const fam = {|x| x + 100}
 
-  x := 2.fam
+  let x = 2.fam

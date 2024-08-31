@@ -8,10 +8,10 @@ fn my_map():
   }
 
 fn thing():
-  f := my_map()
-  map := f(23)
+  let f = my_map()
+  let map = f(23)
   print(map.a + map.b + map.c)
   map.a + map.b + map.c
 
 fn main():
-  x := meta thing()
+  let x = meta thing()

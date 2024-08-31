@@ -10,12 +10,12 @@ fn do_something_else_with_loop(loop: ctobj, x: int) @inline:
 
 fn main():
 
-  i := 0
-  iterations := 0
+  let i = 0
+  let iterations = 0
   while i < 100000:
     i += 1
 
-    loop :: get_current_loop()
+    const loop = get_current_loop()
     do_something_with_loop(loop, i)
     do_something_else_with_loop(loop, i)
 

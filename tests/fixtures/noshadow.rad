@@ -6,14 +6,14 @@ fn main():
   
   # should this reference outer scope or inner scope?
 
-  foo :: thing(100)
+  const foo = thing(100)
 
   meta if 1 == 1:
 
     fn thing(x: int):
       100
 
-  bar :: thing(100)
+  const bar = thing(100)
 
   comptime:
     print(foo)

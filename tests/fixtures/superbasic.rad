@@ -37,7 +37,7 @@ fn my_bar(bar: ref Bar):
 
 fn main():
 
-  bar := Bar(1, 2)
+  let bar = Bar(1, 2)
   my_bar(bar)
 
   if false:
@@ -47,12 +47,12 @@ fn main():
 
   print("Hello", bar)
 
-  f := 1.0
-  g := 3.2 + f
+  let f = 1.0
+  let g = 3.2 + f
   print(g * 12.2)
 
-  h : double = 3.4124
-  v := h * 2.23 * 2
+  let h : double = 3.4124
+  let v = h * 2.23 * 2
   compiler.assert(int(v) == 15)
 
   # print(bar.x)

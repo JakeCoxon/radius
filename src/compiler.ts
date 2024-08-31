@@ -922,7 +922,7 @@ const instructions: InstructionMapping = {
       stmts.push(letAst)
 
       compilerAssert(tupleType instanceof ParameterizedType && tupleType.typeConstructor === TupleTypeConstructor, "Expected tuple type got $type", { type: tupleType })
-      compilerAssert(tuple.values.length === tupleType.typeInfo.fields.length, "Expected $expected fields in tuple got $actual", { expected: letAst.binding.type.typeInfo.fields.length, actual: tuple.values.length }) // TODO: Make this more clearer
+      compilerAssert(tuple.values.length === tupleType.typeInfo.fields.length, "Expected $expected fields in tuple got $actual", { expected: letAst.binding.type.typeInfo.fields.length, actual: tuple.values.length, tuple: {...tuple} }) // TODO: Make this more clearer
       tuple.values.map((value, i) => {
         const field = tupleType.typeInfo.fields[i]
         const fieldAst = new FieldAst(field.fieldType, vm.location, rightSideBinding, field)

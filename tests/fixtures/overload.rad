@@ -7,7 +7,7 @@ fn calculate_xywh(x: float, y: float, w: float, h: float) -> float:
 fn calculate_pos_size(pos: vec2, size: vec2) -> float:
   calculate_xywh(pos.x, pos.y, size.x, size.y)
 
-calculate :: overloaded([
+const calculate = overloaded([
   calculate_xywh, calculate_pos_size])
 
 fn main():

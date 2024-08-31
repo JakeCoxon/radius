@@ -1,4 +1,4 @@
-foo :: thing()
+const foo = thing()
 
 fn main():
 

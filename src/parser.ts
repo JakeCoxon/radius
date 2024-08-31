@@ -66,6 +66,8 @@ const makeAdvancedLexer = (source: Source) => {
   let previous: Token
 
   let lineSeparate = false
+  let hadToken = false
+  let endStatement = true
   const indents = [0]
   const parenStack = [] as string[]
 
@@ -81,7 +83,7 @@ const makeAdvancedLexer = (source: Source) => {
       if (!token) break
 
       if (token.type === "NEWLINE") {
-        lineSeparate = true
+        if (hadToken) lineSeparate = true
         continue
       }
 
@@ -95,15 +97,17 @@ const makeAdvancedLexer = (source: Source) => {
         }
         while (numSpaces < indents[indents.length - 1]) {
           indents.pop();
-          yield createTokenWithLocation("ENDSTMT", "", previous.location.line, previous.location.column)
+          yield createTokenWithLocation("ENDSTMT", "", token.location.line, token.location.column)
           yield createTokenWithLocation("DEDENT", '', token.location.line, token.location.column)
         }
       }
 
-      if (state.significantNewlines && lineSeparate) {
-        yield createTokenWithLocation("ENDSTMT", "", previous.location.line, previous.location.column)
+      if (state.significantNewlines && lineSeparate && !endStatement) {
+        yield createTokenWithLocation("ENDSTMT", "", token.location.line, token.location.column)
+        endStatement = true
       }
       lineSeparate = false
+      hadToken = true
 
       if (token.value === "|") {
         if (parenStack.at(-1) === "|") parenStack.pop()
@@ -114,10 +118,15 @@ const makeAdvancedLexer = (source: Source) => {
       }
       if (token.type === "OPENPAREN") parenStack.push(token.value)
       else if (token.type === "CLOSEPAREN") parenStack.pop()
+      if (token.type === "CLOSEPAREN" && state.significantNewlines && !endStatement) {
+        yield createTokenWithLocation("ENDSTMT", "", token.location.line, token.location.column)
+        endStatement = true
+      }
       const topParen = parenStack.at(-1)
       state.significantNewlines = topParen === undefined || topParen === "{|" || topParen === "{"
       tokens.push(token);
       yield token
+      endStatement = false
     }
 
     while (indents.length > 1) {
@@ -130,7 +139,7 @@ const makeAdvancedLexer = (source: Source) => {
   const gen = advancedGenerator()
   const getToken = () => {
     const token = gen.next().value
-    // console.log(token)
+    console.log(token)
     previous = token!
     return token
   }
@@ -394,7 +403,7 @@ export const makeParser = (input: string, debugName: string) => {
   };
   const parseBraceBlockExpr = (afterMessage: string): ParseBlock => {
     const token = previous;
-    if (!matchType("INDENT")) return new ParseBlock(token, null, null, new ParseStatements(token, [trailingEndBrace(parseExpr())]))
+    if (!matchType("INDENT")) return new ParseBlock(token, null, null, new ParseStatements(token, [trailingEndBrace(trailingStatement(parseExpr()))]))
     return new ParseBlock(token, null, null, trailingEndBrace(trailingStatement(parseMultilineBlock(token))))
   }
   const parseColonBlockExpr = (afterMessage: string): ParseStatements => {
@@ -446,10 +455,7 @@ export const makeParser = (input: string, debugName: string) => {
       parseKeywords(), parseBody())
   };
   const parseLambda = () => {
-    const lambda = parseBracelessLambda();
-    matchType("NEWLINE");
-    expect("}", "Expected '}' after lambda body");
-    return lambda;
+    return trailingEndBrace(trailingStatement(parseBracelessLambda()))
   };
   const parseKeywords = () => {
     const kw: ParseNode[] = []
@@ -458,7 +464,7 @@ export const makeParser = (input: string, debugName: string) => {
   }
   const parseOptionalReturnType = () => match(":") ? parseExpr() : null
   const parseSingleOrMultilineBody = () => 
-    matchType("NEWLINE") ? parseMultilineBlock(previous) 
+    matchType("INDENT") ? parseMultilineBlock(previous) 
     : new ParseStatements(previous, [parseExpr()])
 
   const parseBracelessLambda = (): ParseNode => {
@@ -493,7 +499,7 @@ export const makeParser = (input: string, debugName: string) => {
     let expr = parseExpr();
     if (match(","))       expr = parseTuple(expr);
     // if (match(":="))      return new ParseLet(previous, assertLeftSide(expr), null, parseAssignExpr());
-    else if (match("::")) return new ParseLetConst(previous, assertIdentifier(expr), parseAssignExpr());
+    // else if (match("::")) return new ParseLetConst(previous, assertIdentifier(expr), parseAssignExpr());
     else if (match("="))  return new ParseSet(previous, expr, parseAssignExpr());
     else if (match("+=")) return new ParseOpEq(previous, expr, parseAssignExpr());
     else if (match("-=")) return new ParseOpEq(previous, expr, parseAssignExpr());
@@ -567,7 +573,7 @@ export const makeParser = (input: string, debugName: string) => {
     if (match("while")) return new ParseMetaWhile(metaToken, parseWhile());
     return new ParseMeta(previous, parseStatement());
   }
-  const parseOptionalExpr = () => matchType("NEWLINE") ? null : trailingStatement(parseExpr())
+  const parseOptionalExpr = () => matchType("ENDSTMT") ? null : trailingStatement(parseExpr())
 
   const parseImport = (importToken: Token) => {
     const module = parseIdentifier()
@@ -585,13 +591,13 @@ export const makeParser = (input: string, debugName: string) => {
     return trailingStatement(new ParseImport(importToken, module, rename, idents))
   }
   const parseBreak = (breakToken: Token) => {
-    if (matchType("NEWLINE")) return new ParseBreak(breakToken, null, null)
+    if (matchType("ENDSTMT")) return new ParseBreak(breakToken, null, null)
     const iden = parseIdentifier()
     if (!match("with")) return trailingStatement(new ParseBreak(breakToken, iden, null))
     return trailingStatement(new ParseBreak(breakToken, iden, parseExpr()))
   }
   const parseContinue = (continueToken: Token) => {
-    if (matchType("NEWLINE")) return new ParseContinue(continueToken, null)
+    if (matchType("ENDSTMT")) return new ParseContinue(continueToken, null)
     const iden = parseIdentifier()
     return trailingStatement(new ParseContinue(continueToken, iden))
   }
@@ -624,7 +630,7 @@ export const makeParser = (input: string, debugName: string) => {
   const parseLines = () => {
     const stmts: ParseNode[] = [];
 
-    while (matchType("NEWLINE"));
+    // while (matchType("NEWLINE"));
     stmts.push(parseStatement());
     while (token && token.type !== "DEDENT") stmts.push(parseStatement());
     return stmts;

@@ -3,7 +3,7 @@ type Range2d:
   h: int
 
   # This tells the compiler what function to use for iteration
-  __iterate :: range2d_iterate
+  const __iterate = range2d_iterate
 
 # the loop body is passed as a template parameter 'f'. and the function must be marked @inline
 fn range2d_iterate!(f)(range: Range2d) -> void @inline:
@@ -14,10 +14,10 @@ fn range2d_iterate!(f)(range: Range2d) -> void @inline:
 type Range:
   start: int
   end: int
-  __iterate :: range_iterate
+  const __iterate = range_iterate
 
 fn range_iterate!(f)(range: Range) -> void @inline:
-  i := range.start
+  let i = range.start
   while i < range.end:
     f(i)
     i += 1
@@ -27,7 +27,7 @@ type vec2i:
   y: int
 
 fn main():
-  range := Range2d(32, 64)
+  let range = Range2d(32, 64)
   for vec in range:
     if vec.x * vec.y > 256:
       continue # continue does the right thing

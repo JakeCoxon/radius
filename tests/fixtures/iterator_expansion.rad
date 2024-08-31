@@ -4,33 +4,33 @@ import range for Range, ints
 type Person @struct:
   age: int
 
-foo :: |yield|
+const foo = |yield|
   for i in Range(0, 10):
     yield(i)
 
-bar :: |yield|
+const bar = |yield|
   for i in Range(1, 9):
     yield(i * i)
 
-bamp :: |yield|
+const bamp = |yield|
   for i in Range(1, 9):
     yield(i * i * i)
 
-baz :: |yield|
-  f := 1
+const baz = |yield|
+  let f = 1
   while true:
     yield(f)
     f *= 2
 
-squares :: |yield|
-  i := 0
+const squares = |yield|
+  let i = 0
   while true:
     yield(i * i)
     i += 1
 
-factorial :: |yield|
-  i := 1
-  f := 1
+const factorial = |yield|
+  let i = 1
+  let f = 1
   while true:
     yield(f)
     f *= i
@@ -41,7 +41,7 @@ fn range2d(x: int, y: int): |yield|
     for i in Range(0, x):
       yield((i, j))
 
-fixed_iterator :: |yield|
+const fixed_iterator = |yield|
   yield(123)
   if 1 == 1:
     yield(32)
@@ -58,34 +58,34 @@ fn custom_iterator2(x: Person, foo: int): |yield|
 
 fn test_fold():
 
-  numbers := [40, 20, 10, 32, 12, 3124]
+  let numbers = [40, 20, 10, 32, 12, 3124]
 
-  count := (fold(0) + numbers[:] * bamp[:] ...)
+  let count = (fold(0) + numbers[:] * bamp[:] ...)
   print(count)
   assert(count == 678802)
 
-  count2 := (fold(0) + fixed_iterator[:] ...)
+  let count2 = (fold(0) + fixed_iterator[:] ...)
   assert(count2 == 278)
 
-  r :: range2d(4, 3)
-  count3 := (fold(0) + r[:]._1 ...)
+  const r = range2d(4, 3)
+  let count3 = (fold(0) + r[:]._1 ...)
   assert(count3 == 18)
 
 fn test_fold_setter():
-  numbers := [40, 20, 10, 32, 12, 3124]
-  foos := [0, 0, 0, 0]
+  let numbers = [40, 20, 10, 32, 12, 3124]
+  let foos = [0, 0, 0, 0]
   foos[:] = numbers[:] * bamp[:] + 2 ...
 
-  count2 := (fold(0) + foos[:] ...)
+  let count2 = (fold(0) + foos[:] ...)
   print(count2)
   assert(count2 == 2526)
 
-  count3 := (fold(0) + foo[:] ...)
+  let count3 = (fold(0) + foo[:] ...)
   print(count3)
   assert(count3 == 45)
 
 fn test_setters():
-  numbers := [40, 20, 10, 32, 12, 3124]
+  let numbers = [40, 20, 10, 32, 12, 3124]
 
   numbers[:] = 1 ...
   assert(@sum(numbers[:]) == 6)
@@ -98,29 +98,29 @@ fn test_setters():
 
 fn test_shorthand():
 
-  numbers := [40, 20, 10, 32, 12, 3124]
+  let numbers = [40, 20, 10, 32, 12, 3124]
   
-  x1 := @all(numbers[:] > 9)
+  let x1 = @all(numbers[:] > 9)
   assert(x1 == true)
   print(x1)
 
-  x2 := @all(numbers[:] < 1000)
+  let x2 = @all(numbers[:] < 1000)
   assert(x2 == false)
   print(x2)
 
-  y1 := @any(numbers[:] == 20)
+  let y1 = @any(numbers[:] == 20)
   assert(y1 == true)
   print(y1)
 
-  y2 := @any(numbers[:] == 1000)
+  let y2 = @any(numbers[:] == 1000)
   assert(y2 == false)
   print(y2)
 
-  z1 := @sum(numbers[1:])
+  let z1 = @sum(numbers[1:])
   assert(z1 == 3198)
   print(z1)
 
-  w1 := @sum(bar[:])
+  let w1 = @sum(bar[:])
   print(w1)
   assert(w1 == 204)
 
@@ -128,61 +128,61 @@ fn test_shorthand():
   assert(@all(factorial[:] < 1000) == false)
 
 fn test_min_max():
-  numbers := [40, 20, 10, 32, 12, 3124]
-  max := @max(numbers[:])
-  min := @min(numbers[:])
+  let numbers = [40, 20, 10, 32, 12, 3124]
+  let max = @max(numbers[:])
+  let min = @min(numbers[:])
   print(max, min)
   assert(max == 3124)
   assert(min == 10)
 
-  max2 := @max(fixed_iterator[:])
+  let max2 = @max(fixed_iterator[:])
   print(max2)
 
-  numbers2 := [23.1, 23.2, 23.3, 23.4]
-  max3 := @max(numbers2[:])
+  let numbers2 = [23.1, 23.2, 23.3, 23.4]
+  let max3 = @max(numbers2[:])
   assert(max3 == 23.4)
 
 fn test_concat():
 
-  numbers := [40, 20, 10, 32, 12, 3124]
+  let numbers = [40, 20, 10, 32, 12, 3124]
   
-  concat1 :: @concat(foo[:], bar[:])
-  x3 := @sum(concat1[:])
+  const concat1 = @concat(foo[:], bar[:])
+  let x3 = @sum(concat1[:])
   print(x3)
   assert(x3 == 249)
 
 
-  concat2 :: @concat(foo[:], bar[:], bamp[:], numbers[:])
-  x4 := @sum(concat2[:])
+  const concat2 = @concat(foo[:], bar[:], bamp[:], numbers[:])
+  let x4 = @sum(concat2[:])
   print(x4)
   assert(x4 == 4783)
 
 fn test_concat2():
 
-  numbers := [40, 20, 10, 32, 12, 3124]
+  let numbers = [40, 20, 10, 32, 12, 3124]
   
-  concat1 :: @concat(foo[:], bar[:], numbers[:], 2, 3, 4)
-  x3 := @sum(concat1[:])
+  const concat1 = @concat(foo[:], bar[:], numbers[:], 2, 3, 4)
+  let x3 = @sum(concat1[:])
   print(x3)
   assert(x3 == 3496)
 
 fn test_concat3():
 
-  numbers := [40, 20, 10, 32, 12, 3124]
+  let numbers = [40, 20, 10, 32, 12, 3124]
   
-  concat1 :: @concat(foo[:], bar[:], numbers[:], 2, 3, 4)
+  const concat1 = @concat(foo[:], bar[:], numbers[:], 2, 3, 4)
   for x in concat1:
     print(x)
 
 
 fn test_concat4():
 
-  numbers := [40, 20, 10, 32, 12, 3124]
+  let numbers = [40, 20, 10, 32, 12, 3124]
   
-  concat1 :: @concat(foo[:], bar[:], 2, 3, 4)
-  concat2 :: @concat(concat1[:], numbers[:], 5, 6, 7)
+  const concat1 = @concat(foo[:], bar[:], 2, 3, 4)
+  const concat2 = @concat(concat1[:], numbers[:], 5, 6, 7)
 
-  res := 0
+  let res = 0
   res += concat2[:] ...
   print(res)
   assert(res == 3514)
@@ -190,28 +190,28 @@ fn test_concat4():
 
 fn test_concat5():
 
-  numbers := [40, 20, 10, 32, 12, 3124]
+  let numbers = [40, 20, 10, 32, 12, 3124]
   
-  concat1 :: @concat(foo[:] * numbers[:], 2, 3, 4)
-  x3 := @sum(concat1[:])
+  const concat1 = @concat(foo[:] * numbers[:], 2, 3, 4)
+  let x3 = @sum(concat1[:])
   print(x3)
   assert(x3 == 15813)
 
 
 fn test_concat6():
 
-  numbers := [40, 20, 10, 32, 12, 3124]
+  let numbers = [40, 20, 10, 32, 12, 3124]
   
-  concat1 :: @concat(foo[:] * numbers[:], 2, 3, 4)
+  const concat1 = @concat(foo[:] * numbers[:], 2, 3, 4)
   numbers[:] = concat1[:] ...
   print(numbers[:]) ...
 
 
 fn test_people():
 
-  people := [Person(10), Person(20), Person(30), Person(40), Person(50)]
+  let people = [Person(10), Person(20), Person(30), Person(40), Person(50)]
   
-  x4 := @sum(people[:].age)
+  let x4 = @sum(people[:].age)
   print(x4)
   assert(x4 == 150)
 
@@ -219,37 +219,37 @@ fn test_people():
 
 fn test_last():
 
-  numbers := [40, 20, 10, 32, 12, 3124]
-  x := @last(numbers[:])
+  let numbers = [40, 20, 10, 32, 12, 3124]
+  let x = @last(numbers[:])
   print(x)
   assert(x == 3124)
 
 fn test_first_last():
 
-  numbers := [40.0, 20, 10, 32, 12, 3124]
+  let numbers = [40.0, 20, 10, 32, 12, 3124]
   
-  x := @first(numbers[:])
+  let x = @first(numbers[:])
   print(x)
   assert(x == 40)
 
-  # y := @last(numbers[:])
+  # y = @last(numbers[:])
   # print(y)
   # assert(y == 3124)
 
-  people := [Person(10), Person(20), Person(30), Person(40), Person(50)]
-  p := @first(people[1:])
+  let people = [Person(10), Person(20), Person(30), Person(40), Person(50)]
+  let p = @first(people[1:])
   assert(p.age == 20)
 
-  # p2 := @last(people[:])
+  # p2 = @last(people[:])
   # assert(p2.age == 50)
 
 fn test_range():
-  rng := Range(10, 20)
+  let rng = Range(10, 20)
   print(rng[1:10:2]) ...
 
   print(ints[1:10:2]) ...
 
-  sum := @sum(ints[1:10:2])
+  let sum = @sum(ints[1:10:2])
   assert(sum == 25)
   
 
@@ -280,8 +280,8 @@ fn test_for_loop():
 
 fn test_if():
 
-  numbers := [43, 21, 10, 34, 12, 3124]
-  x := @sum(numbers[:] if numbers[:] > 20)
+  let numbers = [43, 21, 10, 34, 12, 3124]
+  let x = @sum(numbers[:] if numbers[:] > 20)
   print(x)
   assert(x == 3222)
   
@@ -297,13 +297,13 @@ fn test_if():
   assert(@first(numbers[:] if numbers[:] < 20) == 10)
   assert(@last(numbers[:] if numbers[:] < 20) == 12)
 
-  cc1 :: @concat(numbers[:] if numbers[:] < 20, numbers[:] if numbers[:] > 20)
+  const cc1 = @concat(numbers[:] if numbers[:] < 20, numbers[:] if numbers[:] > 20)
   print(cc1[:]) ...
 
 fn test_while():
   
-  numbers := [40, 20, 10, 32, 12, 3124]
-  x := @sum(numbers[:] while numbers[:] < 100)
+  let numbers = [40, 20, 10, 32, 12, 3124]
+  let x = @sum(numbers[:] while numbers[:] < 100)
   print(x)
   assert(x == 114)
 
@@ -314,48 +314,48 @@ fn test_while():
 
 fn test_sideeffect():
 
-  numbers := [40, 20, 10, 32, 12, 3124]
-  calls := 0
+  let numbers = [40, 20, 10, 32, 12, 3124]
+  let calls = 0
 
-  side :: {||
+  const side = {||
     print("sideeffect")
     calls += 1
     500
   }
 
-  x := @any(numbers[:] > side())
+  let x = @any(numbers[:] > side())
   assert(calls == 1)
 
 fn test_template!(T)():
 
-  numbers := [40, 20, 10, 32, 12, 3124]
-  x := @sum(numbers[:])
+  let numbers = [40, 20, 10, 32, 12, 3124]
+  let x = @sum(numbers[:])
   print(x)
   
 fn test_flatmap():
 
-  cells := [[1,2,3], [4,5,6], [7,8,9]]
+  let cells = [[1,2,3], [4,5,6], [7,8,9]]
 
-  # foo :: @mapcat(cells[:])
+  # foo = @mapcat(cells[:])
 
-  # x := @sum(cells[:][:])
+  # x = @sum(cells[:][:])
 
 fn test_custom_iterator():
-  person := Person(10)
-  it :: custom_iterator(person, 23)
+  let person = Person(10)
+  const it = custom_iterator(person, 23)
   for x, y in it:
     print(x, y)
 
-  it2 :: custom_iterator2(person, 23)
-  f := @sum(it2[:])
+  const it2 = custom_iterator2(person, 23)
+  let f = @sum(it2[:])
   assert(f == 375)
 
-  f2 := @sum((meta custom_iterator2(person, 23))[:])
+  let f2 = @sum((meta custom_iterator2(person, 23))[:])
   assert(f2 == 375)
 
 
 fn test_iterator_to_array():
-  arr := [
+  let arr = [
     3,
     factorial[:5] ...,
     factorial[10:12] ...,
@@ -364,33 +364,33 @@ fn test_iterator_to_array():
   assert(@sum(arr[:]) == 43545640)
   print(arr[:]) ...
 
-  arr2 := [factorial[:5] + factorial[1:6] ...]
+  let arr2 = [factorial[:5] + factorial[1:6] ...]
   assert(@sum(arr2[:]) == 187)
 
-  arr3 := [factorial[:5] if factorial[:5] > 5 ...]
+  let arr3 = [factorial[:5] if factorial[:5] > 5 ...]
   assert(@sum(arr3[:]) == 30)
 
-  arr4 := [1, 2, 3, 5 if false]
+  let arr4 = [1, 2, 3, 5 if false]
   assert(@sum(arr4[:]) == 6)
 
 fn test_for_expr_array():
 
-  r :: range2d(4, 3)
-  arr := [x + x * y for x, y in r ...]
+  const r = range2d(4, 3)
+  let arr = [x + x * y for x, y in r ...]
   assert(@sum(arr[:]) == 36)
   
 fn test_slice():
-  c :: @concat(factorial[2:8:2])
+  const c = @concat(factorial[2:8:2])
   assert(@sum(c[:]) == 746)
 
 fn test_array():
-  x := 0.2
-  arr := [x, 1, 1]
+  let x = 0.2
+  let arr = [x, 1, 1]
   assert(@sum(arr[:]) == 2.2)
 
 fn test_float_sum():
-  asd := [1,2,3.2]
-  s := @sum(asd[:] + float(foo[:]))
+  let asd = [1,2,3.2]
+  let s = @sum(asd[:] + float(foo[:]))
   assert(s == 9.2)
 
 fn main():

@@ -10,7 +10,7 @@ fn foothing(a: Thing):
 
 fn main():
 
-  thing: Thing
+  let thing: Thing
   thing = Thing(32, float(100))
 
   print(thing.x)

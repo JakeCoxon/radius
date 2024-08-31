@@ -1,19 +1,19 @@
 import compiler
 import vec for vec3
 
-assert :: compiler.assert
+const assert = compiler.assert
 
 type Array!(T) @struct:
   data: rawptr
   size: int
   capacity: int
 
-  __iterate :: array_iterate
-  __subscript :: array_subscript
-  __set_subscript :: array_set_subscript
+  const __iterate = array_iterate
+  const __subscript = array_subscript
+  const __set_subscript = array_set_subscript
 
 fn array_create!(T)(initial_size: int) -> Array!T:
-  array: Array!T
+  let array: Array!T
   array.data = malloc(initial_size * (meta T.sizeof))
   array.size = initial_size
   array.capacity = initial_size
@@ -34,7 +34,7 @@ fn array_free!(T)(array: ref Array!T):
   array.capacity = 0
 
 fn array_iterate!(f, T)(array: Array!T) -> void @inline:
-  i := 0
+  let i = 0
   while i < array.size:
     f(compiler.unsafe_subscript!T(array.data, i))
     i += 1
@@ -46,7 +46,7 @@ fn array_set_subscript!(T)(array: Array!T, index: int, value: T) @inline:
   compiler.unsafe_set_subscript!T(array.data, index, value)
 
 fn main():
-  arr := array_create!int(10)
+  let arr = array_create!int(10)
   arr[0] = 2
   arr[1] = 1
   arr[2] = 6
@@ -62,6 +62,6 @@ fn main():
   assert(arr[12] == 30)
   assert(arr[13] == 40)
 
-  arr2 := array_create!vec3(0)
+  let arr2 = array_create!vec3(0)
   arr2.append(vec3(1, 2, 3))
   assert(arr2[0].x == 1)

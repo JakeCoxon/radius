@@ -590,7 +590,7 @@ export const preloadModuleText = () => {
 import compiler for rawptr, overloaded, never
 
 fn iterate!(f, T)(list: List!T) @inline @method:
-  i := 0
+  let i = 0
   while i < list.length:
     f(list[i])
     i += 1
@@ -608,37 +608,37 @@ fn sizeof!(T)() @external
 fn fmod_double(t: double, b: double) -> double 
 @@external("fmodf")
 fn fmod_float(t: float, b: float) -> float
-fmod :: overloaded([fmod_double, fmod_float])
+const fmod = overloaded([fmod_double, fmod_float])
 
 fn abs_int(v: int) -> int:
   ifx v < 0: -1 * v else: v
 fn abs_float(v: float) -> float:
   ifx v < 0.0: -1.0 * v else: v
-abs :: overloaded([abs_int, abs_float])
+const abs = overloaded([abs_int, abs_float])
 
 @@external("sin")
 fn sin_double(t: double) -> double
 fn sin_float(t: float) -> float:
   float(sin_double(double(t)))
-sin :: overloaded([sin_double, sin_float])
+const sin = overloaded([sin_double, sin_float])
 
 @@external("cos")
 fn cos_double(t: double) -> double
 fn cos_float(t: float) -> float:
   float(cos_double(double(t)))
-cos :: overloaded([cos_double, cos_float])
+const cos = overloaded([cos_double, cos_float])
 
 @@external("tan")
 fn tan_double(t: double) -> double
 fn tan_float(t: float) -> float:
   float(tan_double(double(t)))
-tan :: overloaded([tan_double, tan_float])
+const tan = overloaded([tan_double, tan_float])
 
 @@external("sqrt")
 fn sqrt_double(t: double) -> double 
 fn sqrt_float(t: float) -> float:
   float(sqrt_double(double(t)))
-sqrt :: overloaded([sqrt_double, sqrt_float])
+const sqrt = overloaded([sqrt_double, sqrt_float])
 
 fn min!(T)(a: T, b: T) -> T @inline:
   ifx a <= b: a else: b
@@ -650,7 +650,7 @@ fn unreachable() -> never @inline:
   print("Unreachable code")
   exit(1)
 
-PI :: 3.14159265359
+const PI = 3.14159265359
 
 `
 }

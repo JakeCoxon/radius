@@ -1,10 +1,10 @@
 fn transduce(iterable) @inline:
-  acc := 1
+  let acc = 1
   for x in iterable:
-    zzz := 1
+    let zzz = 1
     print(zzz)
 
 fn main():
 
-  my_list := [1, 2, 3, 2, 1]
+  let my_list = [1, 2, 3, 2, 1]
   transduce(my_list)

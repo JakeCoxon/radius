@@ -6,9 +6,9 @@ fn my_map():
   }
 
 fn thing():
-  map := my_map()
+  let map = my_map()
   print(map.a + map.b + map.c)
   map.a + map.b + map.c
 
 fn main():
-  x := meta thing()
+  let x = meta thing()

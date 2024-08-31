@@ -11,9 +11,9 @@ fn foo2(tup: (int, float, Thing)):
 
 
 fn main():
-  thing := Thing(4, 3)
+  let thing = Thing(4, 3)
 
-  tup := (1, float(2), thing)
+  let tup = (1, float(2), thing)
 
   print(tup._1 + int(tup._2) + tup._3.x + tup._3.y)
 

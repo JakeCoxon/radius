@@ -2,8 +2,8 @@ fn create_adder(x: int) -> any: {|y| y + x}
 
 fn main():
 
-  baz :: create_adder(10)
+  const baz = create_adder(10)
   print(baz(20) + baz(1))
 
-  bamp :: create_adder(123)
+  const bamp = create_adder(123)
   print(baz(3) * bamp(20))

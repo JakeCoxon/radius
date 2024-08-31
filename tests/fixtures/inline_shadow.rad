@@ -1,10 +1,10 @@
 
 fn bar!(T)() -> int @inline:
-  x := 43
+  let x = 43
   100
 
 fn main():
 
-  x := 32
+  let x = 32
   bar!(123)()
   

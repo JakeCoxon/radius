@@ -5,9 +5,9 @@ type Array!(T) @struct:
   size: int
   capacity: int
 
-  __iterate :: array_iterate
-  __subscript :: array_subscript
-  __set_subscript :: array_set_subscript
+  const __iterate = array_iterate
+  const __subscript = array_subscript
+  const __set_subscript = array_set_subscript
 
 fn array_create!(T)(initial_size: int) -> Array!T:
   array: Array!T
@@ -31,7 +31,7 @@ fn array_free!(T)(array: ref Array!T):
   array.capacity = 0
 
 fn array_iterate!(f, T)(array: Array!T) -> void @inline:
-  i := 0
+  let i = 0
   while i < array.size:
     f(compiler.unsafe_subscript!T(array.data, i))
     i += 1

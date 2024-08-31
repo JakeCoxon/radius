@@ -10,7 +10,7 @@ fn main():
   bar!(123)()
   bar!(124)()
 
-  meta f := 0
+  meta let f = 0
   meta while f < 10:
     print(meta f)
     meta f = f + 1

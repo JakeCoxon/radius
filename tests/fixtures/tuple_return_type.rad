@@ -3,6 +3,6 @@ fn foo(x: int, y: float) -> int, float:
   (x, y)
 
 fn main():
-  tup := foo(100, 3.1)
+  let tup = foo(100, 3.1)
   print(tup._1)
   print(tup._2)

@@ -1,8 +1,8 @@
 
 fn foo!(t)():
-  z := 123
+  let z = 123
 
-  baz :: {|| z * 10}
+  const baz = {|| z * 10}
   print(baz())
 
 fn main():

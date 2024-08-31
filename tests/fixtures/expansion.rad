@@ -2,21 +2,21 @@ import compiler for assert
 
 fn main():
 
-  lst1 := [1, 2, 3, 4, 5]
-  lst2 := [6, 7, 8, 9]
+  let lst1 = [1, 2, 3, 4, 5]
+  let lst2 = [6, 7, 8, 9]
 
   print(lst1[:] + lst1[1:]) ...
 
   print(lst1[1:-2] + lst2[:100:2]) ...
 
-  x := (fold(0) + lst1[:] * 2 ...)
+  let x = (fold(0) + lst1[:] * 2 ...)
   assert(x == 30)
 
-  t := (fold(true) and lst1[:] > 4 ...)
+  let t = (fold(true) and lst1[:] > 4 ...)
   # assert(t)
 
-  m := (min(fold(1000), lst1[:]) ...)
+  let m = (min(fold(1000), lst1[:]) ...)
   assert(m == 1)
   
 
-  #b := (fold(1) + x * x for x in lst1)
+  #let b = (fold(1) + x * x for x in lst1)

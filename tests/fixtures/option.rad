@@ -6,13 +6,13 @@ fn is_some!(T)(x: Option!T) -> bool @inline:
   return false
 
 fn main():
-  a : Option!int
+  let a : Option!int
 
   a = 78
-  b : Option!int = 124
+  let b : Option!int = 124
 
-  x := None!int()
-  y := Some!int(10)
+  let x = None!int()
+  let y = Some!int(10)
 
   y = Some!int(32)
 
@@ -24,13 +24,13 @@ fn main():
   print(x)
   print(y)
 
-  z := x.orelse 69
-  w := y.orelse 100
+  let z = x.orelse 69
+  let w = y.orelse 100
   print(z + w)
 
-  # asd := { x? + y? }.orelse 3
+  # let asd = { x? + y? }.orelse 3
 
-  # x := {
+  # let x = {
   #   x? + y?
   # } if true else 0
 
@@ -40,7 +40,7 @@ fn main():
     print("None", x)
 
 
-  u := x.orelse return
+  let u = x.orelse return
   print(u)
   print("Should not print")
 

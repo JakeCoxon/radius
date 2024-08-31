@@ -62,6 +62,7 @@ test('basic', async () => {
   }
 })
 
+
 test('closure', async () => {
   const testObject = createTest({ 
     moduleName: 'closure',
