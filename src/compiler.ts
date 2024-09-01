@@ -1,7 +1,7 @@
 import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol, ScopeParentSymbol, isPlainObject, ParseLet, ParseList, ParseExpand, ParseBlock, findLabelByBinding, ParseSubscript, ParseNumber, ParseQuote, ParseWhile, ParseOperator, ParseBytecode, ParseOpEq, ParseSet, ParseFreshIden, UnknownObject, ParseNote, DefaultConsAst, RawPointerType, ValueFieldAst, SetValueFieldAst, FloatLiteralType, IntLiteralType, CompilerFunction, DerefAst, SetDerefAst, ParseSlice, CompilerFunctionCallContext, NeverType, LoopObject, CompTimeObjAst, CompileTimeObjectType, NamedArgAst, TypeCheckVar, TypeCheckConfig, u8Type, u64Type, isTypeScalar, FreshBindingToken, isCompilerCallable, ParseIs, OptionTypeConstructor } from "./defs";
 import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, functionCompileTimeCompileTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, compileExportedFunctionTask } from "./compiler_functions";
 import { Event, Task, TaskDef, Unit, isTask, isTaskResult, withContext } from "./tasks";
-import { createCompilerModuleTask, createListConstructor, defaultMetaFunction, optionCastSugar, orElseSugar, print, smartCastSugar } from "./compiler_sugar";
+import { createCompilerModuleTask, createListConstructor, defaultMetaFunction, optionBlockSugar, optionCastSugar, orElseSugar, print, questionSugar, smartCastSugar } from "./compiler_sugar";
 import { expandDotsSugar, expandFuncAllSugar, expandFuncAnySugar, expandFuncConcatSugar, expandFuncFirstSugar, expandFuncLastSugar, expandFuncMaxSugar, expandFuncMinSugar, expandFuncSumSugar, foldSugar, forExprSugar, forLoopSugar, listComprehensionSugar, listConstructorSugar, sliceSugar, whileExprSugar } from "./compiler_iterator"
 
 export const pushBytecode = <T extends BytecodeInstr>(out: BytecodeWriter, token: Token, instr: T) => {
@@ -55,6 +55,11 @@ export const BytecodeDefault: ParseTreeTable = {
   bytecode:  (out, node) => compilerAssert(false, "Not implemented 'bytecode' in BytecodeDefault"),
   fold:      (out, node) => compilerAssert(false, "Not implemented 'fold' in BytecodeDefault"),
   namedarg:  (out, node) => compilerAssert(false, "Not implemented 'namedarg' in BytecodeDefault"),
+  question:  (out, node) => compilerAssert(false, "Not implemented 'question' in BytecodeDefault"),
+  breakopt:  (out, node) => compilerAssert(false, "Not implemented 'breakopt' in BytecodeDefault"),
+  iterator:  (out, node) => compilerAssert(false, "Not implemented 'iterator' in BytecodeDefault"),
+  case:      (out, node) => compilerAssert(false, "Not implemented 'case' in BytecodeDefault"),
+  match:     (out, node) => compilerAssert(false, "Not implemented 'match' in BytecodeDefault"),
   constructor: (out, node) => compilerAssert(false, "Not implemented 'constructor' in BytecodeDefault"),
   compileriden: (out, node) => compilerAssert(false, "Not implemented 'compileriden' in BytecodeDefault"),
 
@@ -213,6 +218,7 @@ export const BytecodeDefault: ParseTreeTable = {
 
   else: (out, node) => visitParseNode(out, node.body),
   if: (out, node) => {
+    compilerAssert(false, "TODO: Jump instructions must use relative because we do splicing tricks of the bytecode")
     visitParseNode(out, node.condition);
     const jump1 = { type: "jumpf" as const, address: 0 };
     pushBytecode(out, node.condition.token, jump1);
@@ -272,6 +278,9 @@ export const BytecodeSecondOrder: ParseTreeTable = {
   metafor:   (out, node) => compilerAssert(false, "Not implemented 'metafor'"),
   import:    (out, node) => compilerAssert(false, "Not implemented 'import'"),
   quote:     (out, node) => compilerAssert(false, "Not implemented 'quote'"),
+  iterator:  (out, node) => compilerAssert(false, "Not implemented 'iterator'"),
+  case:      (out, node) => compilerAssert(false, "Not implemented 'case'"),
+  match:     (out, node) => compilerAssert(false, "Not implemented 'match'"),
   compileriden: (out, node) => compilerAssert(false, "Not implemented 'compileriden'"),
 
   constructor:  (out, node) => (visitParseNode(out, node.type), visitAll(out, node.args), pushBytecode(out, node.token, { type: 'constructorast', count: node.args.length })),
@@ -298,6 +307,7 @@ export const BytecodeSecondOrder: ParseTreeTable = {
   fold:     (out, node) => foldSugar(out, node),
   listcomp: (out, node) => listComprehensionSugar(out, node),
   slice:    (out, node) => sliceSugar(out, node, null),
+  question: (out, node) => questionSugar(out, node),
 
   dict: (out, node) => {
     node.pairs.forEach(([key, value]) => {
@@ -358,6 +368,10 @@ export const BytecodeSecondOrder: ParseTreeTable = {
     if (node.name) writeMeta(out, node.name);
     if (node.expr) visitParseNode(out, node.expr);
     pushBytecode(out, node.token, { type: 'breakast', named: !!node.name, v: !!node.expr, breakType: 'break' })
+  },
+  breakopt: (out, node) => {
+    if (node.name) writeMeta(out, node.name);
+    pushBytecode(out, node.token, { type: 'breakast', named: false, v: false, breakType: 'option' })
   },
   continue: (out, node) => {
     if (node.name) writeMeta(out, node.name)
@@ -512,6 +526,7 @@ export const BytecodeSecondOrder: ParseTreeTable = {
     pushBytecode(out, node.token, { type: "popqs" });
   },
   block: (out, node) => {
+    if (node.breakType === 'option') return optionBlockSugar(out, node)
     const name = (node.name instanceof ParseFreshIden ? node.name.freshBindingToken.identifier : node.name?.token.value) ?? null
     pushBytecode(out, node.token, { type: 'beginblockast', breakType: node.breakType, name })
     visitParseNode(out, node.statements)
@@ -1187,7 +1202,7 @@ const instructions: InstructionMapping = {
     const expr = v ? propagatedLiteralAst(expectAst(popStack(vm))) : null
     const name = named ? popStack(vm) : null
     if (name && name instanceof LoopObject) { // It's possible to directly pass a loop object to break from
-      const block = breakType === 'break' ? name.breakBlock : name.continueBlock
+      const block = breakType === 'break' ? name.breakBlock : breakType === 'continue' ? name.continueBlock : (compilerAssert(false, "Invalid breakType", { breakType }) as never)
       compilerAssert(block.binding, "Expected binding")
       vm.stack.push(new BreakAst(NeverType, vm.location, block.binding, expr))
       return
@@ -1203,6 +1218,7 @@ const instructions: InstructionMapping = {
       block.type = expr.type
       block.breakWithExpr = true
     }
+    block.didBreak = true
     compilerAssert(block.binding, "Expected binding")
     vm.stack.push(new BreakAst(NeverType, vm.location, block.binding, expr))
   },
@@ -1244,12 +1260,15 @@ const instructions: InstructionMapping = {
     const body = propagatedLiteralAst(expectAst(vm.stack.pop()))
     const blockType = labelBlock.type ?? body.type
     // TODO: This should be NeverType instead of VoidType
-    if (labelBlock.type) compilerAssert(labelBlock.type === VoidType || labelBlock.type === body.type, "Block type inferred to be of type $blockType but the result expression was type $bodyType", { blockType: labelBlock.type, bodyType: body.type })
+    if (labelBlock.type) {
+      let blockTypeOk = labelBlock.type === VoidType || labelBlock.type === body.type || body.type === NeverType
+      compilerAssert(blockTypeOk, "Block type inferred to be of type $blockType but the result expression was type $bodyType", { blockType: labelBlock.type, bodyType: body.type })
+    }
     const breakExprBinding = labelBlock.breakWithExpr ? new Binding(`${binding.name}_breakexpr`, body.type) : null
-    vm.stack.push(new BlockAst(blockType, vm.location, binding, breakExprBinding, body))
     vm.context.subCompilerState.labelBlock = labelBlock.parent
     compilerAssert(vm.scope[ScopeParentSymbol], "Expected parent scope")
     vm.scope = vm.scope[ScopeParentSymbol]
+    vm.stack.push(new BlockAst(blockType, vm.location, binding, breakExprBinding, body))
   },
 
   binding: (vm, { name }) => {
@@ -1284,13 +1303,18 @@ const instructions: InstructionMapping = {
     if (!vm.stack.pop()) vm.ip = address;
   },
   letlocal: (vm, { name }) => {
-    compilerAssert(!Object.hasOwn(vm.scope, name), `$name is already in scope`, { name });
-    setScopeValueAndResolveEvents(vm.scope, name, popStack(vm))
+    // Always set on the scope of the current function for now. Not sure if this is the best idea
+    compilerAssert(vm.context.subCompilerState.functionCompiler, "Expected function compiler")
+    const scope = vm.context.subCompilerState.functionCompiler.scope
+    compilerAssert(!Object.hasOwn(scope, name), `$name is already in scope`, { name });
+    setScopeValueAndResolveEvents(scope, name, popStack(vm))
     vm.stack.push(null) // statement expression
   },
   setlocal: (vm, { name }) => {
-    compilerAssert(Object.hasOwn(vm.scope, name), `$name does not exist in scope`, { name });
-    vm.scope[name] = popStack(vm);
+    compilerAssert(vm.context.subCompilerState.functionCompiler, "Expected function compiler")
+    const scope = vm.context.subCompilerState.functionCompiler.scope
+    compilerAssert(Object.hasOwn(scope, name), `$name does not exist in scope`, { name });
+    scope[name] = popStack(vm);
     vm.stack.push(null) // statement expression
   },
   jump: (vm, { address }) => void (vm.ip = address),

@@ -139,7 +139,7 @@ const makeAdvancedLexer = (source: Source) => {
   const gen = advancedGenerator()
   const getToken = () => {
     const token = gen.next().value
-    console.log(token)
+    // console.log(token)
     previous = token!
     return token
   }
@@ -403,12 +403,11 @@ export const makeParser = (input: string, debugName: string) => {
   };
   const parseBraceBlockExpr = (afterMessage: string): ParseBlock => {
     const token = previous;
-    if (!matchType("INDENT")) return new ParseBlock(token, null, null, new ParseStatements(token, [trailingEndBrace(trailingStatement(parseExpr()))]))
+    if (!matchType("INDENT")) return new ParseBlock(token, 'option', null, new ParseStatements(token, [trailingEndBrace(trailingStatement(parseExpr()))]))
     return new ParseBlock(token, null, null, trailingEndBrace(trailingStatement(parseMultilineBlock(token))))
   }
   const parseColonBlockExpr = (afterMessage: string): ParseStatements => {
     const token = expect(":", `Expected ':' after ${afterMessage}`);
-    previous;
     if (!matchType("INDENT")) return new ParseStatements(token, [parseExpr()]);
     return parseMultilineBlock(token)
   };

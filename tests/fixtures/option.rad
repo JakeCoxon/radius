@@ -1,4 +1,4 @@
-import compiler for Option, Some, None
+import compiler for Option, Some, None, assert
 
 fn is_some!(T)(x: Option!T) -> bool @inline:
   if x is Some:
@@ -7,14 +7,15 @@ fn is_some!(T)(x: Option!T) -> bool @inline:
 
 fn main():
   let a : Option!int
-
   a = 78
+
   let b : Option!int = 124
 
   let x = None!int()
-  let y = Some!int(10)
+  let y = Some(10)
+  # let g = 10.Some
 
-  y = Some!int(32)
+  y = Some(32)
 
   if y is Some:
     print(y.value + 123)
@@ -28,20 +29,33 @@ fn main():
   let w = y.orelse 100
   print(z + w)
 
-  # let asd = { x? + y? }.orelse 3
+  let asd = { x? + y? }.orelse 3
+  assert(asd == 3)
 
-  # let x = {
+  x = 16
+
+  let asd2 = { x? + y? }.orelse 3
+  assert(asd2 == 48)
+
+  print({ x? + y? })
+
+  let asd3 = { 2 + 3 }
+  print(asd3)
+
+  # let x = ifx {
   #   x? + y?
-  # } if true else 0
+  # } else {
+  # }
 
   if x.is_some:
     print(x)
   else:
     print("None", x)
 
+  x = None!int()
+
 
   let u = x.orelse return
   print(u)
   print("Should not print")
-
-  # print(x)
+  assert(1 == 0)

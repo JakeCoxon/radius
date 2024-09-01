@@ -151,6 +151,7 @@ export class ParseClass extends ParseNodeType {        key = 'class' as const;  
 export class ParseReturn extends ParseNodeType {       key = 'return' as const;       constructor(public token: Token, public expr: ParseNode | null) { super();} }
 export class ParseBreak extends ParseNodeType {        key = 'break' as const;        constructor(public token: Token, public name: ParseIdentifier | ParseFreshIden | null, public expr: ParseNode | null) { super();} }
 export class ParseContinue extends ParseNodeType {     key = 'continue' as const;     constructor(public token: Token, public name: ParseIdentifier | ParseFreshIden | null) { super();} }
+export class ParseBreakOpt extends ParseNodeType {     key = 'breakopt' as const;     constructor(public token: Token, public name: ParseIdentifier | ParseFreshIden | null) { super();} }
 export class ParseFor extends ParseNodeType {          key = 'for' as const;          constructor(public token: Token, public left: ParseIdentifier | ParseTuple | ParseCase, public expr: ParseNode, public body: ParseNode) { super();} }
 export class ParseIs extends ParseNodeType {           key = 'is' as const;           constructor(public token: Token, public expr: ParseNode, public type: ParseNode) { super();} }
 export class ParseOrElse extends ParseNodeType {       key = 'orelse' as const;       constructor(public token: Token, public expr: ParseNode, public orElse: ParseNode) { super();} }
@@ -191,13 +192,14 @@ export type ParseNode = ParseStatements | ParseLet | ParseSet | ParseOperator | 
   ParseDict | ParsePostCall | ParseSymbol | ParseNote | ParseSlice | ParseSubscript | ParseTuple | ParseClass |
   ParseNil | ParseBoolean | ParseElse | ParseMetaIf | ParseMetaFor | ParseMetaWhile | ParseBlock | ParseImport | 
   ParseCompilerIden | ParseValue | ParseConstructor | ParseQuote | ParseBytecode | ParseFreshIden | ParseFold | 
-  ParseNamedArg | ParseEvalFunc | ParseConcurrency | ParseVoid | ParseIs | ParseOrElse | ParseQuestion | ParseIterator | ParseCase | ParseMatch
+  ParseNamedArg | ParseEvalFunc | ParseConcurrency | ParseVoid | ParseIs | ParseOrElse | ParseQuestion | 
+  ParseIterator | ParseCase | ParseMatch | ParseBreakOpt
 
 // Void types mean that in secondOrder compilation, the AST doesn't return an AST
 export const isParseVoid = (ast: ParseNode) => ast.key == 'letconst' || ast.key === 'function' || ast.key === 'class' || ast.key === 'comptime' || ast.key === 'metawhile';
 export const isParseNode = (ast: unknown): ast is ParseNode => ast instanceof ParseNodeType
 
-export type BreakType = 'break' | 'continue'
+export type BreakType = 'break' | 'continue' | 'option'
 
 export type BytecodeInstr = 
   { type: 'comment', comment: string } |
@@ -250,7 +252,6 @@ export type BytecodeInstr =
   { type: 'letast', name: string, t: boolean, v: boolean } |
   { type: 'letmatchast', t: boolean, v: boolean } |
   { type: 'callast', name: string, count: number, tcount: number, method?: boolean } |
-  { type: 'orelseast' } |
   { type: 'pushqs' } |
   { type: 'popqs' } |
   { type: 'appendq' } |
@@ -302,6 +303,7 @@ export interface BytecodeWriter {
     locations: SourceLocation[],
   },
   state: {
+    optionalBlock?: { didBreak: boolean }  | null,
     labelBlock: LabelBlock | null,
     expansion: ExpansionCompilerState | null
   }
@@ -898,7 +900,8 @@ export type Vm = {
 // Isn't it weird that these are similar but not the same?
 export class LabelBlock {
   public completion: ((value: unknown) => void)[] = []
-  public type: Type | null = null;
+  public type: Type | null = null
+  public didBreak = false
   // Does a break with an expression occur?
   // If so it needs to pass to BlockAst to compile differently in LLVM
   public breakWithExpr: boolean = false;

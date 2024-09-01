@@ -270,7 +270,7 @@ function functionInlineTask(ctx: TaskContext, { location, func, typeArgs, parent
   subCompilerState.inlineIntoCompiler = inlineInto
   subCompilerState.labelBlock = lexicalParent.labelBlock
   subCompilerState.nextLabelBlockDepth = inlineInto.nextLabelBlockDepth
-  // TODO: Should this have functionCompiler set to self? Make a test case
+  subCompilerState.functionCompiler = subCompilerState // functionCompiler is used to set locals etc
 
   const { concreteTypes } = result
 
@@ -468,9 +468,11 @@ export function createCallAstFromValue(ctx: CompilerFunctionCallContext, value: 
   }
 
   if (value instanceof ExternalTypeConstructor) {
+    // TOOD: Do this properly
+    compilerAssert(typeArgs[0] || args[0], "Expected type", { typeArgs, args })
+    const type = typeArgs[0] || args[0].type
     return (
-
-      TaskDef(callFunctionFromValueTask, ctx.compilerState.vm, value, typeArgs, [])
+      TaskDef(callFunctionFromValueTask, ctx.compilerState.vm, value, [type], [])
       .chainFn((task, value) => {
         const type = ctx.compilerState.vm.stack.pop()
         compilerAssert(isType(type), "Expected type got $type", { type })
