@@ -47,6 +47,23 @@ test('option', async () => {
   }
 })
 
+test('option_expansion', async () => {
+  const testObject = createTest({ 
+    moduleName: 'option_expansion',
+    globalOptions,
+    inputPath: `${import.meta.dir}/fixtures/option_expansion.rad`,
+  })
+  try {
+    const input = await Bun.file(testObject.inputPath).text()
+    runCompilerTest(input, { testObject })
+    await writeSyntaxFile(testObject)
+    await writeLlvmBytecodeFile(testObject)
+    await executeNativeExecutable(testObject)
+  } finally {
+    testObject.close()
+  }
+})
+
 test('basic', async () => {
   const testObject = createTest({ 
     moduleName: 'basic',

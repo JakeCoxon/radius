@@ -1527,7 +1527,7 @@ export function compileClassTask(ctx: TaskContext, { classDef, typeArgs }: { cla
 
   const templateScope = Object.create(classDef.parentScope);
   const subCompilerState = pushSubCompilerState(ctx, { debugName: `${classDef.debugName} class template`, lexicalParent: ctx.subCompilerState, scope: templateScope })
-  subCompilerState.functionCompiler = undefined;
+  subCompilerState.functionCompiler = subCompilerState; // Consider class as the functionCompiler - could be renamed something else
   
   classDef.typeArgs.forEach((typeArg, i) => {
     compilerAssert(typeArg instanceof ParseIdentifier, "Not implemented")

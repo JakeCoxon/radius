@@ -1,0 +1,27 @@
+import compiler for Option, Some, None, assert
+
+fn filter_optional(iterable) @inline: {|yield|
+  for x in iterable:
+    if x is Some:
+      yield(x.value)
+}
+
+fn sum(iterable) @inline:
+  (fold(0) + iterable[:] ...)
+
+fn test_filter():
+  let numbers = [1, 2, 3, 4, 5]
+
+  const foo = {|x|
+    (ifx x > 2:
+      Some(x)
+    else:
+      None!int())
+  }
+  
+  const x = filter_optional(@concat(foo(numbers[:])))
+  assert(x.sum == 12)
+  print(x[:]) ...
+
+fn main():
+  test_filter()
