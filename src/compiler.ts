@@ -764,30 +764,26 @@ createOperator("==", "eq",  typecheckEquality,         (a, b) => a == b)
 createOperator("!=", "neq", typecheckEquality,         (a, b) => a != b)
 
 export const propagateLiteralType = (inferType: Type, ast: Ast | null): Type => {
+  // This is for literals only, not for types that need implicit casts
   if (!ast) return inferType
   if (inferType === IntLiteralType) inferType = IntType
   if (inferType === FloatLiteralType) inferType = FloatType
   if (inferType === ast.type) return inferType
+  if (!canAssignTypeTo(ast.type, inferType)) return inferType
+
   const recur = (ast: Ast) => {
     if (inferType === ast.type) return
     if (ast instanceof VariantCastAst) {
       // This is to support None!never into Option!int, assume that the type was originally allowed to contain never
-      if (canAssignTypeTo(ast.type, inferType)) {
-        ast.type = inferType;
-      }
+      ast.type = inferType;
     } else if (ast instanceof NumberAst) {
-      if (ast.type === IntLiteralType || ast.type === FloatLiteralType) ast.type = inferType
-      else compilerAssert(ast.type === inferType, "Unexpected", { ast, inferType })
+      ast.type = inferType
     } else if (ast instanceof OperatorAst) {
-      if (ast.type === IntLiteralType || ast.type === FloatLiteralType) {
-        ast.type = inferType; recur(ast.args[0]); recur(ast.args[1])
-      }
-      else compilerAssert(ast.type === inferType, "Unexpected", { ast, inferType })
+      ast.type = inferType;
+      recur(ast.args[0]); recur(ast.args[1])
     } else if (ast instanceof StatementsAst) {
-      if (ast.type === IntLiteralType || ast.type === FloatLiteralType) {
-        ast.type = inferType; recur(ast.statements.at(-1)!)
-      }
-      else compilerAssert(ast.type === inferType, "Unexpected", { ast, inferType })
+      ast.type = inferType;
+      recur(ast.statements.at(-1)!)
     }
   }
   recur(ast)
@@ -1136,7 +1132,8 @@ const instructions: InstructionMapping = {
   setlocalast: (vm, { name }) => {
     return TaskDef(resolveScope, vm.scope, name).chainFn((task, binding) => {
       compilerAssert(binding instanceof Binding, "Expected binding got $binding", { binding })
-      let ast = propagatedLiteralAst(expectAst(popStack(vm)))
+      const ast = expectAst(popStack(vm))
+      propagateLiteralType(binding.type, ast)
       // Hack in implicit casting for now
       let astTask: Task<Ast, CompilerError> = implicitTypeCast(vm, ast, binding.type)
       

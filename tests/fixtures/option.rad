@@ -16,6 +16,7 @@ fn main():
   # let g = 10.Some
 
   let v: Option!int = None()
+  v = None()
   # let v2 = None()
   print(v)
 
