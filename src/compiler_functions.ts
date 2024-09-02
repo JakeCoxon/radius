@@ -469,10 +469,9 @@ export function createCallAstFromValue(ctx: CompilerFunctionCallContext, value: 
 
   if (value instanceof ExternalTypeConstructor) {
     // TOOD: Do this properly
-    compilerAssert(typeArgs[0] || args[0], "Expected type", { typeArgs, args })
-    const type = typeArgs[0] || args[0].type
+    const types = typeArgs.length ? typeArgs : args.map(x => x.type)
     return (
-      TaskDef(callFunctionFromValueTask, ctx.compilerState.vm, value, [type], [])
+      TaskDef(callFunctionFromValueTask, ctx.compilerState.vm, value, types, [])
       .chainFn((task, value) => {
         const type = ctx.compilerState.vm.stack.pop()
         compilerAssert(isType(type), "Expected type got $type", { type })

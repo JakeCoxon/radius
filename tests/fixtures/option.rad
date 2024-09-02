@@ -15,6 +15,10 @@ fn main():
   let y = Some(10)
   # let g = 10.Some
 
+  let v: Option!int = None()
+  # let v2 = None()
+  print(v)
+
   y = Some(32)
 
   if y is Some:

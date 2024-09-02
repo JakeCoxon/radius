@@ -534,6 +534,7 @@ export interface TypeInfo {
   isReferenceType: boolean,
   sizeof: number
   variantPadding?: number
+  isInvalidSize?: boolean
 }
 export class TypeRoot {}
 export class PrimitiveType extends TypeRoot {
@@ -698,10 +699,12 @@ export const ListTypeConstructor: ExternalTypeConstructor = new ExternalTypeCons
 
 
 export const NoneTypeConstructor: ExternalTypeConstructor = new ExternalTypeConstructor("None", (compiler, argTypes) => {
-  compilerAssert(argTypes.length === 1, "Expected one type arg", { argTypes })
-  const sizeof = argTypes[0].typeInfo.sizeof + IntType.typeInfo.sizeof
-  const variantPadding = argTypes[0].typeInfo.sizeof
-  const type = new ParameterizedType(NoneTypeConstructor, argTypes, { sizeof, variantPadding, fields: [], metaobject: Object.create(null), isReferenceType: false });
+  const argType = argTypes[0] || NeverType
+  compilerAssert(isType(argType), "Expected one type arg", { argType })
+  const sizeof = argType.typeInfo.sizeof + IntType.typeInfo.sizeof
+  const variantPadding = argType.typeInfo.sizeof
+  const type = new ParameterizedType(NoneTypeConstructor, [argType], { sizeof, variantPadding, fields: [], metaobject: Object.create(null), isReferenceType: false });
+  type.typeInfo.isInvalidSize = argType === NeverType
   type.typeInfo.metaobject.isEnumVariant = true
   type.typeInfo.metaobject.enumConstructorVariantOf = OptionTypeConstructor
   type.typeInfo.metaobject.enumVariantIndex = 0
@@ -711,31 +714,35 @@ export const NoneTypeConstructor: ExternalTypeConstructor = new ExternalTypeCons
 
 export const SomeTypeConstructor: ExternalTypeConstructor = new ExternalTypeConstructor("Some", (compiler, argTypes) => {
   compilerAssert(argTypes.length === 1, "Expected one type arg", { argTypes })
-  const sizeof = argTypes[0].typeInfo.sizeof + IntType.typeInfo.sizeof
-  const type = new ParameterizedType(SomeTypeConstructor, argTypes, { sizeof, fields: [], metaobject: Object.create(null), isReferenceType: false });
+  const argType = argTypes[0]
+  const sizeof = argType.typeInfo.sizeof + IntType.typeInfo.sizeof
+  const type = new ParameterizedType(SomeTypeConstructor, [argType], { sizeof, fields: [], metaobject: Object.create(null), isReferenceType: false });
   type.typeInfo.metaobject.isEnumVariant = true
   type.typeInfo.metaobject.enumConstructorVariantOf = OptionTypeConstructor
   type.typeInfo.metaobject.enumVariantIndex = 1
+  type.typeInfo.isInvalidSize = argType === NeverType
   type.typeInfo.fields.push(new TypeField(SourceLocation.anon, "tag", type, 0, IntType))
-  type.typeInfo.fields.push(new TypeField(SourceLocation.anon, "value", type, 1, argTypes[0]))
+  type.typeInfo.fields.push(new TypeField(SourceLocation.anon, "value", type, 1, argType))
   return Task.of(type)
 })
 
 export const OptionTypeConstructor: ExternalTypeConstructor = new ExternalTypeConstructor("Option", (compiler, argTypes) => {
-  compilerAssert(argTypes.length === 1, "Expected one type arg", { argTypes })
+  const argType = argTypes[0] || NeverType
+  compilerAssert(isType(argType), "Expected one type arg", { argType })
 
-  const sizeof = argTypes[0].typeInfo.sizeof + IntType.typeInfo.sizeof
-  const variantPadding = argTypes[0].typeInfo.sizeof
-  const opttype = new ParameterizedType(OptionTypeConstructor, argTypes, { sizeof, variantPadding, fields: [], metaobject: Object.create(null), isReferenceType: false });
+  const sizeof = argType.typeInfo.sizeof + IntType.typeInfo.sizeof
+  const variantPadding = argType.typeInfo.sizeof
+  const opttype = new ParameterizedType(OptionTypeConstructor, [argType], { sizeof, variantPadding, fields: [], metaobject: Object.create(null), isReferenceType: false });
 
+  opttype.typeInfo.isInvalidSize = argType === NeverType
   opttype.typeInfo.metaobject.isEnum = true
   opttype.typeInfo.fields.push(new TypeField(SourceLocation.anon, "tag", opttype, 0, IntType))
 
   return (
-    createParameterizedExternalType(compiler, SomeTypeConstructor, argTypes)
+    createParameterizedExternalType(compiler, SomeTypeConstructor, [argType])
     .chainFn((task, someType) => {
       return (
-        createParameterizedExternalType(compiler, NoneTypeConstructor, argTypes)
+        createParameterizedExternalType(compiler, NoneTypeConstructor, [argType])
         .chainFn((task, noneType) => {
           opttype.typeInfo.metaobject.variants = [someType, noneType]
           opttype.typeInfo.metaobject.Some = someType

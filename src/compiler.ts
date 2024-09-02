@@ -1,4 +1,4 @@
-import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol, ScopeParentSymbol, isPlainObject, ParseLet, ParseList, ParseExpand, ParseBlock, findLabelByBinding, ParseSubscript, ParseNumber, ParseQuote, ParseWhile, ParseOperator, ParseBytecode, ParseOpEq, ParseSet, ParseFreshIden, UnknownObject, ParseNote, DefaultConsAst, RawPointerType, ValueFieldAst, SetValueFieldAst, FloatLiteralType, IntLiteralType, CompilerFunction, DerefAst, SetDerefAst, ParseSlice, CompilerFunctionCallContext, NeverType, LoopObject, CompTimeObjAst, CompileTimeObjectType, NamedArgAst, TypeCheckVar, TypeCheckConfig, u8Type, u64Type, isTypeScalar, FreshBindingToken, isCompilerCallable, ParseIs, OptionTypeConstructor } from "./defs";
+import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol, ScopeParentSymbol, isPlainObject, ParseLet, ParseList, ParseExpand, ParseBlock, findLabelByBinding, ParseSubscript, ParseNumber, ParseQuote, ParseWhile, ParseOperator, ParseBytecode, ParseOpEq, ParseSet, ParseFreshIden, UnknownObject, ParseNote, DefaultConsAst, RawPointerType, ValueFieldAst, SetValueFieldAst, FloatLiteralType, IntLiteralType, CompilerFunction, DerefAst, SetDerefAst, ParseSlice, CompilerFunctionCallContext, NeverType, LoopObject, CompTimeObjAst, CompileTimeObjectType, NamedArgAst, TypeCheckVar, TypeCheckConfig, u8Type, u64Type, isTypeScalar, FreshBindingToken, isCompilerCallable, ParseIs, OptionTypeConstructor, VariantCastAst } from "./defs";
 import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, functionCompileTimeCompileTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, compileExportedFunctionTask } from "./compiler_functions";
 import { Event, Task, TaskDef, Unit, isTask, isTaskResult, withContext } from "./tasks";
 import { createCompilerModuleTask, createListConstructor, defaultMetaFunction, optionBlockSugar, optionCastSugar, orElseSugar, print, questionSugar, smartCastSugar } from "./compiler_sugar";
@@ -699,11 +699,28 @@ export const numberTypeToConcrete = (from: TypeCheckVar) => {
   else if (from.type === FloatLiteralType) from.type = FloatType
 }
 
+export const canAssignUnknownTo = (from: unknown, to: unknown) => {
+  if (from === to) return true
+  return isType(from) && isType(to) && canAssignTypeTo(from, to)
+}
 export const canAssignTypeTo = (from: Type, to: Type) => {
   if (from === to) return true
   const a = { type: from }, b = { type: to }
   normalizeNumberType(a, b)
-  return a.type === b.type
+  if (a.type === b.type) return true
+  
+  if (a.type === NeverType) return true
+
+  if (a.type instanceof ParameterizedType && b.type instanceof ParameterizedType) {
+    if (a.type.typeConstructor !== b.type.typeConstructor) return false
+    if (a.type.args.length !== b.type.args.length) return false
+    for (let i = 0; i < a.type.args.length; i++) {
+      if (!canAssignUnknownTo(a.type.args[i], b.type.args[i])) return false
+    }
+    return true
+  }
+
+  return false
 }
 
 const typecheckNumberOperator = (config: TypeCheckConfig): void => {
@@ -750,9 +767,15 @@ export const propagateLiteralType = (inferType: Type, ast: Ast | null): Type => 
   if (!ast) return inferType
   if (inferType === IntLiteralType) inferType = IntType
   if (inferType === FloatLiteralType) inferType = FloatType
-  if (inferType !== IntType && inferType !== FloatType) return inferType
+  if (inferType === ast.type) return inferType
   const recur = (ast: Ast) => {
-    if (ast instanceof NumberAst) {
+    if (inferType === ast.type) return
+    if (ast instanceof VariantCastAst) {
+      // This is to support None!never into Option!int, assume that the type was originally allowed to contain never
+      if (canAssignTypeTo(ast.type, inferType)) {
+        ast.type = inferType;
+      }
+    } else if (ast instanceof NumberAst) {
       if (ast.type === IntLiteralType || ast.type === FloatLiteralType) ast.type = inferType
       else compilerAssert(ast.type === inferType, "Unexpected", { ast, inferType })
     } else if (ast instanceof OperatorAst) {
@@ -772,6 +795,20 @@ export const propagateLiteralType = (inferType: Type, ast: Ast | null): Type => 
 }
 export const propagatedLiteralAst = (ast: Ast) => { propagateLiteralType(ast.type, ast); return ast }
 
+export const calculateSizeOfType =  (expr: Type): number => {
+  // TODO: Padding
+
+  if (expr instanceof ConcreteClassType) {
+    compilerAssert(expr, "Expected concrete type") // TODO: Compile it?
+    return expr.typeInfo.fields.reduce((acc, x) => acc + calculateSizeOfType(x.fieldType), 0)
+  }
+  if (expr instanceof PrimitiveType) { return expr.typeInfo.sizeof }
+  if (expr instanceof ParameterizedType) { 
+    return expr.typeInfo.fields.reduce((acc, x) => acc + calculateSizeOfType(x.fieldType), 0)
+  }
+  compilerAssert(false, "Not implemented", { expr })
+}
+
 const letLocalAst = (vm: Vm, name: string, type: Type | null, value: Ast | null) => {
   compilerAssert(type || value, "Expected type or initial value for let binding $name", { name });
   compilerAssert(!Object.hasOwn(vm.scope, name), `Already defined $name`, { name });
@@ -780,8 +817,9 @@ const letLocalAst = (vm: Vm, name: string, type: Type | null, value: Ast | null)
   inferType = propagateLiteralType(inferType, value)
   const binding = new Binding(name, inferType)
   setScopeValueAndResolveEvents(vm.scope, name, binding) // This is for globals usually. Locals should be in order
+  compilerAssert(!inferType.typeInfo.isInvalidSize, "Expected concrete type got $inferType which cannot be assigned to", { inferType })
   if (value) {
-    compilerAssert(inferType === value.type, "Mismatch types got $got expected $expected", { got: value.type, expected: inferType })
+    compilerAssert(canAssignTypeTo(value.type, inferType), "Mismatch types got $got expected $expected", { got: value.type, expected: inferType })
   }
   binding.definitionCompiler = vm.context.subCompilerState
   value ||= new DefaultConsAst(inferType.typeInfo.isReferenceType ? RawPointerType : inferType, vm.location)
@@ -1038,27 +1076,15 @@ const instructions: InstructionMapping = {
         );
       }
 
-      const sizeof = (expr: unknown): number => {
-        // TODO: Padding
-
-        if (expr instanceof ConcreteClassType) {
-          compilerAssert(expr, "Expected concrete type") // TODO: Compile it?
-          return expr.typeInfo.fields.reduce((acc, x) => acc + sizeof(x.fieldType), 0)
-        }
-        if (expr instanceof PrimitiveType) { return expr.typeInfo.sizeof }
-        if (expr instanceof ParameterizedType) { 
-          return expr.typeInfo.fields.reduce((acc, x) => acc + sizeof(x.fieldType), 0)
-        }
-        compilerAssert(false, "Not implemented", { expr })
-      }
+      compilerAssert(isType(expr), "Expected type got $expr", { expr })
 
       if (expr instanceof ClassDefinition) {
         return (toType(expr).chainFn((task, type) => {
-          vm.stack.push(sizeof(type)); return Task.success()
+          vm.stack.push(calculateSizeOfType(type)); return Task.success()
         }))
       }
 
-      vm.stack.push(sizeof(expr))
+      vm.stack.push(calculateSizeOfType(expr))
       return
     }
     compilerAssert(false, "Not implemented", { expr, name })
