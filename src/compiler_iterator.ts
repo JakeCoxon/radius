@@ -857,34 +857,42 @@ export const expandFuncMaxSugar = (out: BytecodeWriter, noteNode: ParseNote, arg
 export const expandIteratorSugar = (out: BytecodeWriter, iteratorNode: ParseIterator) => {
   const token = iteratorNode.token
   const nodes: ParseNode[] = []
-  for (const expr of iteratorNode.exprs) {
-    if (expr instanceof ParseExpand) {
-      const node = expr.expr
 
-      const expansion = createExpansionState('iterator', node.token.location)
-      const result = visitExpansion(out, expansion, node)
+  const visit = (node: ParseNode) => {
+    const expansion = createExpansionState('iterator', node.token.location)
+    const result = visitExpansion(out, expansion, node)
 
-      if (expansion.selectors.length === 0) {
-        nodes.push(node) // TDDO: DOes this compile node twice?
-        continue
-      }
-
-      compilerAssert(!expansion.fold, "Fold not supported in this context")
-
-      const param = new ParseFreshIden(node.token, new FreshBindingToken('yieldFn'))
-      expansion.loopBodyNode = new ParseCall(createAnonymousToken(''), param, [result], [])
-      expansion.optimiseSimple = expansion.selectors.length === 1 // TODO: Check this is correct in all cases
-      expansion.debugName = `concat${nodes.length}`
-
-      const expansionParseNode = compileExpansionToParseNode(out, expansion, node)
-
-      const func = createAnonymousParserFunctionDecl("iterate", 
-        createAnonymousToken(''), [{ name: param, type: null, storage: null }], expansionParseNode)
-
-      nodes.push(new ParseFunction(token, func))
-    } else {
-      nodes.push(expr)
+    if (expansion.selectors.length === 0) {
+      nodes.push(node) // TDDO: DOes this compile node twice?
+      return
     }
+
+    compilerAssert(!expansion.fold, "Fold not supported in this context")
+
+    const param = new ParseFreshIden(node.token, new FreshBindingToken('yieldFn'))
+    expansion.loopBodyNode = new ParseCall(createAnonymousToken(''), param, [result], [])
+    expansion.optimiseSimple = expansion.selectors.length === 1 // TODO: Check this is correct in all cases
+    expansion.debugName = `concat${nodes.length}`
+
+    const expansionParseNode = compileExpansionToParseNode(out, expansion, node)
+
+    const func = createAnonymousParserFunctionDecl("iterate", 
+      createAnonymousToken(''), [{ name: param, type: null, storage: null }], expansionParseNode)
+
+    nodes.push(new ParseFunction(token, func))
+  }
+
+  // Concat syntax when expr is a list
+  if (iteratorNode.expr instanceof ParseList) {
+    for (const expr of iteratorNode.expr.exprs) {
+      if (expr instanceof ParseExpand) {
+        visit(expr.expr)
+      } else {
+        nodes.push(expr)
+      }
+    }
+  } else {
+    visit(iteratorNode.expr)
   }
 
   visitParseNode(out, new ParseMeta(token, 

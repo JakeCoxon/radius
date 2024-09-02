@@ -211,11 +211,34 @@ fn test_concat6():
 fn test_iterator_syntax():
 
   numbers := [40, 20, 10, 32, 12, 3124]
-  x := @[foo[:] * numbers[:] ..., 2, 3, 4].sum
+  x := [foo[:] * numbers[:] ..., 2, 3, 4].iter.sum
   assert(x == 15813)
 
-  y :: @[ foo[:] ..., 2, 3, 4 ]
+  y :: [ foo[:] ..., 2, 3, 4 ].iter
   assert(y.sum == 54)
+
+  z := foo.sum
+  assert(z == 45)
+
+  w :: (foo[:] + 1).iter
+  assert(w.sum == 55)
+
+  bar :: {|x| x * 2}
+
+  g := foo[:].bar.iter.sum
+  assert(g == 90)
+
+fn test_postfix():
+
+  bar :: {|x| x * 2}
+
+  i := 0
+  p :: {|x|
+    i += x
+  }
+  
+  foo[:].bar.p ...
+  assert(i == 90)
 
 fn test_people():
 
@@ -415,6 +438,7 @@ fn main():
   test_concat5()
   test_concat6()
   test_iterator_syntax()
+  test_postfix()
   test_min_max()
   test_people()
   test_last()

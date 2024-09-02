@@ -2,7 +2,7 @@ import { ParseAnd, ParseNode, ParseBreak, ParseCall, ParseCast, ParseCompTime, P
 
 const regexes = {
   KEYWORD:
-    /^(?:and|as\!|as|break|class|continue|comptime|def|defn|elif|else|fn|for|if|ifx|in|lambda|meta|null|or|pass|return|try|while|with|type|interface|import|block|fold|ref)(?=\W)/, // note (?=\W)
+    /^(?:and|as\!|as|break|class|continue|comptime|def|defn|elif|else|fn|for|if|ifx|in|iter|lambda|meta|null|or|pass|return|try|while|with|type|interface|import|block|fold|ref)(?=\W)/, // note (?=\W)
   IDENTIFIER: /^[a-zA-Z_][a-zA-Z_0-9]*/,
   STRING: /^(?:"(?:[^"\\]|\\.)*")/,
   SPECIALNUMBER: /^0o[0-7]+|^0x[0-9a-fA-F_]+|^0b[01_]+/,
@@ -227,13 +227,6 @@ export const makeParser = (input: string, debugName: string) => {
     expect("}", "Expected '}' after dict value");
     return new ParseDict(dictToken, pairs);
   };
-  const parseIterator = (iteratorToken: Token): ParseNode => {
-    if (match("]")) return new ParseIterator(iteratorToken, [])
-    const list = [parseExpr()];
-    while (match(",")) list.push(parseExpr());
-    expect("]", "Expected ']' after iterator value");
-    return new ParseIterator(iteratorToken, list);
-  }
 
   const parseFold = (foldToken: Token) => {
     expect("(", "Expected '(' after fold")
@@ -249,7 +242,6 @@ export const makeParser = (input: string, debugName: string) => {
     else if (match("'"))     return new ParseSymbol(parseIdentifier().token);
     else if (match("@"))     return new ParseNote(previous, parseCall());
     else if (match("%{"))    return parseDict(previous)
-    else if (match("@["))    return parseIterator(previous)
     else if (match("{"))     return match("|") ? parseLambda() : throwExpectError("Not implemented")
     else if (match("block")) return new ParseBlock(previous, null, token?.value != ':' ? parseIdentifier() : null, parseColonBlockExpr('block'))
     else if (match("ifx"))   return parseIf(previous, true, "if condition")
@@ -303,7 +295,11 @@ export const makeParser = (input: string, debugName: string) => {
     while (true) {
       if (match("("))        left = new ParseCall(previous, left, parseArgs(), []);
       else if (match("["))   left = parseSlice(false, left);
-      else if (match("."))   left = match("[") ? parseSlice(true, left) : parseFieldAccess(left)
+      else if (match(".")) {
+        if (match("[")) left = parseSlice(true, left);
+        else if (match("iter")) left = new ParseIterator(previous, left);
+        else left = parseFieldAccess(left)
+      }
       else if (match("!"))   left = parseFunctionTypeArguments(previous, left);
       else if (match("{"))   left = match("|") ? parsePostCall(left) : (compilerAssert(false, "Not implemented") as never)
       else if (prevSignificantNewlines && match("|"))
