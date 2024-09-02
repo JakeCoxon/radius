@@ -2,13 +2,13 @@ import { ParseAnd, ParseNode, ParseBreak, ParseCall, ParseCast, ParseCompTime, P
 
 const regexes = {
   KEYWORD:
-    /^(?:and|as\!|as|break|class|continue|comptime|const|def|defn|elif|else|fn|for|if|ifx|in|is|lambda|let|match|meta|null|or|orelse|pass|return|try|while|with|type|interface|import|block|fold|ref)(?=\W)/, // note (?=\W)
+    /^(?:and|as\!|as|break|class|continue|comptime|const|def|defn|elif|else|fn|for|if|ifx|in|is|iter|lambda|let|match|meta|null|or|orelse|pass|return|try|while|with|type|interface|import|block|fold|ref)(?=\W)/, // note (?=\W)
   IDENTIFIER: /^[a-zA-Z_][a-zA-Z_0-9]*/,
   STRING: /^(?:"(?:[^"\\]|\\.)*")/,
   SPECIALNUMBER: /^0o[0-7]+|^0x[0-9a-fA-F_]+|^0b[01_]+/,
   NUMBER: /^(0|[1-9][0-9_]*)(\.[0-9_]+)?(?:[eE][+-]?[0-9]+)?/,
   COMMENT: /^#[^\n]+/,
-  OPENPAREN: /^(?:[\[\{\(]|%{|@\[)/,
+  OPENPAREN: /^(?:[\[\{\(]|%{)/,
   CLOSEPAREN: /^[\]\}\)]/,
   PUNCTUATION: /^(?:==|!=|:=|<=|>=|\+=|\-=|\*=|\/=|::|->|\|\>|\.\.\.|@@|[@!:,=<>\-+\.*\/'\|?])/,
   NEWLINE: /^\n/,
@@ -345,6 +345,7 @@ export const makeParser = (input: string, debugName: string) => {
       else if (match("["))   left = parseSlice(false, left);
       else if (match(".")) {
         if (match("[")) left = parseSlice(true, left);
+        else if (match("iter")) left = new ParseIterator(previous, left);
         else if (match("orelse")) left = new ParseOrElse(previous, left, parseExpr());
         else if (match("match"))  left = parseMatch(previous, left);
         else left = parseFieldAccess(left)

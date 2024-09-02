@@ -55,6 +55,8 @@ fn custom_iterator2(x: Person, foo: int): |yield|
   for i in Range(0, 10):
     yield(x.age + i + foo)
 
+fn sum(arr) @inline:
+  (fold(0) + arr[:] ...)
 
 fn test_fold():
 
@@ -206,6 +208,37 @@ fn test_concat6():
   numbers[:] = concat1[:] ...
   print(numbers[:]) ...
 
+fn test_iterator_syntax():
+
+  let numbers = [40, 20, 10, 32, 12, 3124]
+  let x = [foo[:] * numbers[:] ..., 2, 3, 4].iter.sum
+  assert(x == 15813)
+
+  const y = [ foo[:] ..., 2, 3, 4 ].iter
+  assert(y.sum == 54)
+
+  let z = foo.sum
+  assert(z == 45)
+
+  const w = (foo[:] + 1).iter
+  assert(w.sum == 55)
+
+  const bar = {|x| x * 2}
+
+  let g = foo[:].bar.iter.sum
+  assert(g == 90)
+
+fn test_postfix():
+
+  const bar = {|x| x * 2}
+
+  let i = 0
+  const p = {|x|
+    i += x
+  }
+  
+  foo[:].bar.p ...
+  assert(i == 90)
 
 fn test_people():
 
@@ -404,6 +437,8 @@ fn main():
   test_concat4()
   test_concat5()
   test_concat6()
+  test_iterator_syntax()
+  test_postfix()
   test_min_max()
   test_people()
   test_last()

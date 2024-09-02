@@ -2,7 +2,7 @@ import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst,
 import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, functionCompileTimeCompileTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, compileExportedFunctionTask } from "./compiler_functions";
 import { Event, Task, TaskDef, Unit, isTask, isTaskResult, withContext } from "./tasks";
 import { createCompilerModuleTask, createListConstructor, defaultMetaFunction, optionBlockSugar, optionCastSugar, orElseSugar, print, questionSugar, smartCastSugar } from "./compiler_sugar";
-import { expandDotsSugar, expandFuncAllSugar, expandFuncAnySugar, expandFuncConcatSugar, expandFuncFirstSugar, expandFuncLastSugar, expandFuncMaxSugar, expandFuncMinSugar, expandFuncSumSugar, foldSugar, forExprSugar, forLoopSugar, listComprehensionSugar, listConstructorSugar, sliceSugar, whileExprSugar } from "./compiler_iterator"
+import { expandDotsSugar, expandFuncAllSugar, expandFuncAnySugar, expandFuncConcatSugar, expandFuncFirstSugar, expandFuncLastSugar, expandFuncMaxSugar, expandFuncMinSugar, expandFuncSumSugar, expandIteratorSugar, foldSugar, forExprSugar, forLoopSugar, listComprehensionSugar, listConstructorSugar, sliceSugar, whileExprSugar } from "./compiler_iterator"
 
 export const pushBytecode = <T extends BytecodeInstr>(out: BytecodeWriter, token: Token, instr: T) => {
   out.bytecode.locations.push(token.location);
@@ -108,6 +108,8 @@ export const BytecodeDefault: ParseTreeTable = {
     visitParseNode(out, node.subscript)
     pushBytecode(out, node.token, { type: 'subscript' })
   },
+
+  iterator: (out, node) => expandIteratorSugar(out, node),
 
   quote: (out, node) => {
     visitParseNode({ location: node.token.location, bytecode: out.bytecode, instructionTable: BytecodeSecondOrder, globalCompilerState: out.globalCompilerState, state: out.state }, node.expr)
@@ -278,7 +280,6 @@ export const BytecodeSecondOrder: ParseTreeTable = {
   metafor:   (out, node) => compilerAssert(false, "Not implemented 'metafor'"),
   import:    (out, node) => compilerAssert(false, "Not implemented 'import'"),
   quote:     (out, node) => compilerAssert(false, "Not implemented 'quote'"),
-  iterator:  (out, node) => compilerAssert(false, "Not implemented 'iterator'"),
   case:      (out, node) => compilerAssert(false, "Not implemented 'case'"),
   match:     (out, node) => compilerAssert(false, "Not implemented 'match'"),
   compileriden: (out, node) => compilerAssert(false, "Not implemented 'compileriden'"),
@@ -307,6 +308,7 @@ export const BytecodeSecondOrder: ParseTreeTable = {
   fold:     (out, node) => foldSugar(out, node),
   listcomp: (out, node) => listComprehensionSugar(out, node),
   slice:    (out, node) => sliceSugar(out, node, null),
+  iterator: (out, node) => expandIteratorSugar(out, node),
   question: (out, node) => questionSugar(out, node),
 
   dict: (out, node) => {
