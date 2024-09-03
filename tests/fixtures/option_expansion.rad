@@ -1,6 +1,6 @@
 import compiler for Option, Some, None, assert
 
-fn filter_optional(iterable) @inline: {|yield|
+fn filter_some(iterable) @inline: {|yield|
   for x in iterable:
     if x is Some:
       yield(x.value)
@@ -8,6 +8,25 @@ fn filter_optional(iterable) @inline: {|yield|
 
 fn sum(iterable) @inline:
   (fold(0) + iterable[:] ...)
+
+# fn max2!(T)(iterable) @inline: {
+#   let m = fold(None!T())
+#   let it = iterable[:]
+#   ifx it > m.orelse(0): Some(it) else: m
+# } ...
+
+# const max_by_opt = {|max, it|
+#   (ifx it > max.orelse(0): Some(it) else: max)
+# }
+# fn max2!(T)(iterable) @inline: 
+#   max_by_opt(fold(None!T()), iterable[:]) ...
+
+fn max2!(T)(iterable) @inline:
+  let m = None!T()
+  for it in iterable:
+    if it > m.orelse(0):
+      m = it
+  m
 
 fn test_filter():
   let numbers = [1, 2, 3, 4, 5]
@@ -19,9 +38,26 @@ fn test_filter():
       None!int())
   }
   
-  const x = filter_optional(@concat(foo(numbers[:])))
+  const x = filter_some(foo(numbers[:]).iter)
   assert(x.sum == 12)
   print(x[:]) ...
 
+fn test_max():
+  let numbers = [1, 2, 3, 4, 5]
+  let m = numbers.max2!int
+
+  let v = { m? }.orelse 0
+  assert(v == 5)
+
+fn test_early_exit():
+  let numbers = [1, 2, 3, 4, 5]
+
+  const foo = {|x| ifx x > 2: Some(x) else: None!int() }
+
+  let x = { foo(numbers[:])?.iter.sum }.orelse 32
+  assert(x == 32)
+
 fn main():
   test_filter()
+  test_max()
+  test_early_exit()

@@ -57,7 +57,6 @@ export const BytecodeDefault: ParseTreeTable = {
   namedarg:  (out, node) => compilerAssert(false, "Not implemented 'namedarg' in BytecodeDefault"),
   question:  (out, node) => compilerAssert(false, "Not implemented 'question' in BytecodeDefault"),
   breakopt:  (out, node) => compilerAssert(false, "Not implemented 'breakopt' in BytecodeDefault"),
-  iterator:  (out, node) => compilerAssert(false, "Not implemented 'iterator' in BytecodeDefault"),
   case:      (out, node) => compilerAssert(false, "Not implemented 'case' in BytecodeDefault"),
   match:     (out, node) => compilerAssert(false, "Not implemented 'match' in BytecodeDefault"),
   constructor: (out, node) => compilerAssert(false, "Not implemented 'constructor' in BytecodeDefault"),
@@ -308,7 +307,10 @@ export const BytecodeSecondOrder: ParseTreeTable = {
   fold:     (out, node) => foldSugar(out, node),
   listcomp: (out, node) => listComprehensionSugar(out, node),
   slice:    (out, node) => sliceSugar(out, node, null),
-  iterator: (out, node) => expandIteratorSugar(out, node),
+  iterator: (out, node) => {
+    expandIteratorSugar(out, node)
+    pushBytecode(out, node.token, { type: 'toast' })
+  },
   question: (out, node) => questionSugar(out, node),
 
   dict: (out, node) => {
@@ -750,7 +752,7 @@ const typecheckEquality = (config: TypeCheckConfig) => {
   numberTypeToConcrete(config.b)
   const aok = config.a.type === BoolType || isTypeScalar(config.a.type)
   const bok = config.b.type === BoolType || isTypeScalar(config.b.type)
-  compilerAssert(aok && bok, "Expected bool, int, float or double type got $type", { a: config.a.type, b: config.b.type })
+  compilerAssert(aok && bok, "Expected bool, int, float or double type got $a $b", { a: config.a.type, b: config.b.type })
   config.inferType = BoolType
 }
 createOperator("-",  "sub", typecheckNumberOperator,   (a, b) => a - b)

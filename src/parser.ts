@@ -240,14 +240,6 @@ export const makeParser = (input: string, debugName: string) => {
     return new ParseDict(dictToken, pairs);
   };
 
-  const parseIterator = (iteratorToken: Token): ParseNode => {
-    if (match("]")) return new ParseIterator(iteratorToken, [])
-    const list = [parseExpr()];
-    while (match(",")) list.push(parseExpr());
-    expect("]", "Expected ']' after iterator value");
-    return new ParseIterator(iteratorToken, list);
-  }
-
   const parseFold = (foldToken: Token) => {
     expect("(", "Expected '(' after fold")
     const expr = parseExpr()
@@ -265,9 +257,8 @@ export const makeParser = (input: string, debugName: string) => {
     else if (match("["))     return parseList();
     else if (match("-"))     return new ParseOperator(previous, [parseLiteral()])
     else if (match("'"))     return new ParseSymbol(parseIdentifier().token);
-    else if (match("@"))     return new ParseNote(previous, parseCall());
+    else if (match("@"))     return new ParseNote(previous, parsePostfix()); // TODO: This is broken
     else if (match("%{"))    return parseDict(previous)
-    else if (match("@["))    return parseIterator(previous)
     else if (match("{"))     return match("|") ? parseLambda() : parseBraceBlockExpr("{")
     else if (match("block")) return new ParseBlock(previous, null, token?.value != ':' ? parseIdentifier() : null, parseColonBlockExpr('block'))
     else if (match("ifx"))   return parseIf(previous, true, "if condition")
@@ -337,11 +328,12 @@ export const makeParser = (input: string, debugName: string) => {
   const parseFieldAccess = (left: ParseNode) => new ParseField(previous, left, parseIdentifier())
   const parsePostCall = (left: ParseNode) => new ParsePostCall(previous, left, parseLambda())
 
-  const parseCall = (): ParseNode => {
+  const parsePostfix = (): ParseNode => {
     let left = parseLiteral();
 
     while (true) {
       if (match("("))        left = new ParseCall(previous, left, parseArgs(), []);
+      else if (match("?"))   left = new ParseQuestion(previous, left); 
       else if (match("["))   left = parseSlice(false, left);
       else if (match(".")) {
         if (match("[")) left = parseSlice(true, left);
@@ -358,10 +350,9 @@ export const makeParser = (input: string, debugName: string) => {
     }
   };
   
-  const parseNot = (): ParseNode => match("!")  ? new ParseNot(previous, parseNot()) : parseCall();
+  const parseNot = (): ParseNode => match("!")  ? new ParseNot(previous, parseNot()) : parsePostfix();
 
-  const parseQuestion = () => {  let left = parseNot();      while (match("?"))                    left = new ParseQuestion(previous, left);                   return left; };
-  const parseIs = () => {        let left = parseQuestion(); while (match("is"))                   left = new ParseIs(previous, left, parseQuestion());        return left; };
+  const parseIs = () => {        let left = parseNot(); while (match("is"))                   left = new ParseIs(previous, left, parseNot());        return left; };
   const parseAs = () => {        let left = parseIs();       while (match("as!") || match("as"))   left = new ParseCast(previous, left, parseIs());            return left; };
   const parseFactor = () => {    let left = parseAs();       while (match("*") || match("/"))      left = new ParseOperator(previous, [left, parseAs()]);      return left; };
   const parseSum = () => {       let left = parseFactor();   while (match("+") || match("-"))      left = new ParseOperator(previous, [left, parseFactor()]);  return left; };
