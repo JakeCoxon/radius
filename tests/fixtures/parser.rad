@@ -69,12 +69,25 @@ fn main():
 
   let x = [ a? + b? ...]
 
-  let x = @[
-      a[:]? + b[:]? ...
-  ]
-  let x = @[{
+  let x = ( a[:]? + b[:]? ).iter
+  let x = [ a? + b? ...].iter
+  let x = ({
     let foo = a? + b?
     foo + 32
-  }.orelse 0 ...]
+  }.orelse 0).iter
+
+  let x, y = thing
+  let (x, y) = thing
+  let Some(x, y) = thing
+  let Some(x, y), Some(x, y) = thing
+  let (Some(x, y), None) = thing
+  let a, b, c, d, Some(e), f = thing
+  orelse return 30
+
+  let x = thing.match {
+    Some(a): 123
+    None: 232
+  }
+
 
   # hello

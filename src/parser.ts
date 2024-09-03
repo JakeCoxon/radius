@@ -534,26 +534,25 @@ export const makeParser = (input: string, debugName: string) => {
   // Expr after in must be lower precedence than expansion dots
   const expectInExpr = () => (expect("in", "Expected 'in' after for identifier"), parseAssignExpr())
   const parseLeftSideMatch = (): ParseIdentifier | ParseTuple | ParseCase => {
-    const commaSeperated = (left: ParseIdentifier | ParseTuple | ParseCase) => {
-      const list = [left, parseLeftSideMatch()];
-      while (match(",")) list.push(parseLeftSideMatch());
-      return list
-    }
-    const inner = () => {
-      let left: ParseIdentifier | ParseTuple | ParseCase = parseIdentifier();
-      if (match("(")) {
-        let args = [parseLeftSideMatch()];
-        while (match(",")) args.push(parseLeftSideMatch());
-        left = new ParseCase(previous, left, args);
-        expect(")", "Expected ')' after tuple expression");
-      }
-      if (match(",")) {
-        left = new ParseTuple(previous, commaSeperated(left));
-      }
+    if (match("(")) return trailingEndParen(parseLeftSideMatch())
 
-      return left;
+    const idenOrCaseClass = (): ParseIdentifier | ParseTuple | ParseCase => {
+      if (match("(")) return trailingEndParen(idenOrCaseClass())
+      let left: ParseIdentifier | ParseTuple | ParseCase = parseIdentifier();
+      if (!match("(")) return left
+      let args = [idenOrCaseClass()];
+      while (match(",")) args.push(idenOrCaseClass());
+      left = new ParseCase(previous, left, args);
+      expect(")", "Expected ')' after tuple expression");
+      return left
     }
-    return match("(") ? trailingEndParen(inner()) : inner()
+    let left: ParseIdentifier | ParseTuple | ParseCase = idenOrCaseClass();
+    while (match(",")) {
+      const list = [left, idenOrCaseClass()];
+      while (match(",")) list.push(idenOrCaseClass());
+      left = new ParseTuple(previous, list);
+    }
+    return left;
   }
   const parseForStatement = () =>
     new ParseFor(previous, parseLeftSideMatch(), expectInExpr(), parseColonBlock("for list-expression"))
@@ -632,7 +631,7 @@ export const makeParser = (input: string, debugName: string) => {
 
   const msg = `Expected EOF but got ${previous?.value} (${previous?.type})`;
   compilerAssert(token === undefined, msg, { lexer, token: previous });
-  return <ParsedModule>{ rootNode, classDefs: state.classDecls, functionDecls: state.functionDecls };
+  return { rootNode, classDefs: state.classDecls, functionDecls: state.functionDecls } satisfies ParsedModule
 };
 
 const createNamedFunc = (state: any, token: Token, functionMetaName: ParseIdentifier | null, name: ParseIdentifier, typeParams: ParseNode[], params: ParserFunctionParameter[], returnType: ParseNode | null, keywords: ParseNode[], body: ParseNode | null) => {

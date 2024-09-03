@@ -219,7 +219,7 @@ export const BytecodeDefault: ParseTreeTable = {
 
   else: (out, node) => visitParseNode(out, node.body),
   if: (out, node) => {
-    compilerAssert(false, "TODO: Jump instructions must use relative because we do splicing tricks of the bytecode")
+    // compilerAssert(false, "TODO: Jump instructions must use relative because we do splicing tricks of the bytecode")
     visitParseNode(out, node.condition);
     const jump1 = { type: "jumpf" as const, address: 0 };
     pushBytecode(out, node.condition.token, jump1);
