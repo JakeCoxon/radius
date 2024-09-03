@@ -395,8 +395,8 @@ export const makeParser = (input: string, debugName: string) => {
   };
   const parseBraceBlockExpr = (afterMessage: string): ParseBlock => {
     const token = previous;
-    if (!matchType("INDENT")) return new ParseBlock(token, 'option', null, new ParseStatements(token, [trailingEndBrace(trailingStatement(parseExpr()))]))
-    return new ParseBlock(token, null, null, trailingEndBrace(trailingStatement(parseMultilineBlock(token))))
+    if (!matchType("INDENT")) return new ParseBlock(token, 'option', null, new ParseStatements(token, [trailingEndBrace(parseExpressionStatement())]))
+    return new ParseBlock(token, 'option', null, trailingEndBrace(trailingStatement(parseMultilineBlock(token))))
   }
   const parseColonBlockExpr = (afterMessage: string): ParseStatements => {
     const token = expect(":", `Expected ':' after ${afterMessage}`);

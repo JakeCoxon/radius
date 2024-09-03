@@ -1226,7 +1226,7 @@ const instructions: InstructionMapping = {
   list: (vm, { count }) => vm.stack.push(popValues(vm, count)),
   
   breakast: (vm, { v, named, breakType }) => {
-    const expr = v ? propagatedLiteralAst(expectAst(popStack(vm))) : null
+    let expr = v ? propagatedLiteralAst(expectAst(popStack(vm))) : null
     const name = named ? popStack(vm) : null
     if (name && name instanceof LoopObject) { // It's possible to directly pass a loop object to break from
       const block = breakType === 'break' ? name.breakBlock : breakType === 'continue' ? name.continueBlock : (compilerAssert(false, "Invalid breakType", { breakType }) as never)
@@ -1240,13 +1240,19 @@ const instructions: InstructionMapping = {
       block = vm.context.subCompilerState.functionReturnBreakBlock
     else if (name) block = findLabelByBinding(vm.context.subCompilerState.labelBlock, name as Binding)
     else block = findLabelBlockByType(vm.context.subCompilerState.labelBlock, breakType);
+    compilerAssert(block.binding, "Expected binding")
+    block.didBreak = true
+    if (expr?.type === VoidType) {
+      // Make sure to keep the expr, but don't use it in break expression
+      const break_ = new BreakAst(NeverType, vm.location, block.binding, null)
+      const ast = new StatementsAst(VoidType, vm.location, [expr, break_])
+      return vm.stack.push(ast)
+    }
     if (expr) {
       if (block.type) compilerAssert(block.type === expr.type, "Block type is already inferred to be $blockType but got an expression of type $exprType", { blockType: block.type, exprType: expr.type })
       block.type = expr.type
       block.breakWithExpr = true
     }
-    block.didBreak = true
-    compilerAssert(block.binding, "Expected binding")
     vm.stack.push(new BreakAst(NeverType, vm.location, block.binding, expr))
   },
   bindingast: (vm, { name }) => {

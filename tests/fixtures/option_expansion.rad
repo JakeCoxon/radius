@@ -53,11 +53,28 @@ fn test_early_exit():
   let numbers = [1, 2, 3, 4, 5]
 
   const foo = {|x| ifx x > 2: Some(x) else: None!int() }
+  let y = Some(23)
 
-  let x = { foo(numbers[:])?.iter.sum }.orelse 32
+  let x = {
+    foo(numbers[:])?.iter.sum + y?
+  }.orelse 32
   assert(x == 32)
+
+fn test_early_exit_sideffect():
+  let numbers = [1, 2, 3, 4, 5, 2, 1]
+  let y = Some(23)
+  const foo = {|x| ifx x < 3: Some(x) else: None!int() }
+
+  let r = 0
+  { r += numbers[:].foo? } ...
+  assert(r == 6)
+
+  let s = 0
+  { s += numbers[:].foo? ... }
+  assert(s == 3)
 
 fn main():
   test_filter()
   test_max()
   test_early_exit()
+  test_early_exit_sideffect()

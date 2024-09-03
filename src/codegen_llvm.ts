@@ -213,7 +213,7 @@ const astWriter: LlvmAstWriterTable = {
     return { pointer }
   },
   binding: (writer, ast) => {
-    compilerAssert(ast.binding.type !== VoidType)
+    compilerAssert(ast.binding.type !== VoidType, "Expected type got $type", { ast, type: ast.binding.type })
     if (ast.binding.storage === 'ref') {
       // Ref params are alloca as pointers themselves so we need to load them first (should get optimised away)
       const pointer = createPointer("", ast.binding.type)

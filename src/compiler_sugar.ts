@@ -542,14 +542,10 @@ export const smartCastSugar = (out: BytecodeWriter, node: ParseIf) => {
   pushBytecode(out, node.token, { type: "ifast", f: !!node.falseBody, e: node.isExpr })
 }
 
-const getSomeTypeConstructor = new ExternalFunction('getSomeTypeConstructor', VoidType, (ctx, args) => {
-  return SomeTypeConstructor
-})
-
 export const orElseSugar = (out: BytecodeWriter, node: ParseOrElse) => {
   const letIden = new ParseFreshIden(node.token, new FreshBindingToken('orelse'))
   const letNode = new ParseLet(node.token, letIden, null, node.expr)
-  const testNode = new ParseIs(node.token, letIden, new ParseCall(node.token, new ParseValue(node.token, getSomeTypeConstructor), [], []))
+  const testNode = new ParseIs(node.token, letIden, new ParseValue(node.token, SomeTypeConstructor))
   const valueNode = new ParseField(node.token, letIden, new ParseIdentifier(createAnonymousToken('value')))
   const if_ = new ParseIf(node.token, true, testNode, valueNode, new ParseElse(node.token, node.orElse))
   pushBytecode(out, node.token, { type: 'pushqs' })
@@ -566,6 +562,17 @@ export const optionCastSugar = (vm: Vm, ast: Ast, type: Type): Task<Ast, Compile
   const ctx: CompilerFunctionCallContext = { location: vm.location, compilerState: vm.context.subCompilerState, resultAst: undefined, typeCheckResult: undefined }
   return createCallAstFromValue(ctx, SomeTypeConstructor, [ast.type], [ast])
 }
+
+const someOrVoid = new CompilerFunction('someOrVoid', (ctx, typeArgs, args): Task<Ast, CompilerError> => {
+  if (args[0].type === VoidType) return Task.of(args[0])
+  const fnctx: CompilerFunctionCallContext = { location: ctx.location, compilerState: ctx.compilerState, resultAst: undefined, typeCheckResult: undefined }
+  return createCallAstFromValue(fnctx, SomeTypeConstructor, [args[0].type], [args[0]])
+})
+const noneOrVoid = new CompilerFunction('noneOrVoid', (ctx, typeArgs, args): Task<Ast, CompilerError> => {
+  if (typeArgs[0] === VoidType) return Task.of(new VoidAst(VoidType, ctx.location))
+  const fnctx: CompilerFunctionCallContext = { location: ctx.location, compilerState: ctx.compilerState, resultAst: undefined, typeCheckResult: undefined }
+  return createCallAstFromValue(fnctx, NoneTypeConstructor, [typeArgs[0]], [])
+})
 
 export const optionBlockSugar = (out: BytecodeWriter, node: ParseBlock) => {
   const name = (node.name instanceof ParseFreshIden ? node.name.freshBindingToken.identifier : node.name?.token.value) ?? null
@@ -587,7 +594,7 @@ export const optionBlockSugar = (out: BytecodeWriter, node: ParseBlock) => {
   visitParseNode(writer, new ParseMeta(node.token, new ParseSet(node.token, stmtsIden, new ParseQuote(node. token, node.statements))))
   pushBytecode(writer, node.token, { type: 'pop' })
   if (optionalBlock.didBreak) {
-    const some_ = new ParseCall(node.token, new ParseValue(node.token, SomeTypeConstructor), [stmtsIden], [])
+    const some_ = new ParseCall(node.token, new ParseValue(node.token, someOrVoid), [stmtsIden], [])
     visitParseNode(writer, new ParseBreak(node.token, outerIden, some_))
   } else {
     visitParseNode(writer, stmtsIden)
@@ -596,7 +603,7 @@ export const optionBlockSugar = (out: BytecodeWriter, node: ParseBlock) => {
   if (optionalBlock.didBreak) {
     const top = new ParseEvalFunc(node.token, (vm) => { }, [], [])
     const inferType = new ParseCall(node.token, new ParseValue(node.token, typeOf), [stmtsIden], [])
-    const none_ = new ParseCall(node.token, new ParseValue(node.token, NoneTypeConstructor), [], [inferType])
+    const none_ = new ParseCall(node.token, new ParseValue(node.token, noneOrVoid), [], [inferType])
     const stmts = new ParseStatements(node.token, [top, none_])
     visitParseNode(writer, stmts)
   }
