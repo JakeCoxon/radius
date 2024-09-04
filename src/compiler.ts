@@ -1,7 +1,7 @@
 import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol, ScopeParentSymbol, isPlainObject, ParseLet, ParseList, ParseExpand, ParseBlock, findLabelByBinding, ParseSubscript, ParseNumber, ParseQuote, ParseWhile, ParseOperator, ParseBytecode, ParseOpEq, ParseSet, ParseFreshIden, UnknownObject, ParseNote, DefaultConsAst, RawPointerType, ValueFieldAst, SetValueFieldAst, FloatLiteralType, IntLiteralType, CompilerFunction, DerefAst, SetDerefAst, ParseSlice, CompilerFunctionCallContext, NeverType, LoopObject, CompTimeObjAst, CompileTimeObjectType, NamedArgAst, TypeCheckVar, TypeCheckConfig, u8Type, u64Type, isTypeScalar, FreshBindingToken, isCompilerCallable, ParseIs, OptionTypeConstructor, VariantCastAst } from "./defs";
 import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, functionCompileTimeCompileTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, compileExportedFunctionTask } from "./compiler_functions";
 import { Event, Task, TaskDef, Unit, isTask, isTaskResult, withContext } from "./tasks";
-import { createCompilerModuleTask, createListConstructor, defaultMetaFunction, optionBlockSugar, optionCastSugar, orElseSugar, print, questionSugar, smartCastSugar } from "./compiler_sugar";
+import { createCompilerModuleTask, createListConstructor, defaultMetaFunction, matchSugar, optionBlockSugar, optionCastSugar, orElseSugar, print, questionSugar, smartCastSugar } from "./compiler_sugar";
 import { expandDotsSugar, expandFuncAllSugar, expandFuncAnySugar, expandFuncConcatSugar, expandFuncFirstSugar, expandFuncLastSugar, expandFuncMaxSugar, expandFuncMinSugar, expandFuncSumSugar, expandIteratorSugar, foldSugar, forExprSugar, forLoopSugar, listComprehensionSugar, listConstructorSugar, sliceSugar, whileExprSugar } from "./compiler_iterator"
 
 export const pushBytecode = <T extends BytecodeInstr>(out: BytecodeWriter, token: Token, instr: T) => {
@@ -57,7 +57,7 @@ export const BytecodeDefault: ParseTreeTable = {
   namedarg:  (out, node) => compilerAssert(false, "Not implemented 'namedarg' in BytecodeDefault"),
   question:  (out, node) => compilerAssert(false, "Not implemented 'question' in BytecodeDefault"),
   breakopt:  (out, node) => compilerAssert(false, "Not implemented 'breakopt' in BytecodeDefault"),
-  case:      (out, node) => compilerAssert(false, "Not implemented 'case' in BytecodeDefault"),
+  extract:   (out, node) => compilerAssert(false, "Not implemented 'extract' in BytecodeDefault"),
   match:     (out, node) => compilerAssert(false, "Not implemented 'match' in BytecodeDefault"),
   constructor: (out, node) => compilerAssert(false, "Not implemented 'constructor' in BytecodeDefault"),
   compileriden: (out, node) => compilerAssert(false, "Not implemented 'compileriden' in BytecodeDefault"),
@@ -279,8 +279,7 @@ export const BytecodeSecondOrder: ParseTreeTable = {
   metafor:   (out, node) => compilerAssert(false, "Not implemented 'metafor'"),
   import:    (out, node) => compilerAssert(false, "Not implemented 'import'"),
   quote:     (out, node) => compilerAssert(false, "Not implemented 'quote'"),
-  case:      (out, node) => compilerAssert(false, "Not implemented 'case'"),
-  match:     (out, node) => compilerAssert(false, "Not implemented 'match'"),
+  extract:   (out, node) => compilerAssert(false, "Not implemented 'extract'"),
   compileriden: (out, node) => compilerAssert(false, "Not implemented 'compileriden'"),
 
   constructor:  (out, node) => (visitParseNode(out, node.type), visitAll(out, node.args), pushBytecode(out, node.token, { type: 'constructorast', count: node.args.length })),
@@ -307,11 +306,12 @@ export const BytecodeSecondOrder: ParseTreeTable = {
   fold:     (out, node) => foldSugar(out, node),
   listcomp: (out, node) => listComprehensionSugar(out, node),
   slice:    (out, node) => sliceSugar(out, node, null),
+  question: (out, node) => questionSugar(out, node),
+  match:    (out, node) => matchSugar(out, node),
   iterator: (out, node) => {
     expandIteratorSugar(out, node)
     pushBytecode(out, node.token, { type: 'toast' })
   },
-  question: (out, node) => questionSugar(out, node),
 
   dict: (out, node) => {
     node.pairs.forEach(([key, value]) => {
@@ -561,7 +561,8 @@ export const BytecodeSecondOrder: ParseTreeTable = {
     // TODO: This is no longer possible because we use if-expr without else clause in iterators
     // if (node.isExpr) compilerAssert(node.falseBody, "If-expression needs false branch")
 
-    if (node.condition instanceof ParseIs) return smartCastSugar(out, node)
+    // This is messing things up
+    // if (node.condition instanceof ParseIs) return smartCastSugar(out, node)
     if (node.falseBody) visitParseNode(out, node.falseBody)
     visitParseNode(out, node.trueBody)
     visitParseNode(out, node.condition)
@@ -990,7 +991,8 @@ const instructions: InstructionMapping = {
   ifast: (vm, { f, e }) => {
     const cond = propagatedLiteralAst(expectAst(popStack(vm)))
     const trueBody = propagatedLiteralAst(expectAst(popStack(vm)))
-    const falseBody = f ? propagatedLiteralAst(expectAst(popStack(vm))) : null
+    const falseBody = f ? expectAst(popStack(vm)) : null
+    if (falseBody) propagateLiteralType(trueBody.type, falseBody) // FalseBody takes type of trueBody but we should make both depend on each other like binary operators
     let resultType: Type = VoidType
     if (e && falseBody) resultType = trueBody.type === NeverType ? falseBody.type : trueBody.type
     if (trueBody.type === NeverType && (!falseBody || falseBody.type === NeverType)) resultType = NeverType // Propagate never type even if it's not an expression if

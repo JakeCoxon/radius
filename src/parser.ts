@@ -1,4 +1,4 @@
-import { ParseAnd, ParseNode, ParseBreak, ParseCall, ParseCast, ParseCompTime, ParseContinue, ParseDict, ParseExpand, ParseField, ParseFor, ParseForExpr, ParseIf, ParseLet, ParseLetConst, ParseList, ParseListComp, ParseMeta, ParseNot, ParseNumber, ParseOpEq, ParseOperator, ParseOr, ParseReturn, ParseSet, ParseStatements, ParseString, ParseIdentifier, ParseWhile, ParseWhileExpr, ParserFunctionDecl, Token, compilerAssert, ParsePostCall, ParseSymbol, ParseNote, ParseSlice, ParseSubscript, ParserClassDecl, ParseClass, ParseFunction, createToken, ParseBoolean, ParseElse, ParseMetaIf, ParseMetaFor, ParseBlock, ParseImport, ParsedModule, Source, ParseMetaWhile, ParseTuple, ParseImportName, ParseFold, ParserFunctionParameter, ParseNamedArg, ParseIs, ParseOrElse, ParseIterator, ParseQuestion, ParseCase, ParseMatch } from "./defs";
+import { ParseAnd, ParseNode, ParseBreak, ParseCall, ParseCast, ParseCompTime, ParseContinue, ParseDict, ParseExpand, ParseField, ParseFor, ParseForExpr, ParseIf, ParseLet, ParseLetConst, ParseList, ParseListComp, ParseMeta, ParseNot, ParseNumber, ParseOpEq, ParseOperator, ParseOr, ParseReturn, ParseSet, ParseStatements, ParseString, ParseIdentifier, ParseWhile, ParseWhileExpr, ParserFunctionDecl, Token, compilerAssert, ParsePostCall, ParseSymbol, ParseNote, ParseSlice, ParseSubscript, ParserClassDecl, ParseClass, ParseFunction, createToken, ParseBoolean, ParseElse, ParseMetaIf, ParseMetaFor, ParseBlock, ParseImport, ParsedModule, Source, ParseMetaWhile, ParseTuple, ParseImportName, ParseFold, ParserFunctionParameter, ParseNamedArg, ParseIs, ParseOrElse, ParseIterator, ParseQuestion, ParseExtract, ParseMatch, ParseMatchCase } from "./defs";
 
 const regexes = {
   KEYWORD:
@@ -315,7 +315,7 @@ export const makeParser = (input: string, debugName: string) => {
       else return trailingStatement(parseExpr());
     }
     const parseCase = () => {
-      return [parseLeftSideMatch(), parseMatchBlock()] as [ParseIdentifier | ParseTuple | ParseCase, ParseNode]
+      return new ParseMatchCase(previous, parseLeftSideMatch(), parseMatchBlock())
     }
     const cases = [parseCase()];
     while (token?.type !== 'DEDENT') cases.push(parseCase());
@@ -533,23 +533,24 @@ export const makeParser = (input: string, debugName: string) => {
 
   // Expr after in must be lower precedence than expansion dots
   const expectInExpr = () => (expect("in", "Expected 'in' after for identifier"), parseAssignExpr())
-  const parseLeftSideMatch = (): ParseIdentifier | ParseTuple | ParseCase => {
+  const parseLeftSideMatch = (): ParseNode => {
     if (match("(")) return trailingEndParen(parseLeftSideMatch())
 
-    const idenOrCaseClass = (): ParseIdentifier | ParseTuple | ParseCase => {
-      if (match("(")) return trailingEndParen(idenOrCaseClass())
-      let left: ParseIdentifier | ParseTuple | ParseCase = parseIdentifier();
+    const idenOrExtract = (): ParseNode => {
+      if (match("(")) return trailingEndParen(idenOrExtract())
+      let left: ParseNode = parseIdentifier();
       if (!match("(")) return left
-      let args = [idenOrCaseClass()];
-      while (match(",")) args.push(idenOrCaseClass());
-      left = new ParseCase(previous, left, args);
+      if (match(")")) return new ParseExtract(previous, left, [])
+      let args = [idenOrExtract()];
+      while (match(",")) args.push(idenOrExtract());
+      left = new ParseExtract(previous, left, args);
       expect(")", "Expected ')' after tuple expression");
       return left
     }
-    let left: ParseIdentifier | ParseTuple | ParseCase = idenOrCaseClass();
+    let left = idenOrExtract();
     while (match(",")) {
-      const list = [left, idenOrCaseClass()];
-      while (match(",")) list.push(idenOrCaseClass());
+      const list = [left, idenOrExtract()];
+      while (match(",")) list.push(idenOrExtract());
       left = new ParseTuple(previous, list);
     }
     return left;

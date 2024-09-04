@@ -1,0 +1,10 @@
+import compiler for Some, None, Option
+
+fn main():
+  let y = Some(1)
+
+  let x = y.match {
+    Some(z): z + 2
+    None(): 3
+  }
+  print(x)

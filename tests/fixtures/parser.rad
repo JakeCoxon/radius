@@ -89,5 +89,9 @@ fn main():
     None: 232
   }
 
+  # let Some(x) = thing + 1
+  # else: return
 
+  print(x)
+  
   # hello
