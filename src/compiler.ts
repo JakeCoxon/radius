@@ -469,6 +469,11 @@ export const BytecodeSecondOrder: ParseTreeTable = {
       writeMeta(out, node.type);
       pushBytecode(out, node.type.token, { type: 'totype' });
     }
+    if (node.left instanceof ParseMeta) {
+      // compilerAssert(false, "Not implemented", { node })
+      writeMeta(out, node.left.expr)
+      return pushBytecode(out, node.token, { type: 'letmetaast', t: !!node.type, v: !!node.value }) 
+    }
     if (node.left instanceof ParseTuple) {
       const recur = (tup: ParseTuple) => {
         tup.exprs.forEach(expr => {
@@ -613,6 +618,7 @@ export const compileFunctionPrototype = (ctx: TaskContext, prototype: FunctionPr
   pushGeneratedBytecode(out, { type: "halt" })
 
   ctx.globalCompiler.logger.log(textColors.cyan(`Compiled ${prototype.name}`))
+  ctx.globalCompiler.logger.log(textColors.cyan(`Params: ${prototype.params.map(x => x.name instanceof ParseFreshIden ? x.name.freshBindingToken.identifier : x.name.token.value).join(", ")}`))
   ctx.globalCompiler.logger.log(bytecodeToString(prototype.bytecode))
   ctx.globalCompiler.logger.log("")
   return prototype.bytecode;
@@ -962,6 +968,18 @@ const instructions: InstructionMapping = {
       return Task.success()
     })
   },
+  letmetaast: (vm, { t, v }) => {
+    const name = popStack(vm)
+    compilerAssert(typeof name === 'string', "Expected string got $name", { name })
+    const type = t ? expectType(popStack(vm)) : null
+    const value = v ? expectAst(popStack(vm)) : null
+    compilerAssert(value, "Expected value for let")
+    const newValue: Task<Ast | null, CompilerError> = (value && type) ? implicitTypeCast(vm, value, type) : Task.of(value)
+    return newValue.chainFn((task, ast) => {
+      vm.stack.push(letLocalAst(vm, name, type, ast))
+      return Task.success()
+    })
+  },
   letmatchast: (vm, { t, v }) =>  {
     compilerAssert(!t, "Type not supported for tuple let")
     const tuple = popStack(vm)
@@ -993,6 +1011,10 @@ const instructions: InstructionMapping = {
     const trueBody = propagatedLiteralAst(expectAst(popStack(vm)))
     const falseBody = f ? expectAst(popStack(vm)) : null
     if (falseBody) propagateLiteralType(trueBody.type, falseBody) // FalseBody takes type of trueBody but we should make both depend on each other like binary operators
+    if (e && cond instanceof BoolAst) {
+      if (cond.value) { vm.stack.push(trueBody); return }
+      else if (falseBody) { vm.stack.push(falseBody); return }
+    }
     let resultType: Type = VoidType
     if (e && falseBody) resultType = trueBody.type === NeverType ? falseBody.type : trueBody.type
     if (trueBody.type === NeverType && (!falseBody || falseBody.type === NeverType)) resultType = NeverType // Propagate never type even if it's not an expression if
@@ -1261,7 +1283,8 @@ const instructions: InstructionMapping = {
     return (
       TaskDef(resolveScope, vm.scope, name)
       .chainFn((task, value) => {
-        if (value instanceof Binding) ensureBindingIsNotClosedOver(vm.context.subCompilerState, name, value);
+        // TODO: This is not working with compile time functions
+        // if (value instanceof Binding) ensureBindingIsNotClosedOver(vm.context.subCompilerState, name, value);
         if (isPlainObject(value)) vm.stack.push(value)
         else if (value instanceof Module) vm.stack.push(value)
         // else if (value instanceof LoopObject) vm.stack.push(value)
@@ -1466,7 +1489,7 @@ const ensureBindingIsNotClosedOver = (subCompilerState: SubCompilerState, name: 
       compiler = compiler.inlineIntoCompiler
     }
   })()
-  compilerAssert(found, "Name $name is declared in an external function which isn't supported in this compiler. You might want to use an inline function", { name, found, subCompilerState })
+  compilerAssert(found, "Name $name is declared in an external function which isn't supported in this compiler. You might want to use an inline function", { name, value, found, subCompilerState, definitionCompiler: value.definitionCompiler })
 }
 
 function executeVmTask(ctx: TaskContext, { vm } : { vm: Vm }, p: void): Task<Unit, CompilerError> {
@@ -1525,7 +1548,7 @@ export function compileClassTask(ctx: TaskContext, { classDef, typeArgs }: { cla
   
   if (!classDef.templatePrototype)  {
     compilerAssert(classDef.body, "Expected class body");
-    classDef.templatePrototype = { name: `${classDef.debugName} class template bytecode`, body: classDef.body, initialInstructionTable: BytecodeSecondOrder }; 
+    classDef.templatePrototype = { name: `${classDef.debugName} class template bytecode`, body: classDef.body, initialInstructionTable: BytecodeSecondOrder, params: [] }; 
     compileFunctionPrototype(ctx, classDef.templatePrototype);
   }
 

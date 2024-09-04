@@ -128,7 +128,7 @@ export class ParseNumber extends ParseNodeType {       key = 'number' as const; 
 export class ParseString extends ParseNodeType {       key = 'string' as const;       constructor(public token: Token, public string: string) { super();} }
 export class ParseBoolean extends ParseNodeType {      key = 'boolean' as const;      constructor(public token: Token) { super();} }
 export class ParseStatements extends ParseNodeType {   key = 'statements' as const;   constructor(public token: Token, public exprs: ParseNode[]) { super();} }
-export class ParseLet extends ParseNodeType {          key = 'let' as const;          constructor(public token: Token, public left: ParseIdentifier | ParseFreshIden | ParseTuple | ParseExtract, public type: ParseNode | null, public value: ParseNode | null) { super();} }
+export class ParseLet extends ParseNodeType {          key = 'let' as const;          constructor(public token: Token, public left: ParseNode, public type: ParseNode | null, public value: ParseNode | null) { super();} }
 export class ParseSet extends ParseNodeType {          key = 'set' as const;          constructor(public token: Token, public left: ParseNode, public value: ParseNode) { super();} }
 export class ParseOperator extends ParseNodeType {     key = 'operator' as const;     constructor(public token: Token, public exprs: ParseNode[]) { super();} }
 export class ParseNote extends ParseNodeType {         key = 'note' as const;         constructor(public token: Token, public expr: ParseNode) { super();} }
@@ -168,7 +168,7 @@ export class ParsePostCall extends ParseNodeType {     key = 'postcall' as const
 export class ParseSlice extends ParseNodeType {        key = 'slice' as const;        constructor(public token: Token, public expr: ParseNode, public start: ParseNode | null, public end: ParseNode | null, public step: ParseNode | null, public isStatic: boolean) { super();} }
 export class ParseExtract extends ParseNodeType {      key = 'extract' as const;      constructor(public token: Token, public name: ParseIdentifier, public args: ParseNode[]) { super();} }
 export class ParseMatch extends ParseNodeType {        key = 'match' as const;        constructor(public token: Token, public subject: ParseNode, public cases: ParseMatchCase[]) { super();} }
-export class ParseMatchCase extends ParseNodeType {    key = 'matchcase' as const;    constructor(public token: Token, public extract: ParseNode, public body: ParseNode) { super();} }
+export class ParseMatchCase extends ParseNodeType {    key = 'matchcase' as const;    constructor(public token: Token, public extract: ParseNode, public condition: ParseNode | null, public body: ParseNode) { super();} }
 export class ParseSubscript extends ParseNodeType {    key = 'subscript' as const;    constructor(public token: Token, public expr: ParseNode, public subscript: ParseNode, public isStatic: boolean) { super();} }
 export class ParseTuple extends ParseNodeType {        key = 'tuple' as const;        constructor(public token: Token, public exprs: ParseNode[]) { super();} }
 export class ParseBlock extends ParseNodeType {        key = 'block' as const;        constructor(public token: Token, public breakType: BreakType | null, public name: ParseIdentifier | ParseFreshIden | null, public statements: ParseStatements) { super();} }
@@ -251,6 +251,7 @@ export type BytecodeInstr =
   { type: 'ifast', f: boolean, e: boolean } |
   { type: 'notast' } |
   { type: 'letast', name: string, t: boolean, v: boolean } |
+  { type: 'letmetaast', t: boolean, v: boolean } |
   { type: 'letmatchast', t: boolean, v: boolean } |
   { type: 'callast', name: string, count: number, tcount: number, method?: boolean } |
   { type: 'pushqs' } |
@@ -316,6 +317,7 @@ export type FunctionPrototype = {
   bytecode?: BytecodeProgram | undefined
   body: ParseNode
   initialInstructionTable: ParseTreeTable
+  params: ParserFunctionParameter[]
 }
 
 export type ParseTreeTable = {

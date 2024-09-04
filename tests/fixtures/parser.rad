@@ -82,11 +82,15 @@ fn main():
   let Some(x, y), Some(x, y) = thing
   let (Some(x, y), None) = thing
   let a, b, c, d, Some(e), f = thing
+  let a, b, (c, (d, d)), Some(e, (a, Some(b))), f = thing
   orelse return 30
 
   let x = thing.match {
-    Some(a): 123
-    None: 232
+    A(a, b, c): 123
+    A((a, b), (c, d), e): 232
+    A(a, b, c) if a == b: 123
+    B: 232
+    c(): 32
   }
 
   # let Some(x) = thing + 1

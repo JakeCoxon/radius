@@ -1,5 +1,5 @@
 import { BytecodeDefault, BytecodeSecondOrder, callFunctionFromValueTask, compileClassTask, compileFunctionPrototype, createBytecodeVmAndExecuteTask, normalizeNumberType, numberTypeToConcrete, propagateLiteralType, propagatedLiteralAst, pushBytecode, pushGeneratedBytecode, unknownToAst, visitParseNode, visitParseNodeAndError } from "./compiler";
-import { createEnumVariantAst, externalBuiltinBindings, getEnumOf } from "./compiler_sugar";
+import { externalBuiltinBindings, getEnumOf } from "./compiler_sugar";
 import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, CallAst, IntType, Closure, UserCallAst, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition, ParseCall, TypeVariable, TypeMatcher, typeMatcherEquals, SourceLocation, ExternalTypeConstructor, ScopeParentSymbol, SubCompilerState, CompilerFunction, IntLiteralType, FloatLiteralType, FloatType, RawPointerType, AddressAst, BindingAst, UnknownObject, NeverType, CompilerFunctionCallContext, CompileTimeObjectType, CompTimeObjAst, ParseString, NamedArgAst, TypeCheckResult, u8Type, TypeCheckVar, ParseFreshIden, NumberAst, BoolAst, createStatements, ExternalFunction, BlockAst, LabelBlock, ConstructorAst, VariantCastAst } from "./defs";
 import { Task, TaskDef, Unit } from "./tasks";
 
@@ -59,7 +59,7 @@ function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, args, typ
   
   if (!func.headerPrototype) {
 
-    func.headerPrototype = { name: `${func.debugName} header`, body: null!, initialInstructionTable: BytecodeDefault };
+    func.headerPrototype = { name: `${func.debugName} header`, body: null!, initialInstructionTable: BytecodeDefault, params: func.params };
     func.headerPrototype.bytecode = { code: [], locations: [] }
     const out: BytecodeWriter = {
       location: undefined!,
@@ -167,7 +167,7 @@ export function functionTemplateTypeCheckAndCompileTask(ctx: TaskContext, { func
   compilerAssert(func.body, "Expected function body")
 
   if (!func.templatePrototype)  {
-    func.templatePrototype = { name: `${func.debugName} template bytecode`, body: func.body, initialInstructionTable: BytecodeSecondOrder };
+    func.templatePrototype = { name: `${func.debugName} template bytecode`, body: func.body, initialInstructionTable: BytecodeSecondOrder, params: func.params };
     compileFunctionPrototype(ctx, func.templatePrototype);
   }
   compilerAssert(func.templatePrototype);
@@ -258,7 +258,7 @@ function functionInlineTask(ctx: TaskContext, { location, func, typeArgs, parent
   compilerAssert(func.body, "Expected body to inline function", { func })
 
   if (!func.templatePrototype)  {
-    func.templatePrototype = { name: `${func.debugName} inline bytecode`, body: func.body, initialInstructionTable: BytecodeSecondOrder };
+    func.templatePrototype = { name: `${func.debugName} inline bytecode`, body: func.body, initialInstructionTable: BytecodeSecondOrder, params: func.params };
     compileFunctionPrototype(ctx, func.templatePrototype);
   }
   compilerAssert(func.templatePrototype);
@@ -342,7 +342,7 @@ export function functionCompileTimeCompileTask(ctx: TaskContext, { vm, func, typ
   compilerAssert(args.length === func.params.length, "Expected $expected arguments got $got", { expected: func.params.length, got: args.length, func })
 
   if (!func.compileTimePrototype) 
-    func.compileTimePrototype = { name: `${func.debugName} comptime bytecode`, body: func.body, initialInstructionTable: BytecodeDefault };
+    func.compileTimePrototype = { name: `${func.debugName} comptime bytecode`, body: func.body, initialInstructionTable: BytecodeDefault, params: func.params };
   compilerAssert(func.compileTimePrototype)
 
   const scope = createScope({}, parentScope)
@@ -350,7 +350,9 @@ export function functionCompileTimeCompileTask(ctx: TaskContext, { vm, func, typ
   subCompilerState.functionCompiler = subCompilerState
 
   args.forEach((arg, i) => {
-    scope[func.params[i].name.token.value] = arg;
+    const name_ = func.params[i].name
+    const name = name_ instanceof ParseFreshIden ? name_.freshBindingToken.identifier : name_.token.value
+    scope[name] = arg;
   });
   func.typeParams.forEach((typeParam, i) => {
     compilerAssert(typeParam instanceof ParseIdentifier, "Not implemented")

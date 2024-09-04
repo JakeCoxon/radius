@@ -315,7 +315,8 @@ export const makeParser = (input: string, debugName: string) => {
       else return trailingStatement(parseExpr());
     }
     const parseCase = () => {
-      return new ParseMatchCase(previous, parseLeftSideMatch(), parseMatchBlock())
+      return new ParseMatchCase(previous, parseLeftSideMatch(), 
+        match("if") ? parseExpr() : null, parseMatchBlock())
     }
     const cases = [parseCase()];
     while (token?.type !== 'DEDENT') cases.push(parseCase());
@@ -537,7 +538,13 @@ export const makeParser = (input: string, debugName: string) => {
     if (match("(")) return trailingEndParen(parseLeftSideMatch())
 
     const idenOrExtract = (): ParseNode => {
-      if (match("(")) return trailingEndParen(idenOrExtract())
+      if (match("(")) {
+        const token = previous
+        let args = [idenOrExtract()];
+        while (match(",")) args.push(idenOrExtract());
+        expect(")", "Expected ')' after tuple expression");
+        return new ParseTuple(token, args);
+      }
       let left: ParseNode = parseIdentifier();
       if (!match("(")) return left
       if (match(")")) return new ParseExtract(previous, left, [])

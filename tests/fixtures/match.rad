@@ -1,10 +1,46 @@
 import compiler for Some, None, Option
 
-fn main():
+fn test_basic():
   let y = Some(1)
 
-  let x = y.match {
-    Some(z): z + 2
-    None(): 3
+  let x = Some(1).match {
+    Some(z) if z > 0: z + 2
+    Some(z) if z == 0: 0
+    None(): 100
   }
   print(x)
+
+fn test_tuple():
+  let x = (1, 2).match {
+    (2, w): 23
+    (z, w) if z == w: 1
+    (z, w) if z > w: 2
+    (z, w) if z < w: 3
+  }
+  print(x)
+
+
+fn test_nested_tuple():
+
+  let x = (Some(1), Some(3)).match {
+    (Some(z), None()) if z > 0: z + 2
+    (Some(z), None(w)) if z == w: w + z
+  }
+  print(x)
+
+fn test_nested():
+  let y = Some(1)
+
+  # let x = y.match 'a {
+  #   is Some(z): z.match 'b {
+  #     is % == 0: z + 2
+  #     is % > 0: 0
+  #   }
+  #   is None(): 3
+  # }
+  # print(x)
+
+
+fn main():
+  # test_basic()
+  test_tuple()
