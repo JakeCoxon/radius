@@ -375,7 +375,7 @@ export const BytecodeSecondOrder: ParseTreeTable = {
   },
   breakopt: (out, node) => {
     if (node.name) writeMeta(out, node.name);
-    pushBytecode(out, node.token, { type: 'breakast', named: false, v: false, breakType: 'option' })
+    pushBytecode(out, node.token, { type: 'breakast', named: !!node.name, v: false, breakType: 'option' })
   },
   continue: (out, node) => {
     if (node.name) writeMeta(out, node.name)

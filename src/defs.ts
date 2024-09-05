@@ -934,7 +934,7 @@ export const findLabelBlockByType = (labelBlock: LabelBlock | null, breakType: B
     if (block.breakType === breakType) return block
     block = block.parent;
   }
-  compilerAssert(false, breakType === 'continue' ? `Invalid continue outside a loop` : `Invalid ${breakType} outside a block`, { labelBlock })
+  compilerAssert(false, breakType === 'continue' ? `Invalid continue outside a loop` : `Invalid break statement`, { labelBlock })
 }
 
 export const findLabelByBinding = (labelBlock: LabelBlock | null, binding: Binding) => {

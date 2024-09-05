@@ -6,7 +6,7 @@ const regexes = {
   IDENTIFIER: /^[a-zA-Z_][a-zA-Z_0-9]*/,
   STRING: /^(?:"(?:[^"\\]|\\.)*")/,
   SPECIALNUMBER: /^0o[0-7]+|^0x[0-9a-fA-F_]+|^0b[01_]+/,
-  NUMBER: /^(0|[1-9][0-9_]*)(\.[0-9_]+)?(?:[eE][+-]?[0-9]+)?/,
+  NUMBER: /^-?(0|[1-9][0-9_]*)(\.[0-9_]+)?(?:[eE][+-]?[0-9]+)?/,
   COMMENT: /^#[^\n]+/,
   OPENPAREN: /^(?:[\[\{\(]|%{)/,
   CLOSEPAREN: /^[\]\}\)]/,
@@ -268,8 +268,8 @@ export const makeParser = (input: string, debugName: string) => {
     else if (matchType("STRING")) return new ParseString(previous, previous.value.slice(1, -1))
     else if (matchType("NUMBER")) return parseNumberLiteral();
     else if (matchType("SPECIALNUMBER")) return parseNumberLiteral();
-    else if (prevSignificantNewlines && match("|")) return parseBracelessLambda();
     else if (match("true") || match("false")) return new ParseBoolean(previous);
+    else if (prevSignificantNewlines && match("|")) return parseBracelessLambda();
     else if (match("fold"))  return parseFold(previous)
     else return parseIdentifier();
   };
@@ -537,6 +537,15 @@ export const makeParser = (input: string, debugName: string) => {
   const parseLeftSideMatch = (): ParseNode => {
     if (match("(")) return trailingEndParen(parseLeftSideMatch())
 
+    const literal = () => {
+      if (matchType("STRING")) return new ParseString(previous, previous.value.slice(1, -1))
+      else if (matchType("NUMBER")) return parseNumberLiteral();
+      else if (matchType("SPECIALNUMBER")) return parseNumberLiteral();
+      else if (match("true") || match("false")) return new ParseBoolean(previous);
+      else return parseIdentifier();
+    }
+    const expectIden = (node: ParseNode): ParseIdentifier => (compilerAssert(node instanceof ParseIdentifier, "Expected identifier", { lexer, token, previous, location: previous?.location, prevLocation: previous?.location }), node);
+
     const idenOrExtract = (): ParseNode => {
       if (match("(")) {
         const token = previous
@@ -545,12 +554,13 @@ export const makeParser = (input: string, debugName: string) => {
         expect(")", "Expected ')' after tuple expression");
         return new ParseTuple(token, args);
       }
-      let left: ParseNode = parseIdentifier();
+      let left: ParseNode = literal()
+      
       if (!match("(")) return left
-      if (match(")")) return new ParseExtract(previous, left, [])
+      if (match(")")) return new ParseExtract(previous, expectIden(left), [])
       let args = [idenOrExtract()];
       while (match(",")) args.push(idenOrExtract());
-      left = new ParseExtract(previous, left, args);
+      left = new ParseExtract(previous, expectIden(left), args);
       expect(")", "Expected ')' after tuple expression");
       return left
     }

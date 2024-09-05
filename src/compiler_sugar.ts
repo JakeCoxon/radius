@@ -1,7 +1,7 @@
 import { BytecodeSecondOrder, callFunctionFromValueTask, compileFunctionPrototype, createParameterizedExternalType, getOperatorTable, loadModule, propagateLiteralType, propagatedLiteralAst, pushBytecode, resolveScope, unknownToAst, visitParseNode } from "./compiler"
 import { compileExportedFunctionTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, insertFunctionDefinition } from "./compiler_functions"
 import { concat } from "./compiler_iterator"
-import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, UserCallAst, hashValues, NeverType, IfAst, BoolType, VoidAst, LoopObject, CompileTimeObjectType, u64Type, FunctionDefinition, ParserFunctionDecl, StatementsAst, isTypeScalar, IntLiteralType, FloatLiteralType, isAst, isType, isTypeCheckError, InterleaveAst, ContinueInterAst, CompTimeObjAst, ParseEvalFunc, SetAst, DefaultConsAst, WhileAst, BoolAst, isArray, ExpansionSelector, ParseNote, ExpansionCompilerState, ParseBoolean, ParseOr, ParseBreak, isTypeInteger, OptionTypeConstructor, ParseIs, filterNotNull, ParseLetConst, ParseCast, VariantCastAst, ExternalTypeConstructor, NoneTypeConstructor, SomeTypeConstructor, typesEqual, GlobalCompilerState, ParseOrElse, ParseField, ParseQuestion, ParseBreakOpt, LabelBlock, BlockAst, ParseMatch, ParseExtract, ParseMatchCase, ParseTuple, ParseString, Tuple } from "./defs"
+import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, UserCallAst, hashValues, NeverType, IfAst, BoolType, VoidAst, LoopObject, CompileTimeObjectType, u64Type, FunctionDefinition, ParserFunctionDecl, StatementsAst, isTypeScalar, IntLiteralType, FloatLiteralType, isAst, isType, isTypeCheckError, InterleaveAst, ContinueInterAst, CompTimeObjAst, ParseEvalFunc, SetAst, DefaultConsAst, WhileAst, BoolAst, isArray, ExpansionSelector, ParseNote, ExpansionCompilerState, ParseBoolean, ParseOr, ParseBreak, isTypeInteger, OptionTypeConstructor, ParseIs, filterNotNull, ParseLetConst, ParseCast, VariantCastAst, ExternalTypeConstructor, NoneTypeConstructor, SomeTypeConstructor, typesEqual, GlobalCompilerState, ParseOrElse, ParseField, ParseQuestion, ParseBreakOpt, LabelBlock, BlockAst, ParseMatch, ParseExtract, ParseMatchCase, ParseTuple, ParseString, Tuple, ParseNot } from "./defs"
 import { Event, Task, TaskDef, isTask } from "./tasks"
 
 const rangeLoop = (token: Token, iden: ParseIdentifier | ParseFreshIden, start: ParseNode, end: ParseNode, body: ParseNode) => {
@@ -543,36 +543,14 @@ export const smartCastSugar = (out: BytecodeWriter, node: ParseIf) => {
   pushBytecode(out, node.token, { type: "ifast", f: !!node.falseBody, e: node.isExpr })
 }
 
-const idenMatchToOption = (node: ParseNode, blockIden: ParseFreshIden, subject: ParseNode): ParseNode => {
-  // const test = new ParseOperator(createAnonymousToken('=='), [subject, node.extract])
-  // const some = new ParseCall(node.token, new ParseValue(node.token, SomeTypeConstructor), [node.body], [])
-  // const none = new ParseCall(node.token, new ParseValue(node.token, NoneTypeConstructor), [], [])
-  // return new ParseIf(node.token, true, test, some, new ParseElse(node.token, none))
-  if (node instanceof ParseIdentifier) {
-    return new ParseLet(node.token, node, null, subject)
-  }
-  compilerAssert(false, "Not implemented", { node })
-}
 
 const asExprTuple = new ExternalFunction('asExprTuple', VoidType, (ctx, args) => {
   const [subject, type, numFields, idenName] = args
   compilerAssert(typeof numFields === 'number', "Expected number", { numFields })
   compilerAssert(typeof idenName === 'string', "Expected string", { idenName })
-  compilerAssert(subject instanceof Binding, "Expected binding", { subject })
+  compilerAssert(isAst(subject), "Expected ast", { subject })
   compilerAssert(type instanceof ExternalTypeConstructor, "Expected type constructor", { type })
-  // if (type instanceof ExternalTypeConstructor) {
-  //   if (subject.type instanceof ParameterizedType) {
-  //     if (subject.type.typeInfo.metaobject.isEnum) {
-  //       compilerAssert(subject.type.typeInfo.metaobject.variants, "Expected variants", { subject })
-  //       const variant = (subject.type.typeInfo.metaobject.variants as Type[]).find(x => x instanceof ParameterizedType && x.typeConstructor === type)
-  //       compilerAssert(variant, "Expected $subjectType to be a type or a variant of $type", { subjectType: subject.type, type, variant, variants: subject.type.typeInfo.metaobject.variants })
-  //     } else {
-  //       compilerAssert(subject.type.typeConstructor === type, "Expected $subjectType to be a type or a variant of $type", { subjectType: subject.type, type })
-  //     }
-  //   } else {
-  //     compilerAssert(false, "Not implemented", { args })
-  //   }
-  // }
+
   const vm = ctx.compilerState.vm
   if (subject.type instanceof ParameterizedType && subject.type.typeConstructor === TupleTypeConstructor) {
     const tuple = subject.type
@@ -580,34 +558,20 @@ const asExprTuple = new ExternalFunction('asExprTuple', VoidType, (ctx, args) =>
     compilerAssert(tuple.typeConstructor === TupleTypeConstructor, "Expected tuple type", { tuple })
     compilerAssert(tuple.args.length === numFields, "Expected tuple with $expected fields got $got", { tuple, expected: tuple.args.length, got: numFields })
     compilerAssert(subject.type.typeConstructor === type, "Expected $subjectType to be a type or a variant of $type", { subjectType: subject.type, type })
-    // const fnDef = insertFunctionDefinition(ctx.compilerState.globalCompiler, asTupleFn)
-    // const closure = new Closure(fnDef, ctx.compilerState.scope, ctx.compilerState)
-
     const location = ctx.location
     const bool_ = new BoolAst(BoolType, location, true)
-    return new Tuple([bool_, new BindingAst(subject.type, location, subject)])
-
-    // return TaskDef(callFunctionFromValueTask, vm, closure, [], [subject, type]).chainFn((task, _) => {
-    //   const value = vm.stack.pop()
-    //   compilerAssert(false, "Not implemented", { value })
-    //   return Task.of(value)
-    // })
+    return new Tuple([bool_, subject])
   }
   if (subject.type instanceof ParameterizedType && subject.type.typeInfo.metaobject.isEnum) {
     compilerAssert(subject.type.typeInfo.metaobject.variants, "Expected variants", { subject })
     const variant = (subject.type.typeInfo.metaobject.variants as Type[]).find(x => x instanceof ParameterizedType && x.typeConstructor === type)
     compilerAssert(variant, "Expected $subjectType to be a type or a variant of $type", { subjectType: subject.type, type, variant, variants: subject.type.typeInfo.metaobject.variants })
-    // compilerAssert(false, "enum Not implemented", { subject, variant })
     const fnDef = insertFunctionDefinition(ctx.compilerState.globalCompiler, asEnumVariantFn)
     const closure = new Closure(fnDef, ctx.compilerState.scope, ctx.compilerState)
 
     return (
       TaskDef(callFunctionFromValueTask, vm, closure, [], [subject, type, idenName])
-      .chainFn((task, _) => {
-        const value = vm.stack.pop()
-        // compilerAssert(false, "Not implemented", { value: value.values })
-        return Task.of(value)
-      })
+      .chainFn((task, _) => { return Task.of(vm.stack.pop()) })
     )
   }
   compilerAssert(false, "asExprTuple Not implemented", { type, args })
@@ -617,7 +581,7 @@ const asEnumVariantFn = (() => {
 
   const token = createAnonymousToken('')
   const subjectIden = new ParseFreshIden(token, new FreshBindingToken('subject'))
-  const testTypeIden = new ParseFreshIden(token, new FreshBindingToken('typeasdf'))
+  const testTypeIden = new ParseFreshIden(token, new FreshBindingToken('typef'))
   const newNameIden = new ParseFreshIden(token, new FreshBindingToken('iden'))
 
   const fnParams: ParserFunctionParameter[] = [
@@ -634,54 +598,23 @@ const asEnumVariantFn = (() => {
   const cond = new ParseOperator(createAnonymousToken('=='), [tag, indexIden])
 
   const cast = new ParseCall(token, new ParseValue(token, unsafeEnumCast), [subjectIden], [testTypeIden])
-  // const letExtract = new ParseLet(token, new ParseMeta(token, newNameIden), null, cast)
-//   const letExtract = new ParseEvalFunc(token, (vm) => {
-//     const value = vm.stack.pop()
-//     compilerAssert(false, "Expected tuple", { value })
-// }, [], [newNameIden])
 
   const condExpr = new ParseStatements(token, [letIndex, cond])
   const condQuote = new ParseQuote(token, condExpr)
 
   const extractQuote = new ParseQuote(token, cast)
-
   const body = new ParseTuple(token, [condQuote, extractQuote])
-  
-  const decl = createAnonymousParserFunctionDecl('asEnumVariant', token, fnParams, body)
 
-  // const funcDef = insertFunctionDefinition(subCompilerState.globalCompiler, decl)
-  return decl
-  // return new GlobalFunction('foo', decl)
+  return createAnonymousParserFunctionDecl('asEnumVariant', token, fnParams, body)
 })()
 
-const asTupleFn = (() => {
-
-  const token = createAnonymousToken('foo')
-  const subjectIden = new ParseFreshIden(token, new FreshBindingToken('subject'))
-  const typeIden = new ParseFreshIden(token, new FreshBindingToken('type'))
-
-  const fnParams: ParserFunctionParameter[] = [
-    { name: subjectIden, storage: null, type: null },
-    { name: typeIden, storage: null, type: null },
-  ]
-
-  const a = new ParseQuote(token, new ParseNumber(createAnonymousToken("1")))
-  const b = new ParseQuote(token, new ParseNumber(createAnonymousToken("25")))
-
-  const body = new ParseTuple(token, [a, b])
-  
-  const decl = createAnonymousParserFunctionDecl('foo', token, fnParams, body)
-
-  // const funcDef = insertFunctionDefinition(subCompilerState.globalCompiler, decl)
-  return decl
-  // return new GlobalFunction('foo', decl)
-})()
-
-const asExprSugar = (subject: ParseNode, asType: ParseNode, numFields: number, iden: ParseFreshIden | ParseIdentifier, trueExpr: ParseNode, falseExpr: ParseNode | null) => {
+const guardAsExprSugar = (subject: ParseNode, asType: ParseNode, numFields: number, iden: ParseFreshIden | ParseIdentifier, elseExpr: ParseNode) => {
   const token = subject.token
   const asTupleIden = new ParseFreshIden(token, new FreshBindingToken('astuple'))
   const idenName = iden instanceof ParseFreshIden ? iden.freshBindingToken.identifier : iden.token.value
-  const letAsTuple = new ParseLetConst(token, asTupleIden, new ParseCall(token, new ParseValue(token, asExprTuple), [subject, asType, new ParseNumber(createAnonymousToken(numFields)), new ParseString(token, idenName)], []))
+  const subjectQuote = new ParseQuote(token, subject)
+  const asExprCall = new ParseCall(token, new ParseValue(token, asExprTuple), [subjectQuote, asType, new ParseNumber(createAnonymousToken(numFields)), new ParseString(token, idenName)], [])
+  const letAsTuple = new ParseLetConst(token, asTupleIden, asExprCall)
   const cond = new ParseEvalFunc(token, (vm) => {
     const value = vm.stack.pop()
     compilerAssert(value instanceof Tuple, "Expected tuple", { value })
@@ -695,75 +628,64 @@ const asExprSugar = (subject: ParseNode, asType: ParseNode, numFields: number, i
   }, [], [asTupleIden])
 
   const letExtract = new ParseLet(token, iden, null, extractValue)
-  const trueBody = new ParseBlock(token, null, null, new ParseStatements(token, [letExtract, trueExpr]))
-  const if_ = new ParseIf(token, true, cond, trueBody, falseExpr ? new ParseElse(token, falseExpr) : null)
-  return new ParseStatements(token, [letAsTuple, if_])
+  const if_ = new ParseIf(token, true, new ParseNot(token, cond), elseExpr, null)
+  return new ParseStatements(token, [letAsTuple, if_, letExtract])
 }
-const asVariantExprSugar = (subject: ParseNode, asType: ParseNode, iden: ParseFreshIden | ParseIdentifier, trueExpr: ParseNode, falseExpr: ParseNode | null) => {
-  const token = subject.token
-  const testTypeIden = new ParseFreshIden(token, new FreshBindingToken('testtype'))
-  const subjectIden = new ParseFreshIden(token, new FreshBindingToken('subject'))
-  const indexIden = new ParseFreshIden(token, new FreshBindingToken('index'))
 
-  const letTestType = new ParseLetConst(token, testTypeIden, asType)
-  const letSubject = new ParseLet(token, subjectIden, null, subject)
+
+const extractToOption = (node: ParseNode, blockIden: ParseFreshIden, subject: ParseNode): ParseNode => {
+  const token = node.token
+  const break_ = new ParseBreakOpt(token, blockIden)
+
+  if (node instanceof ParseIdentifier) return new ParseLet(token, node, null, subject)
+  if (node instanceof ParseNumber || node instanceof ParseString || node instanceof ParseBoolean) {
+    return new ParseIf(token, false, new ParseOperator(createAnonymousToken('!='), [subject, node]), break_, null)
+  }
+
+  const extractIden = new ParseFreshIden(token, new FreshBindingToken('extract'))
+  if (node instanceof ParseExtract) {
+    const numArgs = node.args.length
+    if (numArgs === 0)
+      return guardAsExprSugar(subject, node.name, 0, extractIden, break_)
+
+    const bind = node.args.map(x => extractToOption(x, blockIden, new ParseField(token, extractIden, new ParseIdentifier(createAnonymousToken('value')))))
+    const guard = guardAsExprSugar(subject, node.name, numArgs, extractIden, break_)
+    return new ParseStatements(token, [guard, ...bind])
+  }
+
+  if (node instanceof ParseTuple) {
+    const bind = node.exprs.map((x, i) => extractToOption(x, blockIden, new ParseField(token, extractIden, new ParseIdentifier(createAnonymousToken(`_${i+1}`)))))
+    const tupleType = new ParseValue(token, TupleTypeConstructor)
+    const guard = guardAsExprSugar(subject, tupleType, node.exprs.length, extractIden, break_)
+    return new ParseStatements(token, [guard, ...bind])
+  }
   
-  const getTypeIndexCall = new ParseCall(token, new ParseValue(token, getTypeIndex), [subjectIden], [testTypeIden])
-  const letIndex = new ParseLetConst(token, indexIden, new ParseQuote(token, getTypeIndexCall))
-
-  const tag = new ParseField(token, subjectIden, new ParseIdentifier(createAnonymousToken('tag')))
-  const cond = new ParseOperator(createAnonymousToken('=='), [tag, indexIden])
-
-  const cast = new ParseCall(token, new ParseValue(token, unsafeEnumCast), [subjectIden], [testTypeIden])
-  const letExtract = new ParseLet(token, iden, null, cast)
-  const trueBody = new ParseBlock(token, null, null, new ParseStatements(token, [letExtract, trueExpr]))
-  const if_ = new ParseIf(token, true, cond, trueBody, falseExpr ? new ParseElse(token, falseExpr) : null)
-  return new ParseStatements(token, [letTestType, letSubject, letIndex, if_])
+  compilerAssert(false, "Not implemented", { node })
 }
 
 const caseToOption = (node: ParseMatchCase, blockIden: ParseFreshIden, subject: ParseNode): ParseNode => {
   const token = node.token
+  const break_ = new ParseBreakOpt(token, blockIden)
+  const smts = [extractToOption(node.extract, blockIden, subject)]
+  if (node.condition) smts.push(new ParseIf(token, false, new ParseNot(token, node.condition), break_, null))
 
-  const none = new ParseCall(subject.token, new ParseValue(subject.token, NoneTypeConstructor), [], [])
+  const resIden = new ParseFreshIden(token, new FreshBindingToken('res'))
+  const letRes = new ParseLet(token, resIden, null, node.body)
+  const some = new ParseCall(subject.token, new ParseValue(subject.token, SomeTypeConstructor), [resIden], [])
 
-  let someBody: ParseNode = new ParseCall(subject.token, new ParseValue(subject.token, SomeTypeConstructor), [node.body], [])
-  if (node.condition) someBody = new ParseIf(token, true, node.condition, someBody, new ParseElse(token, none))
-
-  const extractIden = new ParseFreshIden(token, new FreshBindingToken('extract'))
-  if (node.extract instanceof ParseExtract) {
-    const numArgs = node.extract.args.length
-    if (numArgs === 0)
-      return asExprSugar(subject, node.extract.name, 0, extractIden, someBody, none)
-
-    const bind = node.extract.args.map(x => idenMatchToOption(x, blockIden, new ParseField(token, extractIden, new ParseIdentifier(createAnonymousToken('value')))))
-    const newBody = new ParseBlock(token, null, null, new ParseStatements(token, [...bind, someBody]))
-    return asExprSugar(subject, node.extract.name, numArgs, extractIden, newBody, none)
-  } else if (node.extract instanceof ParseIdentifier) {
-    // const test = new ParseIs(token, subject, node.extract)
-    return asExprSugar(subject, node.extract, 0, extractIden, someBody, none)
-  } else if (node.extract instanceof ParseTuple) {
-    const numArgs = node.extract.exprs.length
-    const bind = node.extract.exprs.map((x, i) => idenMatchToOption(x, blockIden, new ParseField(token, extractIden, new ParseIdentifier(createAnonymousToken(`_${i+1}`)))))
-    const newBody = new ParseBlock(token, null, null, new ParseStatements(token, [...bind, someBody]))
-    return asExprSugar(subject, new ParseValue(token, TupleTypeConstructor), numArgs, extractIden, newBody, none)
-    // const newBody = new ParseBlock(token, null, null, new ParseStatements(token, [...bind, someBody]))
-    // return asExprSugar(subject, node.extract, extractIden, newBody, none)
-  }
-  compilerAssert(false, "Not implemented", { node })
+  return new ParseStatements(token, [...smts, letRes, some])
 }
 
 export const matchSugar = (out: BytecodeWriter, node: ParseMatch) => {
-  // compilerAssert(false, "Not implemented", { node })
   const token = node.token
   const subjectIden = new ParseFreshIden(token, new FreshBindingToken('subject'))
   const letSubject = new ParseLet(token, subjectIden, null, node.subject)
   const options = node.cases.map(case_ => {
     const blockIden = new ParseFreshIden(token, new FreshBindingToken('case'))
-    return new ParseBlock(token, null, blockIden, 
-      new ParseStatements(token, [caseToOption(case_, blockIden, subjectIden)]))
+    const caseBlock = caseToOption(case_, blockIden, subjectIden)
+    return new ParseBlock(token, 'option', blockIden, new ParseStatements(token, [caseBlock]))
   })
   const defaultElse = new ParseCall(token, new ParseIdentifier(createAnonymousToken('unreachable')), [], [])
-  // compilerAssert(false, "Not implemented", { options })
 
   const orElse = options.reverse().reduce((acc, next) => 
     new ParseOrElse(node.token, next, acc), defaultElse as ParseNode)

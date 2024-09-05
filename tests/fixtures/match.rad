@@ -11,21 +11,24 @@ fn test_basic():
   print(x)
 
 fn test_tuple():
-  let x = (1, 2).match {
-    (2, w): 23
-    (z, w) if z == w: 1
-    (z, w) if z > w: 2
-    (z, w) if z < w: 3
+  let x = (1, 2, true).match {
+    (2, w, true): 23
+    (z, 2, true) if z > 0: 1
+    (z, w, true) if z > w: 2
+    (z, w, y) if z < w: 3
   }
   print(x)
 
 
 fn test_nested_tuple():
 
-  let x = (Some(1), Some(3)).match {
+  let y = (Some(1), Some(3))
+  let x = y.match {
     (Some(z), None()) if z > 0: z + 2
-    (Some(z), None(w)) if z == w: w + z
+    (Some(z), None()) if z > 0: z
+    (Some(z), Some(w)) if z > 0: z + w
   }
+
   print(x)
 
 fn test_nested():
@@ -42,5 +45,6 @@ fn test_nested():
 
 
 fn main():
-  # test_basic()
+  test_basic()
   test_tuple()
+  test_nested_tuple()
