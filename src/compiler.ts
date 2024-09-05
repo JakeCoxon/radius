@@ -1,4 +1,4 @@
-import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol, ScopeParentSymbol, isPlainObject, ParseLet, ParseList, ParseExpand, ParseBlock, findLabelByBinding, ParseSubscript, ParseNumber, ParseQuote, ParseWhile, ParseOperator, ParseBytecode, ParseOpEq, ParseSet, ParseFreshIden, UnknownObject, ParseNote, DefaultConsAst, RawPointerType, ValueFieldAst, SetValueFieldAst, FloatLiteralType, IntLiteralType, CompilerFunction, DerefAst, SetDerefAst, ParseSlice, CompilerFunctionCallContext, NeverType, LoopObject, CompTimeObjAst, CompileTimeObjectType, NamedArgAst, TypeCheckVar, TypeCheckConfig, u8Type, u64Type, isTypeScalar, FreshBindingToken, isCompilerCallable, ParseIs, OptionTypeConstructor, VariantCastAst } from "./defs";
+import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, hashValues, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, isParameterizedTypeOf, ParseMeta, createAnonymousParserFunctionDecl, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol, ScopeParentSymbol, isPlainObject, ParseLet, ParseList, ParseExpand, ParseBlock, findLabelByBinding, ParseSubscript, ParseNumber, ParseQuote, ParseWhile, ParseOperator, ParseBytecode, ParseOpEq, ParseSet, ParseFreshIden, UnknownObject, ParseNote, DefaultConsAst, RawPointerType, ValueFieldAst, SetValueFieldAst, FloatLiteralType, IntLiteralType, CompilerFunction, DerefAst, SetDerefAst, ParseSlice, CompilerFunctionCallContext, NeverType, LoopObject, CompTimeObjAst, CompileTimeObjectType, NamedArgAst, TypeCheckVar, TypeCheckConfig, u8Type, u64Type, isTypeScalar, FreshBindingToken, isCompilerCallable, ParseIs, OptionTypeConstructor, VariantCastAst, EnumVariantAst } from "./defs";
 import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, functionCompileTimeCompileTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, compileExportedFunctionTask } from "./compiler_functions";
 import { Event, Task, TaskDef, Unit, isTask, isTaskResult, withContext } from "./tasks";
 import { createCompilerModuleTask, createListConstructor, defaultMetaFunction, matchSugar, optionBlockSugar, optionCastSugar, orElseSugar, print, questionSugar, smartCastSugar } from "./compiler_sugar";
@@ -787,6 +787,13 @@ export const propagateLiteralType = (inferType: Type, ast: Ast | null): Type => 
     if (ast instanceof VariantCastAst) {
       // This is to support None!never into Option!int, assume that the type was originally allowed to contain never
       ast.type = inferType;
+    } else if (ast instanceof EnumVariantAst) {
+      ast.type = inferType;
+      ast.enumType = inferType
+      const variantType = ast.variantType
+      compilerAssert(variantType instanceof ParameterizedType, "Expected parameterized type", { ast });
+      ast.variantType = (inferType.typeInfo.metaobject.variants as Type[]).find(x => x instanceof ParameterizedType && x.typeConstructor === variantType.typeConstructor)!
+      compilerAssert(ast.variantType, "Expected variant type", { ast, variantType })
     } else if (ast instanceof NumberAst) {
       ast.type = inferType
     } else if (ast instanceof OperatorAst) {
@@ -1020,7 +1027,7 @@ const instructions: InstructionMapping = {
     if (trueBody.type === NeverType && (!falseBody || falseBody.type === NeverType)) resultType = NeverType // Propagate never type even if it's not an expression if
     // TODO: This is no longer possible because we use if-expr without else clause in iterators
     // if (e) compilerAssert(falseBody && falseBody.type === trueBody.type, "If expression inferred to be of type $trueType but got $falseType", { trueType: trueBody.type, falseType: falseBody?.type })
-    compilerAssert(cond.type === BoolType, "Expected bool got $type", { type: cond.type })
+    compilerAssert(cond.type === BoolType, "Expected bool got $type", { type: cond.type, cond })
     vm.stack.push(new IfAst(resultType, vm.location, cond, trueBody, falseBody))
   },
   evalfunc: (vm, { func }) => { return func(vm) },
@@ -1250,12 +1257,15 @@ const instructions: InstructionMapping = {
   list: (vm, { count }) => vm.stack.push(popValues(vm, count)),
   
   breakast: (vm, { v, named, breakType }) => {
-    let expr = v ? propagatedLiteralAst(expectAst(popStack(vm))) : null
+    // Type not propagated until endblockast
+    let expr = v ? expectAst(popStack(vm)) : null
     const name = named ? popStack(vm) : null
     if (name && name instanceof LoopObject) { // It's possible to directly pass a loop object to break from
       const block = breakType === 'break' ? name.breakBlock : breakType === 'continue' ? name.continueBlock : (compilerAssert(false, "Invalid breakType", { breakType }) as never)
       compilerAssert(block.binding, "Expected binding")
-      vm.stack.push(new BreakAst(NeverType, vm.location, block.binding, expr))
+      const breakAst = new BreakAst(NeverType, vm.location, block.binding, expr)
+      block.breaks.push(breakAst)
+      vm.stack.push(breakAst)
       return
     }
     compilerAssert(!name || name instanceof Binding, "Expected binding", { name })
@@ -1268,16 +1278,15 @@ const instructions: InstructionMapping = {
     block.didBreak = true
     if (expr?.type === VoidType) {
       // Make sure to keep the expr, but don't use it in break expression
-      const break_ = new BreakAst(NeverType, vm.location, block.binding, null)
-      const ast = new StatementsAst(VoidType, vm.location, [expr, break_])
+      const breakAst = new BreakAst(NeverType, vm.location, block.binding, null)
+      const ast = new StatementsAst(NeverType, vm.location, [expr, breakAst])
+      block.breaks.push(breakAst)
       return vm.stack.push(ast)
     }
-    if (expr) {
-      if (block.type) compilerAssert(block.type === expr.type, "Block type is already inferred to be $blockType but got an expression of type $exprType", { blockType: block.type, exprType: expr.type })
-      block.type = expr.type
-      block.breakWithExpr = true
-    }
-    vm.stack.push(new BreakAst(NeverType, vm.location, block.binding, expr))
+    if (expr) block.breakWithExpr = true
+    const breakAst = new BreakAst(NeverType, vm.location, block.binding, expr);
+    block.breaks.push(breakAst)
+    vm.stack.push(breakAst)
   },
   bindingast: (vm, { name }) => {
     return (
@@ -1291,7 +1300,9 @@ const instructions: InstructionMapping = {
         else if (value instanceof Binding) {
           if (value.storage !== 'ref') vm.stack.push(unknownToAst(vm.location, value))
           else vm.stack.push(new DerefAst(value.type, vm.location, unknownToAst(vm.location, value) as BindingAst, []))
-        } else vm.stack.push(unknownToAst(vm.location, value))
+        } else {
+          vm.stack.push(unknownToAst(vm.location, value))
+        }
         return Task.success()
       })
     )
@@ -1316,12 +1327,16 @@ const instructions: InstructionMapping = {
     const binding = labelBlock.binding
     compilerAssert(binding, "Expected binding", { labelBlock: labelBlock })
     const body = propagatedLiteralAst(expectAst(vm.stack.pop()))
-    const blockType = labelBlock.type ?? body.type
-    // TODO: This should be NeverType instead of VoidType
-    if (labelBlock.type) {
-      let blockTypeOk = labelBlock.type === VoidType || labelBlock.type === body.type || body.type === NeverType
-      compilerAssert(blockTypeOk, "Block type inferred to be of type $blockType but the result expression was type $bodyType", { blockType: labelBlock.type, bodyType: body.type })
+    const types = [body.type]
+    if (labelBlock.type) types.push(labelBlock.type)
+    if (labelBlock.breakWithExpr) {
+      types.push(...labelBlock.breaks.map(x => x.expr!.type))
     }
+    let blockType = getCommonType(types)
+    labelBlock.breaks.forEach(breakAst => {
+      propagateLiteralType(blockType, breakAst.expr)
+    })
+    
     const breakExprBinding = labelBlock.breakWithExpr ? new Binding(`${binding.name}_breakexpr`, body.type) : null
     vm.context.subCompilerState.labelBlock = labelBlock.parent
     compilerAssert(vm.scope[ScopeParentSymbol], "Expected parent scope")
@@ -1625,7 +1640,19 @@ export function compileClassTask(ctx: TaskContext, { classDef, typeArgs }: { cla
   
 }
 
+const isTypeOption = (type: Type): type is ParameterizedType => {
+  return type instanceof ParameterizedType && type.typeConstructor === OptionTypeConstructor
+}
 export const getCommonType = (types: Type[]): Type => {
+  if (isTypeOption(types[0])) {
+    compilerAssert(types.every(x => isTypeOption(x)), "Expected all types to be option")
+    const typesP = types as ParameterizedType[]
+    if (typesP.every(x => x.args[0] === typesP[0].args[0])) return typesP[0]
+    const opt = typesP.find(x => x.args[0] !== NeverType)!
+    compilerAssert(typesP.every(x => canAssignUnknownTo(x.args[0], opt.args[0])), "Expected all types to be the assignable")
+    return typesP[0]
+  }
+  
   if (types.some(x => x === FloatLiteralType || x === FloatType)) {
     compilerAssert(types.every(x => x === IntLiteralType || x === FloatLiteralType || x === FloatType), "Expected types to be the same for list literal", { types })
     return FloatType
@@ -1634,8 +1661,9 @@ export const getCommonType = (types: Type[]): Type => {
     compilerAssert(types.every(x => x === IntLiteralType || x === IntType), "Expected types to be the same for list literal", { types })
     return IntType
   }
-  compilerAssert(types.every(x => x === types[0]), "Expected types to be the same")
-  return types[0];
+  const types2 = types.filter(x => x !== NeverType)
+  compilerAssert(types2.every(x => x === types2[0]), "Expected types to be the same", { types })
+  return types2[0];
 }
 export const createParameterizedExternalType = (globalCompiler: GlobalCompilerState, typeConstructor: ExternalTypeConstructor, argTypes: unknown[]): Task<Type, CompilerError> => {
   const newArgTypes = argTypes.map(value => {
@@ -1983,9 +2011,10 @@ export const generateCompileCommands = (globalCompiler: GlobalCompilerState) => 
   const nativePath = opts.nativePath
   const assemblyPath = opts.assemblyPath
   const clang = globalOptions.clangPath
+  const optimizeLevel = 1
   return {
-    compile: `${llcPath} ${llPath} -O3 -o ${assemblyPath}`,
-    compileAndLink: `${clang} ${llPath} -O3 -o ${nativePath} ${addLibraryDirs} ${libs} ${frameworks}`,
+    compile: `${llcPath} ${llPath} -O${optimizeLevel} -o ${assemblyPath}`,
+    compileAndLink: `${clang} ${llPath} -O${optimizeLevel} -o ${nativePath} ${addLibraryDirs} ${libs} ${frameworks}`,
     nativePath
   }
 }

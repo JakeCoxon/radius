@@ -1,9 +1,9 @@
-import compiler for Option, Some, None, assert
+import compiler for Option, Some, None, assert, is_enum_variant, unsafe_enum_cast
 
 fn filter_some(iterable) @inline: {|yield|
   for x in iterable:
-    if x is Some:
-      yield(x.value)
+    if is_enum_variant!Some(x):
+      yield(unsafe_enum_cast!Some(x).value)
 }
 
 fn sum(iterable) @inline:

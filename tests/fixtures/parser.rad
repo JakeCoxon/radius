@@ -93,6 +93,13 @@ fn main():
     c(): 32
   }
 
+  y.match {
+    ((1, 2), (3, (4, 5))): 23
+  }
+  y.match {
+    (1, 2), (3, (4, 5)): 23
+  }
+
   # let Some(x) = thing + 1
   # else: return
 

@@ -1,4 +1,4 @@
-import compiler for Some, None, Option
+import compiler for Some, None, Option, assert, assert_compile_error
 
 fn test_basic():
   let y = Some(1)
@@ -8,30 +8,48 @@ fn test_basic():
     Some(z) if z == 0: 0
     None(): 100
   }
-  print(x)
+  assert(x == 3)
 
 fn test_tuple():
   let x = (1, 2, true).match {
     (2, w, true): 23
-    (z, 2, true) if z > 0: 1
+    (z, 2, true): 1
     (z, w, true) if z > w: 2
     (z, w, y) if z < w: 3
+    (z, w, y): 0
   }
   print(x)
+  assert(x == 1)
 
 
-fn test_nested_tuple():
+fn test_nested():
 
   let y = (Some(1), Some(3))
   let x = y.match {
-    (Some(z), None()) if z > 0: z + 2
+    (Some(z), None()) if z > 0: 3
     (Some(z), None()) if z > 0: z
     (Some(z), Some(w)) if z > 0: z + w
   }
+  assert(x == 4)
 
-  print(x)
+fn test_nested_tuple():
+  let y = ((1, 2), (3, (4, 5)))
+  let x = y.match {
+    ((1, 2), (3, (4, 5))): 23
+    ((z, 2), (3, (4, 5))) if z > 0: 1
+    ((z, w), (3, (4, 5))) if z > w: 2
+    ((z, w), (y, (4, 5))) if z < w: 3
+  }
+  assert(x == 23)
 
-fn test_nested():
+
+fn test_fail():
+  ((1, 2), (3, 3)).match {
+    (a, b, c): 23
+  }
+
+
+fn test_nested_break():
   let y = Some(1)
 
   # let x = y.match 'a {
@@ -47,4 +65,8 @@ fn test_nested():
 fn main():
   test_basic()
   test_tuple()
-  test_nested_tuple()
+  test_nested()
+
+  assert_compile_error!(test_fail, "Expected tuple with 2 fields got 3")
+
+  

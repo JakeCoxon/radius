@@ -231,6 +231,10 @@ const astWriter: SyntaxAstWriterTable = {
   variantcast: (writer, ast) => {
     format(writer, `@variantcast($, $)`, ast.expr, ast.type)
   },
+  enumvariant: (writer, ast) => {
+    const cons = new ConstructorAst(ast.type, ast.location, ast.args)
+    format(writer, `$`, cons)
+  },
   void: (writer, ast) => {
     format(writer, `# nothing`)
   },

@@ -1,6 +1,6 @@
-import { BytecodeDefault, BytecodeSecondOrder, callFunctionFromValueTask, compileClassTask, compileFunctionPrototype, createBytecodeVmAndExecuteTask, normalizeNumberType, numberTypeToConcrete, propagateLiteralType, propagatedLiteralAst, pushBytecode, pushGeneratedBytecode, unknownToAst, visitParseNode, visitParseNodeAndError } from "./compiler";
+import { BytecodeDefault, BytecodeSecondOrder, callFunctionFromValueTask, compileClassTask, compileFunctionPrototype, createBytecodeVmAndExecuteTask, getCommonType, normalizeNumberType, numberTypeToConcrete, propagateLiteralType, propagatedLiteralAst, pushBytecode, pushGeneratedBytecode, unknownToAst, visitParseNode, visitParseNodeAndError } from "./compiler";
 import { externalBuiltinBindings, getEnumOf } from "./compiler_sugar";
-import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, CallAst, IntType, Closure, UserCallAst, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition, ParseCall, TypeVariable, TypeMatcher, typeMatcherEquals, SourceLocation, ExternalTypeConstructor, ScopeParentSymbol, SubCompilerState, CompilerFunction, IntLiteralType, FloatLiteralType, FloatType, RawPointerType, AddressAst, BindingAst, UnknownObject, NeverType, CompilerFunctionCallContext, CompileTimeObjectType, CompTimeObjAst, ParseString, NamedArgAst, TypeCheckResult, u8Type, TypeCheckVar, ParseFreshIden, NumberAst, BoolAst, createStatements, ExternalFunction, BlockAst, LabelBlock, ConstructorAst, VariantCastAst } from "./defs";
+import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, hashValues, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, CallAst, IntType, Closure, UserCallAst, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition, ParseCall, TypeVariable, TypeMatcher, typeMatcherEquals, SourceLocation, ExternalTypeConstructor, ScopeParentSymbol, SubCompilerState, CompilerFunction, IntLiteralType, FloatLiteralType, FloatType, RawPointerType, AddressAst, BindingAst, UnknownObject, NeverType, CompilerFunctionCallContext, CompileTimeObjectType, CompTimeObjAst, ParseString, NamedArgAst, TypeCheckResult, u8Type, TypeCheckVar, ParseFreshIden, NumberAst, BoolAst, createStatements, ExternalFunction, BlockAst, LabelBlock, ConstructorAst, VariantCastAst, EnumVariantAst } from "./defs";
 import { Task, TaskDef, Unit } from "./tasks";
 
 
@@ -316,11 +316,10 @@ function functionInlineTask(ctx: TaskContext, { location, func, typeArgs, parent
       compilerAssert(isAst(ast), "Expected ast got $ast", { ast });
 
       // ctx.globalCompiler.logger.log(textColors.cyan(`Compiled inline ${func.debugName}`))
-      // TODO: This is basically what endblockast instruction does. can we fuse it?
+      // TODO: This is basically what endblockast instruction does. can we just emit block instructions?
       let type = propagatedLiteralAst(ast).type
-      if (breakBlock.type) {
-        compilerAssert(type === NeverType || type === breakBlock.type, "Expected types to match $x $y", { ast, x: type, y: breakBlock.type })
-        type = breakBlock.type
+      if (breakBlock.didBreak) {
+        type = getCommonType([type, ...breakBlock.breaks.map(x => x.expr!.type)])
       }
       const stmts = createStatements(location, [...statements, ast])
       const breakExprBinding = breakBlock.breakWithExpr ? new Binding('breakExpr', type) : null
@@ -486,8 +485,7 @@ export function createCallAstFromValue(ctx: CompilerFunctionCallContext, value: 
               const num = new NumberAst(IntType, location, variantIndex)
               args.forEach(x => propagatedLiteralAst(x))
               // TODO: Properly check arg types
-              const cons = new ConstructorAst(type, location, [num, ...args])
-              const cast = new VariantCastAst(enumVariantOf, location, type, cons)
+              const cast = new EnumVariantAst(enumVariantOf, location, type, enumVariantOf, [num, ...args])
               return Task.of(cast)
             })
           )

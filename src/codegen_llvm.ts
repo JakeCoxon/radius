@@ -489,6 +489,7 @@ const astWriter: LlvmAstWriterTable = {
     return { register: name }
   },
   constructor: (writer, ast) => {
+    compilerAssert(ast.type.typeInfo.fields.length === ast.args.length, "Expected same number of fields")
     if (ast.type.typeInfo.isReferenceType) {
       // TODO: Break out ASTs?
       const structPtrPtr = allocaHelper(writer, createPointer("", RawPointerType))
@@ -592,6 +593,14 @@ const astWriter: LlvmAstWriterTable = {
     format(writer, "  store $ $, $ $\n", ast.enumType, ast.expr, 'ptr', fromPointer)
     format(writer, "  $ = bitcast $* $ to $*\n", pointer, ast.enumType, fromPointer, ast.type)
     return { pointer }
+  },
+  enumvariant: (writer, ast) => {
+    const pointer = createPointer("", ast.type)
+    const structPtr = allocaHelper(writer, pointer)
+    // const dataType = getDataTypeName(writer.writer, ast.type)
+    const cons = new ConstructorAst(ast.variantType, ast.location, ast.args)
+    format(writer, "  store $ $, $ $\n", ast.variantType, cons, 'ptr', structPtr)
+    return { pointer: structPtr }
   },
   list: (writer, ast) => {
     compilerAssert(false, "Not implemented 'list'", { ast })

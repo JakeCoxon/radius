@@ -535,7 +535,7 @@ export const makeParser = (input: string, debugName: string) => {
   // Expr after in must be lower precedence than expansion dots
   const expectInExpr = () => (expect("in", "Expected 'in' after for identifier"), parseAssignExpr())
   const parseLeftSideMatch = (): ParseNode => {
-    if (match("(")) return trailingEndParen(parseLeftSideMatch())
+    
 
     const literal = () => {
       if (matchType("STRING")) return new ParseString(previous, previous.value.slice(1, -1))
@@ -564,8 +564,9 @@ export const makeParser = (input: string, debugName: string) => {
       expect(")", "Expected ')' after tuple expression");
       return left
     }
+
     let left = idenOrExtract();
-    while (match(",")) {
+    if (match(",")) {
       const list = [left, idenOrExtract()];
       while (match(",")) list.push(idenOrExtract());
       left = new ParseTuple(previous, list);
