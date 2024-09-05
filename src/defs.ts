@@ -1,4 +1,3 @@
-import { createParameterizedExternalType } from "./compiler";
 import { Event, Task } from "./tasks";
 
 export type UnknownObject = {[key:string]:unknown}
@@ -515,23 +514,12 @@ export class FreshBindingToken {
 let uniqueId = 1000
 // const uniqueMap = new WeakMap<object, number>()
 const UNIQUE_ID = Symbol('UNIQUE_ID')
-const getUniqueId = (obj: any) => {
+export const getUniqueId = (obj: any) => {
   if (obj[UNIQUE_ID] !== undefined) return obj[UNIQUE_ID]
   obj[UNIQUE_ID] = uniqueId++
   return obj[UNIQUE_ID];
 }
-export const hashValues = (values: unknown[], info={}) => {
-  return values.map(value => {
-    if (typeof value === 'number') return value
-    if (value instanceof PrimitiveType) return `$${value.typeName}`
-    if (value instanceof ParameterizedType) return getUniqueId(value)
-    if (value instanceof ConcreteClassType) return getUniqueId(value)
-    if (value instanceof ClassDefinition) return getUniqueId(value)
-    if (value instanceof FunctionDefinition) return getUniqueId(value)
-    if (value instanceof Closure) return getUniqueId(value)
-    compilerAssert(false, "Cannot hash value", { value, ...info })
-  }).join("__")
-}
+
 
 export interface TypeInfo {
   fields: TypeField[]
@@ -703,61 +691,6 @@ export const ListTypeConstructor: ExternalTypeConstructor = new ExternalTypeCons
 })
 
 
-export const NoneTypeConstructor: ExternalTypeConstructor = new ExternalTypeConstructor("None", (compiler, argTypes) => {
-  const argType = argTypes[0] || NeverType
-  compilerAssert(isType(argType), "Expected one type arg", { argType })
-  const sizeof = argType.typeInfo.sizeof + IntType.typeInfo.sizeof
-  const variantPadding = argType.typeInfo.sizeof
-  const type = new ParameterizedType(NoneTypeConstructor, [argType], { sizeof, variantPadding, fields: [], metaobject: Object.create(null), isReferenceType: false });
-  type.typeInfo.isInvalidSize = argType === NeverType
-  type.typeInfo.metaobject.isEnumVariant = true
-  type.typeInfo.metaobject.enumConstructorVariantOf = OptionTypeConstructor
-  type.typeInfo.metaobject.enumVariantIndex = 0
-  type.typeInfo.fields.push(new TypeField(SourceLocation.anon, "tag", type, 0, IntType))
-  return Task.of(type)
-})
-
-export const SomeTypeConstructor: ExternalTypeConstructor = new ExternalTypeConstructor("Some", (compiler, argTypes) => {
-  compilerAssert(argTypes.length === 1, "Expected one type arg", { argTypes })
-  const argType = argTypes[0]
-  const sizeof = argType.typeInfo.sizeof + IntType.typeInfo.sizeof
-  const type = new ParameterizedType(SomeTypeConstructor, [argType], { sizeof, fields: [], metaobject: Object.create(null), isReferenceType: false });
-  type.typeInfo.metaobject.isEnumVariant = true
-  type.typeInfo.metaobject.enumConstructorVariantOf = OptionTypeConstructor
-  type.typeInfo.metaobject.enumVariantIndex = 1
-  type.typeInfo.isInvalidSize = argType === NeverType
-  type.typeInfo.fields.push(new TypeField(SourceLocation.anon, "tag", type, 0, IntType))
-  type.typeInfo.fields.push(new TypeField(SourceLocation.anon, "value", type, 1, argType))
-  return Task.of(type)
-})
-
-export const OptionTypeConstructor: ExternalTypeConstructor = new ExternalTypeConstructor("Option", (compiler, argTypes) => {
-  const argType = argTypes[0] || NeverType
-  compilerAssert(isType(argType), "Expected one type arg", { argType })
-
-  const sizeof = argType.typeInfo.sizeof + IntType.typeInfo.sizeof
-  const variantPadding = argType.typeInfo.sizeof
-  const opttype = new ParameterizedType(OptionTypeConstructor, [argType], { sizeof, variantPadding, fields: [], metaobject: Object.create(null), isReferenceType: false });
-
-  opttype.typeInfo.isInvalidSize = argType === NeverType
-  opttype.typeInfo.metaobject.isEnum = true
-  opttype.typeInfo.fields.push(new TypeField(SourceLocation.anon, "tag", opttype, 0, IntType))
-
-  return (
-    createParameterizedExternalType(compiler, SomeTypeConstructor, [argType])
-    .chainFn((task, someType) => {
-      return (
-        createParameterizedExternalType(compiler, NoneTypeConstructor, [argType])
-        .chainFn((task, noneType) => {
-          opttype.typeInfo.metaobject.variants = [someType, noneType]
-          opttype.typeInfo.metaobject.Some = someType
-          opttype.typeInfo.metaobject.None = noneType
-          return Task.of(opttype)
-        })
-      )
-    })
-  )
-})
 export const TupleTypeConstructor: ExternalTypeConstructor = new ExternalTypeConstructor("Tuple", (compiler, argTypes) => {
   const type = new ParameterizedType(TupleTypeConstructor, argTypes, { sizeof: 0, fields: [], metaobject: Object.create(null), isReferenceType: false });
   // TODO: Add getter for length
@@ -767,10 +700,6 @@ export const TupleTypeConstructor: ExternalTypeConstructor = new ExternalTypeCon
   })
   return Task.of(type)
 })
-
-export const isTypeInteger = (type: Type) => type === IntType || type === u64Type || type === u8Type
-export const isTypeFloating = (type: Type) => type === FloatType || type === DoubleType
-export const isTypeScalar = (type: Type) => isTypeInteger(type) || isTypeFloating(type)
 
 export const BuiltinTypes = {
   int: IntType,
@@ -786,93 +715,10 @@ export const BuiltinTypes = {
   u8: u8Type
 }
 
-class TypeTable {
+export class TypeTable {
   array: Type[] = [] // TODO: Use a map here?
   constructor() { }
-
-  get(type: Type) { 
-    for (const t of this.array) {
-      if (typesEqual(t, type)) return t;
-    }
-  }
-  insert<T extends Type>(type: T) { 
-    this.array.push(type);
-    return type;
-  }
-  getOrInsert<T extends Type>(type: T): T {
-    let v = this.get(type)
-    if (v) return v as T;
-    return this.insert(type)
-  }
-  
 }
-
-// Don't use directly, use type table to see if types are equal
-export const typesEqual = (t1: unknown, t2: any): boolean => {
-  if (Object.getPrototypeOf(t1) !== Object.getPrototypeOf(t2)) return false;
-  if (t1 instanceof ExternalTypeConstructor) return t1 === t2;
-  if (!isType(t1)) {
-    return hashValues([t1]) === hashValues([t2])
-  }
-  compilerAssert(t1 && t2, "Unexpected", { t1, t2 })
-  if (t1 instanceof PrimitiveType) return t1 == t2;
-  if (t1 instanceof ConcreteClassType) return t1.compiledClass == t2.compiledClass;
-  if (t1 instanceof ParameterizedType) {
-    if (!typesEqual(t1.typeConstructor, t2.typeConstructor)) return false;
-    if (t1.args.length !== t2.args.length) return false;
-    return t1.args.every((x, i) => typesEqual(x, t2.args[i]))
-  }
-  return false;
-}
-
-export const typeMatcherEquals = (matcher: TypeMatcher, expected: Type, substitutions: UnknownObject) => {
-  const testTypeConstructor = (matcher: ExternalTypeConstructor | ClassDefinition, expected: TypeConstructor) => {
-    if (matcher instanceof ExternalTypeConstructor) {
-      if (matcher === expected) return true
-      compilerAssert(false, "$matcher does not equal $expected", { matcher, expected })
-    }
-    if (expected instanceof ClassDefinition) {
-      if (matcher !== expected) {
-        compilerAssert(false, "$matcher does not equal $expected", { matcher, expected: expected })
-        return false;
-      }
-      return true
-    }
-    compilerAssert(false, "Not implemented", { matcher, expected })
-  }
-  
-  const test = (matcher: unknown, expected: unknown) => {
-    if (matcher instanceof TypeMatcher && expected instanceof ParameterizedType) {
-      if (!testTypeConstructor(matcher.typeConstructor, expected.typeConstructor)) {
-        compilerAssert(false, "Not implemented", { matcher, expected })
-        return false;
-      }
-
-      let i = 0;
-      for (const arg of matcher.args) {
-        if (!test(arg, expected.args[i])) return false;
-        i++
-      }
-      return true;
-    }
-    if (matcher instanceof TypeVariable) {
-      if (substitutions[matcher.name]) return substitutions[matcher.name] === expected;
-      substitutions[matcher.name] = expected;
-      return true
-    }
-    if (matcher instanceof TypeMatcher && expected instanceof ConcreteClassType) {
-      compilerAssert(false, "Not implemented", { matcher, expected })
-      return false;
-    }
-    compilerAssert(false, "Not implemented", { matcher, expected })
-  }
-  return test(matcher, expected)
-}
-
-export const isParameterizedTypeOf = (a: Type, expected: TypeConstructor) => {
-  return a instanceof ParameterizedType && a.typeConstructor === expected;
-}
-
 
 export const expectMap = <T extends UnknownObject, K extends keyof T>(object: T, key: K, message: string, info: object = {}) => {
   compilerAssert(object[key] !== undefined, message, { object, key, ...info }); 
