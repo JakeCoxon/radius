@@ -1017,7 +1017,10 @@ const instructions: InstructionMapping = {
     const cond = propagatedLiteralAst(expectAst(popStack(vm)))
     const trueBody = propagatedLiteralAst(expectAst(popStack(vm)))
     const falseBody = f ? expectAst(popStack(vm)) : null
-    if (falseBody) propagateLiteralType(trueBody.type, falseBody) // FalseBody takes type of trueBody but we should make both depend on each other like binary operators
+    if (falseBody) {
+      const type = e ? getCommonType([trueBody.type, falseBody.type]) : falseBody.type
+      propagateLiteralType(type, falseBody) // FalseBody takes type of trueBody but we should make both depend on each other like binary operators
+    }
     if (e && cond instanceof BoolAst) {
       if (cond.value) { vm.stack.push(trueBody); return }
       else if (falseBody) { vm.stack.push(falseBody); return }
@@ -1644,6 +1647,10 @@ const isTypeOption = (type: Type): type is ParameterizedType => {
   return type instanceof ParameterizedType && type.typeConstructor === OptionTypeConstructor
 }
 export const getCommonType = (types: Type[]): Type => {
+  const types2 = types.filter(x => x !== NeverType)
+  if (types2.length === 1) return types2[0]
+  if (types2.length !== types.length) return getCommonType(types2)
+
   if (isTypeOption(types[0])) {
     compilerAssert(types.every(x => isTypeOption(x)), "Expected all types to be option")
     const typesP = types as ParameterizedType[]
@@ -1654,15 +1661,15 @@ export const getCommonType = (types: Type[]): Type => {
   }
   
   if (types.some(x => x === FloatLiteralType || x === FloatType)) {
-    compilerAssert(types.every(x => x === IntLiteralType || x === FloatLiteralType || x === FloatType), "Expected types to be the same for list literal", { types })
+    compilerAssert(types.every(x => x === IntLiteralType || x === FloatLiteralType || x === FloatType), "Expected types to be the same", { types })
     return FloatType
   }
   if (types.some(x => x === IntLiteralType || x === IntType)) {
-    compilerAssert(types.every(x => x === IntLiteralType || x === IntType), "Expected types to be the same for list literal", { types })
+    compilerAssert(types.every(x => x === IntLiteralType || x === IntType), "Expected types to be the same", { types })
     return IntType
   }
-  const types2 = types.filter(x => x !== NeverType)
-  compilerAssert(types2.every(x => x === types2[0]), "Expected types to be the same", { types })
+  
+  compilerAssert(types.every(x => x === types[0]), "Expected types to be the same", { types })
   return types2[0];
 }
 export const createParameterizedExternalType = (globalCompiler: GlobalCompilerState, typeConstructor: ExternalTypeConstructor, argTypes: unknown[]): Task<Type, CompilerError> => {
