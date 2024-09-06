@@ -14,39 +14,39 @@ const to_iterator = |thing|
 #   {|yield_outer: iter|
 #     while true:
 #       iterator_a({|consume| 
-# let         elem = consume()
+#         let elem = consume()
 #         yield_outer(elem)
 #       })
 #       iterator_b({|consume| 
-# let         elem = consume()
+#         let elem = consume()
 #         yield_outer(elem)
 #       })
 #   }
 # or
 # concat2 :: |iterator_a, iterator_b|
-#   {|yield_outer: yielder|
+#   yielder {|yield_outer|
 #     while true:
-# let       elem_a = consume(iterator_a)
+#       let elem_a = consume(iterator_a)
 #       yield_outer(elem_a)
-# let       elem_b = consume(iterator_b)
+#       let elem_b = consume(iterator_b)
 #       yield_outer(elem_b)
 #   }
-# a
+# 
 # concat2 :: {|iterator_a: iter, iterator_b: iter| -> |outer: yielder|
 #   while true:
-# let     elem_a = iterator_a()
+#     let elem_a = iterator_a()
 #     outer(elem_a)
-# let     elem_b = iterator_b()
+#     let elem_b = iterator_b()
 #     outer(elem_b)
 # }
-# a
+# 
 
 
 
 
 const concat2 = |iterator_a, iterator_b|
   {|yield_outer|
-    generator({|consume| 
+    meta generator({|consume| 
       while true:
         let elem = consume()
         yield_outer(elem)
@@ -68,8 +68,8 @@ const concat2 = |iterator_a, iterator_b|
 
 const zip2 = |iterator_a, iterator_b|
   {|yield_outer|
-    generator({|consume_b|
-      generator({|consume_a| 
+    meta generator({|consume_b|
+      meta generator({|consume_a| 
         while true:
           let elem_a = consume_a()
           let elem_b = consume_b()
@@ -81,7 +81,7 @@ const zip2 = |iterator_a, iterator_b|
 
 const interpose = |iterator, value|
   {|yield_outer|
-    generator({|consume| 
+    meta generator({|consume| 
       let elem = consume()
       yield_outer(elem)
       while true:
@@ -93,8 +93,8 @@ const interpose = |iterator, value|
   
 const interleave = |iterator_a, iterator_b|
   {|yield_outer|
-    generator({|consume_a| 
-      generator({|consume_b| 
+    meta generator({|consume_a| 
+      meta generator({|consume_b| 
         while true:
           let elem_a = consume_a()
           yield_outer(elem_a)
@@ -111,8 +111,8 @@ const interleave_infinite = |iterator_a, iterator_b|
     let complete_a = false
     let complete_b = false
 
-    generator({|consume_a| 
-      generator({|consume_b| 
+    meta generator({|consume_a| 
+      meta generator({|consume_b| 
         while !complete_a or !complete_b:
           let elem_a = consume_a()
           if !complete_a:
@@ -184,18 +184,18 @@ const custom_consume = |yield|
 fn main():
   # test_basic()
   test_concat2()
-  # test_normal_concat()
-  # test_concat2_concat2()
-  # test_zip2()
+  test_normal_concat()
+  test_concat2_concat2()
+  test_zip2()
   # test_interpose()
-  # test_interleave()
-  # test_interleave_to_iterator()
-  # test_interleave_infinite()
+  test_interleave()
+  test_interleave_to_iterator()
+  test_interleave_infinite()
 
   
 fn test_basic():
 
-  generator({|consume| 
+  meta generator({|consume| 
     let elem1 = consume()
     print(elem1)
     let elem2 = consume()
@@ -296,11 +296,11 @@ fn test_interleave_to_iterator():
     num += x4
   assert(num == 74)
 
-# fn test_interleave_infinite():
+fn test_interleave_infinite():
 
-# let   thing = [10, 20, 30]
-#   interleaved3 :: interleave_infinite(to_iterator(thing), bar)
-# let   num = 0
-#   for x5 in interleaved3:
-#     num += x5
-#   assert(num == 264)
+  let thing = [10, 20, 30]
+  const interleaved3 = interleave_infinite(to_iterator(thing), bar)
+  let num = 0
+  for x5 in interleaved3:
+    num += x5
+  assert(num == 264)

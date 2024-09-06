@@ -1009,7 +1009,7 @@ const generatorInternal = (
   )
 }
 
-const generator = new ExternalFunction("generator", VoidType, (ctx, values) => {
+export const generator = new ExternalFunction("generator", VoidType, (ctx, values) => {
 
   const [consumeFn, produceFn] = values
 

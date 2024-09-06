@@ -722,14 +722,6 @@ const letLocalAst = (vm: Vm, name: string, type: Type | null, value: Ast | null)
   value ||= new DefaultConsAst(inferType.typeInfo.isReferenceType ? RawPointerType : inferType, vm.location)
   return new LetAst(VoidType, vm.location, binding, value);
 }
-const implicitTypeCast = (vm: Vm, ast: Ast, type: Type) => {
-  if (type instanceof ParameterizedType && type.typeConstructor === OptionTypeConstructor) {
-    if (isType(type.args[0]) && canAssignTypeTo(ast.type, type.args[0])) {
-      return optionCastSugar(vm, propagatedLiteralAst(ast), type)
-    }
-  }
-  return Task.of(ast)
-}
 
 export function resolveScope(ctx: TaskContext, scope: Scope, name: string): Task<unknown, CompilerError> {
   let checkScope: Scope | undefined = scope;
@@ -852,11 +844,8 @@ const instructions: InstructionMapping = {
   letast: (vm, { name, t, v }) => {
     const type = t ? expectType(popStack(vm)) : null
     let value = v ? expectAst(popStack(vm)) : null
-    const newValue: Task<Ast | null, CompilerError> = (value && type) ? implicitTypeCast(vm, value, type) : Task.of(value)
-    return newValue.chainFn((task, ast) => {
-      vm.stack.push(letLocalAst(vm, name, type, ast))
-      return Task.success()
-    })
+    vm.stack.push(letLocalAst(vm, name, type, value))
+    return Task.success()
   },
   letmetaast: (vm, { t, v }) => {
     const name = popStack(vm)
@@ -864,11 +853,8 @@ const instructions: InstructionMapping = {
     const type = t ? expectType(popStack(vm)) : null
     const value = v ? expectAst(popStack(vm)) : null
     compilerAssert(value, "Expected value for let")
-    const newValue: Task<Ast | null, CompilerError> = (value && type) ? implicitTypeCast(vm, value, type) : Task.of(value)
-    return newValue.chainFn((task, ast) => {
-      vm.stack.push(letLocalAst(vm, name, type, ast))
-      return Task.success()
-    })
+    vm.stack.push(letLocalAst(vm, name, type, value))
+    return Task.success()
   },
   letmatchast: (vm, { t, v }) =>  {
     compilerAssert(!t, "Type not supported for tuple let")
@@ -1055,14 +1041,9 @@ const instructions: InstructionMapping = {
       compilerAssert(binding instanceof Binding, "Expected binding got $binding", { binding })
       const ast = expectAst(popStack(vm))
       propagateLiteralType(binding.type, ast)
-      // Hack in implicit casting for now
-      let astTask: Task<Ast, CompilerError> = implicitTypeCast(vm, ast, binding.type)
-      
-      return astTask.chainFn((task, ast) => {
-        compilerAssert(binding.type === ast.type, "Type mismatch got $got expected $expected", { got: ast.type, expected: binding.type })
-        vm.stack.push(new SetAst(VoidType, vm.location, binding, ast))
-        return Task.success()
-      })
+      compilerAssert(binding.type === ast.type, "Type mismatch got $got expected $expected", { got: ast.type, expected: binding.type })
+      vm.stack.push(new SetAst(VoidType, vm.location, binding, ast))
+      return Task.success()
     });
   },
   setmetaast: (vm, {}) => { // Allow meta evaluating left side of assignment

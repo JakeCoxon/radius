@@ -25,7 +25,7 @@ fn max2!(T)(iterable) @inline:
   let m = None!T()
   for it in iterable:
     if it > m.orelse(0):
-      m = it
+      m = Some(it)
   m
 
 fn test_filter():

@@ -15,6 +15,7 @@ export const getCommonType = (types: Type[]): Type => {
   if (types2.length === 1) return types2[0]
   if (types2.length !== types.length) return getCommonType(types2)
 
+  // Special case for Option for now
   if (isTypeOption(types[0])) {
     compilerAssert(types.every(x => isTypeOption(x)), "Expected all types to be option")
     const typesP = types as ParameterizedType[]
@@ -37,13 +38,13 @@ export const getCommonType = (types: Type[]): Type => {
   return types2[0];
 }
 
-export const typeTableGet = (typeTable: TypeTable, type: Type) => {
+const typeTableGet = (typeTable: TypeTable, type: Type) => {
   for (const t of typeTable.array) {
     if (typesEqual(t, type)) return t;
   }
 }
 
-export const typeTableInsert = (typeTable: TypeTable, type: Type) => {
+const typeTableInsert = (typeTable: TypeTable, type: Type) => {
   typeTable.array.push(type);
   return type;
 }

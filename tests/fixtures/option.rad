@@ -7,9 +7,9 @@ fn is_some!(T)(x: Option!T) -> bool @inline:
 
 fn main():
   let a : Option!int
-  a = 78
+  a = Some(78)
 
-  let b : Option!int = 124
+  let b : Option!int = Some(124)
 
   let x = None!int()
   let y = Some(10)
@@ -38,7 +38,7 @@ fn main():
   let asd = { x? + y? }.orelse 3
   assert(asd == 3)
 
-  x = 16
+  x = Some(16)
 
   let asd2 = { x? + y? }.orelse 3
   assert(asd2 == 48)
