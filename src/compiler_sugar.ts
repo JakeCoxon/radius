@@ -5,27 +5,6 @@ import { NoneTypeConstructor, OptionTypeConstructor, SomeTypeConstructor, create
 import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, UserCallAst, NeverType, IfAst, BoolType, VoidAst, LoopObject, CompileTimeObjectType, u64Type, FunctionDefinition, ParserFunctionDecl, StatementsAst, IntLiteralType, FloatLiteralType, isAst, isType, isTypeCheckError, InterleaveAst, ContinueInterAst, CompTimeObjAst, ParseEvalFunc, SetAst, DefaultConsAst, WhileAst, BoolAst, isArray, ExpansionSelector, ParseNote, ExpansionCompilerState, ParseBoolean, ParseOr, ParseBreak, ParseIs, filterNotNull, ParseLetConst, ParseCast, VariantCastAst, ExternalTypeConstructor, GlobalCompilerState, ParseOrElse, ParseField, ParseQuestion, ParseBreakOpt, LabelBlock, BlockAst, ParseMatch, ParseExtract, ParseMatchCase, ParseTuple, ParseString, Tuple, ParseNot, EnumVariantAst } from "./defs"
 import { Event, Task, TaskDef, isTask } from "./tasks"
 
-const rangeLoop = (token: Token, iden: ParseIdentifier | ParseFreshIden, start: ParseNode, end: ParseNode, body: ParseNode) => {
-  const letNode = new ParseLet(token, iden, null, start)
-  const loopBody = new ParseStatements(token, [body, new ParseOpEq(createAnonymousToken("+="), iden, new ParseNumber(createAnonymousToken('1')))])
-  const loop = new ParseWhile(token, new ParseOperator(createAnonymousToken('<'), [iden, end]), loopBody)
-  return [letNode, loop]
-}
-
-const minAll = (token: Token, letIden: ParseIdentifier | ParseFreshIden, exprs: ParseNode[]) => {
-  // Iteratively compute the minimum of a list of expressions
-  const letMin = new ParseLet(token, letIden, null, exprs[0])
-  const mins = exprs.flatMap((expr, i) => {
-    const tmpIden = new ParseFreshIden(token, new FreshBindingToken("min"))
-    const letExpr = new ParseLet(token, tmpIden, null, expr)
-    const less = new ParseOperator(createAnonymousToken('<'), [letIden, tmpIden])
-    const min = new ParseIf(token, true, less, letIden, new ParseElse(token, tmpIden))
-    const set = new ParseSet(token, letIden, min)
-    return [letExpr, set]
-  })
-  return [letMin, ...mins]
-}
-
 const insertMetaObjectPairwiseOperator = (compiledClass: CompiledClass, operatorName: string, operatorSymbol: string) => {
   const operatorFunc = new CompilerFunction(operatorName, (ctx, typeArgs, args) => {
     const [a, b] = args
@@ -501,6 +480,21 @@ const isEnumVariant = new CompilerFunction("isEnumVariant", (ctx, typeArgs, args
   return createCallAstFromValue(ctx, closure, [], [value, v])
 })
 
+const isTypeOf = new CompilerFunction("isType", (ctx, typeArgs, args) => {
+  const [value] = args
+  const [type] = typeArgs
+  compilerAssert(isAst(value), "Expected ast", { value })
+  if (type instanceof ExternalTypeConstructor) {
+    if (value.type.typeInfo.metaobject.isEnum) {
+      return isEnumVariant.func(ctx, typeArgs, args)
+    }
+    compilerAssert(false, "Not implemented yet", { type })
+  } else if (isType(type)) {    
+    return Task.of(new BoolAst(BoolType, ctx.location, value.type === type))
+  }
+  compilerAssert(false, "Expected type or type constructor", { type })
+})
+
 const unsafeEnumCast = new CompilerFunction("unsafeEnumCast", (ctx, typeArgs, args) => {
   const [value] = args
   let [variantType] = typeArgs
@@ -542,7 +536,7 @@ export const smartCastSugar = (out: BytecodeWriter, node: ParseIf) => {
   const tag = new ParseField(node.token, name, new ParseIdentifier(createAnonymousToken('tag')))
   const cond = new ParseOperator(createAnonymousToken('=='), [tag, indexIden])
   const cast = new ParseCall(node.token, new ParseValue(node.token, unsafeEnumCast), [name], [testTypeIden])
-  const letCast = new ParseLet(node.token, name, null, cast)
+  const letCast = new ParseLet(node.token, false, name, null, cast)
   const trueBody = new ParseBlock(node.token, null, null, new ParseStatements(node.token, [letCast, node.trueBody]))
 
   visitParseNode(out, letTestType)
@@ -663,7 +657,7 @@ const guardAsExprSugar = (subject: ParseNode, asType: ParseNode, numFields: numb
     vm.stack.push(value.values[1])
   }, [], [asTupleIden])
 
-  const letExtract = new ParseLet(token, iden, null, extractValue)
+  const letExtract = new ParseLet(token, false, iden, null, extractValue)
   const if_ = new ParseIf(token, true, new ParseNot(token, cond), elseExpr, null)
   return new ParseStatements(token, [letAsTuple, if_, letExtract])
 }
@@ -674,7 +668,7 @@ const extractToOption = (node: ParseNode, blockIden: ParseFreshIden, subject: Pa
   const none = new ParseCall(token, new ParseValue(token, NoneTypeConstructor), [], [])
   const break_ = new ParseBreak(token, blockIden, none)
 
-  if (node instanceof ParseIdentifier) return new ParseLet(token, node, null, subject)
+  if (node instanceof ParseIdentifier) return new ParseLet(token, false, node, null, subject)
   if (node instanceof ParseNumber || node instanceof ParseString || node instanceof ParseBoolean) {
     return new ParseIf(token, false, new ParseOperator(createAnonymousToken('!='), [subject, node]), break_, null)
   }
@@ -708,7 +702,7 @@ const caseToOption = (node: ParseMatchCase, blockIden: ParseFreshIden, subject: 
   if (node.condition) smts.push(new ParseIf(token, false, new ParseNot(token, node.condition), break_, null))
 
   const resIden = new ParseFreshIden(token, new FreshBindingToken('res'))
-  const letRes = new ParseLet(token, resIden, null, node.body)
+  const letRes = new ParseLet(token, false, resIden, null, node.body)
   const some = new ParseCall(subject.token, new ParseValue(subject.token, SomeTypeConstructor), [resIden], [])
 
   return new ParseStatements(token, [...smts, letRes, some])
@@ -717,7 +711,7 @@ const caseToOption = (node: ParseMatchCase, blockIden: ParseFreshIden, subject: 
 export const matchSugar = (out: BytecodeWriter, node: ParseMatch) => {
   const token = node.token
   const subjectIden = new ParseFreshIden(token, new FreshBindingToken('subject'))
-  const letSubject = new ParseLet(token, subjectIden, null, node.subject)
+  const letSubject = new ParseLet(token, false, subjectIden, null, node.subject)
   const options = node.cases.map(case_ => {
     const blockIden = new ParseFreshIden(token, new FreshBindingToken('case'))
     const caseBlock = caseToOption(case_, blockIden, subjectIden)
@@ -731,9 +725,15 @@ export const matchSugar = (out: BytecodeWriter, node: ParseMatch) => {
   visitParseNode(out, stmts)
 }
 
+export const isSugar = (out: BytecodeWriter, node: ParseIs) => {
+  // compilerAssert(false, "isSugar not implemented", { node })
+  const call = new ParseCall(node.token, new ParseValue(node.token, isTypeOf), [node.expr], [node.type])
+  visitParseNode(out, call)
+}
+
 export const orElseSugar = (out: BytecodeWriter, node: ParseOrElse) => {
   const letIden = new ParseFreshIden(node.token, new FreshBindingToken('orelse'))
-  const letNode = new ParseLet(node.token, letIden, null, node.expr)
+  const letNode = new ParseLet(node.token, false, letIden, null, node.expr)
   const testNode = new ParseIs(node.token, letIden, new ParseValue(node.token, SomeTypeConstructor))
   const valueNode = new ParseField(node.token, letIden, new ParseIdentifier(createAnonymousToken('value')))
   const if_ = new ParseIf(node.token, true, testNode, valueNode, new ParseElse(node.token, node.orElse))
@@ -741,7 +741,7 @@ export const orElseSugar = (out: BytecodeWriter, node: ParseOrElse) => {
   visitParseNode(out, letNode)
   pushBytecode(out, node.token, { type: 'appendq' })
   pushBytecode(out, node.token, { type: 'pop' })
-  smartCastSugar(out, if_)
+  smartCastSugar(out, if_) // TODO: Make this a parse node so it cleans up the entire function
   pushBytecode(out, node.token, { type: 'appendq' })
   pushBytecode(out, node.token, { type: 'pop' })
   pushBytecode(out, node.token, { type: 'popqs' })

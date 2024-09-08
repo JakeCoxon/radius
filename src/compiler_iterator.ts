@@ -23,7 +23,7 @@ export const forLoopSugar = (out: BytecodeWriter, node: ParseFor) => {
 
   const fnIden = node.left instanceof ParseIdentifier ? node.left : new ParseFreshIden(node.token, new FreshBindingToken('it'))
   const fnParams: ParserFunctionParameter[] = [{ name: fnIden, storage: null, type: null }]
-  const extract = node.left instanceof ParseTuple ? new ParseLet(node.token, node.left, null, fnIden) : null
+  const extract = node.left instanceof ParseTuple ? new ParseLet(node.token, false, node.left, null, fnIden) : null
   const continueBlock = new ParseBlock(node.token, 'continue', null, new ParseStatements(node.token, filterNotNull([extract, node.body])))
   const decl = createAnonymousParserFunctionDecl("for", node.token, fnParams, continueBlock)
   const fn = new ParseFunction(node.token, decl)
@@ -174,7 +174,7 @@ const appendValuePartialFn = (() => {
 
   const exprQuote = new ParseQuote(token, exprParam)
   const iden = new ParseFreshIden(token, new FreshBindingToken('elem'))
-  const let_ = new ParseLet(token, iden, null, exprQuote)
+  const let_ = new ParseLet(token, false, iden, null, exprQuote)
   const call = callV(token, arrayConstructorTypeCheck, [consIdenParam, iden], [])
   const call2 = callV(token, arrayConstructorCreateAppend, [consIdenParam, iden], [])
   const call3 = callV(token, arrayConstructorAddAppendCall, [consIdenParam, call2], [])
@@ -196,7 +196,7 @@ const appendValuePartialIfFn = (() => {
 
   const exprQuote = new ParseQuote(token, exprParam)
   const iden = new ParseFreshIden(token, new FreshBindingToken('elem'))
-  const let_ = new ParseLet(token, iden, null, exprQuote)
+  const let_ = new ParseLet(token, false, iden, null, exprQuote)
   const call = callV(token, arrayConstructorTypeCheck, [consIdenParam, iden], [])
 
   const call2 = new ParseMeta(token, callV(token, arrayConstructorCreateAppend, [consIdenParam, iden], []))
@@ -221,7 +221,7 @@ const compileListConstructorForExpr = (out: BytecodeWriter, node: ParseForExpr, 
 
   const iden = new ParseFreshIden(node.token, new FreshBindingToken('elem'))
   const exprQuote = new ParseQuote(node.token, node.body)
-  const let_ = new ParseLet(node.token, iden, null, exprQuote)
+  const let_ = new ParseLet(node.token, false, iden, null, exprQuote)
   const call = callV(node.token, arrayConstructorTypeCheck, [listConstructorIden, iden], [])
   const call2 = callV(node.token, arrayConstructorCreateAppend, [listConstructorIden, iden], [])
 
@@ -244,7 +244,7 @@ const compileListConstructorExpand = (out: BytecodeWriter, node: ParseExpand, li
   const result = visitExpansion(out, expansion, node.expr)
   const iden = new ParseFreshIden(node.token, new FreshBindingToken('elem'))
   const exprQuote = new ParseQuote(node.token, result)
-  const let_ = new ParseLet(node.token, iden, null, exprQuote)
+  const let_ = new ParseLet(node.token, false, iden, null, exprQuote)
   const call = callV(node.token, arrayConstructorTypeCheck, [listConstructorIden, iden], [])
   const call2 = callV(node.token, arrayConstructorCreateAppend, [listConstructorIden, iden], [])
   expansion.loopBodyNode = new ParseMeta(node.token, new ParseStatements(node.token, [let_, call, call2]))
@@ -284,15 +284,15 @@ const createArrayIterator = (token: Token, subCompilerState: SubCompilerState, s
   compilerAssert(indexIdentifier)
   const fnParams: ParserFunctionParameter[] = [{ name: yieldParam, storage: null, type: null }]
 
-  const letNodeNode = new ParseLet(token, new ParseFreshIden(token, new FreshBindingToken('node')), null, selector.node)
+  const letNodeNode = new ParseLet(token, false, new ParseFreshIden(token, new FreshBindingToken('node')), null, selector.node)
   let lengthNode: ParseNode = getLength(token, letNodeNode.left)
   if (selector.end) {
     const offsetNode = new ParseOperator(createAnonymousToken("+"), [lengthNode, selector.end])
     const lenCond = new ParseOperator(createAnonymousToken("<"), [selector.end, new ParseNumber(createAnonymousToken('0'))])
     lengthNode = new ParseIf(token, true, lenCond, offsetNode, new ParseElse(token, selector.end))
   }
-  let letLengthNode: ParseNode = new ParseLet(token, new ParseFreshIden(token, new FreshBindingToken('length')), null, lengthNode)
-  const letIndexNode = new ParseLet(token, indexIdentifier, null, selector.start ?? new ParseNumber(createAnonymousToken('0')))
+  let letLengthNode: ParseNode = new ParseLet(token, false, new ParseFreshIden(token, new FreshBindingToken('length')), null, lengthNode)
+  const letIndexNode = new ParseLet(token, false, indexIdentifier, null, selector.start ?? new ParseNumber(createAnonymousToken('0')))
   const incNode = new ParseOpEq(createAnonymousToken("+="), letIndexNode.left, selector.step ?? new ParseNumber(createAnonymousToken('1')))
   const condNode = new ParseOperator(createAnonymousToken("<"), [letIndexNode.left, letLengthNode.left])
   const subscriptIterator = new ParseSubscript(token, letNodeNode.left, indexIdentifier, false)
@@ -321,12 +321,12 @@ const createArraySetterIterator2 = (token: Token, selector: { node: ParseNode, s
     const lenCond = new ParseOperator(createAnonymousToken("<"), [selector.end, new ParseNumber(createAnonymousToken('0'))])
     lengthNode = new ParseIf(token, true, lenCond, offsetNode, new ParseElse(token, selector.end))
   }
-  let letLengthNode: ParseNode = new ParseLet(token, new ParseFreshIden(token, new FreshBindingToken('length')), null, lengthNode)
-  const letIndexNode = new ParseLet(token, indexIdentifier, null, selector.start ?? new ParseNumber(createAnonymousToken('0')))
+  let letLengthNode: ParseNode = new ParseLet(token, false, new ParseFreshIden(token, new FreshBindingToken('length')), null, lengthNode)
+  const letIndexNode = new ParseLet(token, false, indexIdentifier, null, selector.start ?? new ParseNumber(createAnonymousToken('0')))
   const incNode = new ParseOpEq(createAnonymousToken("+="), letIndexNode.left, selector.step ?? new ParseNumber(createAnonymousToken('1')))
   const condNode = new ParseOperator(createAnonymousToken("<"), [letIndexNode.left, letLengthNode.left])
   const subscriptIterator = new ParseSubscript(token, selector.node, indexIdentifier, false)
-  const loopBody = new ParseLet(token, valueIdentifier, null, new ParseCall(createAnonymousToken(''), yieldParam, [], []))
+  const loopBody = new ParseLet(token, false, valueIdentifier, null, new ParseCall(createAnonymousToken(''), yieldParam, [], []))
   const setNode = new ParseSet(token, subscriptIterator, valueIdentifier)
   const whileStmts = new ParseStatements(token, [loopBody, setNode, incNode])
   const loop = new ParseWhile(token, condNode, whileStmts)
@@ -338,7 +338,7 @@ const createArraySetterIterator2 = (token: Token, selector: { node: ParseNode, s
 
 const letIn = (token: Token, node: ParseNode, f: (iden: ParseFreshIden) => ParseNode[]) => {
   const iden = new ParseFreshIden(token, new FreshBindingToken('let_in'))
-  const let_ = new ParseLet(token, iden, null, node)
+  const let_ = new ParseLet(token, false, iden, null, node)
   return new ParseStatements(token, [let_, ...f(iden)])
 }
 
@@ -367,12 +367,12 @@ const createIteratorSliceLoopPartialFn = (() => {
   // const indexIden = new ParseFreshIden(token, new FreshBindingToken('index'))
 
   const letStartNode = metaIf(token, startIden, 
-    new ParseLet(token, new ParseFreshIden(token, new FreshBindingToken('start')), null, startIden), null)
+    new ParseLet(token, false, new ParseFreshIden(token, new FreshBindingToken('start')), null, startIden), null)
   const letEndNode = metaIf(token, endIden,
-    new ParseLet(token, new ParseFreshIden(token, new FreshBindingToken('end')), null, endIden), null)
+    new ParseLet(token, false, new ParseFreshIden(token, new FreshBindingToken('end')), null, endIden), null)
   const letStepNode = metaIf(token, stepIden, 
-    new ParseLet(token, new ParseFreshIden(token, new FreshBindingToken('step')), null, stepIden), null)
-  const letIndexNode = new ParseLet(token, indexIdentifier, null, new ParseNumber(createAnonymousToken('0')))
+    new ParseLet(token, false, new ParseFreshIden(token, new FreshBindingToken('step')), null, stepIden), null)
+  const letIndexNode = new ParseLet(token, false, indexIdentifier, null, new ParseNumber(createAnonymousToken('0')))
   const incNode = new ParseOpEq(createAnonymousToken("+="), indexIdentifier, new ParseNumber(createAnonymousToken('1')))
   const consumedValue = new ParseFreshIden(token, new FreshBindingToken('slice'))
   const trueNode = new ParseBoolean(createAnonymousToken('true'))
@@ -403,7 +403,7 @@ const createIteratorSliceLoopPartialFn = (() => {
       new ParseElse(token, new ParseQuote(token, yieldCall)))
   ]))
 
-  const consumeCall = new ParseLet(token, consumedValue, null, new ParseCall(createAnonymousToken(''), consumeParam, [], []))
+  const consumeCall = new ParseLet(token, false, consumedValue, null, new ParseCall(createAnonymousToken(''), consumeParam, [], []))
   const loopBody = new ParseStatements(token, filterNotNull([consumeCall, wrappedYieldCall, incNode]))
   const loop = new ParseWhile(token, loopCondNode, loopBody)
 
@@ -629,13 +629,13 @@ const compileExpansionToParseNode = (out: BytecodeWriter, expansion: ExpansionCo
   const lets: ParseNode[] = [...expansion.lets]
   const final: ParseNode[] = [loopNode]
   if (expansion.fold) {
-    lets.push(new ParseLet(node.token, expansion.fold.iden, null, expansion.fold.initial))
+    lets.push(new ParseLet(node.token, false, expansion.fold.iden, null, expansion.fold.initial))
     final.push(expansion.fold.iden)
   }
 
   const stmts = new ParseStatements(node.token, [...lets, ...final])
   const block =  new ParseBlock(createAnonymousToken(''), 'break', expansion.breakIden, stmts)
-  const metaLet = new ParseLet(node.token, expansion.metaResultIden, null, new ParseQuote(node.token, block))
+  const metaLet = new ParseLet(node.token, false, expansion.metaResultIden, null, new ParseQuote(node.token, block))
   return new ParseMeta(node.token, new ParseStatements(node.token, [metaLet, expansion.metaResult]))
 }
 
@@ -725,7 +725,7 @@ const zipHelper = (debugName: string, zips: ZipIterator[], result: (stmts: Parse
   const consumeParam1 = new ParseFreshIden(token, new FreshBindingToken('consume'))
   const produceParam1 = new ParseFreshIden(token, new FreshBindingToken('produce'))
 
-  const let_ = new ParseLet(token, elemIden, null, new ParseCall(token, consumeParam1, [], []))
+  const let_ = new ParseLet(token, false, elemIden, null, new ParseCall(token, consumeParam1, [], []))
   
   const innerProducer = zipHelper(debugName, zips, result, index + 1, [...letStmts, let_])
   const consumerProducer = createConsumerProducer(token, callable, produceParam1)

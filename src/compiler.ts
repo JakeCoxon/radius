@@ -1,7 +1,7 @@
 import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, ParseMeta, createAnonymousParserFunctionDecl, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol, ScopeParentSymbol, isPlainObject, ParseLet, ParseList, ParseExpand, ParseBlock, findLabelByBinding, ParseSubscript, ParseNumber, ParseQuote, ParseWhile, ParseOperator, ParseBytecode, ParseOpEq, ParseSet, ParseFreshIden, UnknownObject, ParseNote, DefaultConsAst, RawPointerType, ValueFieldAst, SetValueFieldAst, FloatLiteralType, IntLiteralType, CompilerFunction, DerefAst, SetDerefAst, ParseSlice, CompilerFunctionCallContext, NeverType, LoopObject, CompTimeObjAst, CompileTimeObjectType, NamedArgAst, TypeCheckVar, TypeCheckConfig, u8Type, u64Type, FreshBindingToken, isCompilerCallable, ParseIs, VariantCastAst, EnumVariantAst } from "./defs";
 import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, functionCompileTimeCompileTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, compileExportedFunctionTask } from "./compiler_functions";
 import { Event, Task, TaskDef, Unit, isTask, isTaskResult, withContext } from "./tasks";
-import { createCompilerModuleTask, createListConstructor, defaultMetaFunction, matchSugar, optionBlockSugar, optionCastSugar, orElseSugar, print, questionSugar, smartCastSugar } from "./compiler_sugar";
+import { createCompilerModuleTask, createListConstructor, defaultMetaFunction, isSugar, matchSugar, optionBlockSugar, optionCastSugar, orElseSugar, print, questionSugar } from "./compiler_sugar";
 import { expandDotsSugar, expandFuncAllSugar, expandFuncAnySugar, expandFuncConcatSugar, expandFuncFirstSugar, expandFuncLastSugar, expandFuncMaxSugar, expandFuncMinSugar, expandFuncSumSugar, expandIteratorSugar, foldSugar, forExprSugar, forLoopSugar, listComprehensionSugar, listConstructorSugar, sliceSugar, whileExprSugar } from "./compiler_iterator"
 import { OptionTypeConstructor, calculateSizeOfType, canAssignTypeTo, createParameterizedExternalType, getCommonType, hashValues, isParameterizedTypeOf, propagateLiteralType, propagatedLiteralAst, typeTableGetOrInsert, typecheckEquality, typecheckNumberComparison, typecheckNumberOperator } from "./compilter_types";
 
@@ -39,6 +39,8 @@ export const pushGeneratedBytecode = <T extends BytecodeInstr>(out: BytecodeWrit
 }
 
 export const BytecodeDefault: ParseTreeTable = {
+  guard:     (out, node) => compilerAssert(false, "Not implemented 'guard' in BytecodeDefault"),
+  letas:     (out, node) => compilerAssert(false, "Not implemented 'letas' in BytecodeDefault"),
   is:        (out, node) => compilerAssert(false, "Not implemented 'is' in BytecodeDefault"),
   cast:      (out, node) => compilerAssert(false, "Not implemented 'cast' in BytecodeDefault"),
   orelse:    (out, node) => compilerAssert(false, "Not implemented 'orelse' in BytecodeDefault"),
@@ -272,7 +274,8 @@ export const BytecodeDefault: ParseTreeTable = {
 };
 
 export const BytecodeSecondOrder: ParseTreeTable = {
-  is:        (out, node) => compilerAssert(false, "Not implemented 'is'"),
+  guard:     (out, node) => compilerAssert(false, "Not implemented 'guard'"),
+  letas:     (out, node) => compilerAssert(false, "Not implemented 'letas'"),
   cast:      (out, node) => compilerAssert(false, "Not implemented 'cast'"),
   symbol:    (out, node) => compilerAssert(false, "Not implemented 'symbol'"),
   class:     (out, node) => compilerAssert(false, "Not implemented 'class'"),
@@ -309,6 +312,8 @@ export const BytecodeSecondOrder: ParseTreeTable = {
   slice:    (out, node) => sliceSugar(out, node, null),
   question: (out, node) => questionSugar(out, node),
   match:    (out, node) => matchSugar(out, node),
+  is:       (out, node) => isSugar(out, node),
+
   iterator: (out, node) => {
     expandIteratorSugar(out, node)
     pushBytecode(out, node.token, { type: 'toast' })
@@ -568,7 +573,6 @@ export const BytecodeSecondOrder: ParseTreeTable = {
     // if (node.isExpr) compilerAssert(node.falseBody, "If-expression needs false branch")
 
     // This is messing things up
-    // if (node.condition instanceof ParseIs) return smartCastSugar(out, node)
     if (node.falseBody) visitParseNode(out, node.falseBody)
     visitParseNode(out, node.trueBody)
     visitParseNode(out, node.condition)

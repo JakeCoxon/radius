@@ -1,8 +1,8 @@
-import { ParseAnd, ParseNode, ParseBreak, ParseCall, ParseCast, ParseCompTime, ParseContinue, ParseDict, ParseExpand, ParseField, ParseFor, ParseForExpr, ParseIf, ParseLet, ParseLetConst, ParseList, ParseListComp, ParseMeta, ParseNot, ParseNumber, ParseOpEq, ParseOperator, ParseOr, ParseReturn, ParseSet, ParseStatements, ParseString, ParseIdentifier, ParseWhile, ParseWhileExpr, ParserFunctionDecl, Token, compilerAssert, ParsePostCall, ParseSymbol, ParseNote, ParseSlice, ParseSubscript, ParserClassDecl, ParseClass, ParseFunction, createToken, ParseBoolean, ParseElse, ParseMetaIf, ParseMetaFor, ParseBlock, ParseImport, ParsedModule, Source, ParseMetaWhile, ParseTuple, ParseImportName, ParseFold, ParserFunctionParameter, ParseNamedArg, ParseIs, ParseOrElse, ParseIterator, ParseQuestion, ParseExtract, ParseMatch, ParseMatchCase } from "./defs";
+import { ParseAnd, ParseNode, ParseBreak, ParseCall, ParseCast, ParseCompTime, ParseContinue, ParseDict, ParseExpand, ParseField, ParseFor, ParseForExpr, ParseIf, ParseLet, ParseLetConst, ParseList, ParseListComp, ParseMeta, ParseNot, ParseNumber, ParseOpEq, ParseOperator, ParseOr, ParseReturn, ParseSet, ParseStatements, ParseString, ParseIdentifier, ParseWhile, ParseWhileExpr, ParserFunctionDecl, Token, compilerAssert, ParsePostCall, ParseSymbol, ParseNote, ParseSlice, ParseSubscript, ParserClassDecl, ParseClass, ParseFunction, createToken, ParseBoolean, ParseElse, ParseMetaIf, ParseMetaFor, ParseBlock, ParseImport, ParsedModule, Source, ParseMetaWhile, ParseTuple, ParseImportName, ParseFold, ParserFunctionParameter, ParseNamedArg, ParseIs, ParseOrElse, ParseIterator, ParseQuestion, ParseExtract, ParseMatch, ParseMatchCase, ParseGuard, createAnonymousToken, ParseLetAs } from "./defs";
 
 const regexes = {
   KEYWORD:
-    /^(?:and|as\!|as|break|class|continue|comptime|const|def|defn|elif|else|fn|for|if|ifx|in|is|iter|lambda|let|match|meta|null|or|orelse|pass|return|try|while|with|type|interface|import|block|fold|ref)(?=\W)/, // note (?=\W)
+    /^(?:and|as\!|as\?|as|break|class|continue|comptime|const|def|defn|elif|else|fn|for|guard|if|ifx|in|is|iter|lambda|let|match|meta|null|or|orelse|pass|return|try|while|with|type|interface|import|block|fold|ref|var)(?=\W)/, // note (?=\W)
   IDENTIFIER: /^[a-zA-Z_][a-zA-Z_0-9]*/,
   STRING: /^(?:"(?:[^"\\]|\\.)*")/,
   SPECIALNUMBER: /^0o[0-7]+|^0x[0-9a-fA-F_]+|^0b[01_]+/,
@@ -10,7 +10,7 @@ const regexes = {
   COMMENT: /^#[^\n]+/,
   OPENPAREN: /^(?:[\[\{\(]|%{)/,
   CLOSEPAREN: /^[\]\}\)]/,
-  PUNCTUATION: /^(?:==|!=|:=|<=|>=|\+=|\-=|\*=|\/=|::|->|\|\>|\.\.\.|@@|[@!:,=<>\-+\.*\/'\|?])/,
+  PUNCTUATION: /^(?:==|!=|:=|<=|>=|\+=|\-=|\*=|\/=|::|->|\|\>|\.\.\.|@@|[@!:,=<>\-+\.*\/'\|?;])/,
   NEWLINE: /^\n/,
   WHITESPACE: /^[ ]+/ // Not newline
 }
@@ -226,11 +226,11 @@ export const makeParser = (input: string, debugName: string) => {
     return args;
   };
 
-  const parseIdentifier = () => 
+  const expectIdentifier = () => 
     new ParseIdentifier(expect(matchType("IDENTIFIER"), `Expected identifier`));
 
   const parseDictPair = (): [ParseNode, ParseNode] => {
-    return [parseIdentifier(), (expect("=", "Expected '=' after dict key"), parseExpr())]
+    return [expectIdentifier(), (expect("=", "Expected '=' after dict key"), parseExpr())]
   }
   const parseDict = (dictToken: Token): ParseNode => {
     if (match("}")) return new ParseDict(dictToken, [])
@@ -251,27 +251,32 @@ export const makeParser = (input: string, debugName: string) => {
     const expr = token?.type === 'ENDSTMT' ? null : parseExpr()
     return new ParseReturn(returnToken, expr)
   }
+  const parseSymbol = () => new ParseSymbol(expectIdentifier().token);
 
-  const parseLiteral = (): ParseNode => {
-    if (match("("))          return parseParens(previous);
-    else if (match("["))     return parseList();
-    else if (match("-"))     return new ParseOperator(previous, [parseLiteral()])
-    else if (match("'"))     return new ParseSymbol(parseIdentifier().token);
-    else if (match("@"))     return new ParseNote(previous, parsePostfix()); // TODO: This is broken
-    else if (match("%{"))    return parseDict(previous)
-    else if (match("{"))     return match("|") ? parseLambda() : parseBraceBlockExpr("{")
-    else if (match("block")) return new ParseBlock(previous, null, token?.value != ':' ? parseIdentifier() : null, parseColonBlockExpr('block'))
-    else if (match("ifx"))   return parseIf(previous, true, "if condition")
-    else if (match("return")) return parseReturnExpr(previous);
-    else if (match("break")) return parseBreak(previous)
-    else if (match("continue")) return parseContinue(previous)
-    else if (matchType("STRING")) return new ParseString(previous, previous.value.slice(1, -1))
+  const parseBasicLiteral = () => {
+    if (matchType("STRING")) return new ParseString(previous, previous.value.slice(1, -1))
+    else if (match("'")) return parseSymbol();
     else if (matchType("NUMBER")) return parseNumberLiteral();
     else if (matchType("SPECIALNUMBER")) return parseNumberLiteral();
     else if (match("true") || match("false")) return new ParseBoolean(previous);
+    else return expectIdentifier();
+  }
+  
+  const parseLiteral = (): ParseNode => {
+    if (match("("))             return parseParens(previous);
+    else if (match("["))        return parseList();
+    else if (match("-"))        return new ParseOperator(previous, [parseLiteral()])
+    else if (match("@"))        return new ParseNote(previous, parsePostfix()); // TODO: This is broken
+    else if (match("%{"))       return parseDict(previous)
+    else if (match("{"))        return match("|") ? parseLambda() : parseBraceBlockExpr("{")
+    else if (match("block"))    return new ParseBlock(previous, null, token?.value != ':' ? expectIdentifier() : null, parseColonBlockExpr('block'))
+    else if (match("ifx"))      return parseIf(previous, true, "if condition")
+    else if (match("return"))   return parseReturnExpr(previous);
+    else if (match("break"))    return parseBreak(previous)
+    else if (match("fold"))     return parseFold(previous)
+    else if (match("continue")) return parseContinue(previous)
     else if (prevSignificantNewlines && match("|")) return parseBracelessLambda();
-    else if (match("fold"))  return parseFold(previous)
-    else return parseIdentifier();
+    else return parseBasicLiteral()
   };
 
   const parseSlice = (isStatic: boolean, left: ParseNode): ParseNode => {
@@ -301,12 +306,14 @@ export const makeParser = (input: string, debugName: string) => {
       return typeArgs;
     }
 
-    const typeArgs = match("(") ? parseTypeArgs() : matchType("NUMBER") ? [parseNumberLiteral()] : [parseIdentifier()];
+    const typeArgs = match("(") ? parseTypeArgs() : matchType("NUMBER") ? [parseNumberLiteral()] : [expectIdentifier()];
     const args = match("(") ? parseArgs() : []
     return new ParseCall(callToken, left, args, typeArgs)
   };
 
-  const parseMatch = (matchToken: Token, expr: ParseNode): ParseNode => {
+  const parseMatch = (matchToken: Token, subject: ParseNode): ParseNode => {
+    let name: ParseIdentifier | null = null;
+    if (match("'")) name = expectIdentifier();
     expect("{", "Expected '{' after match expression");
     expect(matchType("INDENT"), "Expected indent after match");
     const parseMatchBlock = () => {
@@ -323,10 +330,10 @@ export const makeParser = (input: string, debugName: string) => {
     expect(matchType("DEDENT"), "Expected dedent after match cases");
     expect(matchType("ENDSTMT"), "Expected end of statement after match cases"); // Hmm ?
     expect("}", "Expected '}' after match cases");
-    return new ParseMatch(matchToken, expr, cases);
+    return new ParseMatch(matchToken, name, subject, cases);
   }
 
-  const parseFieldAccess = (left: ParseNode) => new ParseField(previous, left, parseIdentifier())
+  const parseFieldAccess = (left: ParseNode) => new ParseField(previous, left, expectIdentifier())
   const parsePostCall = (left: ParseNode) => new ParsePostCall(previous, left, parseLambda())
 
   const parsePostfix = (): ParseNode => {
@@ -383,7 +390,7 @@ export const makeParser = (input: string, debugName: string) => {
   const parseExpr = parseDots;
 
   const parseFunctionParam = (): ParserFunctionParameter => {
-    const name = parseIdentifier()
+    const name = expectIdentifier()
     if (match(":")) return { name, storage: match('ref') ? 'ref' : null, type: parseExpr() };
     return { name, storage: null, type: null };
   };
@@ -422,7 +429,7 @@ export const makeParser = (input: string, debugName: string) => {
     return params;
   };
 
-  const parseOptionalMetaName = () => match("(") ? trailingEndParen(parseIdentifier()) :  null;
+  const parseOptionalMetaName = () => match("(") ? trailingEndParen(expectIdentifier()) :  null;
 
   const parseFunctionDef = () => {
 
@@ -442,7 +449,7 @@ export const makeParser = (input: string, debugName: string) => {
     }
 
     return createNamedFunc(state, previous, parseOptionalMetaName(), 
-      parseIdentifier(), match("!") ? parseFunctionTypeParameters() : [], 
+      expectIdentifier(), match("!") ? parseFunctionTypeParameters() : [], 
       parseFunctionParamListParen(), match('->') ? parseOptionalReturnType(previous) : null, 
       parseKeywords(), parseBody())
   };
@@ -463,10 +470,10 @@ export const makeParser = (input: string, debugName: string) => {
     return createAnonymousFunc(state, previous, parseFunctionParamList("|"), 
       parseKeywords(), parseOptionalReturnType(), parseSingleOrMultilineBody())
   };
-  const parseOptionalMetaClass = () => match("<") ? parseIdentifier() :  null;
+  const parseOptionalMetaClass = () => match("<") ? expectIdentifier() :  null;
   const parseClassDef = (): ParseNode => {
     return createClassDef(state, previous,  
-      parseIdentifier(), match("!") ? parseFunctionTypeParameters() : [], 
+      expectIdentifier(), match("!") ? parseFunctionTypeParameters() : [], 
       parseOptionalMetaClass(),
       parseKeywords(), parseColonBlock("class definition header"))
   };
@@ -476,8 +483,26 @@ export const makeParser = (input: string, debugName: string) => {
     else if (match("else")) return new ParseElse(previous, parseColonBlock("else"))
     return null
   }
+
+  const parseLetOrExpr = () => 
+    match("var") ? parseLetExpr(true) : 
+    match("let") ? parseLetExpr(false) : parseExpr();
+
+  const parseLetOrExprList = () => {
+    const list = [parseLetOrExpr()];
+    while (match(";")) list.push(parseLetOrExpr());
+    if (list.length === 1) return list[0];
+    return new ParseAnd(previous, list);
+  }
+
   const parseIf = (ifToken: Token, isExpr: boolean, message: string = "if condition"): ParseIf =>
-    new ParseIf(ifToken, isExpr, parseExpr(), parseColonBlock(message), parseElse(isExpr));
+    new ParseIf(ifToken, isExpr, parseLetOrExprList(), parseColonBlock(message), parseElse(isExpr));
+
+  const parseGuard  = (guardToken: Token) => {
+    const expr = parseLetOrExprList();
+    expect("else", "Expected 'else' after guard condition");
+    return new ParseGuard(guardToken, expr, parseColonBlock("guard"))
+  }
 
   const parseWhile = () => new ParseWhile(previous, parseExpr(), parseColonBlock('while condition')); // prettier-ignore
 
@@ -500,7 +525,7 @@ export const makeParser = (input: string, debugName: string) => {
     else if (match(":")) {
       const type = parseExpr();
       const value = match("=") ? parseAssignExpr() : null
-      return new ParseLet(previous, assertLeftSide(expr), type, value)
+      return new ParseLet(previous, true, assertLeftSide(expr), type, value)
     }
     return expr;
   };
@@ -513,14 +538,15 @@ export const makeParser = (input: string, debugName: string) => {
     return trailingStatement(expr);
   };
 
-  const parseLetStatement = () => {
+  const parseLetExpr = (mutable: boolean) => {
     const left = parseLeftSideMatch();
     const type = match(":") ? parseExpr() : null;
     const value = match("=") ? parseAssignExpr() : null;
-    const let_ = trailingStatement(new ParseLet(previous, left, type, value))
-    if (!match("orelse")) return let_
-    return new ParseOrElse(previous, let_, parseExpressionStatement())
+    let let_ = new ParseLet(previous, mutable, left, type, value)
+    if (match("as?")) return new ParseLetAs(previous, let_, parseExpr())
+    return let_
   }
+  const parseLetStatement = (mutable: boolean) => trailingStatement(parseLetExpr(mutable))
   const parseLetConstStatement = () => {
     const left = parseLeftSideMatch();
     expect("=", "Expected '=' after const identifier");
@@ -537,13 +563,6 @@ export const makeParser = (input: string, debugName: string) => {
   const parseLeftSideMatch = (): ParseNode => {
     
 
-    const literal = () => {
-      if (matchType("STRING")) return new ParseString(previous, previous.value.slice(1, -1))
-      else if (matchType("NUMBER")) return parseNumberLiteral();
-      else if (matchType("SPECIALNUMBER")) return parseNumberLiteral();
-      else if (match("true") || match("false")) return new ParseBoolean(previous);
-      else return parseIdentifier();
-    }
     const expectIden = (node: ParseNode): ParseIdentifier => (compilerAssert(node instanceof ParseIdentifier, "Expected identifier", { lexer, token, previous, location: previous?.location, prevLocation: previous?.location }), node);
 
     const idenOrExtract = (): ParseNode => {
@@ -554,7 +573,7 @@ export const makeParser = (input: string, debugName: string) => {
         expect(")", "Expected ')' after tuple expression");
         return new ParseTuple(token, args);
       }
-      let left: ParseNode = literal()
+      let left: ParseNode = parseBasicLiteral()
       
       if (!match("(")) return left
       if (match(")")) return new ParseExtract(previous, expectIden(left), [])
@@ -585,12 +604,12 @@ export const makeParser = (input: string, debugName: string) => {
   const parseOptionalExpr = () => matchType("ENDSTMT") ? null : trailingStatement(parseExpr())
 
   const parseImport = (importToken: Token) => {
-    const module = parseIdentifier()
-    const rename = match("as") ? parseIdentifier() : null
+    const module = expectIdentifier()
+    const rename = match("as") ? expectIdentifier() : null
     const idents: ParseImportName[] = []
     const parseImportName = () => {
-      const name = parseIdentifier()
-      const rename = match("as") ? parseIdentifier() : null
+      const name = expectIdentifier()
+      const rename = match("as") ? expectIdentifier() : null
       return new ParseImportName(name.token, name, rename)
     }
     if (match("for")) {
@@ -601,13 +620,13 @@ export const makeParser = (input: string, debugName: string) => {
   }
   const parseBreak = (breakToken: Token) => {
     if (matchType("ENDSTMT")) return new ParseBreak(breakToken, null, null)
-    const iden = parseIdentifier()
+    const iden = expectIdentifier()
     if (!match("with")) return trailingStatement(new ParseBreak(breakToken, iden, null))
     return trailingStatement(new ParseBreak(breakToken, iden, parseExpr()))
   }
   const parseContinue = (continueToken: Token) => {
     if (matchType("ENDSTMT")) return new ParseContinue(continueToken, null)
-    const iden = parseIdentifier()
+    const iden = expectIdentifier()
     return trailingStatement(new ParseContinue(continueToken, iden))
   }
   const parseAnnotation = () => {
@@ -623,9 +642,11 @@ export const makeParser = (input: string, debugName: string) => {
     if (match("fn"))            return parseFunctionDef();
     else if (match("@@"))       return parseAnnotation()
     else if (match("type"))     return parseClassDef();
-    else if (match("let"))      return parseLetStatement();
+    else if (match("let"))      return parseLetStatement(false);
+    else if (match("var"))      return parseLetStatement(true);
     else if (match("const"))    return parseLetConstStatement();
     else if (match("if"))       return parseIf(previous, false);
+    else if (match("guard"))    return parseGuard(previous);
     else if (match("while"))    return parseWhile();
     else if (match("comptime")) return new ParseCompTime(previous, parseColonBlock("comptime"));
     else if (match("return"))   return new ParseReturn(previous, parseOptionalExpr());

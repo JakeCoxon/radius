@@ -58,7 +58,6 @@ fn main():
   const asd = 23 + 3135
 
   let (x, Some(a, b), y) = (1, (2, 3), 4)
-  orelse return 30
 
   let thing = 23.match {
     Some(a):
@@ -83,7 +82,25 @@ fn main():
   let (Some(x, y), None) = thing
   let a, b, c, d, Some(e), f = thing
   let a, b, (c, (d, d)), Some(e, (a, Some(b))), f = thing
-  orelse return 30
+
+  guard let Some(x) = thing else:
+    return
+
+  guard let Some(x) = thing; let Some(y) = thing; x != y else:
+    return
+
+  if let Some(x) = thing:
+    print(x)
+  else:
+    return
+
+  if a; b; c:
+    print("OK")
+
+
+  if let x = thing as? Some:
+    print(x)
+  
 
   let x = thing.match {
     A(a, b, c): 123

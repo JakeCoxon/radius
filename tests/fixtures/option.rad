@@ -1,7 +1,7 @@
 import compiler for Option, Some, None, assert, unsafe_enum_cast, is_enum_variant
 
 fn is_some!(T)(x: Option!T) -> bool @inline:
-  if is_enum_variant!Some(x):
+  if x is Some:
     return true
   return false
 
@@ -22,7 +22,9 @@ fn main():
 
   y = Some(32)
 
-  if y.tag == 1:
+  let d = y is Some
+
+  if x is Some:
     let f = unsafe_enum_cast!Some(y)
     print(f.value + 123)
   else:
