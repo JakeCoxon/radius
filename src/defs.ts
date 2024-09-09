@@ -133,7 +133,7 @@ export class ParseSet extends ParseNodeType {          key = 'set' as const;    
 export class ParseOperator extends ParseNodeType {     key = 'operator' as const;     constructor(public token: Token, public exprs: ParseNode[]) { super();} }
 export class ParseNote extends ParseNodeType {         key = 'note' as const;         constructor(public token: Token, public expr: ParseNode) { super();} }
 export class ParseMeta extends ParseNodeType {         key = 'meta' as const;         constructor(public token: Token, public expr: ParseNode) { super();} }
-export class ParseMetaIf extends ParseNodeType {       key = 'metaif' as const;       constructor(public token: Token, public expr: ParseIf) { super();} }
+export class ParseMetaIf extends ParseNodeType {       key = 'metaif' as const;       constructor(public token: Token, public expr: ParseIf | ParseIfMulti) { super();} }
 export class ParseMetaFor extends ParseNodeType {      key = 'metafor' as const;      constructor(public token: Token, public expr: ParseFor) { super();} }
 export class ParseMetaWhile extends ParseNodeType {    key = 'metawhile' as const;    constructor(public token: Token, public expr: ParseWhile) { super();} }
 export class ParseCompTime extends ParseNodeType {     key = 'comptime' as const;     constructor(public token: Token, public expr: ParseNode) { super();} }
@@ -144,8 +144,9 @@ export class ParseIterator extends ParseNodeType {     key = 'iterator' as const
 export class ParseOr extends ParseNodeType {           key = 'or' as const;           constructor(public token: Token, public exprs: ParseNode[]) { super();} }
 export class ParseAnd extends ParseNodeType {          key = 'and' as const;          constructor(public token: Token, public exprs: ParseNode[]) { super();} }
 export class ParseElse extends ParseNodeType {         key = 'else' as const;         constructor(public token: Token, public body: ParseNode) { super();} }
-export class ParseIf extends ParseNodeType {           key = 'if' as const;           constructor(public token: Token, public isExpr: boolean, public condition: ParseNode, public trueBody: ParseNode, public falseBody: ParseIf | ParseElse | null) { super();} }
-export class ParseGuard extends ParseNodeType {        key = 'guard' as const;        constructor(public token: Token, public condition: ParseNode, public elseBody: ParseNode) { super();} }
+export class ParseIf extends ParseNodeType {           key = 'if' as const;           constructor(public token: Token, public isExpr: boolean, public condition: ParseNode, public trueBody: ParseNode, public falseBody: ParseIf | ParseIfMulti | ParseElse | null) { super();} }
+export class ParseIfMulti extends ParseNodeType {      key = 'ifmulti' as const;      constructor(public token: Token, public isExpr: boolean, public conditions: ParseNode[], public trueBody: ParseNode, public falseBody: ParseIf | ParseIfMulti | ParseElse | null) { super();} }
+export class ParseGuard extends ParseNodeType {        key = 'guard' as const;        constructor(public token: Token, public conditions: ParseNode[], public elseBody: ParseNode) { super();} }
 export class ParseLetConst extends ParseNodeType {     key = 'letconst' as const;     constructor(public token: Token, public name: ParseIdentifier | ParseFreshIden, public value: ParseNode) { super();} }
 export class ParseFunction extends ParseNodeType {     key = 'function' as const;     constructor(public token: Token, public functionDecl: ParserFunctionDecl) { super();} }
 export class ParseClass extends ParseNodeType {        key = 'class' as const;        constructor(public token: Token, public classDecl: ParserClassDecl) { super();} }
@@ -173,6 +174,7 @@ export class ParseMatchCase extends ParseNodeType {    key = 'matchcase' as cons
 export class ParseSubscript extends ParseNodeType {    key = 'subscript' as const;    constructor(public token: Token, public expr: ParseNode, public subscript: ParseNode, public isStatic: boolean) { super();} }
 export class ParseTuple extends ParseNodeType {        key = 'tuple' as const;        constructor(public token: Token, public exprs: ParseNode[]) { super();} }
 export class ParseBlock extends ParseNodeType {        key = 'block' as const;        constructor(public token: Token, public breakType: BreakType | null, public name: ParseIdentifier | ParseFreshIden | null, public statements: ParseStatements) { super();} }
+export class ParseBlockNoScope extends ParseNodeType { key = 'blocknoscope' as const; constructor(public token: Token, public breakType: BreakType | null, public name: ParseIdentifier | ParseFreshIden | null, public statements: ParseStatements) { super();} }
 export class ParseImportName extends ParseNodeType {   key = 'importname' as const;   constructor(public token: Token, public identifier: ParseIdentifier, public rename: ParseIdentifier | null) { super();} }
 export class ParseImport extends ParseNodeType {       key = 'import' as const;       constructor(public token: Token, public module: ParseIdentifier, public rename: ParseIdentifier | null, public imports: ParseImportName[]) { super();} }
 export class ParseValue extends ParseNodeType {        key = 'value' as const;        constructor(public token: Token, public value: unknown) { super();} }
@@ -195,7 +197,7 @@ export type ParseNode = ParseStatements | ParseLet | ParseSet | ParseOperator | 
   ParseNil | ParseBoolean | ParseElse | ParseMetaIf | ParseMetaFor | ParseMetaWhile | ParseBlock | ParseImport | 
   ParseCompilerIden | ParseValue | ParseConstructor | ParseQuote | ParseBytecode | ParseFreshIden | ParseFold | 
   ParseNamedArg | ParseEvalFunc | ParseConcurrency | ParseVoid | ParseIs | ParseOrElse | ParseQuestion | 
-  ParseIterator | ParseExtract | ParseMatch | ParseBreakOpt |  ParseGuard | ParseLetAs
+  ParseIterator | ParseExtract | ParseMatch | ParseBreakOpt | ParseGuard | ParseLetAs | ParseIfMulti | ParseBlockNoScope
 
 // Void types mean that in secondOrder compilation, the AST doesn't return an AST
 export const isParseVoid = (ast: ParseNode) => ast.key == 'letconst' || ast.key === 'function' || ast.key === 'class' || ast.key === 'comptime' || ast.key === 'metawhile';
@@ -224,8 +226,8 @@ export type BytecodeInstr =
   { type: 'not' } |
   { type: 'pop' } |
   { type: 'nil' } |
-  { type: 'beginblockast', breakType: BreakType | null, name: string | null } |
-  { type: 'endblockast' } |
+  { type: 'beginblockast', breakType: BreakType | null, name: string | null, scope: boolean } |
+  { type: 'endblockast', scope: boolean } |
   { type: 'bindingast', name: string } |
   { type: 'totype' } |
   { type: 'numberast', value: string } |

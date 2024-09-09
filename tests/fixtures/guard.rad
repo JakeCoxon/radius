@@ -1,0 +1,48 @@
+import compiler for Some, None, Option, assert
+
+fn test_guard():
+  let x = 3
+  guard x == 3 else:
+    return
+
+  let y = Some(32)
+  guard let Some(u) = y; x == 1 else:
+    return
+
+  print(u)
+  print("OK")
+
+fn test_if_let():
+  var x: Option!int = Some(32)
+  var t = 0
+  if let Some(u) = x:
+    print(u)
+    t += 1
+
+  assert(t == 1)
+
+  x = None()
+  if let Some(v) = x:
+    print(v)
+  else:
+    t += 1
+
+  assert(t == 2)
+
+  x = Some(32)
+
+  if let Some(w) = x; w == 33:
+    print(w)
+  else:
+    t += 1
+  
+  assert(t == 3)
+
+  # if let u = x as? Some:
+  #   t += 1
+    
+  # assert(t == 4)
+
+fn main():
+  test_guard()
+  test_if_let()

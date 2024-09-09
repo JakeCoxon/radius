@@ -890,9 +890,12 @@ const numberToDoubleBitString = (f: number) => {
 }
 
 const bitStringToFloat = (bitString: string) => {
+  // https://llvm.org/docs/LangRef.html#id1977
+  // TODO: What was I thinking here? Do it properly
+  
   // LLVM has some weird behaviour where a float constant is 
   // written in 64 bit but the exponent is rounded to 23 bits
-  // otherwise it won't compile. Easiest way is string maniupulations
+  // otherwise it won't compile. Easiest way is string manipulations
 
   // So it looks like
   //  1 bit sign | 11 bit mantissa | 23 bit exponent | 29 bit zeros

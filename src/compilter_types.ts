@@ -12,6 +12,7 @@ export const isTypeOption = (type: Type): type is ParameterizedType => {
 
 export const getCommonType = (types: Type[]): Type => {
   const types2 = types.filter(x => x !== NeverType)
+  if (types2.length === 0) return NeverType
   if (types2.length === 1) return types2[0]
   if (types2.length !== types.length) return getCommonType(types2)
 

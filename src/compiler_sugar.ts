@@ -2,7 +2,7 @@ import { BytecodeSecondOrder, callFunctionFromValueTask, compileFunctionPrototyp
 import { compileExportedFunctionTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, insertFunctionDefinition } from "./compiler_functions"
 import { concat, generator } from "./compiler_iterator"
 import { NoneTypeConstructor, OptionTypeConstructor, SomeTypeConstructor, createParameterizedExternalType, hashValues, isTypeInteger, isTypeScalar, propagateLiteralType, propagatedLiteralAst } from "./compilter_types"
-import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, UserCallAst, NeverType, IfAst, BoolType, VoidAst, LoopObject, CompileTimeObjectType, u64Type, FunctionDefinition, ParserFunctionDecl, StatementsAst, IntLiteralType, FloatLiteralType, isAst, isType, isTypeCheckError, InterleaveAst, ContinueInterAst, CompTimeObjAst, ParseEvalFunc, SetAst, DefaultConsAst, WhileAst, BoolAst, isArray, ExpansionSelector, ParseNote, ExpansionCompilerState, ParseBoolean, ParseOr, ParseBreak, ParseIs, filterNotNull, ParseLetConst, ParseCast, VariantCastAst, ExternalTypeConstructor, GlobalCompilerState, ParseOrElse, ParseField, ParseQuestion, ParseBreakOpt, LabelBlock, BlockAst, ParseMatch, ParseExtract, ParseMatchCase, ParseTuple, ParseString, Tuple, ParseNot, EnumVariantAst } from "./defs"
+import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, UserCallAst, NeverType, IfAst, BoolType, VoidAst, LoopObject, CompileTimeObjectType, u64Type, FunctionDefinition, ParserFunctionDecl, StatementsAst, IntLiteralType, FloatLiteralType, isAst, isType, isTypeCheckError, InterleaveAst, ContinueInterAst, CompTimeObjAst, ParseEvalFunc, SetAst, DefaultConsAst, WhileAst, BoolAst, isArray, ExpansionSelector, ParseNote, ExpansionCompilerState, ParseBoolean, ParseOr, ParseBreak, ParseIs, filterNotNull, ParseLetConst, ParseCast, VariantCastAst, ExternalTypeConstructor, GlobalCompilerState, ParseOrElse, ParseField, ParseQuestion, ParseBreakOpt, LabelBlock, BlockAst, ParseMatch, ParseExtract, ParseMatchCase, ParseTuple, ParseString, Tuple, ParseNot, EnumVariantAst, ParseIfMulti, ParseGuard, ParseBlockNoScope } from "./defs"
 import { Event, Task, TaskDef, isTask } from "./tasks"
 
 const insertMetaObjectPairwiseOperator = (compiledClass: CompiledClass, operatorName: string, operatorSymbol: string) => {
@@ -516,6 +516,61 @@ const unsafeEnumCast = new CompilerFunction("unsafeEnumCast", (ctx, typeArgs, ar
   )
 })
 
+export const guardSugar = (out: BytecodeWriter, node: ParseGuard) => {
+  // compilerAssert(false, "Not implemented", { node })
+  const token = node.token
+  const blockIden = new ParseFreshIden(token, new FreshBindingToken('block'))
+  const break_ = node.conditions.length === 1 ? node.elseBody : new ParseBreak(token, blockIden, null)
+  const stmts = node.conditions.map(cond => {
+    if (cond instanceof ParseLet) {
+      if (cond.left instanceof ParseExtract) {
+        compilerAssert(cond.value, "Expected value", { cond })
+        return extractToOption(cond.left, cond.value, break_)
+      }
+      compilerAssert(false, "Not implemented", { node })
+    } else {
+      return new ParseIf(token, false, new ParseNot(token, cond), break_, null)
+    }
+  })
+  let block: ParseNode = new ParseStatements(token, stmts)
+  // BlockNoScope means new variables will escape the scope. So we
+  // really need to make sure that the elseBlock exits the scope
+  // TODO: Do that
+  if (node.conditions.length > 1) block = new ParseBlockNoScope(token, null, blockIden, block)
+  visitParseNode(out, block)
+}
+
+export const ifMultiSugar = (out: BytecodeWriter, node: ParseIfMulti) => {
+  // This is the same as option block, and match case
+  // where we need to continue executing the block unless we 
+  // hit a condition that causes us to break or continue,
+  // and continue should switch to the next branch
+
+  // {
+  //   if (!... ) continue
+  //   ...
+  //   if (!... ) continue
+  // } else {
+  //   ...
+  // }
+  const token = node.token
+
+  const outerIden = new ParseFreshIden(token, new FreshBindingToken('outer'))
+  const innerIden = new ParseFreshIden(token, new FreshBindingToken('inner'))
+
+  const breakOuter = new ParseBreak(token, outerIden, null)
+  const breakInner = new ParseBreak(token, innerIden, null)
+  const conds = node.conditions.map(cond => {
+    if (cond instanceof ParseLet) return new ParseGuard(token, [cond], breakInner)
+    return new ParseIf(token, false, new ParseNot(token, cond), breakInner, null)
+  })
+  const stmts = new ParseStatements(token, [...conds, node.trueBody, breakOuter])
+  const innerBlock = new ParseBlock(token, null, innerIden, stmts)
+  const else_ = new ParseStatements(token, filterNotNull([innerBlock, node.falseBody]))
+  const outerBlock = new ParseBlock(token, null, outerIden, else_)
+  visitParseNode(out, outerBlock)
+}
+
 export const smartCastSugar = (out: BytecodeWriter, node: ParseIf) => {
   compilerAssert(node.condition instanceof ParseIs, "Expected is", { node })
   const testType = node.condition.type
@@ -663,31 +718,35 @@ const guardAsExprSugar = (subject: ParseNode, asType: ParseNode, numFields: numb
 }
 
 
-const extractToOption = (node: ParseNode, blockIden: ParseFreshIden, subject: ParseNode): ParseNode => {
+const extractToOption = (node: ParseNode, subject: ParseNode, elseBlock: ParseNode): ParseNode => {
   const token = node.token
-  const none = new ParseCall(token, new ParseValue(token, NoneTypeConstructor), [], [])
-  const break_ = new ParseBreak(token, blockIden, none)
+  // const none = new ParseCall(token, new ParseValue(token, NoneTypeConstructor), [], [])
+  // const break_ = new ParseBreak(token, blockIden, none)
 
   if (node instanceof ParseIdentifier) return new ParseLet(token, false, node, null, subject)
   if (node instanceof ParseNumber || node instanceof ParseString || node instanceof ParseBoolean) {
-    return new ParseIf(token, false, new ParseOperator(createAnonymousToken('!='), [subject, node]), break_, null)
+    return new ParseIf(token, false, new ParseOperator(createAnonymousToken('!='), [subject, node]), elseBlock, null)
   }
 
   const extractIden = new ParseFreshIden(token, new FreshBindingToken('extract'))
   if (node instanceof ParseExtract) {
     const numArgs = node.args.length
     if (numArgs === 0)
-      return guardAsExprSugar(subject, node.name, 0, extractIden, break_)
+      return guardAsExprSugar(subject, node.name, 0, extractIden, elseBlock)
 
-    const bind = node.args.map(x => extractToOption(x, blockIden, new ParseField(token, extractIden, new ParseIdentifier(createAnonymousToken('value')))))
-    const guard = guardAsExprSugar(subject, node.name, numArgs, extractIden, break_)
+    const guard = guardAsExprSugar(subject, node.name, numArgs, extractIden, elseBlock)
+    const extractedSubject = new ParseField(token, extractIden, new ParseIdentifier(createAnonymousToken('value')))
+    const bind = node.args.map(x => extractToOption(x, extractedSubject, elseBlock))
     return new ParseStatements(token, [guard, ...bind])
   }
 
   if (node instanceof ParseTuple) {
-    const bind = node.exprs.map((x, i) => extractToOption(x, blockIden, new ParseField(token, extractIden, new ParseIdentifier(createAnonymousToken(`_${i+1}`)))))
     const tupleType = new ParseValue(token, TupleTypeConstructor)
-    const guard = guardAsExprSugar(subject, tupleType, node.exprs.length, extractIden, break_)
+    const guard = guardAsExprSugar(subject, tupleType, node.exprs.length, extractIden, elseBlock)
+    const bind = node.exprs.map((x, i) => {
+      const field = new ParseField(token, extractIden, new ParseIdentifier(createAnonymousToken(`_${i+1}`)))
+      return extractToOption(x, field, elseBlock)
+    })
     return new ParseStatements(token, [guard, ...bind])
   }
   
@@ -698,7 +757,7 @@ const caseToOption = (node: ParseMatchCase, blockIden: ParseFreshIden, subject: 
   const token = node.token
   const none = new ParseCall(token, new ParseValue(token, NoneTypeConstructor), [], [])
   const break_ = new ParseBreak(token, blockIden, none)
-  const smts = [extractToOption(node.extract, blockIden, subject)]
+  const smts = [extractToOption(node.extract, subject, break_)]
   if (node.condition) smts.push(new ParseIf(token, false, new ParseNot(token, node.condition), break_, null))
 
   const resIden = new ParseFreshIden(token, new FreshBindingToken('res'))
@@ -778,8 +837,8 @@ export const optionBlockSugar = (out: BytecodeWriter, node: ParseBlock) => {
   const writer = { location: node.token.location, bytecode, instructionTable: BytecodeSecondOrder, globalCompilerState: out.globalCompilerState, state: out.state }
   visitParseNode(writer, new ParseLetConst(node.token, stmtsIden, new ParseValue(node.token, null)))
   pushBytecode(writer, node.token, { type: 'pop' })
-  pushBytecode(writer, node.token, { type: 'beginblockast', breakType: node.breakType, name: outerIden.freshBindingToken.identifier })
-  pushBytecode(writer, node.token, { type: 'beginblockast', breakType: node.breakType, name })
+  pushBytecode(writer, node.token, { type: 'beginblockast', breakType: node.breakType, name: outerIden.freshBindingToken.identifier, scope: true })
+  pushBytecode(writer, node.token, { type: 'beginblockast', breakType: node.breakType, name, scope: true })
   visitParseNode(writer, new ParseMeta(node.token, new ParseSet(node.token, stmtsIden, new ParseQuote(node. token, node.statements))))
   pushBytecode(writer, node.token, { type: 'pop' })
   if (optionalBlock.didBreak) {
@@ -788,7 +847,7 @@ export const optionBlockSugar = (out: BytecodeWriter, node: ParseBlock) => {
   } else {
     visitParseNode(writer, stmtsIden)
   }
-  pushBytecode(writer, node.token, { type: 'endblockast' })
+  pushBytecode(writer, node.token, { type: 'endblockast', scope: true })
   if (optionalBlock.didBreak) {
     const top = new ParseEvalFunc(node.token, (vm) => { }, [], [])
     const inferType = new ParseCall(node.token, new ParseValue(node.token, typeOf), [stmtsIden], [])
@@ -796,7 +855,7 @@ export const optionBlockSugar = (out: BytecodeWriter, node: ParseBlock) => {
     const stmts = new ParseStatements(node.token, [top, none_])
     visitParseNode(writer, stmts)
   }
-  pushBytecode(writer, node.token, { type: 'endblockast' })
+  pushBytecode(writer, node.token, { type: 'endblockast', scope: true })
   out.state.optionalBlock = prevOptionalBlock
   
   const bc = new ParseBytecode(node.token, bytecode)

@@ -1,4 +1,4 @@
-import { ParseAnd, ParseNode, ParseBreak, ParseCall, ParseCast, ParseCompTime, ParseContinue, ParseDict, ParseExpand, ParseField, ParseFor, ParseForExpr, ParseIf, ParseLet, ParseLetConst, ParseList, ParseListComp, ParseMeta, ParseNot, ParseNumber, ParseOpEq, ParseOperator, ParseOr, ParseReturn, ParseSet, ParseStatements, ParseString, ParseIdentifier, ParseWhile, ParseWhileExpr, ParserFunctionDecl, Token, compilerAssert, ParsePostCall, ParseSymbol, ParseNote, ParseSlice, ParseSubscript, ParserClassDecl, ParseClass, ParseFunction, createToken, ParseBoolean, ParseElse, ParseMetaIf, ParseMetaFor, ParseBlock, ParseImport, ParsedModule, Source, ParseMetaWhile, ParseTuple, ParseImportName, ParseFold, ParserFunctionParameter, ParseNamedArg, ParseIs, ParseOrElse, ParseIterator, ParseQuestion, ParseExtract, ParseMatch, ParseMatchCase, ParseGuard, createAnonymousToken, ParseLetAs } from "./defs";
+import { ParseAnd, ParseNode, ParseBreak, ParseCall, ParseCast, ParseCompTime, ParseContinue, ParseDict, ParseExpand, ParseField, ParseFor, ParseForExpr, ParseIf, ParseLet, ParseLetConst, ParseList, ParseListComp, ParseMeta, ParseNot, ParseNumber, ParseOpEq, ParseOperator, ParseOr, ParseReturn, ParseSet, ParseStatements, ParseString, ParseIdentifier, ParseWhile, ParseWhileExpr, ParserFunctionDecl, Token, compilerAssert, ParsePostCall, ParseSymbol, ParseNote, ParseSlice, ParseSubscript, ParserClassDecl, ParseClass, ParseFunction, createToken, ParseBoolean, ParseElse, ParseMetaIf, ParseMetaFor, ParseBlock, ParseImport, ParsedModule, Source, ParseMetaWhile, ParseTuple, ParseImportName, ParseFold, ParserFunctionParameter, ParseNamedArg, ParseIs, ParseOrElse, ParseIterator, ParseQuestion, ParseExtract, ParseMatch, ParseMatchCase, ParseGuard, createAnonymousToken, ParseLetAs, ParseIfMulti } from "./defs";
 
 const regexes = {
   KEYWORD:
@@ -478,7 +478,7 @@ export const makeParser = (input: string, debugName: string) => {
       parseKeywords(), parseColonBlock("class definition header"))
   };
 
-  const parseElse = (isExpr: boolean): ParseIf | ParseElse | null => {
+  const parseElse = (isExpr: boolean): ParseIf | ParseIfMulti | ParseElse | null => {
     if (match("elif")) return parseIf(previous, isExpr, "elif condition")
     else if (match("else")) return new ParseElse(previous, parseColonBlock("else"))
     return null
@@ -488,20 +488,19 @@ export const makeParser = (input: string, debugName: string) => {
     match("var") ? parseLetExpr(true) : 
     match("let") ? parseLetExpr(false) : parseExpr();
 
-  const parseLetOrExprList = () => {
+  const parseIf = (ifToken: Token, isExpr: boolean, message: string = "if condition"): ParseIf | ParseIfMulti => {
     const list = [parseLetOrExpr()];
     while (match(";")) list.push(parseLetOrExpr());
-    if (list.length === 1) return list[0];
-    return new ParseAnd(previous, list);
+    if (list.length === 1 && !(list[0] instanceof ParseLet)) 
+      return new ParseIf(ifToken, isExpr, list[0], parseColonBlock(message), parseElse(isExpr));
+    return new ParseIfMulti(ifToken, isExpr, list, parseColonBlock(message), parseElse(isExpr));
   }
 
-  const parseIf = (ifToken: Token, isExpr: boolean, message: string = "if condition"): ParseIf =>
-    new ParseIf(ifToken, isExpr, parseLetOrExprList(), parseColonBlock(message), parseElse(isExpr));
-
   const parseGuard  = (guardToken: Token) => {
-    const expr = parseLetOrExprList();
+    const list = [parseLetOrExpr()];
+    while (match(";")) list.push(parseLetOrExpr());
     expect("else", "Expected 'else' after guard condition");
-    return new ParseGuard(guardToken, expr, parseColonBlock("guard"))
+    return new ParseGuard(guardToken, list, parseColonBlock("guard"));
   }
 
   const parseWhile = () => new ParseWhile(previous, parseExpr(), parseColonBlock('while condition')); // prettier-ignore

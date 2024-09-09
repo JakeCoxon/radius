@@ -57,7 +57,11 @@ const astWriter: SyntaxAstWriterTable = {
         return
       }
       if (expr instanceof BlockAst) {
-        visit(expr.body)
+        if (expr.binding) {
+          format(writer, "  ".repeat(writer.indent))
+          writeExpr(writer, expr)
+          format(writer, "\n")
+        } else visit(expr.body)
         return
       }
       if (expr instanceof VoidAst) return

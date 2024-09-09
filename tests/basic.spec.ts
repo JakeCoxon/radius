@@ -64,6 +64,23 @@ test('option', async () => {
   }
 })
 
+test('guard', async () => {
+  const testObject = createTest({ 
+    moduleName: 'guard',
+    globalOptions,
+    inputPath: `${import.meta.dir}/fixtures/guard.rad`,
+  })
+  try {
+    const input = await Bun.file(testObject.inputPath).text()
+    runCompilerTest(input, { testObject })
+    await writeSyntaxFile(testObject)
+    await writeLlvmBytecodeFile(testObject)
+    await executeNativeExecutable(testObject)
+  } finally {
+    testObject.close()
+  }
+})
+
 test('option_expansion', async () => {
   const testObject = createTest({ 
     moduleName: 'option_expansion',
