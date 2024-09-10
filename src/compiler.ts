@@ -729,7 +729,7 @@ const letLocalAst = (vm: Vm, name: string, type: Type | null, value: Ast | null)
   inferType = propagateLiteralType(inferType, value)
   const binding = new Binding(name, inferType)
   setScopeValueAndResolveEvents(vm.scope, name, binding) // This is for globals usually. Locals should be in order
-  compilerAssert(!inferType.typeInfo.isInvalidSize, "Expected concrete type got $inferType which cannot be assigned to", { inferType })
+  compilerAssert(!inferType.typeInfo.isInvalidSize, "Expected concrete type got $inferType which cannot be assigned to", { inferType, value })
   if (value) {
     compilerAssert(canAssignTypeTo(value.type, inferType), "Mismatch types got $got expected $expected", { got: value.type, expected: inferType })
   }
@@ -1219,8 +1219,8 @@ const instructions: InstructionMapping = {
     labelBlock.breaks.forEach(breakAst => {
       propagateLiteralType(blockType, breakAst.expr)
     })
-    
-    const breakExprBinding = labelBlock.breakWithExpr ? new Binding(`${binding.name}_breakexpr`, body.type) : null
+
+    const breakExprBinding = labelBlock.breakWithExpr ? new Binding(`${binding.name}_breakexpr`, blockType) : null
     vm.context.subCompilerState.labelBlock = labelBlock.parent
     compilerAssert(vm.scope[ScopeParentSymbol], "Expected parent scope")
     if (scope) vm.scope = vm.scope[ScopeParentSymbol]

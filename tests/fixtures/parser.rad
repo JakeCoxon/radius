@@ -100,6 +100,11 @@ fn main():
 
   if let x = thing as? Some:
     print(x)
+
+  let x = (ifx let Some(u) = x:
+    u
+  else:
+    0)
   
 
   let x = thing.match {

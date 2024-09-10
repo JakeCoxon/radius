@@ -557,55 +557,21 @@ export const ifMultiSugar = (out: BytecodeWriter, node: ParseIfMulti) => {
 
   const outerIden = new ParseFreshIden(token, new FreshBindingToken('outer'))
   const innerIden = new ParseFreshIden(token, new FreshBindingToken('inner'))
+  const resultIden = new ParseFreshIden(token, new FreshBindingToken('res'))
 
-  const breakOuter = new ParseBreak(token, outerIden, null)
   const breakInner = new ParseBreak(token, innerIden, null)
   const conds = node.conditions.map(cond => {
     if (cond instanceof ParseLet) return new ParseGuard(token, [cond], breakInner)
     return new ParseIf(token, false, new ParseNot(token, cond), breakInner, null)
   })
-  const stmts = new ParseStatements(token, [...conds, node.trueBody, breakOuter])
+  const let_ = new ParseLet(token, false, resultIden, null, node.trueBody)
+  const breakOuter = new ParseBreak(token, outerIden, resultIden)
+  const stmts = new ParseStatements(token, [...conds, let_, breakOuter])
   const innerBlock = new ParseBlock(token, null, innerIden, stmts)
   const else_ = new ParseStatements(token, filterNotNull([innerBlock, node.falseBody]))
   const outerBlock = new ParseBlock(token, null, outerIden, else_)
   visitParseNode(out, outerBlock)
 }
-
-export const smartCastSugar = (out: BytecodeWriter, node: ParseIf) => {
-  compilerAssert(node.condition instanceof ParseIs, "Expected is", { node })
-  const testType = node.condition.type
-  compilerAssert(node.condition.expr instanceof ParseIdentifier || node.condition.expr instanceof ParseFreshIden, "Expected identifier", { node })
-  const name = node.condition.expr
-  const condExpr = new ParseQuote(node.token, node.condition.expr)
-
-  const testTypeIden = new ParseFreshIden(node.token, new FreshBindingToken('testtype'))
-  const condExprIden = new ParseFreshIden(node.token, new FreshBindingToken('condexpr'))
-  const indexIden = new ParseFreshIden(node.token, new FreshBindingToken('index'))
-
-  const letTestType = new ParseLetConst(node.token, testTypeIden, testType)
-  const letCondExpr = new ParseLetConst(node.token, condExprIden, condExpr)
-  
-  const call = new ParseCall(node.token, new ParseValue(node.token, getTypeIndex), [condExprIden], [testTypeIden])
-  const letIndex = new ParseLetConst(node.token, indexIden, new ParseQuote(node.token, call))
-  
-  const tag = new ParseField(node.token, name, new ParseIdentifier(createAnonymousToken('tag')))
-  const cond = new ParseOperator(createAnonymousToken('=='), [tag, indexIden])
-  const cast = new ParseCall(node.token, new ParseValue(node.token, unsafeEnumCast), [name], [testTypeIden])
-  const letCast = new ParseLet(node.token, false, name, null, cast)
-  const trueBody = new ParseBlock(node.token, null, null, new ParseStatements(node.token, [letCast, node.trueBody]))
-
-  visitParseNode(out, letTestType)
-  pushBytecode(out, node.token, { type: 'pop' })
-  visitParseNode(out, letCondExpr)
-  pushBytecode(out, node.token, { type: 'pop' })
-  visitParseNode(out, letIndex)
-  pushBytecode(out, node.token, { type: 'pop' })
-  if (node.falseBody) visitParseNode(out, node.falseBody)
-  visitParseNode(out, trueBody)
-  visitParseNode(out, cond)
-  pushBytecode(out, node.token, { type: "ifast", f: !!node.falseBody, e: node.isExpr })
-}
-
 
 const asExprTuple = new ExternalFunction('asExprTuple', VoidType, (ctx, args) => {
   const [subject, type, numFields, idenName] = args
@@ -637,7 +603,7 @@ const asExprTuple = new ExternalFunction('asExprTuple', VoidType, (ctx, args) =>
       .chainFn((task, _) => { return Task.of(vm.stack.pop()) })
     )
   }
-  compilerAssert(false, "asExprTuple Not implemented", { type, args })
+  compilerAssert(false, "asExprTuple Not implemented", { subject, type, numFields, idenName })
 })
 
 const isEnumVariantFn = (() => {
@@ -723,6 +689,7 @@ const extractToOption = (node: ParseNode, subject: ParseNode, elseBlock: ParseNo
   // const none = new ParseCall(token, new ParseValue(token, NoneTypeConstructor), [], [])
   // const break_ = new ParseBreak(token, blockIden, none)
 
+  if (node instanceof ParseFreshIden) return new ParseLet(token, false, node, null, subject)
   if (node instanceof ParseIdentifier) return new ParseLet(token, false, node, null, subject)
   if (node instanceof ParseNumber || node instanceof ParseString || node instanceof ParseBoolean) {
     return new ParseIf(token, false, new ParseOperator(createAnonymousToken('!='), [subject, node]), elseBlock, null)
@@ -791,19 +758,16 @@ export const isSugar = (out: BytecodeWriter, node: ParseIs) => {
 }
 
 export const orElseSugar = (out: BytecodeWriter, node: ParseOrElse) => {
-  const letIden = new ParseFreshIden(node.token, new FreshBindingToken('orelse'))
-  const letNode = new ParseLet(node.token, false, letIden, null, node.expr)
-  const testNode = new ParseIs(node.token, letIden, new ParseValue(node.token, SomeTypeConstructor))
-  const valueNode = new ParseField(node.token, letIden, new ParseIdentifier(createAnonymousToken('value')))
-  const if_ = new ParseIf(node.token, true, testNode, valueNode, new ParseElse(node.token, node.orElse))
-  pushBytecode(out, node.token, { type: 'pushqs' })
-  visitParseNode(out, letNode)
-  pushBytecode(out, node.token, { type: 'appendq' })
-  pushBytecode(out, node.token, { type: 'pop' })
-  smartCastSugar(out, if_) // TODO: Make this a parse node so it cleans up the entire function
-  pushBytecode(out, node.token, { type: 'appendq' })
-  pushBytecode(out, node.token, { type: 'pop' })
-  pushBytecode(out, node.token, { type: 'popqs' })
+  const token = node.token
+  const letIden = new ParseFreshIden(token, new FreshBindingToken('orelse'))
+  const letNode = new ParseLet(token, false, letIden, null, node.expr)
+  const valueIden = new ParseFreshIden(token, new FreshBindingToken('value'))
+
+  const extract = new ParseExtract(token, new ParseIdentifier(createAnonymousToken("Some")), [valueIden])
+  const ifLet = new ParseLet(token, false, extract, null, letIden)
+  const ifNode = new ParseIfMulti(token, true, [ifLet], valueIden, new ParseElse(token, node.orElse))
+  const stmts = new ParseStatements(token, [letNode, ifNode])
+  visitParseNode(out, stmts)
 }
 
 export const optionCastSugar = (vm: Vm, ast: Ast, type: Type): Task<Ast, CompilerError> => {

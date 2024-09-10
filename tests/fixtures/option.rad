@@ -5,7 +5,7 @@ fn is_some!(T)(x: Option!T) -> bool @inline:
     return true
   return false
 
-fn main():
+fn test_various():
   let a : Option!int
   a = Some(78)
 
@@ -67,3 +67,20 @@ fn main():
   print(u)
   print("Should not print")
   assert(1 == 0)
+
+
+fn test_or_else():
+  let x = None!int()
+  let z = x.orelse 69
+  assert(z == 69)
+
+fn test_question_or_else():
+  let x = None!int()
+  let y = None!int()
+  let z = { x? + y? }.orelse 3
+  assert(z == 3)
+
+fn main():
+  test_various()
+  test_or_else()
+  test_question_or_else()

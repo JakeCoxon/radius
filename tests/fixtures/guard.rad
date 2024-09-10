@@ -43,6 +43,16 @@ fn test_if_let():
     
   # assert(t == 4)
 
+fn test_if_let_expr():
+  let x = Some(32)
+  let y = (ifx let Some(u) = x:
+      u
+    else:
+      0)
+
+  assert(y == 32)
+
 fn main():
-  test_guard()
-  test_if_let()
+  # test_guard()
+  # test_if_let()
+  test_if_let_expr()
