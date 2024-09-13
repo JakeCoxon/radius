@@ -720,7 +720,7 @@ const extractToOption = (node: ParseNode, subject: ParseNode, elseBlock: ParseNo
   compilerAssert(false, "Not implemented", { node })
 }
 
-const caseToOption = (node: ParseMatchCase, blockIden: ParseFreshIden, subject: ParseNode): ParseNode => {
+const caseToOption = (node: ParseMatchCase, blockIden: ParseFreshIden | ParseIdentifier, subject: ParseNode): ParseNode => {
   const token = node.token
   const none = new ParseCall(token, new ParseValue(token, NoneTypeConstructor), [], [])
   const break_ = new ParseBreak(token, blockIden, none)
@@ -738,10 +738,10 @@ export const matchSugar = (out: BytecodeWriter, node: ParseMatch) => {
   const token = node.token
   const subjectIden = new ParseFreshIden(token, new FreshBindingToken('subject'))
   const letSubject = new ParseLet(token, false, subjectIden, null, node.subject)
+  const blockIden = node.name ?? new ParseFreshIden(token, new FreshBindingToken('case'))
   const options = node.cases.map(case_ => {
-    const blockIden = new ParseFreshIden(token, new FreshBindingToken('case'))
     const caseBlock = caseToOption(case_, blockIden, subjectIden)
-    return new ParseBlock(token, 'option', blockIden, new ParseStatements(token, [caseBlock]))
+    return new ParseBlock(token, null, blockIden, new ParseStatements(token, [caseBlock]))
   })
   const defaultElse = new ParseCall(token, new ParseIdentifier(createAnonymousToken('unreachable')), [], [])
 

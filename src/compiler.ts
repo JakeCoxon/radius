@@ -1147,7 +1147,7 @@ const instructions: InstructionMapping = {
       const block = breakType === 'break' ? name.breakBlock : breakType === 'continue' ? name.continueBlock : (compilerAssert(false, "Invalid breakType", { breakType }) as never)
       compilerAssert(block.binding, "Expected binding")
       const breakAst = new BreakAst(NeverType, vm.location, block.binding, expr)
-      block.breaks.push(breakAst)
+      if (expr) block.breaks.push(breakAst)
       vm.stack.push(breakAst)
       return
     }
@@ -1166,9 +1166,11 @@ const instructions: InstructionMapping = {
       block.breaks.push(breakAst)
       return vm.stack.push(ast)
     }
-    if (expr) block.breakWithExpr = true
     const breakAst = new BreakAst(NeverType, vm.location, block.binding, expr);
-    block.breaks.push(breakAst)
+    if (expr) {
+      block.breakWithExpr = true
+      block.breaks.push(breakAst)
+    }
     vm.stack.push(breakAst)
   },
   bindingast: (vm, { name }) => {
@@ -1213,6 +1215,7 @@ const instructions: InstructionMapping = {
     const types = [body.type]
     if (labelBlock.type) types.push(labelBlock.type)
     if (labelBlock.breakWithExpr) {
+      compilerAssert(labelBlock.breaks.every(x => x.expr), "If one has has an expression then every break for the block also needs to have an expression")
       types.push(...labelBlock.breaks.map(x => x.expr!.type))
     }
     let blockType = getCommonType(types)
