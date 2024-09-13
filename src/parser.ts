@@ -139,7 +139,6 @@ const makeAdvancedLexer = (source: Source) => {
   const gen = advancedGenerator()
   const getToken = () => {
     const token = gen.next().value
-    // console.log(token)
     previous = token!
     return token
   }
@@ -618,15 +617,15 @@ export const makeParser = (input: string, debugName: string) => {
     return trailingStatement(new ParseImport(importToken, module, rename, idents))
   }
   const parseBreak = (breakToken: Token) => {
-    if (matchType("ENDSTMT")) return new ParseBreak(breakToken, null, null)
+    if (token?.type === "ENDSTMT") return new ParseBreak(breakToken, null, null)
     const iden = expectIdentifier()
-    if (!match("with")) return trailingStatement(new ParseBreak(breakToken, iden, null))
-    return trailingStatement(new ParseBreak(breakToken, iden, parseExpr()))
+    if (!match("with")) return new ParseBreak(breakToken, iden, null)
+    return new ParseBreak(breakToken, iden, parseExpr())
   }
   const parseContinue = (continueToken: Token) => {
-    if (matchType("ENDSTMT")) return new ParseContinue(continueToken, null)
+    if (token?.type === "ENDSTMT") return new ParseContinue(continueToken, null)
     const iden = expectIdentifier()
-    return trailingStatement(new ParseContinue(continueToken, iden))
+    return new ParseContinue(continueToken, iden)
   }
   const parseAnnotation = () => {
     const annotation = parseExpr()
@@ -649,8 +648,8 @@ export const makeParser = (input: string, debugName: string) => {
     else if (match("while"))    return parseWhile();
     else if (match("comptime")) return new ParseCompTime(previous, parseColonBlock("comptime"));
     else if (match("return"))   return new ParseReturn(previous, parseOptionalExpr());
-    else if (match("break"))    return parseBreak(previous);
-    else if (match("continue")) return parseContinue(previous);
+    else if (match("break"))    return trailingStatement(parseBreak(previous)); // These could be expression statements
+    else if (match("continue")) return trailingStatement(parseContinue(previous)); // 
     else if (match("for"))      return parseForStatement();
     else if (match("meta"))     return parseMetaStatement(previous)
     else if (match("import"))   return parseImport(previous)

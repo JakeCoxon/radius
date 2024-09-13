@@ -124,7 +124,15 @@ fn main():
 
   y.match 'a {
     a: 0
+    b: continue
+    c: break a
+    d: break a with 2
   }
+
+  continue
+  break
+  break a
+  break a with 123
 
   # let Some(x) = thing + 1
   # else: return
