@@ -50,33 +50,33 @@ export class AllocInstruction extends IRInstruction {
   }
 }
 
-// Store Instruction
-export class StoreFieldInstruction extends IRInstruction {
-  irType = 'storefield';
-  constructor(
-    public address: string,
-    public field: string,
-    public source: string
-  ) {
-    super();
-  }
-}
+// // Store Instruction
+// export class StoreFieldInstruction extends IRInstruction {
+//   irType = 'storefield';
+//   constructor(
+//     public address: string,
+//     public field: string,
+//     public source: string
+//   ) {
+//     super();
+//   }
+// }
 
-// Load Instruction
-export class LoadFieldInstruction extends IRInstruction {
-  irType = 'loadfield';
-  constructor(
-    public dest: string,
-    public address: string,
-    public field: string
-  ) {
-    super();
-  }
-}
+// // Load Instruction
+// export class LoadFieldInstruction extends IRInstruction {
+//   irType = 'loadfield';
+//   constructor(
+//     public dest: string,
+//     public address: string,
+//     public field: string
+//   ) {
+//     super();
+//   }
+// }
 
 export class GetFieldPointerInstruction extends IRInstruction {
   irType = 'getfieldptr';
-  constructor(public dest: string, public address: string, public field: string) {
+  constructor(public dest: string, public address: string, public field: number) {
     super();
   }
 }
@@ -353,10 +353,10 @@ export function formatInstruction(instr: IRInstruction): string {
     return `if ${instr.condition} != 0 goto ${instr.target}`;
   } else if (instr instanceof JumpInstruction) {
     return `goto ${instr.target}`;
-  } else if (instr instanceof StoreFieldInstruction) {
-    return `store ${instr.source} into ${instr.address}.${instr.field}`;
-  } else if (instr instanceof LoadFieldInstruction) {
-    return `${instr.dest} = load ${instr.address}.${instr.field}`;
+  // } else if (instr instanceof StoreFieldInstruction) {
+    // return `store ${instr.source} into ${instr.address}.${instr.field}`;
+  // } else if (instr instanceof LoadFieldInstruction) {
+    // return `${instr.dest} = load ${instr.address}.${instr.field}`;
   } else if (instr instanceof CallInstruction) {
     return `${instr.dest} = call ${instr.functionName}(${instr.args.join(', ')})`;
   } else if (instr instanceof ReturnInstruction) {

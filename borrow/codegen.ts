@@ -1,4 +1,4 @@
-import { ASTNode, AllocInstruction, AssignInstruction, AssignmentNode, BasicBlock, BinaryExpressionNode, BinaryOperationInstruction, BlockStatementNode, CallExpressionNode, CallInstruction, CheckInitializedInstruction, ConditionalJumpInstruction, CreateStructNode, ExpressionNode, ExpressionStatementNode, FunctionBlock, FunctionDeclarationNode, FunctionParameter, IRInstruction, IRValue, IdentifierNode, IfStatementNode, JumpInstruction, LValue, LetConstNode, LiteralNode, LoadConstantInstruction, LoadFromAddressInstruction, LoadFieldInstruction, MemberExpressionNode, ProgramNode, RValue, ReturnInstruction, ReturnNode, StoreFieldInstruction, StoreToAddressInstruction, StructType, Variable, VariableDeclarationNode, WhileStatementNode, compilerAssert, GetFieldPointerInstruction } from "./defs";
+import { ASTNode, AllocInstruction, AssignInstruction, AssignmentNode, BasicBlock, BinaryExpressionNode, BinaryOperationInstruction, BlockStatementNode, CallExpressionNode, CallInstruction, CheckInitializedInstruction, ConditionalJumpInstruction, CreateStructNode, ExpressionNode, ExpressionStatementNode, FunctionBlock, FunctionDeclarationNode, FunctionParameter, IRInstruction, IRValue, IdentifierNode, IfStatementNode, JumpInstruction, LValue, LetConstNode, LiteralNode, LoadConstantInstruction, LoadFromAddressInstruction, MemberExpressionNode, ProgramNode, RValue, ReturnInstruction, ReturnNode, StoreToAddressInstruction, StructType, Variable, VariableDeclarationNode, WhileStatementNode, compilerAssert, GetFieldPointerInstruction } from "./defs";
 
 type ExpressionContext = {
   valueCategory: 'rvalue' | 'lvalue';
@@ -13,6 +13,8 @@ export class CodeGenerator {
   registerCount: number = 0;
   variableMap: Map<string, Variable> = new Map(); // variable name -> register name
   constants: { [name: string]: any } = {};
+
+  functionInstructions: IRInstruction[] = [];
 
   constructor() {
     // Initialize with an entry block
@@ -33,6 +35,10 @@ export class CodeGenerator {
 
   addInstruction(instr: IRInstruction) {
     this.currentBlock.instructions.push(instr);
+  }
+
+  addFunctionInstruction(instr: IRInstruction) {
+    this.functionInstructions.push(instr);
   }
 
   generate(node: ASTNode): void {
@@ -63,6 +69,8 @@ export class CodeGenerator {
     for (const stmt of node.body) {
       this.generate(stmt);
     }
+    this.currentBlock.instructions.unshift(...this.functionInstructions);
+    this.functionInstructions = []
   }
 
   generateReturnStatement(node: ReturnNode) {
@@ -93,6 +101,8 @@ export class CodeGenerator {
     this.functionBlocks.push(functionBlock);
     this.currentFunction = functionBlock;
 
+    this.functionInstructions = []
+
     // Enter a new scope for function parameters and local variables
     // this.enterScope();
 
@@ -119,6 +129,9 @@ export class CodeGenerator {
     // Exit the function scope
     // this.exitScope();
 
+    this.currentBlock.instructions.unshift(...this.functionInstructions);
+    this.functionInstructions = []
+
     // Restore the previous block
     this.currentBlock = savedBlock;
     this.currentFunction = savedFunction;
@@ -129,7 +142,7 @@ export class CodeGenerator {
     const reg = this.newRegister();
     const type = this.constants[node.type];
     this.variableMap.set(node.name, new Variable(node.name, type, reg, false));
-    this.addInstruction(new AllocInstruction(reg, type));
+    this.addFunctionInstruction(new AllocInstruction(reg, type));
   }
 
   generateIfStatement(node: IfStatementNode) {
@@ -235,13 +248,15 @@ export class CodeGenerator {
       return this.generateExpression(field, context);
     });
     const structReg = this.newRegister();
-    this.addInstruction(new AllocInstruction(structReg, structType));
+    this.addFunctionInstruction(new AllocInstruction(structReg, structType));
     for (let i = 0; i < fieldValues.length; i++) {
       const field = structType.fields[i]
       const fieldValue = fieldValues[i];
       compilerAssert(fieldValue instanceof RValue, 'Struct field value must be an RValue');
-      this.addInstruction(new GetFieldPointerInstruction(fieldValue.register, structReg, field.name));
-      this.addInstruction(new StoreToAddressInstruction(fieldValue.register, fieldValue.register));
+      const reg = this.newRegister();
+      const fieldIndex = i;
+      this.addInstruction(new GetFieldPointerInstruction(reg, structReg, fieldIndex));
+      this.addInstruction(new StoreToAddressInstruction(reg, fieldValue.register));
       // this.addInstruction(new StoreFieldInstruction(structReg, field.name, fieldValue.register));
     }
     return new RValue(structReg)
@@ -304,8 +319,10 @@ export class CodeGenerator {
       
       const fieldName = left.property;
       // Store rightReg into objReg.fieldName
-      this.addInstruction(new GetFieldPointerInstruction(objReg.register, objReg.register, fieldName));
-      this.addInstruction(new StoreToAddressInstruction(objReg.register, rightReg.register));
+      const fieldIndex = 0
+      const reg = this.newRegister();
+      this.addInstruction(new GetFieldPointerInstruction(reg, objReg.register, fieldIndex));
+      this.addInstruction(new StoreToAddressInstruction(reg, rightReg.register));
       // this.addInstruction(new StoreFieldInstruction(objReg.register, fieldName, rightReg.register));
       return rightReg;
     } else {
@@ -360,7 +377,8 @@ export class CodeGenerator {
     const fieldName = node.property;
     const destReg = this.newRegister();
     // Load objReg.fieldName into destReg
-    this.addInstruction(new GetFieldPointerInstruction(destReg, objReg.register, fieldName));
+    const fieldIndex = 0 // TODO
+    this.addInstruction(new GetFieldPointerInstruction(destReg, objReg.register, fieldIndex));
     if (context.valueCategory === 'lvalue') {
       return new LValue(destReg);
     } else {

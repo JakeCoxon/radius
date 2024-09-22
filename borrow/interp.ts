@@ -1,41 +1,37 @@
 import { ControlFlowGraph, buildCFG } from "./controlflow";
-import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, CheckInitializedInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, LoadFieldInstruction, ReturnInstruction, StoreFieldInstruction, StoreToAddressInstruction } from "./defs";
+import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, CheckInitializedInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, compilerAssert } from "./defs";
 
-export type InitState = 'uninitialized' | 'initialized' | AggregateState;
+type SD = Top | Bottom | Sequence;
 
-export interface InterpreterState {
-  registers: { [name: string]: InitState };
-  memory: { [address: string]: InitState };
+interface Top {
+  kind: 'Top'; // Represents ⊤ (fully initialized)
 }
 
-export class AggregateState {
-  constructor (public fields: {[field: string]: InitState}) {}
+interface Bottom {
+  kind: 'Bottom'; // Represents ⊥ (fully uninitialized)
 }
 
-const initializeField = (state: InitState | undefined, field: string): AggregateState => {
-  if (state === undefined) {
-    return new AggregateState({ [field]: 'initialized' });
-  }
-  if (state === 'uninitialized') {
-    return new AggregateState({ [field]: 'initialized' });
-  }
-  if (state === 'initialized') {
-    return new AggregateState({ [field]: 'initialized' });
-  }
-  return new AggregateState({ ...state.fields, [field]: 'initialized' });
+interface Sequence {
+  kind: 'Sequence';
+  elements: SD[]; // Array of SD elements representing fields
 }
 
-// Interpreter
+type LocalMap = Map<string, Set<string>>;
+type MemoryMap = Map<string, SD>;
+
+interface InterpreterState {
+  locals: LocalMap; // Local variables/registers
+  memory: MemoryMap // Memory addresses
+}
+
 export class AbstractInterpreterIR {
-  state: InterpreterState = {
-    registers: {},
-    memory: {},
-  };
+  state: InterpreterState
 
   cfg: ControlFlowGraph;
   blockStates: Map<BasicBlock, InterpreterState> = new Map();
   worklist: { block: BasicBlock; inputState: InterpreterState }[] = [];
   function: FunctionBlock;
+  freshAddressCounter = 0;
 
   constructor(fn: FunctionBlock) {
     this.function = fn;
@@ -43,20 +39,27 @@ export class AbstractInterpreterIR {
     this.cfg = buildCFG(fn.blocks);
   }
 
+  checkedInterpret() {
+    try {
+      this.interpret()
+    } catch (e) {
+      console.error(e)
+      console.log("State:")
+      console.log(this.state)
+    }
+  }
+
   interpret() {
 
-    // Initialize block states
     for (const block of this.cfg.blocks) {
-      this.blockStates.set(block, undefined);
+      this.blockStates.set(block, undefined!);
     }
 
-    // Add entry block to worklist with an empty state
-    const entryState = this.createEmptyState();
+    const entryState = createEmptyState();
     this.worklist.push({ block: this.cfg.entry, inputState: entryState });
 
     for (const param of this.function.params) {
-      entryState.registers[param.name] = 'initialized';
-      entryState.memory[`addr_${param.name}`] = 'initialized';
+      this.initializeFunctionParam(entryState, param.name);
     }
 
     // Process the worklist
@@ -66,18 +69,16 @@ export class AbstractInterpreterIR {
 
       // Merge the new input state with the existing state
       const mergedInputState = existingState
-        ? this.mergeStates(existingState, inputState)
+        ? mergeStates(existingState, inputState)
         : inputState;
 
       // If the merged state is the same as the existing state, skip processing
-      if (existingState && this.statesEqual(existingState, mergedInputState)) {
+      if (existingState && statesEqual(existingState, mergedInputState)) {
         continue;
       }
 
-      // Update the block's input state
       this.blockStates.set(block, mergedInputState);
 
-      // Execute the block
       const outputState = this.executeBlock(block, mergedInputState);
 
       // Add successor blocks to the worklist
@@ -86,11 +87,13 @@ export class AbstractInterpreterIR {
         this.worklist.push({ block: successor, inputState: outputState });
       }
     }
+
+    console.log("All checked ok")
   }
 
   executeBlock(block: BasicBlock, inputState: InterpreterState): InterpreterState {
     // Set the state to the input state
-    this.state = this.cloneState(inputState);
+    this.state = cloneState(inputState);
 
     let index = 0;
     while (index < block.instructions.length) {
@@ -100,102 +103,48 @@ export class AbstractInterpreterIR {
     }
 
     // Return the state after executing the block
-    return this.cloneState(this.state);
+    return cloneState(this.state);
   }
 
   execute(instr: IRInstruction): void {
-    console.log('instr', instr.irType)
     if (instr instanceof AssignInstruction) {
       this.ensureRegisterInitialized(instr.source);
-      this.state.registers[instr.dest] = 'initialized';
-      const sourceAddr = `addr_${instr.source}`;
-      console.log('sourceAddr', sourceAddr)
-      if (sourceAddr in this.state.memory) {
-        this.ensureAddressInitialized(sourceAddr);
-        const destAddr = `addr_${instr.dest}`;
-        console.log('destAddr', destAddr)
-        this.state.memory[destAddr] = 'initialized';
-      }
+      this.state.locals.set(instr.dest, this.state.locals.get(instr.source)!);
     } else if (instr instanceof LoadConstantInstruction) {
-      this.state.registers[instr.dest] = 'initialized';
+      this.state.locals.set(instr.dest, new Set([]));
     } else if (instr instanceof StoreToAddressInstruction) {
-      const addr = `addr_${instr.address}`;
-      if (!(addr in this.state.memory)) {
-        console.error(`Memory at address '${addr}' is not allocated.`);
-        console.log('this.state.memory', this.state.memory)
-        console.log('this.state.registers', this.state.registers)
-        throw new Error();
+      this.ensureRegisterInitialized(instr.source);
+      const addresses = this.state.locals.get(instr.address);
+      if (!addresses) {
+        throw new Error(`Address ${instr.address} is not initialized`);
       }
-      this.state.memory[addr] = 'initialized';
+      for (const addr of addresses) {
+        this.initializeMemoryAddress(addr);
+      }
     } else if (instr instanceof AllocInstruction) {
-      // register is initialized but memory is not
-      this.state.registers[instr.dest] = 'initialized';
-      const address = `addr_${instr.dest}`;
-      this.state.memory[address] = 'uninitialized'
+      const addr = this.newAddress();
+      this.state.locals.set(instr.dest, new Set([addr]));
+      this.state.memory.set(addr, { kind: 'Bottom' });
     } else if (instr instanceof CheckInitializedInstruction) {
-      const addr = `addr_${instr.value}`;
-      this.ensureAddressInitialized(addr);
+      this.ensureRegisterInitialized(instr.value);
     } else if (instr instanceof CallInstruction) {
-      console.log('call', instr.args)
-      console.log('this.state.registers', this.state.registers)
-      console.log('this.state.memory', this.state.memory)
-      for (const reg of instr.args) {
-        console.log('reg', reg) 
-        this.ensureRegisterInitialized(reg);
-      }
-      this.state.registers[instr.dest] = 'initialized'
+      this.state.locals.set(instr.dest, new Set([]));
     } else if (instr instanceof BinaryOperationInstruction) {
-      this.ensureRegisterInitialized(instr.left);
-      this.ensureRegisterInitialized(instr.right);
-      this.state.registers[instr.dest] = 'initialized'
-    } else if (instr instanceof StoreFieldInstruction) {
-      this.ensureRegisterInitialized(instr.address);
-      const addr = `addr_${instr.address}`;
-      if (!(addr in this.state.memory)) {
-        console.error(`Memory at address '${addr}' is not allocated.`);
-        console.log('this.state.memory', this.state.memory)
-        console.log('this.state.registers', this.state.registers)
-        throw new Error();
-      }
-      this.state.memory[addr] = initializeField(this.state.memory[addr], instr.field)
+      this.state.locals.set(instr.dest, new Set([]));
     } else if (instr instanceof LoadFromAddressInstruction) {
-      const addr = `addr_${instr.address}`;
-      this.ensureAddressInitialized(addr);
-      this.state.registers[instr.dest] = 'initialized'
+      this.ensureRegisterInitialized(instr.address);
+      this.state.locals.set(instr.dest, this.state.locals.get(instr.address)!);
     } else if (instr instanceof ReturnInstruction) {
       if (instr.value) this.ensureRegisterInitialized(instr.value);
-    } else if (instr instanceof LoadFieldInstruction) {
-      this.ensureRegisterInitialized(instr.address);
-      const loadAddr = `addr_${instr.address}`;
-      const loadFieldState = this.state.memory[loadAddr];
-      if (loadFieldState === undefined) {
-        console.error(`Field '${instr.field}' at address '${loadAddr}' is not initialized.`);
-        throw new Error();
-      } else if (loadFieldState === 'uninitialized') {
-        console.error(
-          `Field '${instr.field}' at address '${loadAddr}' is used before initialization.`
-        );
-        throw new Error();
-      } else if (loadFieldState instanceof AggregateState) {
-        const fieldState = loadFieldState.fields[instr.field];
-        if (fieldState === undefined) {
-          console.error(
-            `Field '${instr.field}' at address '${loadAddr}' is not initialized.`
-          );
-          throw new Error();
-        } else if (fieldState === 'uninitialized') {
-          console.error(
-            `Field '${instr.field}' at address '${loadAddr}' is used before initialization.`
-          );
-          throw new Error();
-        }
-        console.warn(
-          `Field '${instr.field}' at address '${loadAddr}' may be used before initialization.`
-        );
-        throw new Error();
+    } else if (instr instanceof GetFieldPointerInstruction) {
+      const addresses = this.state.locals.get(instr.address);
+      if (!addresses) {
+        throw new Error(`Register ${instr.address} is not found`);
       }
-      this.state.registers[instr.dest] = 'initialized'
-      // this.state.registers[instr.dest] = fieldInitState;
+      compilerAssert(this.state.locals.get(instr.dest) === undefined, `Register ${instr.dest} is already initialized`);
+      const fields = [...addresses].map(addr => `${addr}.${instr.field}`)
+      this.state.locals.set(instr.dest, new Set(fields));
+
     } else {
       console.error(`Unknown instruction in interp: ${instr.irType}`);
     }
@@ -203,101 +152,219 @@ export class AbstractInterpreterIR {
   }
 
   ensureRegisterInitialized(register: string) {
-    const regState = this.state.registers[register];
-    if (regState === undefined || regState === 'uninitialized') {
-      console.error(`Register '${register}' is used before initialization.`);
-      throw new Error();
-    } else if (regState instanceof AggregateState) {
-      console.warn(`Register '${register}' may be used before initialization.`);
-      throw new Error();
+    const locals = this.state.locals.get(register);
+    if (!locals) {
+      throw new Error(`Register ${register} is not found`);
+    }
+    const isInitialized = Array.from(locals).every(addr => {
+      return isStatePathInitialized(this.state.memory, addr);
+    })
+    if (!isInitialized) {
+      throw new Error(`Register ${register} is not initialized`);
     }
   }
 
   ensureAddressInitialized(addr: string) {
-    const state = this.state.memory[addr];
-    if (state === undefined || state === 'uninitialized') {
-      console.error(`Memory at address '${addr}' is not initialized.`);
-      console.error('this.state.memory', this.state.memory)
-      throw new Error();
-    } else if (state instanceof AggregateState) {
-      console.error(`Memory at address '${addr}' is partially initialized.`);
-      console.error('this.state.memory', this.state.memory)
-      throw new Error();
+  }
+
+  newAddress(): string {
+    return `a${this.freshAddressCounter++}`;
+  }
+
+  initializeMemoryAddress(addr: string) {
+    const ids = addr.split('.')
+    let current = this.state.memory.get(ids[0])
+    compilerAssert(current, `Address ${addr} is not initialized`)
+    const x = addressesToSD(ids.slice(1))
+    const newSd = meetSDUpper(current, x)
+    this.state.memory.set(ids[0], newSd)
+    // console.log("Initializing", addr, res)
+    // this.state.memory.set(addr, res);
+  }
+
+  initializeFunctionParam(state: InterpreterState, param: string) {
+    const addr = this.newAddress();
+    state.locals.set(param, new Set([addr]));
+    state.memory.set(addr, { kind: 'Top' });
+  }
+
+}
+
+const createEmptyState = (): InterpreterState => {
+  return {
+    locals: new Map(),
+    memory: new Map()
+  };
+}
+
+function isStatePathInitialized(memory: MemoryMap, addr: string): boolean {
+  const ids = addr.split('.')
+  let current = memory.get(ids[0])
+  
+  for (let i = 1; i < ids.length; i++) {
+    if (!current || current.kind === 'Bottom') { return false; }
+    if (current.kind === 'Top') { return true; }
+    current = current.elements[parseInt(ids[i])];
+  }
+
+  if (!current || current.kind === 'Bottom') { return false; }
+  if (current.kind === 'Top') { return true; }
+  return current.elements.every(e => e.kind === 'Top');
+}
+
+function meetSDUpper(a: SD, b: SD): SD {
+  if (a.kind === 'Top' || b.kind === 'Top') { return { kind: 'Top' }; }
+  if (a.kind === 'Bottom') { return b; }
+  if (b.kind === 'Bottom') { return a; }
+  if (a.kind === 'Sequence' && b.kind === 'Sequence') {
+    const length = Math.max(a.elements.length, b.elements.length);
+    const elements: SD[] = [];
+    for (let i = 0; i < length; i++) {
+      const elemA = a.elements[i] || { kind: 'Bottom' };
+      const elemB = b.elements[i] || { kind: 'Bottom' };
+      elements.push(meetSDUpper(elemA, elemB));
+    }
+    return { kind: 'Sequence', elements };
+  }
+  // Incompatible types, default to Bottom
+  compilerAssert(false, `Incompatible types in meetSDUpper: ${a.kind} and ${b.kind}`);
+}
+
+function meetSD(a: SD, b: SD): SD {
+  if (a.kind === 'Bottom' || b.kind === 'Bottom') { return { kind: 'Bottom' }; }
+  if (a.kind === 'Top') { return b; }
+  if (b.kind === 'Top') { return a; }
+  if (a.kind === 'Sequence' && b.kind === 'Sequence') {
+    const length = Math.max(a.elements.length, b.elements.length);
+    const elements: SD[] = [];
+    for (let i = 0; i < length; i++) {
+      const elemA = a.elements[i] || { kind: 'Bottom' };
+      const elemB = b.elements[i] || { kind: 'Bottom' };
+      elements.push(meetSD(elemA, elemB));
+    }
+    return { kind: 'Sequence', elements };
+  }
+  // Incompatible types, default to Bottom
+  return { kind: 'Bottom' };
+}
+
+function addressesToSD(addresses: string[]): SD {
+  let result: SD = { kind: 'Top' };
+  for (const addr of addresses) {
+    const sd: SD = result;
+    result = { kind: 'Sequence', elements: [] };
+    const index = parseInt(addr);
+    result.elements[index] = sd;
+  }
+  return result;
+}
+
+function meetLocals(a: Set<string> | undefined, b: Set<string> | undefined): Set<string> {
+  const set = new Set<string>();
+  if (a) { a.forEach(v => set.add(v)); }
+  if (b) { b.forEach(v => set.add(v)); }
+  return set
+}
+
+function mergeLocalMaps(
+  map1: LocalMap,
+  map2: LocalMap
+): LocalMap {
+  const result = new Map<string, Set<string>>();
+  const allKeys = new Set([...map1.keys(), ...map2.keys()]);
+  for (const key of allKeys) {
+    const val1 = map1.get(key)
+    const val2 = map2.get(key)
+    result.set(key, meetLocals(val1, val2));
+  }
+  return result;
+}
+
+function mergeMemoryMaps(
+  map1: MemoryMap,
+  map2: MemoryMap
+): MemoryMap {
+  const result = new Map<string, SD>();
+  const allAddresses = new Set([...map1.keys(), ...map2.keys()]);
+  for (const addr of allAddresses) {
+    const val1 = map1.get(addr) || { kind: 'Bottom' };
+    const val2 = map2.get(addr) || { kind: 'Bottom' };
+    result.set(addr, meetSD(val1, val2));
+  }
+  return result;
+}
+
+function mergeStates(
+  state1: InterpreterState,
+  state2: InterpreterState
+): InterpreterState {
+  return {
+    locals: mergeLocalMaps(state1.locals, state2.locals),
+    memory: mergeMemoryMaps(state1.memory, state2.memory)
+  };
+}
+
+function cloneState(state: InterpreterState): InterpreterState {
+  return {
+    locals: new Map(state.locals),
+    memory: new Map(state.memory)
+  };
+}
+
+function mapsEqual<K, V>(
+  map1: Map<K, V>,
+  map2: Map<K, V>,
+  valueEqual: (v1: V, v2: V) => boolean
+): boolean {
+  if (map1.size !== map2.size) {
+    return false;
+  }
+  for (const [key, val1] of map1) {
+    const val2 = map2.get(key);
+    if (!val2 || !valueEqual(val1, val2)) {
+      return false;
     }
   }
+  return true;
+}
 
-  cloneState(state: InterpreterState): InterpreterState {
-    return {
-      registers: { ...state.registers },
-      memory: JSON.parse(JSON.stringify(state.memory)),
-    };
+function statesEqual(state1: InterpreterState, state2: InterpreterState): boolean {
+  return (
+    mapsEqual(state1.locals, state2.locals, localsEqual) &&
+    mapsEqual(state1.memory, state2.memory, sdEqual)
+  );
+}
+
+function localsEqual(locals1: Set<string>, locals2: Set<string>): boolean {
+  if (locals1.size !== locals2.size) {
+    return false;
   }
-
-  mergeStates(state1: InterpreterState, state2: InterpreterState): InterpreterState {
-    const mergedRegisters: { [name: string]: InitState } = {};
-    const allRegisters = new Set([
-      ...Object.keys(state1.registers),
-      ...Object.keys(state2.registers),
-    ]);
-
-    for (const reg of allRegisters) {
-      const stateReg1 = state1.registers[reg];
-      const stateReg2 = state2.registers[reg];
-      mergedRegisters[reg] = this.mergeInitStates(stateReg1, stateReg2);
+  for (const local of locals1) {
+    if (!locals2.has(local)) {
+      return false;
     }
+  }
+  return true;
+}
 
-    const mergedMemory: { [address: string]: InitState } = {};
-    const allAddresses = new Set([
-      ...Object.keys(state1.memory),
-      ...Object.keys(state2.memory),
-    ]);
-
-    for (const addr of allAddresses) {
-      const mem1 = state1.memory[addr] || 'uninitialized'
-      const mem2 = state2.memory[addr] || 'uninitialized'
-      mergedMemory[addr] = this.mergeInitStates(mem1, mem2);
+function sdEqual(sd1: SD, sd2: SD): boolean {
+  if (sd1.kind !== sd2.kind) {
+    return false;
+  }
+  if (sd1.kind === 'Top' || sd1.kind === 'Bottom') {
+    return true;
+  }
+  if (sd1.kind === 'Sequence') {
+    if (sd2.kind !== 'Sequence') { return false; }
+    if (sd1.elements.length !== sd2.elements.length) {
+      return false;
     }
-
-    return {
-      registers: mergedRegisters,
-      memory: mergedMemory,
-    };
-  }
-
-  statesEqual(state1: InterpreterState, state2: InterpreterState): boolean {
-    return JSON.stringify(state1) === JSON.stringify(state2);
-  }
-
-  mergeInitStates(state1: InitState, state2: InitState): InitState {
-    if (state1 === state2) {
-      return state1;
+    for (let i = 0; i < sd1.elements.length; i++) {
+      if (!sdEqual(sd1.elements[i], sd2.elements[i])) {
+        return false;
+      }
     }
-    if (state1 === undefined) return state2;
-    if (state2 === undefined) return state1;
-    if (state1 === 'uninitialized') return 'uninitialized';
-    if (state2 === 'uninitialized') return 'uninitialized';
-    if (state1 === 'initialized') return state2;
-    if (state2 === 'initialized') return state1;
-    return this.mergeAggregateStates(state1 as AggregateState, state2 as AggregateState);
+    return true;
   }
-
-  mergeAggregateStates(
-    agg1: AggregateState,
-    agg2: AggregateState
-  ): AggregateState {
-    const mergedAgg: AggregateState = new AggregateState({});
-    const allFields = new Set([...Object.keys(agg1), ...Object.keys(agg2)]);
-
-    for (const field of allFields) {
-      const stateField1 = agg1.fields[field];
-      const stateField2 = agg2.fields[field];
-      mergedAgg.fields[field] = this.mergeInitStates(stateField1, stateField2);
-    }
-
-    return mergedAgg;
-  }
-
-  createEmptyState(): InterpreterState {
-    return { registers: {}, memory: {} };
-  }
+  return false;
 }

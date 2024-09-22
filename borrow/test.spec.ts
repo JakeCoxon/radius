@@ -75,7 +75,7 @@ const runTest = (name: string, ast: ProgramNode) => {
     for (const fn of codeGenerator.functionBlocks) {
       console.log(`Interpreting function ${fn.name}`);
       const interpreter = new AbstractInterpreterIR(fn);
-      interpreter.interpret();
+      interpreter.checkedInterpret();
     }
   } catch (error) {
     console.error(`${name} failed: ${error.message}`);
