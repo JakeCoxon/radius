@@ -16,6 +16,9 @@ interface Sequence {
   elements: SD[]; // Array of SD elements representing fields
 }
 
+const BOTTOM = { kind: 'Bottom' } as const;
+const TOP = { kind: 'Top' } as const;
+
 type LocalMap = Map<string, Set<string>>;
 type MemoryMap = Map<string, SD>;
 
@@ -28,7 +31,7 @@ export class AbstractInterpreterIR {
   state: InterpreterState
 
   cfg: ControlFlowGraph;
-  blockStates: Map<BasicBlock, InterpreterState> = new Map();
+  blockStates: Map<string, InterpreterState> = new Map();
   worklist: { block: BasicBlock; inputState: InterpreterState }[] = [];
   function: FunctionBlock;
   freshAddressCounter = 0;
@@ -53,7 +56,7 @@ export class AbstractInterpreterIR {
   interpret() {
 
     for (const block of this.cfg.blocks) {
-      this.blockStates.set(block, undefined!);
+      this.blockStates.set(block.label, undefined!);
     }
 
     const entryState = createEmptyState();
@@ -66,7 +69,7 @@ export class AbstractInterpreterIR {
     // Process the worklist
     while (this.worklist.length > 0) {
       const { block, inputState } = this.worklist.shift()!;
-      const existingState = this.blockStates.get(block);
+      const existingState = this.blockStates.get(block.label);
 
       // Merge the new input state with the existing state
       const mergedInputState = existingState
@@ -78,12 +81,13 @@ export class AbstractInterpreterIR {
         continue;
       }
 
-      this.blockStates.set(block, mergedInputState);
+      this.blockStates.set(block.label, mergedInputState);
 
       const outputState = this.executeBlock(block, mergedInputState);
 
       // Add successor blocks to the worklist
       const successors = this.cfg.successors.get(block) || [];
+      
       for (const successor of successors) {
         this.worklist.push({ block: successor, inputState: outputState });
       }
@@ -94,7 +98,8 @@ export class AbstractInterpreterIR {
 
   executeBlock(block: BasicBlock, inputState: InterpreterState): InterpreterState {
     // Set the state to the input state
-    this.state = cloneState(inputState);
+    this.state = cloneState(inputState)
+    console.log("executing block:", block.label);
 
     let index = 0;
     while (index < block.instructions.length) {
@@ -102,6 +107,10 @@ export class AbstractInterpreterIR {
       this.execute(instr);
       index++;
     }
+
+    console.log("State for block:", block.label)
+    printLocals(this.state.locals)
+    printMemory(this.state.memory)
 
     // Return the state after executing the block
     return cloneState(this.state);
@@ -128,12 +137,17 @@ export class AbstractInterpreterIR {
     } else if (instr instanceof AllocInstruction) {
       const addr = this.newAddress(instr.type);
       this.state.locals.set(instr.dest, new Set([addr]));
-      this.state.memory.set(addr, { kind: 'Bottom' });
+      this.state.memory.set(addr, BOTTOM);
     } else if (instr instanceof CheckInitializedInstruction) {
       this.ensureRegisterInitialized(instr.value);
     } else if (instr instanceof CallInstruction) {
+      for (const arg of instr.args) {
+        this.ensureRegisterInitialized(arg);
+      }
       this.state.locals.set(instr.dest, new Set([]));
     } else if (instr instanceof BinaryOperationInstruction) {
+      this.ensureRegisterInitialized(instr.left);
+      this.ensureRegisterInitialized(instr.right);
       this.state.locals.set(instr.dest, new Set([]));
     } else if (instr instanceof LoadFromAddressInstruction) {
       this.ensureRegisterInitialized(instr.address);
@@ -148,11 +162,12 @@ export class AbstractInterpreterIR {
       compilerAssert(this.state.locals.get(instr.dest) === undefined, `Register ${instr.dest} is already initialized`);
       const fields = [...addresses].map(addr => `${addr}.${instr.field}`)
       this.state.locals.set(instr.dest, new Set(fields));
-
+    } else if (instr instanceof JumpInstruction) {
+    } else if (instr instanceof ConditionalJumpInstruction) {
+      this.ensureRegisterInitialized(instr.condition);
     } else {
       console.error(`Unknown instruction in interp: ${instr.irType}`);
     }
-    // No action needed for JumpInstruction and ConditionalJumpInstruction here
   }
 
   ensureRegisterInitialized(register: string) {
@@ -189,7 +204,7 @@ export class AbstractInterpreterIR {
   initializeFunctionParam(state: InterpreterState, param: string, type: Type) {
     const addr = this.newAddress(type);
     state.locals.set(param, new Set([addr]));
-    state.memory.set(addr, { kind: 'Top' });
+    state.memory.set(addr, TOP);
   }
 
 }
@@ -213,8 +228,19 @@ function isStatePathInitialized(memory: MemoryMap, addr: string): boolean {
 
   if (!current || current.kind === 'Bottom') { return false; }
   if (current.kind === 'Top') { return true; }
-  // return current.elements.every(e => e.kind === 'Top');
   return false
+}
+
+function printLocals(locals: LocalMap) {
+  console.log("  Locals:", Array.from(locals.entries()).flatMap(([key, val]) => {
+    if (val.size === 0) return []
+    return `${key} -> ${Array.from(val).join(', ')}`
+  }).join(' | '))
+}
+function printMemory(memory: MemoryMap) {
+  console.log("  Memory:", Array.from(memory.entries()).flatMap(([key, val]) => {
+    return `${key} -> ${sdToString(val)}`
+  }).join(' | '))
 }
 
 function sdToString(sd: SD): string {
@@ -227,7 +253,7 @@ function sdToString(sd: SD): string {
 }
 
 function meetSDUpper(a: SD, b: SD): SD {
-  if (a.kind === 'Top' || b.kind === 'Top') { return { kind: 'Top' }; }
+  if (a.kind === 'Top' || b.kind === 'Top') { return TOP; }
   if (a.kind === 'Bottom') { return b; }
   if (b.kind === 'Bottom') { return a; }
   if (a.kind === 'Sequence' && b.kind === 'Sequence') {
@@ -235,12 +261,12 @@ function meetSDUpper(a: SD, b: SD): SD {
     const elements: SD[] = [];
     let allTop = true;
     for (let i = 0; i < length; i++) {
-      const elemA = a.elements[i] || { kind: 'Bottom' };
-      const elemB = b.elements[i] || { kind: 'Bottom' };
+      const elemA = a.elements[i] || BOTTOM;
+      const elemB = b.elements[i] || BOTTOM;
       elements.push(meetSDUpper(elemA, elemB));
       allTop = allTop && elements[i].kind === 'Top';
     }
-    if (allTop) { return { kind: 'Top' }; }
+    if (allTop) { return TOP; }
     return { kind: 'Sequence', elements };
   }
   // Incompatible types, default to Bottom
@@ -248,7 +274,7 @@ function meetSDUpper(a: SD, b: SD): SD {
 }
 
 function meetSD(a: SD, b: SD): SD {
-  if (a.kind === 'Bottom' || b.kind === 'Bottom') { return { kind: 'Bottom' }; }
+  if (a.kind === 'Bottom' || b.kind === 'Bottom') { return BOTTOM; }
   if (a.kind === 'Top') { return b; }
   if (b.kind === 'Top') { return a; }
   if (a.kind === 'Sequence' && b.kind === 'Sequence') {
@@ -256,12 +282,12 @@ function meetSD(a: SD, b: SD): SD {
     const elements: SD[] = [];
     let allTop = true;
     for (let i = 0; i < length; i++) {
-      const elemA = a.elements[i] || { kind: 'Bottom' };
-      const elemB = b.elements[i] || { kind: 'Bottom' };
+      const elemA = a.elements[i] || BOTTOM;
+      const elemB = b.elements[i] || BOTTOM;
       elements.push(meetSD(elemA, elemB));
       allTop = allTop && elements[i].kind === 'Top';
     }
-    if (allTop) { return { kind: 'Top' }; }
+    if (allTop) { return TOP; }
     return { kind: 'Sequence', elements };
   }
   // Incompatible types, default to Bottom
@@ -269,7 +295,7 @@ function meetSD(a: SD, b: SD): SD {
 }
 
 function addressesToSD(addresses: string[], currentType: Type): SD {
-  if (addresses.length === 0) { return { kind: 'Top' }; }
+  if (addresses.length === 0) { return TOP; }
   const [firstAddr, ...restAddrs] = addresses;
   const index = parseInt(firstAddr, 10);
 
@@ -281,7 +307,7 @@ function addressesToSD(addresses: string[], currentType: Type): SD {
   const nextType = currentType.fields[index].type
   const nestedSD = addressesToSD(restAddrs, nextType);
 
-  const elements: SD[] = new Array(currentType.fields.length).fill({ kind: 'Bottom' });
+  const elements: SD[] = new Array(currentType.fields.length).fill(BOTTOM);
   elements[index] = nestedSD;
 
   return { kind: 'Sequence', elements };
@@ -315,8 +341,8 @@ function mergeMemoryMaps(
   const result = new Map<string, SD>();
   const allAddresses = new Set([...map1.keys(), ...map2.keys()]);
   for (const addr of allAddresses) {
-    const val1 = map1.get(addr) || { kind: 'Bottom' };
-    const val2 = map2.get(addr) || { kind: 'Bottom' };
+    const val1 = map1.get(addr) || BOTTOM;
+    const val2 = map2.get(addr) || BOTTOM;
     result.set(addr, meetSD(val1, val2));
   }
   return result;

@@ -1,4 +1,4 @@
-import { BasicBlock, ConditionalJumpInstruction, JumpInstruction } from "./defs";
+import { BasicBlock, ConditionalJumpInstruction, JumpInstruction, compilerAssert } from "./defs";
 
 export class ControlFlowGraph {
   blocks: BasicBlock[] = [];
@@ -201,20 +201,16 @@ export const buildCFG = (blocks: BasicBlock[]): ControlFlowGraph => {
 
     if (lastInstr instanceof JumpInstruction) {
       const targetBlock = blocks.find((b) => b.label === lastInstr.target);
-      if (targetBlock) {
-        cfg.addEdge(block, targetBlock);
-      }
+      compilerAssert(targetBlock, `Target block ${lastInstr.target} not found.`);
+      cfg.addEdge(block, targetBlock);
     } else if (lastInstr instanceof ConditionalJumpInstruction) {
-      const thenBlock = blocks.find((b) => b.label === lastInstr.target);
-      const elseBlockIndex = blocks.indexOf(block) + 1;
-      const elseBlock = blocks[elseBlockIndex];
+      const thenBlock = blocks.find((b) => b.label === lastInstr.targetLabel);
+      const elseBlock = blocks.find((b) => b.label === lastInstr.elseLabel);
 
-      if (thenBlock) {
-        cfg.addEdge(block, thenBlock);
-      }
-      if (elseBlock) {
-        cfg.addEdge(block, elseBlock);
-      }
+      compilerAssert(thenBlock, `Then block ${lastInstr.targetLabel} not found.`);
+      compilerAssert(elseBlock, `Else block ${lastInstr.elseLabel} not found.`);
+      cfg.addEdge(block, thenBlock);
+      cfg.addEdge(block, elseBlock);
     } else {
       // Default to the next block if no explicit jump
       const nextBlockIndex = blocks.indexOf(block) + 1;

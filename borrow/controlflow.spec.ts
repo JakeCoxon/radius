@@ -36,6 +36,10 @@ function testUnreachableNodes() {
     assert(cfg.dom.get(b3) == null, 'b3 should not have a dominator');
     assert(cfg.dom.get(b4) == null, 'b4 should not have a dominator');
 
+    assert(cfg.successors.get(entry)!.length === 1, 'Entry should have 1 successor');
+    assert(cfg.successors.get(b2)!.length === 0, 'b2 should have 0 successors');
+    assert(cfg.successors.get(b3)!.length === 0, 'b3 should have 0 successors');
+
     console.log('Test 1 passed.\n');
 }
 

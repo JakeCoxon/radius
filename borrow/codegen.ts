@@ -20,8 +20,8 @@ export class CodeGenerator {
     // Initialize with an entry block
     const entryLabel = 'entry';
     this.currentBlock = new BasicBlock(entryLabel, []);
-    this.blocks.push(this.currentBlock);
     this.currentFunction = new FunctionBlock('main', [], [this.currentBlock]);
+    this.blocks = this.currentFunction.blocks
     this.functionBlocks.push(this.currentFunction);
   }
 
@@ -69,7 +69,7 @@ export class CodeGenerator {
     for (const stmt of node.body) {
       this.generate(stmt);
     }
-    this.currentBlock.instructions.unshift(...this.functionInstructions);
+    this.blocks[0].instructions.unshift(...this.functionInstructions);
     this.functionInstructions = []
   }
 
@@ -92,15 +92,17 @@ export class CodeGenerator {
     const savedBlock = this.currentBlock;
     const savedFunction = this.currentFunction;
 
-    // Function body block
+
+    const functionBlock = new FunctionBlock(node.name, [], []);
+    this.functionBlocks.push(functionBlock);
+    this.currentFunction = functionBlock;
+    this.blocks = functionBlock.blocks
+
     const block = new BasicBlock(functionLabel, []);
     this.blocks.push(block);
     this.currentBlock = block;
 
-    const functionBlock = new FunctionBlock(node.name, [], [block]);
-    this.functionBlocks.push(functionBlock);
-    this.currentFunction = functionBlock;
-
+    const savedFunctionInstructions = this.functionInstructions;
     this.functionInstructions = []
 
     // Enter a new scope for function parameters and local variables
@@ -130,11 +132,12 @@ export class CodeGenerator {
     // this.exitScope();
 
     this.currentBlock.instructions.unshift(...this.functionInstructions);
-    this.functionInstructions = []
+    this.functionInstructions = savedFunctionInstructions;
 
     // Restore the previous block
     this.currentBlock = savedBlock;
     this.currentFunction = savedFunction;
+    this.blocks = savedFunction.blocks
   }
 
   generateVariableDeclaration(node: VariableDeclarationNode) {
@@ -147,15 +150,13 @@ export class CodeGenerator {
 
   generateIfStatement(node: IfStatementNode) {
     const conditionReg = this.generateExpression(node.condition, { valueCategory: 'rvalue' });
+    compilerAssert(conditionReg instanceof RValue, 'If condition must be an RValue');
     const thenLabel = this.newLabel();
     const elseLabel = this.newLabel();
     const afterLabel = this.newLabel();
 
     // Conditional jump based on conditionReg
-    this.addInstruction(new ConditionalJumpInstruction(conditionReg, thenLabel));
-
-    // Jump to elseLabel if condition is false
-    this.addInstruction(new JumpInstruction(elseLabel));
+    this.addInstruction(new ConditionalJumpInstruction(conditionReg.register, thenLabel, elseLabel));
 
     // Then block
     const thenBlock = new BasicBlock(thenLabel, []);
@@ -194,10 +195,9 @@ export class CodeGenerator {
     this.blocks.push(conditionBlock);
     this.currentBlock = conditionBlock;
     const conditionReg = this.generateExpression(node.condition, { valueCategory: 'rvalue' });
+    compilerAssert(conditionReg instanceof RValue, 'While condition must be an RValue');
     // Conditional jump to body if condition is true
-    this.addInstruction(new ConditionalJumpInstruction(conditionReg, bodyLabel));
-    // Jump to afterLabel if condition is false
-    this.addInstruction(new JumpInstruction(afterLabel));
+    this.addInstruction(new ConditionalJumpInstruction(conditionReg.register, bodyLabel, afterLabel));
 
     // Body block
     const bodyBlock = new BasicBlock(bodyLabel, []);

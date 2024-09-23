@@ -63,7 +63,11 @@ const runTest = (name: string, ast: ProgramNode) => {
   try {
     codeGenerator.generate(ast);
     console.log(`${name} IR:`);
-    printIR(codeGenerator.blocks);
+    for (const fn of codeGenerator.functionBlocks) {
+      console.log(``);
+      console.log(`Function ${fn.name}:`);
+      printIR(fn.blocks);
+    }
     console.log("")
     const cfg = buildCFG(codeGenerator.blocks)
     printCFG(cfg)
@@ -176,6 +180,52 @@ function testStruct() {
   runTest("testFunction", ast)
 }
 
+function testControlFlow() {
+  // AST representing:
+  // let x: int
+  // if (1) {
+  //   x = 1;
+  // } else {
+  //   x = 2;
+  // }
+  // use(x)
+  const ast = new ProgramNode([
+    new LetConstNode('int', IntType),
+    new VariableDeclarationNode('x', true, 'int'),
+    new FunctionDeclarationNode(
+      'use',
+      [
+        new FunctionParameterNode('z', 'int', false),
+      ],
+      new BlockStatementNode([])
+    ),
+    new IfStatementNode(
+      new LiteralNode(1),
+      new BlockStatementNode([
+        new ExpressionStatementNode(
+          new AssignmentNode(
+            new IdentifierNode('x'),
+            new LiteralNode(1)
+          )
+        )
+      ]),
+      new BlockStatementNode([
+        new ExpressionStatementNode(
+          new AssignmentNode(
+            new IdentifierNode('x'),
+            new LiteralNode(2)
+          )
+        )
+      ])
+    ),
+    new ExpressionStatementNode(
+      new CallExpressionNode('use', [new IdentifierNode('x')])
+    )
+  ]);
+  runTest("testControlFlow", ast)
+}
+
 // testFunction()
-testStruct()
+// testStruct()
+testControlFlow()
 // testWhileLoopThatMightNotExecute()

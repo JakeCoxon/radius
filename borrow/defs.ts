@@ -92,7 +92,7 @@ export class JumpInstruction extends IRInstruction {
 // Conditional Jump Instruction
 export class ConditionalJumpInstruction extends IRInstruction {
   irType = 'cjump';
-  constructor(public condition: any, public target: string) {
+  constructor(public condition: string, public targetLabel: string, public elseLabel: string) {
     super();
   }
 }
@@ -350,13 +350,9 @@ export function formatInstruction(instr: IRInstruction): string {
   } else if (instr instanceof BinaryOperationInstruction) {
     return `${instr.dest} = ${instr.left} ${instr.operator} ${instr.right}`;
   } else if (instr instanceof ConditionalJumpInstruction) {
-    return `if ${instr.condition} != 0 goto ${instr.target}`;
+    return `if ${instr.condition} != 0 goto ${instr.targetLabel} else goto ${instr.elseLabel}`;
   } else if (instr instanceof JumpInstruction) {
     return `goto ${instr.target}`;
-  // } else if (instr instanceof StoreFieldInstruction) {
-    // return `store ${instr.source} into ${instr.address}.${instr.field}`;
-  // } else if (instr instanceof LoadFieldInstruction) {
-    // return `${instr.dest} = load ${instr.address}.${instr.field}`;
   } else if (instr instanceof CallInstruction) {
     return `${instr.dest} = call ${instr.functionName}(${instr.args.join(', ')})`;
   } else if (instr instanceof ReturnInstruction) {
