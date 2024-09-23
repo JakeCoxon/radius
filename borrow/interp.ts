@@ -1,5 +1,5 @@
 import { ControlFlowGraph, buildCFG } from "./controlflow";
-import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, CheckInitializedInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, compilerAssert } from "./defs";
+import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, CheckInitializedInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, compilerAssert, Type, StructType } from "./defs";
 
 type SD = Top | Bottom | Sequence;
 
@@ -32,6 +32,7 @@ export class AbstractInterpreterIR {
   worklist: { block: BasicBlock; inputState: InterpreterState }[] = [];
   function: FunctionBlock;
   freshAddressCounter = 0;
+  addressTypes = new Map<string, Type>(); // Quick lookup for address types
 
   constructor(fn: FunctionBlock) {
     this.function = fn;
@@ -59,7 +60,7 @@ export class AbstractInterpreterIR {
     this.worklist.push({ block: this.cfg.entry, inputState: entryState });
 
     for (const param of this.function.params) {
-      this.initializeFunctionParam(entryState, param.name);
+      this.initializeFunctionParam(entryState, param.name, param.type);
     }
 
     // Process the worklist
@@ -119,10 +120,13 @@ export class AbstractInterpreterIR {
         throw new Error(`Address ${instr.address} is not initialized`);
       }
       for (const addr of addresses) {
-        this.initializeMemoryAddress(addr);
+        const ids = addr.split('.')
+        const rootType = this.addressTypes.get(ids[0])
+        compilerAssert(rootType, `Root type not found for address ${addr}`)
+        this.initializeMemoryAddress(addr, rootType);
       }
     } else if (instr instanceof AllocInstruction) {
-      const addr = this.newAddress();
+      const addr = this.newAddress(instr.type);
       this.state.locals.set(instr.dest, new Set([addr]));
       this.state.memory.set(addr, { kind: 'Bottom' });
     } else if (instr instanceof CheckInitializedInstruction) {
@@ -167,23 +171,23 @@ export class AbstractInterpreterIR {
   ensureAddressInitialized(addr: string) {
   }
 
-  newAddress(): string {
-    return `a${this.freshAddressCounter++}`;
+  newAddress(type: Type): string {
+    const addr = `a${this.freshAddressCounter++}`;
+    this.addressTypes.set(addr, type)
+    return addr;
   }
 
-  initializeMemoryAddress(addr: string) {
+  initializeMemoryAddress(addr: string, rootType: Type) {
     const ids = addr.split('.')
     let current = this.state.memory.get(ids[0])
     compilerAssert(current, `Address ${addr} is not initialized`)
-    const x = addressesToSD(ids.slice(1))
-    const newSd = meetSDUpper(current, x)
+    const sd = addressesToSD(ids.slice(1), rootType)
+    const newSd = meetSDUpper(current, sd)
     this.state.memory.set(ids[0], newSd)
-    // console.log("Initializing", addr, res)
-    // this.state.memory.set(addr, res);
   }
 
-  initializeFunctionParam(state: InterpreterState, param: string) {
-    const addr = this.newAddress();
+  initializeFunctionParam(state: InterpreterState, param: string, type: Type) {
+    const addr = this.newAddress(type);
     state.locals.set(param, new Set([addr]));
     state.memory.set(addr, { kind: 'Top' });
   }
@@ -209,7 +213,17 @@ function isStatePathInitialized(memory: MemoryMap, addr: string): boolean {
 
   if (!current || current.kind === 'Bottom') { return false; }
   if (current.kind === 'Top') { return true; }
-  return current.elements.every(e => e.kind === 'Top');
+  // return current.elements.every(e => e.kind === 'Top');
+  return false
+}
+
+function sdToString(sd: SD): string {
+  if (sd.kind === 'Top') { return '⊤'; }
+  if (sd.kind === 'Bottom') { return '⊥'; }
+  if (sd.kind === 'Sequence') {
+    return `[${sd.elements.map(sdToString).join(', ')}]`;
+  }
+  return '???';
 }
 
 function meetSDUpper(a: SD, b: SD): SD {
@@ -219,11 +233,14 @@ function meetSDUpper(a: SD, b: SD): SD {
   if (a.kind === 'Sequence' && b.kind === 'Sequence') {
     const length = Math.max(a.elements.length, b.elements.length);
     const elements: SD[] = [];
+    let allTop = true;
     for (let i = 0; i < length; i++) {
       const elemA = a.elements[i] || { kind: 'Bottom' };
       const elemB = b.elements[i] || { kind: 'Bottom' };
       elements.push(meetSDUpper(elemA, elemB));
+      allTop = allTop && elements[i].kind === 'Top';
     }
+    if (allTop) { return { kind: 'Top' }; }
     return { kind: 'Sequence', elements };
   }
   // Incompatible types, default to Bottom
@@ -237,26 +254,37 @@ function meetSD(a: SD, b: SD): SD {
   if (a.kind === 'Sequence' && b.kind === 'Sequence') {
     const length = Math.max(a.elements.length, b.elements.length);
     const elements: SD[] = [];
+    let allTop = true;
     for (let i = 0; i < length; i++) {
       const elemA = a.elements[i] || { kind: 'Bottom' };
       const elemB = b.elements[i] || { kind: 'Bottom' };
       elements.push(meetSD(elemA, elemB));
+      allTop = allTop && elements[i].kind === 'Top';
     }
+    if (allTop) { return { kind: 'Top' }; }
     return { kind: 'Sequence', elements };
   }
   // Incompatible types, default to Bottom
-  return { kind: 'Bottom' };
+  compilerAssert(false, `Incompatible types in meetSD: ${a.kind} and ${b.kind}`);
 }
 
-function addressesToSD(addresses: string[]): SD {
-  let result: SD = { kind: 'Top' };
-  for (const addr of addresses) {
-    const sd: SD = result;
-    result = { kind: 'Sequence', elements: [] };
-    const index = parseInt(addr);
-    result.elements[index] = sd;
-  }
-  return result;
+function addressesToSD(addresses: string[], currentType: Type): SD {
+  if (addresses.length === 0) { return { kind: 'Top' }; }
+  const [firstAddr, ...restAddrs] = addresses;
+  const index = parseInt(firstAddr, 10);
+
+  compilerAssert(currentType instanceof StructType, `Current type is not a struct type`)
+  compilerAssert(!isNaN(index), `Index is not a number`)
+  compilerAssert(index >= 0, `Index is negative`)
+  compilerAssert(index < currentType.fields.length, `Index is out of bounds`)
+
+  const nextType = currentType.fields[index].type
+  const nestedSD = addressesToSD(restAddrs, nextType);
+
+  const elements: SD[] = new Array(currentType.fields.length).fill({ kind: 'Bottom' });
+  elements[index] = nestedSD;
+
+  return { kind: 'Sequence', elements };
 }
 
 function meetLocals(a: Set<string> | undefined, b: Set<string> | undefined): Set<string> {

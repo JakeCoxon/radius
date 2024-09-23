@@ -255,8 +255,9 @@ export class CodeGenerator {
       compilerAssert(fieldValue instanceof RValue, 'Struct field value must be an RValue');
       const reg = this.newRegister();
       const fieldIndex = i;
+      const type = field.type
       this.addInstruction(new GetFieldPointerInstruction(reg, structReg, fieldIndex));
-      this.addInstruction(new StoreToAddressInstruction(reg, fieldValue.register));
+      this.addInstruction(new StoreToAddressInstruction(reg, type, fieldValue.register));
       // this.addInstruction(new StoreFieldInstruction(structReg, field.name, fieldValue.register));
     }
     return new RValue(structReg)
@@ -310,7 +311,8 @@ export class CodeGenerator {
       // }
       // compilerAssert(destReg., 'Variable must be an RValue');
       // Assign rightReg to destReg
-      this.addInstruction(new StoreToAddressInstruction(destReg.register, rightReg.register));
+      const type = destReg.type
+      this.addInstruction(new StoreToAddressInstruction(destReg.register, type, rightReg.register));
       return rightReg
     } else if (left instanceof MemberExpressionNode) {
       // Assignment to object field
@@ -319,10 +321,13 @@ export class CodeGenerator {
       
       const fieldName = left.property;
       // Store rightReg into objReg.fieldName
-      const fieldIndex = 0
+      const type = this.constants[left.type];
+      compilerAssert(type && type instanceof StructType, `Struct type not found: ${left.type}`);
+      const fieldIndex = type.fields.findIndex((field) => field.name === fieldName);
       const reg = this.newRegister();
+      const fieldType = type.fields[fieldIndex].type
       this.addInstruction(new GetFieldPointerInstruction(reg, objReg.register, fieldIndex));
-      this.addInstruction(new StoreToAddressInstruction(reg, rightReg.register));
+      this.addInstruction(new StoreToAddressInstruction(reg, fieldType, rightReg.register));
       // this.addInstruction(new StoreFieldInstruction(objReg.register, fieldName, rightReg.register));
       return rightReg;
     } else {
@@ -377,7 +382,9 @@ export class CodeGenerator {
     const fieldName = node.property;
     const destReg = this.newRegister();
     // Load objReg.fieldName into destReg
-    const fieldIndex = 0 // TODO
+    const type = this.constants[node.type];
+    compilerAssert(type && type instanceof StructType, `Struct type not found: ${node.type}`);
+    const fieldIndex = type.fields.findIndex((field) => field.name === fieldName);
     this.addInstruction(new GetFieldPointerInstruction(destReg, objReg.register, fieldIndex));
     if (context.valueCategory === 'lvalue') {
       return new LValue(destReg);

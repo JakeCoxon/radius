@@ -136,7 +136,7 @@ export class CheckInitializedInstruction extends IRInstruction {
 
 export class StoreToAddressInstruction extends IRInstruction {
   irType = 'store_to_address';
-  constructor(public address: string, public source: string) {
+  constructor(public address: string, public type: Type, public source: string) {
     super();
   }
 }
@@ -250,7 +250,7 @@ export class AssignmentNode extends ExpressionNode {
 // Member Expression Node (Field Access)
 export class MemberExpressionNode extends ExpressionNode {
   nodeType = 'MemberExpression';
-  constructor(public object: ExpressionNode, public property: string) {
+  constructor(public object: ExpressionNode, public type: string, public property: string) {
     super();
   }
 }

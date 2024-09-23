@@ -146,17 +146,17 @@ function testStruct() {
       new BlockStatementNode([
         new ExpressionStatementNode(
           new AssignmentNode(
-            new MemberExpressionNode(new IdentifierNode('p'), 'x'),
+            new MemberExpressionNode(new IdentifierNode('p'), 'Point', 'x'),
             new BinaryExpressionNode(
               '+',
-              new MemberExpressionNode(new IdentifierNode('p'), 'x'),
+              new MemberExpressionNode(new IdentifierNode('p'), 'Point', 'x'),
               new IdentifierNode('x')
             )
           )
         )
       ])
     ),
-    new VariableDeclarationNode('result', true, 'int'),
+    new VariableDeclarationNode('result', true, 'Point'),
     new ExpressionStatementNode(
       new AssignmentNode(
         new IdentifierNode('result'),
