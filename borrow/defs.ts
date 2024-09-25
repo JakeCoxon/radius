@@ -3,6 +3,12 @@ export function compilerAssert(expected: unknown, message: string="", info: obje
   throw new Error(message, info)
 }
 
+export enum Capability {
+  Let = "Let",
+  Set = "Set",
+  Inout = "Inout",
+  Sink = "Sink",
+}
 
 export class LValue {
   constructor(public address: string) {}
@@ -127,9 +133,9 @@ export class ReturnInstruction extends IRInstruction {
   }
 }
 
-export class CheckInitializedInstruction extends IRInstruction {
-  irType = 'check_initialized';
-  constructor(public value: string) {
+export class AccessInstruction extends IRInstruction {
+  irType = 'access';
+  constructor(public value: string, public capabilities: Capability[]) {
     super();
   }
 }
@@ -367,7 +373,7 @@ export function formatInstruction(instr: IRInstruction): string {
     return `${instr.dest} = &${instr.address}.${instr.field}`;
   } else if (instr instanceof AllocInstruction) {
     return `alloc ${instr.dest}: ${instr.type.shortName}`;
-  } else if (instr instanceof CheckInitializedInstruction) {
+  } else if (instr instanceof AccessInstruction) {
     return `check_initialized ${instr.value}`;
   } else if (instr instanceof GetFieldPointerInstruction) {
     return `${instr.dest} = address of ${instr.address}.${instr.field}`;

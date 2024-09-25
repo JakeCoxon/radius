@@ -77,7 +77,7 @@ const runTest = (name: string, ast: ProgramNode) => {
     console.log("")
 
     for (const fn of codeGenerator.functionBlocks) {
-      console.log(`Interpreting function ${fn.name}`);
+      console.log(`\n// ${fn.name} ///////////////////////////////////////////////////////////\n`);
       const interpreter = new AbstractInterpreterIR(fn);
       interpreter.checkedInterpret();
     }
@@ -188,7 +188,7 @@ function testControlFlow() {
   // } else {
   //   x = 2;
   // }
-  // use(x)
+  // use(x + 3)
   const ast = new ProgramNode([
     new LetConstNode('int', IntType),
     new VariableDeclarationNode('x', true, 'int'),
@@ -219,7 +219,13 @@ function testControlFlow() {
       ])
     ),
     new ExpressionStatementNode(
-      new CallExpressionNode('use', [new IdentifierNode('x')])
+      new CallExpressionNode('use', [
+        new BinaryExpressionNode(
+          '+',
+          new IdentifierNode('x'),
+          new LiteralNode(3)
+        )
+      ])
     )
   ]);
   runTest("testControlFlow", ast)

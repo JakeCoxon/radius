@@ -1,5 +1,5 @@
 import { ControlFlowGraph, buildCFG } from "./controlflow";
-import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, CheckInitializedInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, compilerAssert, Type, StructType } from "./defs";
+import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, compilerAssert, Type, StructType, Capability } from "./defs";
 
 type SD = Top | Bottom | Sequence;
 
@@ -32,7 +32,7 @@ export class AbstractInterpreterIR {
 
   cfg: ControlFlowGraph;
   blockStates: Map<string, InterpreterState> = new Map();
-  worklist: { block: BasicBlock; inputState: InterpreterState }[] = [];
+  worklist: { block: BasicBlock }[] = [];
   function: FunctionBlock;
   freshAddressCounter = 0;
   addressTypes = new Map<string, Type>(); // Quick lookup for address types
@@ -56,40 +56,44 @@ export class AbstractInterpreterIR {
   interpret() {
 
     for (const block of this.cfg.blocks) {
-      this.blockStates.set(block.label, undefined!);
+      this.blockStates.set(block.label, createEmptyState());
     }
 
     const entryState = createEmptyState();
-    this.worklist.push({ block: this.cfg.entry, inputState: entryState });
+    this.worklist.push({ block: this.cfg.entry });
 
     for (const param of this.function.params) {
+      console.log("Setting up param", param.name)
       this.initializeFunctionParam(entryState, param.name, param.type);
     }
+    this.blockStates.set(this.cfg.blocks[0].label, entryState);
 
     // Process the worklist
     while (this.worklist.length > 0) {
-      const { block, inputState } = this.worklist.shift()!;
-      const existingState = this.blockStates.get(block.label);
+      const { block } = this.worklist.shift()!;
 
-      // Merge the new input state with the existing state
-      const mergedInputState = existingState
-        ? mergeStates(existingState, inputState)
-        : inputState;
-
-      // If the merged state is the same as the existing state, skip processing
-      if (existingState && statesEqual(existingState, mergedInputState)) {
-        continue;
+      const predecessors = this.cfg.predecessors.get(block) || [];
+      let mergedInputState: InterpreterState;
+      if (predecessors.length) {
+        mergedInputState = predecessors.slice(1).reduce((acc, pred) => {
+          const predState = this.blockStates.get(pred.label)!
+          return mergeStates(acc, predState);
+        }, this.blockStates.get(predecessors[0].label)!);
+      } else {
+        mergedInputState = this.blockStates.get(block.label)!;
       }
 
       this.blockStates.set(block.label, mergedInputState);
 
       const outputState = this.executeBlock(block, mergedInputState);
+      if (statesEqual(outputState, mergedInputState)) continue;
 
-      // Add successor blocks to the worklist
+      this.blockStates.set(block.label, outputState);
+
       const successors = this.cfg.successors.get(block) || [];
       
       for (const successor of successors) {
-        this.worklist.push({ block: successor, inputState: outputState });
+        this.worklist.push({ block: successor });
       }
     }
 
@@ -98,8 +102,13 @@ export class AbstractInterpreterIR {
 
   executeBlock(block: BasicBlock, inputState: InterpreterState): InterpreterState {
     // Set the state to the input state
+
     this.state = cloneState(inputState)
-    console.log("executing block:", block.label);
+    console.log("\nExecuting block:", block.label);
+
+    console.log("Input state for block:", block.label)
+    printLocals(inputState.locals)
+    printMemory(inputState.memory)
 
     let index = 0;
     while (index < block.instructions.length) {
@@ -108,7 +117,7 @@ export class AbstractInterpreterIR {
       index++;
     }
 
-    console.log("State for block:", block.label)
+    console.log("Computed state for block:", block.label)
     printLocals(this.state.locals)
     printMemory(this.state.memory)
 
@@ -125,9 +134,7 @@ export class AbstractInterpreterIR {
     } else if (instr instanceof StoreToAddressInstruction) {
       this.ensureRegisterInitialized(instr.source);
       const addresses = this.state.locals.get(instr.address);
-      if (!addresses) {
-        throw new Error(`Address ${instr.address} is not initialized`);
-      }
+      compilerAssert(addresses, `Register ${instr.address} is not found`);
       for (const addr of addresses) {
         const ids = addr.split('.')
         const rootType = this.addressTypes.get(ids[0])
@@ -138,8 +145,19 @@ export class AbstractInterpreterIR {
       const addr = this.newAddress(instr.type);
       this.state.locals.set(instr.dest, new Set([addr]));
       this.state.memory.set(addr, BOTTOM);
-    } else if (instr instanceof CheckInitializedInstruction) {
-      this.ensureRegisterInitialized(instr.value);
+    } else if (instr instanceof AccessInstruction) {
+      compilerAssert(instr.capabilities.length === 1, `Access instruction with multiple capabilities not supported`)
+      if (instr.capabilities[0] === Capability.Inout) {
+        this.ensureRegisterInitialized(instr.value);
+      } else if (instr.capabilities[0] === Capability.Let) {
+        this.ensureRegisterInitialized(instr.value);
+      } else if (instr.capabilities[0] === Capability.Sink) {
+        this.ensureRegisterInitialized(instr.value);
+      } else if (instr.capabilities[0] === Capability.Set) {
+        const register = instr.value;
+        const locals = this.state.locals.get(register);
+        compilerAssert(locals, `Register ${register} is not found`);
+      }
     } else if (instr instanceof CallInstruction) {
       for (const arg of instr.args) {
         this.ensureRegisterInitialized(arg);
@@ -156,9 +174,7 @@ export class AbstractInterpreterIR {
       if (instr.value) this.ensureRegisterInitialized(instr.value);
     } else if (instr instanceof GetFieldPointerInstruction) {
       const addresses = this.state.locals.get(instr.address);
-      if (!addresses) {
-        throw new Error(`Register ${instr.address} is not found`);
-      }
+      compilerAssert(addresses, `Register ${instr.address} is not found`);
       compilerAssert(this.state.locals.get(instr.dest) === undefined, `Register ${instr.dest} is already initialized`);
       const fields = [...addresses].map(addr => `${addr}.${instr.field}`)
       this.state.locals.set(instr.dest, new Set(fields));
@@ -172,15 +188,11 @@ export class AbstractInterpreterIR {
 
   ensureRegisterInitialized(register: string) {
     const locals = this.state.locals.get(register);
-    if (!locals) {
-      throw new Error(`Register ${register} is not found`);
-    }
+    compilerAssert(locals, `Register ${register} is not found`);
     const isInitialized = Array.from(locals).every(addr => {
       return isStatePathInitialized(this.state.memory, addr);
     })
-    if (!isInitialized) {
-      throw new Error(`Register ${register} is not initialized`);
-    }
+    compilerAssert(isInitialized, `Register ${register} is not definitely initialized`);
   }
 
   ensureAddressInitialized(addr: string) {
@@ -233,7 +245,7 @@ function isStatePathInitialized(memory: MemoryMap, addr: string): boolean {
 
 function printLocals(locals: LocalMap) {
   console.log("  Locals:", Array.from(locals.entries()).flatMap(([key, val]) => {
-    if (val.size === 0) return []
+    if (val.size === 0) return `${key} -> ⊤`
     return `${key} -> ${Array.from(val).join(', ')}`
   }).join(' | '))
 }
@@ -313,10 +325,10 @@ function addressesToSD(addresses: string[], currentType: Type): SD {
   return { kind: 'Sequence', elements };
 }
 
-function meetLocals(a: Set<string> | undefined, b: Set<string> | undefined): Set<string> {
+function meetLocals(a: Set<string>, b: Set<string>): Set<string> {
   const set = new Set<string>();
-  if (a) { a.forEach(v => set.add(v)); }
-  if (b) { b.forEach(v => set.add(v)); }
+  a.forEach(v => set.add(v));
+  b.forEach(v => set.add(v));
   return set
 }
 
@@ -329,6 +341,7 @@ function mergeLocalMaps(
   for (const key of allKeys) {
     const val1 = map1.get(key)
     const val2 = map2.get(key)
+    if (val1 === undefined || val2 === undefined) continue
     result.set(key, meetLocals(val1, val2));
   }
   return result;
