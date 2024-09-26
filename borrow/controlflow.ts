@@ -62,6 +62,21 @@ export class ControlFlowGraph {
     return rpo.reverse();
   }
 
+  computeDominanceDepth(): Map<BasicBlock, number> {
+    const depthMap: Map<BasicBlock, number> = new Map();
+
+    const dfs = (block: BasicBlock, currentDepth: number) => {
+      depthMap.set(block, currentDepth);
+      const children = this.children.get(block) || [];
+      for (const child of children) {
+        dfs(child, currentDepth + 1);
+      }
+    }
+
+    dfs(this.entry, 0);
+    return depthMap;
+  }
+
   computeDominatorTree() {
     const rpo = this.computeReversePostOrder();
 

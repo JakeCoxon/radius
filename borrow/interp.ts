@@ -31,7 +31,7 @@ export class AbstractInterpreterIR {
   state: InterpreterState
 
   cfg: ControlFlowGraph;
-  blockStates: Map<string, InterpreterState> = new Map();
+  blockStates: Map<string, { input: InterpreterState, output: InterpreterState }> = new Map();
   worklist: { block: BasicBlock }[] = [];
   function: FunctionBlock;
   freshAddressCounter = 0;
@@ -56,52 +56,59 @@ export class AbstractInterpreterIR {
   interpret() {
 
     for (const block of this.cfg.blocks) {
-      this.blockStates.set(block.label, createEmptyState());
+      this.worklist.push({ block });
     }
 
     const entryState = createEmptyState();
-    this.worklist.push({ block: this.cfg.entry });
 
     for (const param of this.function.params) {
-      console.log("Setting up param", param.name)
       this.initializeFunctionParam(entryState, param.name, param.type);
     }
-    this.blockStates.set(this.cfg.blocks[0].label, entryState);
 
-    // Process the worklist
+
+    const { block } = this.worklist.shift()!;
+    this.executeBlock(block, entryState);
+
+    const visited = (block: BasicBlock) => this.blockStates.has(block.label)
+    const canVisitBlock = (block: BasicBlock) => {
+      const dom = this.cfg.getImmediateDominator(block)
+      if (!dom) return true
+      if (!visited(dom)) return false
+      return this.cfg.predecessors.get(block)!.every(pred => visited(pred) || this.cfg.dominates(block, pred))
+    }
+
     while (this.worklist.length > 0) {
       const { block } = this.worklist.shift()!;
+      if (!canVisitBlock(block)) {
+        this.worklist.push({ block });
+        continue;
+      }
 
       const predecessors = this.cfg.predecessors.get(block) || [];
-      let mergedInputState: InterpreterState;
-      if (predecessors.length) {
-        mergedInputState = predecessors.slice(1).reduce((acc, pred) => {
-          const predState = this.blockStates.get(pred.label)!
-          return mergeStates(acc, predState);
-        }, this.blockStates.get(predecessors[0].label)!);
-      } else {
-        mergedInputState = this.blockStates.get(block.label)!;
-      }
-
-      this.blockStates.set(block.label, mergedInputState);
-
-      const outputState = this.executeBlock(block, mergedInputState);
-      if (statesEqual(outputState, mergedInputState)) continue;
-
-      this.blockStates.set(block.label, outputState);
-
-      const successors = this.cfg.successors.get(block) || [];
+      const state = this.blockStates.get(block.label)!;
       
-      for (const successor of successors) {
-        this.worklist.push({ block: successor });
-      }
+      const inputStates = predecessors.map(pred => this.blockStates.get(pred.label)!).filter(x => x);
+      console.log("\n## Block", block.label, "\n")
+      console.log("immediate dominator", this.cfg.getImmediateDominator(block)?.label)
+      console.log("num predecessors", predecessors.length)
+      console.log("num input states", inputStates.length)
+      console.log("predecessors", predecessors.map(pred => pred.label))
+      compilerAssert(inputStates.length, `No input states found for block ${block.label}`)
+      const mergedInputState = inputStates.slice(1).reduce((acc, predState) => {
+        return mergeStates(acc, predState.output);
+      }, inputStates[0].output);
+      const allInputStates = inputStates.length === predecessors.length
+
+      if (state && allInputStates && statesEqual(state.input, mergedInputState)) continue;
+
+      this.executeBlock(block, mergedInputState);
+      this.worklist.push({ block: block });
     }
 
     console.log("All checked ok")
   }
 
-  executeBlock(block: BasicBlock, inputState: InterpreterState): InterpreterState {
-    // Set the state to the input state
+  executeBlock(block: BasicBlock, inputState: InterpreterState) {
 
     this.state = cloneState(inputState)
     console.log("\nExecuting block:", block.label);
@@ -121,8 +128,7 @@ export class AbstractInterpreterIR {
     printLocals(this.state.locals)
     printMemory(this.state.memory)
 
-    // Return the state after executing the block
-    return cloneState(this.state);
+    this.blockStates.set(block.label, { input: inputState, output: cloneState(this.state) });
   }
 
   execute(instr: IRInstruction): void {
