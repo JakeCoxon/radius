@@ -1,7 +1,8 @@
 import { ControlFlowGraph, buildCFG } from "./controlflow";
 import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, compilerAssert, Type, StructType, Capability } from "./defs";
+import { Worklist } from "./worklist";
 
-type SD = Top | Bottom | Sequence;
+type InitializationState = Top | Bottom | Sequence;
 
 interface Top {
   kind: 'Top'; // Represents ⊤ (fully initialized)
@@ -13,29 +14,29 @@ interface Bottom {
 
 interface Sequence {
   kind: 'Sequence';
-  elements: SD[]; // Array of SD elements representing fields
+  elements: InitializationState[]; // Array of SD elements representing fields
 }
 
 const BOTTOM = { kind: 'Bottom' } as const;
 const TOP = { kind: 'Top' } as const;
 
 type LocalMap = Map<string, Set<string>>;
-type MemoryMap = Map<string, SD>;
+type MemoryMap = Map<string, InitializationState>;
 
 interface InterpreterState {
   locals: LocalMap; // Local variables/registers
   memory: MemoryMap // Memory addresses
 }
 
-export class AbstractInterpreterIR {
+export class InitializationCheckingPass {
   state: InterpreterState
 
   cfg: ControlFlowGraph;
   blockStates: Map<string, { input: InterpreterState, output: InterpreterState }> = new Map();
-  worklist: { block: BasicBlock }[] = [];
   function: FunctionBlock;
   freshAddressCounter = 0;
   addressTypes = new Map<string, Type>(); // Quick lookup for address types
+  debugLog = false
 
   constructor(fn: FunctionBlock) {
     this.function = fn;
@@ -55,55 +56,42 @@ export class AbstractInterpreterIR {
 
   interpret() {
 
-    for (const block of this.cfg.blocks) {
-      this.worklist.push({ block });
-    }
-
     const entryState = createEmptyState();
 
     for (const param of this.function.params) {
       this.initializeFunctionParam(entryState, param.name, param.type);
     }
 
+    const worklist = new Worklist(this.cfg);
 
-    const { block } = this.worklist.shift()!;
+    const { block } = worklist.shift()!;
     this.executeBlock(block, entryState);
+    worklist.visited.add(block);
 
-    const visited = (block: BasicBlock) => this.blockStates.has(block.label)
-    const canVisitBlock = (block: BasicBlock) => {
-      const dom = this.cfg.getImmediateDominator(block)
-      if (!dom) return true
-      if (!visited(dom)) return false
-      return this.cfg.predecessors.get(block)!.every(pred => visited(pred) || this.cfg.dominates(block, pred))
-    }
-
-    while (this.worklist.length > 0) {
-      const { block } = this.worklist.shift()!;
-      if (!canVisitBlock(block)) {
-        this.worklist.push({ block });
-        continue;
-      }
-
+    worklist.fixedPoint((block) => {
       const predecessors = this.cfg.predecessors.get(block) || [];
       const state = this.blockStates.get(block.label)!;
-      
       const inputStates = predecessors.map(pred => this.blockStates.get(pred.label)!).filter(x => x);
-      console.log("\n## Block", block.label, "\n")
-      console.log("immediate dominator", this.cfg.getImmediateDominator(block)?.label)
-      console.log("num predecessors", predecessors.length)
-      console.log("num input states", inputStates.length)
-      console.log("predecessors", predecessors.map(pred => pred.label))
-      compilerAssert(inputStates.length, `No input states found for block ${block.label}`)
       const mergedInputState = inputStates.slice(1).reduce((acc, predState) => {
         return mergeStates(acc, predState.output);
       }, inputStates[0].output);
+      
+      if (this.debugLog) {
+        console.log("\n## Block", block.label, "\n")
+        console.log("immediate dominator", this.cfg.getImmediateDominator(block)?.label)
+        console.log("num predecessors", predecessors.length)
+        console.log("num input states", inputStates.length)
+        console.log("predecessors", predecessors.map(pred => pred.label))
+      }
+
       const allInputStates = inputStates.length === predecessors.length
 
-      if (state && allInputStates && statesEqual(state.input, mergedInputState)) continue;
+      if (state && allInputStates && statesEqual(state.input, mergedInputState)) return
 
       this.executeBlock(block, mergedInputState);
-      this.worklist.push({ block: block });
-    }
+      worklist.addWork(block);
+      worklist.visited.add(block);
+    })
 
     console.log("All checked ok")
   }
@@ -111,11 +99,13 @@ export class AbstractInterpreterIR {
   executeBlock(block: BasicBlock, inputState: InterpreterState) {
 
     this.state = cloneState(inputState)
-    console.log("\nExecuting block:", block.label);
+    if (this.debugLog) {
+      console.log("\nExecuting block:", block.label);
+      console.log("Input state for block:", block.label)
 
-    console.log("Input state for block:", block.label)
-    printLocals(inputState.locals)
-    printMemory(inputState.memory)
+      printLocals(inputState.locals)
+      printMemory(inputState.memory)
+    }
 
     let index = 0;
     while (index < block.instructions.length) {
@@ -124,9 +114,11 @@ export class AbstractInterpreterIR {
       index++;
     }
 
-    console.log("Computed state for block:", block.label)
-    printLocals(this.state.locals)
-    printMemory(this.state.memory)
+    if (this.debugLog) {
+      console.log("Computed state for block:", block.label)
+      printLocals(this.state.locals)
+      printMemory(this.state.memory)
+    }
 
     this.blockStates.set(block.label, { input: inputState, output: cloneState(this.state) });
   }
@@ -214,8 +206,8 @@ export class AbstractInterpreterIR {
     const ids = addr.split('.')
     let current = this.state.memory.get(ids[0])
     compilerAssert(current, `Address ${addr} is not initialized`)
-    const sd = addressesToSD(ids.slice(1), rootType)
-    const newSd = meetSDUpper(current, sd)
+    const sd = addressPathToInitializationState(ids.slice(1), rootType)
+    const newSd = meetInitializationStateUpper(current, sd)
     this.state.memory.set(ids[0], newSd)
   }
 
@@ -257,31 +249,31 @@ function printLocals(locals: LocalMap) {
 }
 function printMemory(memory: MemoryMap) {
   console.log("  Memory:", Array.from(memory.entries()).flatMap(([key, val]) => {
-    return `${key} -> ${sdToString(val)}`
+    return `${key} -> ${initializationStateToString(val)}`
   }).join(' | '))
 }
 
-function sdToString(sd: SD): string {
+function initializationStateToString(sd: InitializationState): string {
   if (sd.kind === 'Top') { return '⊤'; }
   if (sd.kind === 'Bottom') { return '⊥'; }
   if (sd.kind === 'Sequence') {
-    return `[${sd.elements.map(sdToString).join(', ')}]`;
+    return `[${sd.elements.map(initializationStateToString).join(', ')}]`;
   }
   return '???';
 }
 
-function meetSDUpper(a: SD, b: SD): SD {
+function meetInitializationStateUpper(a: InitializationState, b: InitializationState): InitializationState {
   if (a.kind === 'Top' || b.kind === 'Top') { return TOP; }
   if (a.kind === 'Bottom') { return b; }
   if (b.kind === 'Bottom') { return a; }
   if (a.kind === 'Sequence' && b.kind === 'Sequence') {
     const length = Math.max(a.elements.length, b.elements.length);
-    const elements: SD[] = [];
+    const elements: InitializationState[] = [];
     let allTop = true;
     for (let i = 0; i < length; i++) {
       const elemA = a.elements[i] || BOTTOM;
       const elemB = b.elements[i] || BOTTOM;
-      elements.push(meetSDUpper(elemA, elemB));
+      elements.push(meetInitializationStateUpper(elemA, elemB));
       allTop = allTop && elements[i].kind === 'Top';
     }
     if (allTop) { return TOP; }
@@ -291,18 +283,18 @@ function meetSDUpper(a: SD, b: SD): SD {
   compilerAssert(false, `Incompatible types in meetSDUpper: ${a.kind} and ${b.kind}`);
 }
 
-function meetSD(a: SD, b: SD): SD {
+function meetInitializationState(a: InitializationState, b: InitializationState): InitializationState {
   if (a.kind === 'Bottom' || b.kind === 'Bottom') { return BOTTOM; }
   if (a.kind === 'Top') { return b; }
   if (b.kind === 'Top') { return a; }
   if (a.kind === 'Sequence' && b.kind === 'Sequence') {
     const length = Math.max(a.elements.length, b.elements.length);
-    const elements: SD[] = [];
+    const elements: InitializationState[] = [];
     let allTop = true;
     for (let i = 0; i < length; i++) {
       const elemA = a.elements[i] || BOTTOM;
       const elemB = b.elements[i] || BOTTOM;
-      elements.push(meetSD(elemA, elemB));
+      elements.push(meetInitializationState(elemA, elemB));
       allTop = allTop && elements[i].kind === 'Top';
     }
     if (allTop) { return TOP; }
@@ -312,9 +304,9 @@ function meetSD(a: SD, b: SD): SD {
   compilerAssert(false, `Incompatible types in meetSD: ${a.kind} and ${b.kind}`);
 }
 
-function addressesToSD(addresses: string[], currentType: Type): SD {
-  if (addresses.length === 0) { return TOP; }
-  const [firstAddr, ...restAddrs] = addresses;
+function addressPathToInitializationState(addressPath: string[], currentType: Type): InitializationState {
+  if (addressPath.length === 0) { return TOP; }
+  const [firstAddr, ...restAddrs] = addressPath;
   const index = parseInt(firstAddr, 10);
 
   compilerAssert(currentType instanceof StructType, `Current type is not a struct type`)
@@ -323,9 +315,9 @@ function addressesToSD(addresses: string[], currentType: Type): SD {
   compilerAssert(index < currentType.fields.length, `Index is out of bounds`)
 
   const nextType = currentType.fields[index].type
-  const nestedSD = addressesToSD(restAddrs, nextType);
+  const nestedSD = addressPathToInitializationState(restAddrs, nextType);
 
-  const elements: SD[] = new Array(currentType.fields.length).fill(BOTTOM);
+  const elements: InitializationState[] = new Array(currentType.fields.length).fill(BOTTOM);
   elements[index] = nestedSD;
 
   return { kind: 'Sequence', elements };
@@ -357,12 +349,12 @@ function mergeMemoryMaps(
   map1: MemoryMap,
   map2: MemoryMap
 ): MemoryMap {
-  const result = new Map<string, SD>();
+  const result = new Map<string, InitializationState>();
   const allAddresses = new Set([...map1.keys(), ...map2.keys()]);
   for (const addr of allAddresses) {
     const val1 = map1.get(addr) || BOTTOM;
     const val2 = map2.get(addr) || BOTTOM;
-    result.set(addr, meetSD(val1, val2));
+    result.set(addr, meetInitializationState(val1, val2));
   }
   return result;
 }
@@ -404,7 +396,7 @@ function mapsEqual<K, V>(
 function statesEqual(state1: InterpreterState, state2: InterpreterState): boolean {
   return (
     mapsEqual(state1.locals, state2.locals, localsEqual) &&
-    mapsEqual(state1.memory, state2.memory, sdEqual)
+    mapsEqual(state1.memory, state2.memory, initializationStateEqual)
   );
 }
 
@@ -420,7 +412,7 @@ function localsEqual(locals1: Set<string>, locals2: Set<string>): boolean {
   return true;
 }
 
-function sdEqual(sd1: SD, sd2: SD): boolean {
+function initializationStateEqual(sd1: InitializationState, sd2: InitializationState): boolean {
   if (sd1.kind !== sd2.kind) {
     return false;
   }
@@ -433,7 +425,7 @@ function sdEqual(sd1: SD, sd2: SD): boolean {
       return false;
     }
     for (let i = 0; i < sd1.elements.length; i++) {
-      if (!sdEqual(sd1.elements[i], sd2.elements[i])) {
+      if (!initializationStateEqual(sd1.elements[i], sd2.elements[i])) {
         return false;
       }
     }

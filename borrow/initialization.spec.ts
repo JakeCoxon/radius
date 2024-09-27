@@ -1,5 +1,5 @@
 import { AllocInstruction, AssignInstruction, BasicBlock, ConditionalJumpInstruction, JumpInstruction, LoadConstantInstruction, LoadFieldInstruction, StoreFieldInstruction } from "./defs";
-import { AbstractInterpreterIR } from "./interp";
+import { InitializationCheckingPass } from "./initialization";
 
 // Helper function to assert conditions
 function assert(condition: boolean, message: string) {
@@ -42,7 +42,7 @@ function testUninitialized1() {
       new LoadInstruction('r_b', 'r_obj', 'b'),
     ]),
   ];
-  const interpreter = new AbstractInterpreterIR(blocks);
+  const interpreter = new InitializationCheckingPass(blocks);
 
   expectError(() => interpreter.interpret());
   console.log('testUninitialized1 test passed.\n');
@@ -56,7 +56,7 @@ function testUseBeforeInitialization() {
     ]),
   ];
 
-  const interpreter = new AbstractInterpreterIR(blocks);
+  const interpreter = new InitializationCheckingPass(blocks);
 
   expectError(() => interpreter.interpret());
   console.log('testUseBeforeInitialization test passed.\n');
@@ -85,7 +85,7 @@ function testBranchInitialization() {
     ]),
   ];
 
-  const interpreter = new AbstractInterpreterIR(blocks);
+  const interpreter = new InitializationCheckingPass(blocks);
 
   expectError(() => interpreter.interpret());
   console.log('testBranchInitialization test passed.\n');
@@ -113,7 +113,7 @@ function testLoopInitialization() {
     ]),
   ];
 
-  const interpreter = new AbstractInterpreterIR(blocks);
+  const interpreter = new InitializationCheckingPass(blocks);
 
   expectError(() => interpreter.interpret());
   console.log('testLoopInitialization test passed.\n');
@@ -152,7 +152,7 @@ function testNestedConditionals() {
     ]),
   ];
 
-  const interpreter = new AbstractInterpreterIR(blocks);
+  const interpreter = new InitializationCheckingPass(blocks);
 
   expectError(() => interpreter.interpret());
   console.log('testNestedConditionals test passed.\n');
@@ -169,7 +169,7 @@ function testNestedFields() {
     ]),
   ];
 
-  const interpreter = new AbstractInterpreterIR(blocks);
+  const interpreter = new InitializationCheckingPass(blocks);
 
   expectError(() => interpreter.interpret());
   console.log('testNestedFields test passed.\n');
@@ -185,7 +185,7 @@ function testReInitialization() {
     ]),
   ];
 
-  const interpreter = new AbstractInterpreterIR(blocks);
+  const interpreter = new InitializationCheckingPass(blocks);
 
   interpreter.interpret(); // Should not throw an error
   console.log('testReInitialization test passed.\n');

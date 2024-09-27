@@ -1,7 +1,7 @@
 import { CodeGenerator } from "./codegen";
 import { buildCFG, printCFG, printDominators } from "./controlflow";
 import { AssignmentNode, BinaryExpressionNode, BlockStatementNode, CallExpressionNode, CreateStructNode, ExpressionStatementNode, FunctionDeclarationNode, FunctionParameter, FunctionParameterNode, IdentifierNode, IfStatementNode, IntType, LetConstNode, LiteralNode, MemberExpressionNode, PointType, ProgramNode, ReturnNode, VariableDeclarationNode, WhileStatementNode, printIR } from "./defs";
-import { AbstractInterpreterIR } from "./interp";
+import { InitializationCheckingPass } from "./initialization";
 
 
 function testWhileLoopThatMightNotExecute() {
@@ -50,7 +50,7 @@ function testWhileLoopThatMightNotExecute() {
     printCFG(cfg)
     printDominators(cfg)
 
-    // const interpreter = new AbstractInterpreterIR(codeGenerator.blocks);
+    // const interpreter = new InitializationCheckingPass(codeGenerator.blocks);
     // interpreter.interpret();
   } catch (error) {
     console.error(`testWhileLoopThatMightNotExecute failed: ${error.message}`);
@@ -78,7 +78,7 @@ const runTest = (name: string, ast: ProgramNode) => {
 
     for (const fn of codeGenerator.functionBlocks) {
       console.log(`\n// ${fn.name} ///////////////////////////////////////////////////////////\n`);
-      const interpreter = new AbstractInterpreterIR(fn);
+      const interpreter = new InitializationCheckingPass(fn);
       interpreter.checkedInterpret();
     }
   } catch (error) {
@@ -231,7 +231,47 @@ function testControlFlow() {
   runTest("testControlFlow", ast)
 }
 
+function testWhileLoop() {
+  // AST representing:
+  // let x: int
+  // x = 0
+  // while (x < 10) {
+  //   x = x + 1
+  // }
+  const ast = new ProgramNode([
+    new LetConstNode('int', IntType),
+    new VariableDeclarationNode('x', true, 'int'),
+    new ExpressionStatementNode(
+      new AssignmentNode(
+        new IdentifierNode('x'),
+        new LiteralNode(0)
+      )
+    ),
+    new WhileStatementNode(
+      new BinaryExpressionNode(
+        '<',
+        new IdentifierNode('x'),
+        new LiteralNode(10)
+      ),
+      new BlockStatementNode([
+        new ExpressionStatementNode(
+          new AssignmentNode(
+            new IdentifierNode('x'),
+            new BinaryExpressionNode(
+              '+',
+              new IdentifierNode('x'),
+              new LiteralNode(1)
+            )
+          )
+        )
+      ])
+    )
+  ]);
+  runTest("testWhileLoop", ast)
+}
+
 // testFunction()
-// testStruct()
+testStruct()
 testControlFlow()
+testWhileLoop()
 // testWhileLoopThatMightNotExecute()
