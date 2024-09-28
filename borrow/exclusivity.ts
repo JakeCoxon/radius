@@ -2,33 +2,33 @@ import { ControlFlowGraph, buildCFG } from "./controlflow";
 import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, compilerAssert, Type, StructType, Capability } from "./defs";
 import { Worklist } from "./worklist";
 
-type InitializationState = Top | Bottom | Sequence;
+type ExclusivityState = Unique | Borrowed | Aggregate;
 
-interface Top {
-  kind: 'Top'; // Represents ⊤ (fully initialized)
+interface Unique {
+  kind: 'Unique';
 }
 
-interface Bottom {
-  kind: 'Bottom'; // Represents ⊥ (fully uninitialized)
+interface Borrowed {
+  kind: 'Borrowed';
+  instructioons: Set<string>;
 }
 
-interface Sequence {
-  kind: 'Sequence';
-  elements: InitializationState[]; // Array of SD elements representing fields
+interface Aggregate {
+  kind: 'Aggregate';
+  elements: ExclusivityState[];
 }
 
-const BOTTOM = { kind: 'Bottom' } as const;
-const TOP = { kind: 'Top' } as const;
+const UNIQUE = { kind: 'Unique' } as const;
 
 type LocalMap = Map<string, Set<string>>;
-type MemoryMap = Map<string, InitializationState>;
+type MemoryMap = Map<string, ExclusivityState>;
 
 interface InterpreterState {
   locals: LocalMap; // Local variables/registers
   memory: MemoryMap // Memory addresses
 }
 
-export class InitializationCheckingPass {
+export class ExclusivityCheckingPass {
   state: InterpreterState
 
   cfg: ControlFlowGraph;
@@ -125,92 +125,20 @@ export class InitializationCheckingPass {
 
   execute(instr: IRInstruction): void {
     if (instr instanceof AssignInstruction) {
-      this.ensureRegisterInitialized(instr.source);
-      this.state.locals.set(instr.dest, this.state.locals.get(instr.source)!);
     } else if (instr instanceof LoadConstantInstruction) {
-      this.state.locals.set(instr.dest, new Set([]));
     } else if (instr instanceof StoreToAddressInstruction) {
-      this.ensureRegisterInitialized(instr.source);
-      const addresses = this.state.locals.get(instr.address);
-      compilerAssert(addresses, `Register ${instr.address} is not found`);
-      for (const addr of addresses) {
-        const ids = addr.split('.')
-        const rootType = this.addressTypes.get(ids[0])
-        compilerAssert(rootType, `Root type not found for address ${addr}`)
-        this.initializeMemoryAddress(addr, rootType);
-      }
     } else if (instr instanceof AllocInstruction) {
-      const addr = this.newAddress(instr.type);
-      this.state.locals.set(instr.dest, new Set([addr]));
-      this.state.memory.set(addr, BOTTOM);
     } else if (instr instanceof AccessInstruction) {
-      compilerAssert(instr.capabilities.length === 1, `Access instruction with multiple capabilities not supported`)
-      if (instr.capabilities[0] === Capability.Inout) {
-        this.ensureRegisterInitialized(instr.source);
-      } else if (instr.capabilities[0] === Capability.Let) {
-        this.ensureRegisterInitialized(instr.source);
-      } else if (instr.capabilities[0] === Capability.Sink) {
-        this.ensureRegisterInitialized(instr.source);
-      } else if (instr.capabilities[0] === Capability.Set) {
-        const isUninitialized = this.isDefinitelyUninitialized(instr.source);
-        const isInitialized = this.isDefinitelyInitialized(instr.source);
-        compilerAssert(isUninitialized || isInitialized, `Register ${instr.source} is not definitely initialized or uninitialized`);
-      }
-      this.state.locals.set(instr.dest, this.state.locals.get(instr.source)!);
     } else if (instr instanceof CallInstruction) {
-      for (const arg of instr.args) {
-        this.ensureRegisterInitialized(arg);
-      }
-      this.state.locals.set(instr.dest, new Set([]));
     } else if (instr instanceof BinaryOperationInstruction) {
-      this.ensureRegisterInitialized(instr.left);
-      this.ensureRegisterInitialized(instr.right);
-      this.state.locals.set(instr.dest, new Set([]));
     } else if (instr instanceof LoadFromAddressInstruction) {
-      this.ensureRegisterInitialized(instr.address);
-      this.state.locals.set(instr.dest, this.state.locals.get(instr.address)!);
     } else if (instr instanceof ReturnInstruction) {
-      if (instr.value) this.ensureRegisterInitialized(instr.value);
     } else if (instr instanceof GetFieldPointerInstruction) {
-      const addresses = this.state.locals.get(instr.address);
-      compilerAssert(addresses, `Register ${instr.address} is not found`);
-      compilerAssert(this.state.locals.get(instr.dest) === undefined, `Register ${instr.dest} is already initialized`);
-      const fields = [...addresses].map(addr => `${addr}.${instr.field}`)
-      this.state.locals.set(instr.dest, new Set(fields));
     } else if (instr instanceof JumpInstruction) {
     } else if (instr instanceof ConditionalJumpInstruction) {
-      this.ensureRegisterInitialized(instr.condition);
     } else {
       console.error(`Unknown instruction in interp: ${instr.irType}`);
     }
-  }
-
-  isDefinitelyInitialized(register: string): boolean {
-    const locals = this.state.locals.get(register);
-    compilerAssert(locals, `Register ${register} is not found`);
-    return Array.from(locals).every(addr => {
-      return isStatePathInitialized(this.state.memory, addr);
-    })
-  }
-
-  isDefinitelyUninitialized(register: string): boolean {
-    const locals = this.state.locals.get(register);
-    compilerAssert(locals, `Register ${register} is not found`);
-    return Array.from(locals).every(addr => {
-      return !isStatePathInitialized(this.state.memory, addr);
-    })
-  }
-  ensureRegisterInitialized(register: string) {
-    const isInitialized = this.isDefinitelyInitialized(register);
-    compilerAssert(isInitialized, `Register ${register} is not definitely initialized`);
-  }
-
-  ensureRegisterUninitialized(register: string) {
-    const isUninitialized = this.isDefinitelyUninitialized(register);
-    compilerAssert(isUninitialized, `Register ${register} is not definitely uninitialized`);
-  }
-
-  ensureAddressInitialized(addr: string) {
   }
 
   newAddress(type: Type): string {
@@ -243,21 +171,6 @@ const createEmptyState = (): InterpreterState => {
   };
 }
 
-function isStatePathInitialized(memory: MemoryMap, addr: string): boolean {
-  const ids = addr.split('.')
-  let current = memory.get(ids[0])
-  
-  for (let i = 1; i < ids.length; i++) {
-    if (!current || current.kind === 'Bottom') { return false; }
-    if (current.kind === 'Top') { return true; }
-    current = current.elements[parseInt(ids[i])];
-  }
-
-  if (!current || current.kind === 'Bottom') { return false; }
-  if (current.kind === 'Top') { return true; }
-  return false
-}
-
 function printLocals(locals: LocalMap) {
   console.log("  Locals:", Array.from(locals.entries()).flatMap(([key, val]) => {
     if (val.size === 0) return `${key} -> ⊤`
@@ -270,74 +183,19 @@ function printMemory(memory: MemoryMap) {
   }).join(' | '))
 }
 
-function initializationStateToString(sd: InitializationState): string {
-  if (sd.kind === 'Top') { return '⊤'; }
-  if (sd.kind === 'Bottom') { return '⊥'; }
-  if (sd.kind === 'Sequence') {
-    return `[${sd.elements.map(initializationStateToString).join(', ')}]`;
+function initializationStateToString(sd: ExclusivityState): string {
+  if (sd.kind === 'Unique') return 'Unique'
+  if (sd.kind === 'Borrowed') return 'Borrowed'
+  if (sd.kind === 'Aggregate') {
+    return sd.elements.map(initializationStateToString).join(' | ')
   }
   return '???';
 }
 
-function meetInitializationStateUpper(a: InitializationState, b: InitializationState): InitializationState {
-  if (a.kind === 'Top' || b.kind === 'Top') { return TOP; }
-  if (a.kind === 'Bottom') { return b; }
-  if (b.kind === 'Bottom') { return a; }
-  if (a.kind === 'Sequence' && b.kind === 'Sequence') {
-    const length = Math.max(a.elements.length, b.elements.length);
-    const elements: InitializationState[] = [];
-    let allTop = true;
-    for (let i = 0; i < length; i++) {
-      const elemA = a.elements[i] || BOTTOM;
-      const elemB = b.elements[i] || BOTTOM;
-      elements.push(meetInitializationStateUpper(elemA, elemB));
-      allTop = allTop && elements[i].kind === 'Top';
-    }
-    if (allTop) { return TOP; }
-    return { kind: 'Sequence', elements };
-  }
-  // Incompatible types, default to Bottom
-  compilerAssert(false, `Incompatible types in meetSDUpper: ${a.kind} and ${b.kind}`);
+function meetInitializationStateUpper(a: ExclusivityState, b: ExclusivityState): ExclusivityState {
 }
 
-function meetInitializationState(a: InitializationState, b: InitializationState): InitializationState {
-  if (a.kind === 'Bottom' || b.kind === 'Bottom') { return BOTTOM; }
-  if (a.kind === 'Top') { return b; }
-  if (b.kind === 'Top') { return a; }
-  if (a.kind === 'Sequence' && b.kind === 'Sequence') {
-    const length = Math.max(a.elements.length, b.elements.length);
-    const elements: InitializationState[] = [];
-    let allTop = true;
-    for (let i = 0; i < length; i++) {
-      const elemA = a.elements[i] || BOTTOM;
-      const elemB = b.elements[i] || BOTTOM;
-      elements.push(meetInitializationState(elemA, elemB));
-      allTop = allTop && elements[i].kind === 'Top';
-    }
-    if (allTop) { return TOP; }
-    return { kind: 'Sequence', elements };
-  }
-  // Incompatible types, default to Bottom
-  compilerAssert(false, `Incompatible types in meetSD: ${a.kind} and ${b.kind}`);
-}
-
-function addressPathToInitializationState(addressPath: string[], currentType: Type): InitializationState {
-  if (addressPath.length === 0) { return TOP; }
-  const [firstAddr, ...restAddrs] = addressPath;
-  const index = parseInt(firstAddr, 10);
-
-  compilerAssert(currentType instanceof StructType, `Current type is not a struct type`)
-  compilerAssert(!isNaN(index), `Index is not a number`)
-  compilerAssert(index >= 0, `Index is negative`)
-  compilerAssert(index < currentType.fields.length, `Index is out of bounds`)
-
-  const nextType = currentType.fields[index].type
-  const nestedSD = addressPathToInitializationState(restAddrs, nextType);
-
-  const elements: InitializationState[] = new Array(currentType.fields.length).fill(BOTTOM);
-  elements[index] = nestedSD;
-
-  return { kind: 'Sequence', elements };
+function meetInitializationState(a: ExclusivityState, b: ExclusivityState): ExclusivityState {
 }
 
 function meetLocals(a: Set<string>, b: Set<string>): Set<string> {
@@ -366,7 +224,7 @@ function mergeMemoryMaps(
   map1: MemoryMap,
   map2: MemoryMap
 ): MemoryMap {
-  const result = new Map<string, InitializationState>();
+  const result = new Map<string, ExclusivityState>();
   const allAddresses = new Set([...map1.keys(), ...map2.keys()]);
   for (const addr of allAddresses) {
     const val1 = map1.get(addr) || BOTTOM;
@@ -429,7 +287,7 @@ function localsEqual(locals1: Set<string>, locals2: Set<string>): boolean {
   return true;
 }
 
-function initializationStateEqual(sd1: InitializationState, sd2: InitializationState): boolean {
+function initializationStateEqual(sd1: ExclusivityState, sd2: ExclusivityState): boolean {
   if (sd1.kind !== sd2.kind) {
     return false;
   }

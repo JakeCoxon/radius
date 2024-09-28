@@ -113,6 +113,7 @@ export class CodeGenerator {
     for (const param of node.params) {
       const paramReg = this.newRegister();
       const type = this.constants[param.type];
+      compilerAssert(type, `Type not found: ${param.type}`);
       this.variableMap.set(param.name, new Variable(param.name, type, paramReg, param.byReference));
       // this.declareVariable(param, paramReg);
       // Assume that the arguments are passed in registers named 'arg0', 'arg1', etc.
@@ -144,6 +145,7 @@ export class CodeGenerator {
     // Map the variable name to a new register
     const reg = this.newRegister();
     const type = this.constants[node.type];
+    compilerAssert(type, `Type not found: ${node.type}`);
     this.variableMap.set(node.name, new Variable(node.name, type, reg, false));
     this.addFunctionInstruction(new AllocInstruction(reg, type));
   }
@@ -275,13 +277,15 @@ export class CodeGenerator {
       const valueCategory = fn.params[argIndex].byReference ? 'lvalue' : 'rvalue';
       const argContext: ExpressionContext = { valueCategory };
       const argReg = this.generateExpression(arg, argContext);
+      const newReg = this.newRegister();
       if (fn.params[argIndex].byReference) {
         compilerAssert(argReg instanceof LValue, 'Function argument must be an LValue');
-        this.addInstruction(new AccessInstruction(argReg.address, [Capability.Inout]));
-        argRegs.push(argReg.address);
+        this.addInstruction(new AccessInstruction(newReg, argReg.address, [Capability.Inout]));
+        argRegs.push(newReg);
       } else {
         compilerAssert(argReg instanceof RValue, 'Function argument must be an RValue');
-        argRegs.push(argReg.register);
+        this.addInstruction(new AccessInstruction(newReg, argReg.register, [Capability.Let]));
+        argRegs.push(newReg);
       }
     }
 
@@ -296,8 +300,7 @@ export class CodeGenerator {
 
   generateAssignmentExpression(node: AssignmentNode, context: ExpressionContext): IRValue {
     const left = node.left;
-    const rightReg = this.generateExpression(node.right, context);
-    compilerAssert(rightReg instanceof RValue, 'Assignment right-hand side must be an RValue');
+    
 
     if (left instanceof IdentifierNode) {
       // Simple assignment to variable
@@ -312,7 +315,13 @@ export class CodeGenerator {
       // compilerAssert(destReg., 'Variable must be an RValue');
       // Assign rightReg to destReg
       const type = destReg.type
-      this.addInstruction(new StoreToAddressInstruction(destReg.register, type, rightReg.register));
+      const newReg = this.newRegister();
+      this.addInstruction(new AccessInstruction(newReg, destReg.register, [Capability.Set]));
+
+      const rightReg = this.generateExpression(node.right, context);
+      compilerAssert(rightReg instanceof RValue, 'Assignment right-hand side must be an RValue');
+
+      this.addInstruction(new StoreToAddressInstruction(newReg, type, rightReg.register));
       return rightReg
     } else if (left instanceof MemberExpressionNode) {
       // Assignment to object field
@@ -326,6 +335,10 @@ export class CodeGenerator {
       const fieldIndex = type.fields.findIndex((field) => field.name === fieldName);
       const reg = this.newRegister();
       const fieldType = type.fields[fieldIndex].type
+
+      const rightReg = this.generateExpression(node.right, context);
+      compilerAssert(rightReg instanceof RValue, 'Assignment right-hand side must be an RValue');
+
       this.addInstruction(new GetFieldPointerInstruction(reg, objReg.register, fieldIndex));
       this.addInstruction(new StoreToAddressInstruction(reg, fieldType, rightReg.register));
       // this.addInstruction(new StoreFieldInstruction(objReg.register, fieldName, rightReg.register));

@@ -1,7 +1,8 @@
 import { CodeGenerator } from "./codegen";
 import { buildCFG, printCFG, printDominators } from "./controlflow";
-import { AssignmentNode, BinaryExpressionNode, BlockStatementNode, CallExpressionNode, CreateStructNode, ExpressionStatementNode, FunctionDeclarationNode, FunctionParameter, FunctionParameterNode, IdentifierNode, IfStatementNode, IntType, LetConstNode, LiteralNode, MemberExpressionNode, PointType, ProgramNode, ReturnNode, VariableDeclarationNode, WhileStatementNode, printIR } from "./defs";
+import { AssignmentNode, BinaryExpressionNode, BlockStatementNode, CallExpressionNode, CreateStructNode, ExpressionStatementNode, FunctionDeclarationNode, FunctionParameter, FunctionParameterNode, IdentifierNode, IfStatementNode, IntType, LetConstNode, LiteralNode, MemberExpressionNode, PointType, ProgramNode, ReturnNode, VariableDeclarationNode, WhileStatementNode, printIR, printLivenessMap } from "./defs";
 import { InitializationCheckingPass } from "./initialization";
+import { getLiveness } from "./liveness";
 
 
 function testWhileLoopThatMightNotExecute() {
@@ -79,10 +80,16 @@ const runTest = (name: string, ast: ProgramNode) => {
     for (const fn of codeGenerator.functionBlocks) {
       console.log(`\n// ${fn.name} ///////////////////////////////////////////////////////////\n`);
       const interpreter = new InitializationCheckingPass(fn);
+      interpreter.debugLog = true;
       interpreter.checkedInterpret();
     }
+    console.log("")
+
+    const liveness = getLiveness(cfg)
+    printLivenessMap(liveness)
   } catch (error) {
     console.error(`${name} failed: ${error.message}`);
+    console.error(error.stack)
   }
 }
 
@@ -96,6 +103,7 @@ function testFunction() {
   // result = add(2, 3);
   
   const ast = new ProgramNode([
+    new LetConstNode('int', IntType),
     new FunctionDeclarationNode(
       'add',
       [
@@ -270,7 +278,7 @@ function testWhileLoop() {
   runTest("testWhileLoop", ast)
 }
 
-// testFunction()
+testFunction()
 testStruct()
 testControlFlow()
 testWhileLoop()

@@ -32,139 +32,67 @@ export abstract class IRInstruction {
   abstract irType: string;
 }
 
-// Assign Instruction
-export class AssignInstruction extends IRInstruction {
-  irType = 'assign';
-  constructor(public dest: string, public source: string) {
-    super();
+export class AssignInstruction extends IRInstruction {              irType = 'assign';                constructor(public dest: string, public source: string) { super(); } }
+export class LoadConstantInstruction extends IRInstruction {        irType = 'loadconst';             constructor(public dest: string, public value: number) { super(); } }
+export class AllocInstruction extends IRInstruction {               irType = 'alloc';                 constructor(public dest: string, public type: Type) { super(); } }
+export class GetFieldPointerInstruction extends IRInstruction {     irType = 'getfieldptr';           constructor(public dest: string, public address: string, public field: number) { super(); } }
+export class JumpInstruction extends IRInstruction {                irType = 'jump';                  constructor(public target: string) { super(); } }
+export class ConditionalJumpInstruction extends IRInstruction {     irType = 'cjump';                 constructor(public condition: string, public targetLabel: string, public elseLabel: string) { super(); } }
+export class BinaryOperationInstruction extends IRInstruction {     irType = 'binaryop';              constructor(public dest: string, public operator: string, public left: string, public right: string) { super(); } }
+export class CallInstruction extends IRInstruction {                irType = 'call';                  constructor(public dest: string, public functionName: string, public args: string[]) { super(); } }
+export class ReturnInstruction extends IRInstruction {              irType = 'return';                constructor(public value: string | null) { super(); } }
+export class AccessInstruction extends IRInstruction {              irType = 'access';                constructor(public dest: string, public source: string, public capabilities: Capability[]) { super(); } }
+export class StoreToAddressInstruction extends IRInstruction {      irType = 'store_to_address';      constructor(public address: string, public type: Type, public source: string) { super(); } }
+export class LoadFromAddressInstruction extends IRInstruction {     irType = 'load_from_address';     constructor(public dest: string, public address: string) { super(); } }
+export class AddressOfInstruction extends IRInstruction {           irType = 'addressof';             constructor(public dest: string, public source: string) { super(); } }
+export class ComputeFieldAddressInstruction extends IRInstruction { irType = 'compute_field_address'; constructor(public dest: string, public address: string, public field: string) { super(); } }
+
+export const getInstructionOperands = (instr: IRInstruction): string[] => {
+  if (instr instanceof AssignInstruction) {
+    return [instr.source];
+  } else if (instr instanceof BinaryOperationInstruction) {
+    return [instr.left, instr.right];
+  } else if (instr instanceof LoadFromAddressInstruction) {
+    return [instr.address];
+  } else if (instr instanceof StoreToAddressInstruction) {
+    return [instr.address, instr.source];
+  } else if (instr instanceof CallInstruction) {
+    return instr.args;
+  } else if (instr instanceof AccessInstruction) {
+    return [instr.source];
+  } else if (instr instanceof GetFieldPointerInstruction) {
+    return [instr.address];
+  } else if (instr instanceof ReturnInstruction) {
+    return instr.value ? [instr.value] : [];
+  } else {
+    return [];
   }
 }
-
-// Load Constant Instruction
-export class LoadConstantInstruction extends IRInstruction {
-  irType = 'loadconst';
-  constructor(public dest: string, public value: number) {
-    super();
-  }
-}
-
-// Alloc Instruction
-export class AllocInstruction extends IRInstruction {
-  irType = 'alloc';
-  constructor(public dest: string, public type: Type) {
-    super();
-  }
-}
-
-// // Store Instruction
-// export class StoreFieldInstruction extends IRInstruction {
-//   irType = 'storefield';
-//   constructor(
-//     public address: string,
-//     public field: string,
-//     public source: string
-//   ) {
-//     super();
-//   }
-// }
-
-// // Load Instruction
-// export class LoadFieldInstruction extends IRInstruction {
-//   irType = 'loadfield';
-//   constructor(
-//     public dest: string,
-//     public address: string,
-//     public field: string
-//   ) {
-//     super();
-//   }
-// }
-
-export class GetFieldPointerInstruction extends IRInstruction {
-  irType = 'getfieldptr';
-  constructor(public dest: string, public address: string, public field: number) {
-    super();
-  }
-}
-
-// Jump Instruction
-export class JumpInstruction extends IRInstruction {
-  irType = 'jump';
-  constructor(public target: string) {
-    super();
-  }
-}
-
-// Conditional Jump Instruction
-export class ConditionalJumpInstruction extends IRInstruction {
-  irType = 'cjump';
-  constructor(public condition: string, public targetLabel: string, public elseLabel: string) {
-    super();
-  }
-}
-
-export class BinaryOperationInstruction extends IRInstruction {
-  irType = 'binaryop';
-  constructor(
-    public dest: string,
-    public operator: string,
-    public left: string,
-    public right: string
-  ) {
-    super();
-  }
-}
-
-export class CallInstruction extends IRInstruction {
-  irType = 'call';
-  constructor(
-    public dest: string, // Destination register for the return value
-    public functionName: string,
-    public args: string[]
-  ) {
-    super();
-  }
-}
-
-export class ReturnInstruction extends IRInstruction {
-  irType = 'return';
-  constructor(public value: string | null) {
-    super();
-  }
-}
-
-export class AccessInstruction extends IRInstruction {
-  irType = 'access';
-  constructor(public value: string, public capabilities: Capability[]) {
-    super();
-  }
-}
-
-export class StoreToAddressInstruction extends IRInstruction {
-  irType = 'store_to_address';
-  constructor(public address: string, public type: Type, public source: string) {
-    super();
-  }
-}
-
-export class LoadFromAddressInstruction extends IRInstruction {
-  irType = 'load_from_address';
-  constructor(public dest: string, public address: string) {
-    super();
-  }
-}
-
-export class AddressOfInstruction extends IRInstruction {
-  irType = 'addressof';
-  constructor(public dest: string, public source: string) {
-    super();
-  }
-}
-
-export class ComputeFieldAddressInstruction extends IRInstruction {
-  irType = 'compute_field_address';
-  constructor(public dest: string, public address: string, public field: string) {
-    super();
+export const getInstructionResult = (instr: IRInstruction): string | null => {
+  if (instr instanceof AssignInstruction) {
+    return instr.dest;
+  } else if (instr instanceof AllocInstruction) {
+    return instr.dest;
+  } else if (instr instanceof CallInstruction) {
+    return instr.dest;
+  } else if (instr instanceof GetFieldPointerInstruction) {
+    return instr.dest;
+  } else if (instr instanceof LoadFromAddressInstruction) {
+    return instr.dest
+  } else if (instr instanceof ComputeFieldAddressInstruction) {
+    return instr.dest;
+  } else if (instr instanceof ReturnInstruction) {
+    return null;
+  } else if (instr instanceof BinaryOperationInstruction) {
+    return instr.dest;
+  } else if (instr instanceof StoreToAddressInstruction) {
+    return instr.address;
+  } else if (instr instanceof AccessInstruction) {
+    return instr.dest;
+  } else if (instr instanceof LoadConstantInstruction) {
+    return instr.dest;
+  } else {
+    return null;
   }
 }
 
@@ -186,147 +114,22 @@ export abstract class ASTNode {
 // Base Expression Node Class
 export abstract class ExpressionNode extends ASTNode {}
 
-// Program Node
-export class ProgramNode extends ASTNode {
-  nodeType = 'Program';
-  constructor(public body: ASTNode[]) {
-    super();
-  }
-}
-
-export class LetConstNode extends ASTNode {
-  nodeType = 'LetConst';
-  constructor(public name: string, public value: any) {
-    super();
-  }
-}
-
-// Variable Declaration Node
-export class VariableDeclarationNode extends ASTNode {
-  nodeType = 'VariableDeclaration';
-  constructor(public name: string, public mutable: boolean, public type: string) {
-    super();
-  }
-}
-
-// Expression Statement Node
-export class ExpressionStatementNode extends ASTNode {
-  nodeType = 'ExpressionStatement';
-  constructor(public expression: ExpressionNode) {
-    super();
-  }
-}
-
-// If Statement Node
-export class IfStatementNode extends ASTNode {
-  nodeType = 'IfStatement';
-  constructor(
-    public condition: ExpressionNode,
-    public consequent: ASTNode,
-    public alternate?: ASTNode
-  ) {
-    super();
-  }
-}
-
-// While Statement Node
-export class WhileStatementNode extends ASTNode {
-  nodeType = 'WhileStatement';
-  constructor(public condition: ExpressionNode, public body: ASTNode) {
-    super();
-  }
-}
-
-// Block Statement Node
-export class BlockStatementNode extends ASTNode {
-  nodeType = 'BlockStatement';
-  constructor(public body: ASTNode[]) {
-    super();
-  }
-}
-
-// Assignment Expression Node
-export class AssignmentNode extends ExpressionNode {
-  nodeType = 'AssignmentExpression';
-  constructor(public left: ExpressionNode, public right: ExpressionNode) {
-    super();
-  }
-}
-
-// Member Expression Node (Field Access)
-export class MemberExpressionNode extends ExpressionNode {
-  nodeType = 'MemberExpression';
-  constructor(public object: ExpressionNode, public type: string, public property: string) {
-    super();
-  }
-}
-
-// Identifier Node (Variable)
-export class IdentifierNode extends ExpressionNode {
-  nodeType = 'Identifier';
-  constructor(public name: string) {
-    super();
-  }
-}
-
-
-// Literal Node
-export class LiteralNode extends ExpressionNode {
-  nodeType = 'Literal';
-  constructor(public value: any) {
-    super();
-  }
-}
-
-// Binary Expression Node
-export class BinaryExpressionNode extends ExpressionNode {
-  nodeType = 'BinaryExpression';
-  constructor(
-    public operator: string,
-    public left: ExpressionNode,
-    public right: ExpressionNode
-  ) {
-    super();
-  }
-}
-
-export class CallExpressionNode extends ExpressionNode {
-  nodeType = 'CallExpression';
-  constructor(
-    public callee: string,
-    public args: ExpressionNode[]
-  ) {
-    super();
-  }
-}
-
-export class CreateStructNode extends ExpressionNode {
-  nodeType = 'CreateStruct';
-  constructor(
-    public name: string,
-    public fields: ExpressionNode[]
-  ) {
-    super();
-  }
-}
-
-export class ReturnNode extends ASTNode {
-  nodeType = 'ReturnStatement';
-  constructor(public argument: ExpressionNode) {
-    super();
-  }
-}
-
-export class FunctionDeclarationNode extends ASTNode {
-  nodeType = 'FunctionDeclaration';
-  constructor(
-    public name: string,
-    public params: FunctionParameterNode[],
-    public body: BlockStatementNode
-  ) {
-    super();
-  }
-}
+export class ProgramNode extends ASTNode {                 nodeType = 'Program';              constructor(public body: ASTNode[]) { super(); } }
+export class LetConstNode extends ASTNode {                nodeType = 'LetConst';             constructor(public name: string, public value: any) { super(); } }
+export class VariableDeclarationNode extends ASTNode {     nodeType = 'VariableDeclaration';  constructor(public name: string, public mutable: boolean, public type: string) { super(); } }
+export class ExpressionStatementNode extends ASTNode {     nodeType = 'ExpressionStatement';  constructor(public expression: ExpressionNode) { super(); } }
+export class IfStatementNode extends ASTNode {             nodeType = 'IfStatement';          constructor(public condition: ExpressionNode, public consequent: ASTNode, public alternate?: ASTNode) { super(); } }
+export class WhileStatementNode extends ASTNode {          nodeType = 'WhileStatement';       constructor(public condition: ExpressionNode, public body: ASTNode) { super(); } }
+export class BlockStatementNode extends ASTNode {          nodeType = 'BlockStatement';       constructor(public body: ASTNode[]) { super(); } }
+export class AssignmentNode extends ExpressionNode {       nodeType = 'AssignmentExpression'; constructor(public left: ExpressionNode, public right: ExpressionNode) { super(); } }
+export class MemberExpressionNode extends ExpressionNode { nodeType = 'MemberExpression';     constructor(public object: ExpressionNode, public type: string, public property: string) { super(); } }
+export class IdentifierNode extends ExpressionNode {       nodeType = 'Identifier';           constructor(public name: string) { super(); } }
+export class LiteralNode extends ExpressionNode {          nodeType = 'Literal';              constructor(public value: any) { super(); } }
+export class BinaryExpressionNode extends ExpressionNode { nodeType = 'BinaryExpression';     constructor(public operator: string, public left: ExpressionNode, public right: ExpressionNode) { super(); } }
+export class CallExpressionNode extends ExpressionNode {   nodeType = 'CallExpression';       constructor(public callee: string, public args: ExpressionNode[]) { super(); } }
+export class CreateStructNode extends ExpressionNode {     nodeType = 'CreateStruct';         constructor(public name: string, public fields: ExpressionNode[]) { super(); } }
+export class ReturnNode extends ASTNode {                  nodeType = 'ReturnStatement';      constructor(public argument: ExpressionNode) { super(); } }
+export class FunctionDeclarationNode extends ASTNode {     nodeType = 'FunctionDeclaration';  constructor(public name: string, public params: FunctionParameterNode[], public body: BlockStatementNode) { super(); } }
 
 export class FunctionParameterNode extends ASTNode {
   nodeType = 'FunctionParameter';
@@ -374,7 +177,7 @@ export function formatInstruction(instr: IRInstruction): string {
   } else if (instr instanceof AllocInstruction) {
     return `alloc ${instr.dest}: ${instr.type.shortName}`;
   } else if (instr instanceof AccessInstruction) {
-    return `check_initialized ${instr.value}`;
+    return `${instr.dest} = access [${instr.capabilities.join(', ')}] ${instr.source}`;
   } else if (instr instanceof GetFieldPointerInstruction) {
     return `${instr.dest} = address of ${instr.address}.${instr.field}`;
   } else {
@@ -422,3 +225,33 @@ export const PointType = new StructType('Point', [
   new TypeField('x', IntType),
   new TypeField('y', IntType)
 ]);
+
+export class InstructionId {
+  constructor(public blockId: string, public instrId: number) { }
+}
+
+export enum LivenessType {
+  LiveIn = 'LiveIn',
+  LiveOut = 'LiveOut',
+  LiveInAndOut = 'LiveInAndOut',
+  Closed = 'Closed'
+}
+
+export class LivenessState {
+  static LiveInAndOut = new LivenessState(LivenessType.LiveInAndOut);
+  static LiveOut = new LivenessState(LivenessType.LiveOut);
+  static LiveIn = (lastUse: InstructionId | null) => new LivenessState(LivenessType.LiveIn, lastUse);
+  static Closed = (lastUse: InstructionId | null) => new LivenessState(LivenessType.Closed, lastUse);
+  private constructor(public livenessType: LivenessType, public lastUse: InstructionId | null = null) { }
+}
+
+export type LivenessMap = Record<string, Record<string, LivenessState>>
+
+export const printLivenessMap = (liveness: LivenessMap) => {
+  for (const [operand, livenessMap] of Object.entries(liveness)) {
+    console.log(`Liveness for ${operand}:`);
+    for (const [blockId, state] of Object.entries(livenessMap)) {
+      console.log(`  ${blockId}: ${state.livenessType}${state.lastUse ? ` (last use: ${state.lastUse.blockId}:${state.lastUse.instrId})` : ''}`);
+    }
+  }
+}

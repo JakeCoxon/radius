@@ -4,6 +4,7 @@
     "types": ["bun-types"],
     "strictNullChecks": true,
     "noImplicitAny": true,
-    "module": "ES2020"
+    "module": "ES2020",
+    "target": "ES2020",
   }
 }
