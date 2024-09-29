@@ -1,5 +1,5 @@
 import { ControlFlowGraph, buildCFG } from "./controlflow";
-import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, compilerAssert, Type, StructType, Capability } from "./defs";
+import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, compilerAssert, Type, StructType, Capability, EndAccessInstruction, PhiInstruction } from "./defs";
 import { Worklist } from "./worklist";
 
 type InitializationState = Top | Bottom | Sequence;
@@ -37,6 +37,8 @@ export class InitializationCheckingPass {
   freshAddressCounter = 0;
   addressTypes = new Map<string, Type>(); // Quick lookup for address types
   debugLog = false
+  currentBlock: BasicBlock | null = null
+  currentInstr: IRInstruction | null = null
 
   constructor(fn: FunctionBlock) {
     this.function = fn;
@@ -107,9 +109,11 @@ export class InitializationCheckingPass {
       printMemory(inputState.memory)
     }
 
+    this.currentBlock = block;
     let index = 0;
     while (index < block.instructions.length) {
       const instr = block.instructions[index];
+      this.currentInstr = instr;
       this.execute(instr);
       index++;
     }
@@ -180,6 +184,12 @@ export class InitializationCheckingPass {
     } else if (instr instanceof JumpInstruction) {
     } else if (instr instanceof ConditionalJumpInstruction) {
       this.ensureRegisterInitialized(instr.condition);
+    } else if (instr instanceof EndAccessInstruction) {
+      // pass
+    } else if (instr instanceof PhiInstruction) {
+      // TODO: We should actually copy the state from the block
+      // that we came from. Need a test case for this
+      this.state.locals.set(instr.dest, new Set([]));
     } else {
       console.error(`Unknown instruction in interp: ${instr.irType}`);
     }

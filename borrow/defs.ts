@@ -47,6 +47,7 @@ export class StoreToAddressInstruction extends IRInstruction {      irType = 'st
 export class LoadFromAddressInstruction extends IRInstruction {     irType = 'load_from_address';     constructor(public dest: string, public address: string) { super(); } }
 export class AddressOfInstruction extends IRInstruction {           irType = 'addressof';             constructor(public dest: string, public source: string) { super(); } }
 export class ComputeFieldAddressInstruction extends IRInstruction { irType = 'compute_field_address'; constructor(public dest: string, public address: string, public field: string) { super(); } }
+export class PhiInstruction extends IRInstruction {                 irType = 'phi';                   constructor(public dest: string, public sources: string[]) { super(); } }
 
 export const getInstructionOperands = (instr: IRInstruction): string[] => {
   if (instr instanceof AssignInstruction) { return [instr.source]; } 
@@ -57,6 +58,9 @@ export const getInstructionOperands = (instr: IRInstruction): string[] => {
   else if (instr instanceof AccessInstruction) { return [instr.source]; } 
   else if (instr instanceof GetFieldPointerInstruction) { return [instr.address]; } 
   else if (instr instanceof ReturnInstruction) { return instr.value ? [instr.value] : []; } 
+  else if (instr instanceof ComputeFieldAddressInstruction) { return [instr.address]; } 
+  else if (instr instanceof AddressOfInstruction) { return [instr.source]; } 
+  else if (instr instanceof PhiInstruction) { return instr.sources; }
   else { return []; }
 }
 export const getInstructionResult = (instr: IRInstruction): string | null => {
@@ -71,6 +75,8 @@ export const getInstructionResult = (instr: IRInstruction): string | null => {
   else if (instr instanceof StoreToAddressInstruction) { return instr.address; } 
   else if (instr instanceof AccessInstruction) { return instr.dest; } 
   else if (instr instanceof LoadConstantInstruction) { return instr.dest; } 
+  else if (instr instanceof AddressOfInstruction) { return instr.dest; }
+  else if (instr instanceof PhiInstruction) { return instr.dest; }
   else { return null; }
 }
 
@@ -106,8 +112,10 @@ export class LiteralNode extends ExpressionNode {          nodeType = 'Literal';
 export class BinaryExpressionNode extends ExpressionNode { nodeType = 'BinaryExpression';     constructor(public operator: string, public left: ExpressionNode, public right: ExpressionNode) { super(); } }
 export class CallExpressionNode extends ExpressionNode {   nodeType = 'CallExpression';       constructor(public callee: string, public args: ExpressionNode[]) { super(); } }
 export class CreateStructNode extends ExpressionNode {     nodeType = 'CreateStruct';         constructor(public name: string, public fields: ExpressionNode[]) { super(); } }
-export class ReturnNode extends ASTNode {                  nodeType = 'ReturnStatement';      constructor(public argument: ExpressionNode) { super(); } }
+export class ReturnNode extends ASTNode {                  nodeType = 'ReturnStatement';      constructor(public argument: ExpressionNode | undefined = undefined) { super(); } }
 export class FunctionDeclarationNode extends ASTNode {     nodeType = 'FunctionDeclaration';  constructor(public name: string, public params: FunctionParameterNode[], public body: BlockStatementNode) { super(); } }
+export class AndNode extends ExpressionNode {              nodeType = 'AndExpression';        constructor(public left: ExpressionNode, public right: ExpressionNode) { super(); } }
+export class OrNode extends ExpressionNode {               nodeType = 'OrExpression';         constructor(public left: ExpressionNode, public right: ExpressionNode) { super(); } }
 
 export class FunctionParameterNode extends ASTNode {
   nodeType = 'FunctionParameter';
@@ -160,6 +168,8 @@ export function formatInstruction(instr: IRInstruction): string {
     return `end_access [${instr.capabilities.join(', ')}] ${instr.source}`;
   } else if (instr instanceof GetFieldPointerInstruction) {
     return `${instr.dest} = address of ${instr.address}.${instr.field}`;
+  } else if (instr instanceof PhiInstruction) {
+    return `${instr.dest} = phi(${instr.sources.join(', ')})`;
   } else {
     return `Unknown instruction: ${instr.irType}`;
   }

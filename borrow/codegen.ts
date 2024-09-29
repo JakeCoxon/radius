@@ -1,4 +1,4 @@
-import { ASTNode, AllocInstruction, AssignInstruction, AssignmentNode, BasicBlock, BinaryExpressionNode, BinaryOperationInstruction, BlockStatementNode, CallExpressionNode, CallInstruction, AccessInstruction, ConditionalJumpInstruction, CreateStructNode, ExpressionNode, ExpressionStatementNode, FunctionBlock, FunctionDeclarationNode, FunctionParameter, IRInstruction, IRValue, IdentifierNode, IfStatementNode, JumpInstruction, LValue, LetConstNode, LiteralNode, LoadConstantInstruction, LoadFromAddressInstruction, MemberExpressionNode, ProgramNode, RValue, ReturnInstruction, ReturnNode, StoreToAddressInstruction, StructType, Variable, VariableDeclarationNode, WhileStatementNode, compilerAssert, GetFieldPointerInstruction, Capability } from "./defs";
+import { ASTNode, AllocInstruction, AssignInstruction, AssignmentNode, BasicBlock, BinaryExpressionNode, BinaryOperationInstruction, BlockStatementNode, CallExpressionNode, CallInstruction, AccessInstruction, ConditionalJumpInstruction, CreateStructNode, ExpressionNode, ExpressionStatementNode, FunctionBlock, FunctionDeclarationNode, FunctionParameter, IRInstruction, IRValue, IdentifierNode, IfStatementNode, JumpInstruction, LValue, LetConstNode, LiteralNode, LoadConstantInstruction, LoadFromAddressInstruction, MemberExpressionNode, ProgramNode, RValue, ReturnInstruction, ReturnNode, StoreToAddressInstruction, StructType, Variable, VariableDeclarationNode, WhileStatementNode, compilerAssert, GetFieldPointerInstruction, Capability, AndNode, OrNode, PhiInstruction } from "./defs";
 
 type ExpressionContext = {
   valueCategory: 'rvalue' | 'lvalue';
@@ -31,6 +31,13 @@ export class CodeGenerator {
 
   newRegister(): string {
     return `r${this.registerCount++}`;
+  }
+  
+  newBlock(label: string): BasicBlock {
+    const block = new BasicBlock(label, []);
+    this.blocks.push(block);
+    this.currentBlock = block;
+    return block;
   }
 
   addInstruction(instr: IRInstruction) {
@@ -74,10 +81,18 @@ export class CodeGenerator {
   }
 
   generateReturnStatement(node: ReturnNode) {
-    if (!node.argument) return this.addInstruction(new ReturnInstruction(null));
-    const returnReg = this.generateExpression(node.argument, { valueCategory: 'rvalue' });
-    compilerAssert(returnReg instanceof RValue, 'Return argument must be an RValue');
-    this.addInstruction(new ReturnInstruction(returnReg.register));
+    if (!node.argument) {
+      this.addInstruction(new ReturnInstruction(null));
+    } else {
+      const returnReg = this.generateExpression(node.argument, { valueCategory: 'rvalue' });
+      compilerAssert(returnReg instanceof RValue, 'Return argument must be an RValue');
+      this.addInstruction(new ReturnInstruction(returnReg.register));
+    }
+    // After block
+    const afterLabel = this.newLabel()
+    const afterBlock = new BasicBlock(afterLabel, []);
+    this.blocks.push(afterBlock);
+    this.currentBlock = afterBlock;
   }
 
   generateFunctionDeclaration(node: FunctionDeclarationNode) {
@@ -98,9 +113,7 @@ export class CodeGenerator {
     this.currentFunction = functionBlock;
     this.blocks = functionBlock.blocks
 
-    const block = new BasicBlock(functionLabel, []);
-    this.blocks.push(block);
-    this.currentBlock = block;
+    this.newBlock(functionLabel);
 
     const savedFunctionInstructions = this.functionInstructions;
     this.functionInstructions = []
@@ -146,7 +159,7 @@ export class CodeGenerator {
     const reg = this.newRegister();
     const type = this.constants[node.type];
     compilerAssert(type, `Type not found: ${node.type}`);
-    this.variableMap.set(node.name, new Variable(node.name, type, reg, false));
+    this.variableMap.set(node.name, new Variable(node.name, type, reg, true));
     this.addFunctionInstruction(new AllocInstruction(reg, type));
   }
 
@@ -157,31 +170,18 @@ export class CodeGenerator {
     const elseLabel = this.newLabel();
     const afterLabel = this.newLabel();
 
-    // Conditional jump based on conditionReg
     this.addInstruction(new ConditionalJumpInstruction(conditionReg.register, thenLabel, elseLabel));
 
-    // Then block
-    const thenBlock = new BasicBlock(thenLabel, []);
-    this.blocks.push(thenBlock);
-    this.currentBlock = thenBlock;
+    this.newBlock(thenLabel);
     this.generate(node.consequent);
-    // After then block, jump to afterLabel
     this.addInstruction(new JumpInstruction(afterLabel));
 
-    // Else block
-    const elseBlock = new BasicBlock(elseLabel, []);
-    this.blocks.push(elseBlock);
-    this.currentBlock = elseBlock;
+    this.newBlock(elseLabel);
     if (node.alternate) {
       this.generate(node.alternate);
     }
-    // After else block, jump to afterLabel
     this.addInstruction(new JumpInstruction(afterLabel));
-
-    // After block
-    const afterBlock = new BasicBlock(afterLabel, []);
-    this.blocks.push(afterBlock);
-    this.currentBlock = afterBlock;
+    this.newBlock(afterLabel);
   }
 
   generateWhileStatement(node: WhileStatementNode) {
@@ -192,27 +192,51 @@ export class CodeGenerator {
     // Jump to condition check
     this.addInstruction(new JumpInstruction(conditionLabel));
 
-    // Condition block
     const conditionBlock = new BasicBlock(conditionLabel, []);
     this.blocks.push(conditionBlock);
     this.currentBlock = conditionBlock;
     const conditionReg = this.generateExpression(node.condition, { valueCategory: 'rvalue' });
     compilerAssert(conditionReg instanceof RValue, 'While condition must be an RValue');
-    // Conditional jump to body if condition is true
     this.addInstruction(new ConditionalJumpInstruction(conditionReg.register, bodyLabel, afterLabel));
 
-    // Body block
-    const bodyBlock = new BasicBlock(bodyLabel, []);
-    this.blocks.push(bodyBlock);
-    this.currentBlock = bodyBlock;
+    this.newBlock(bodyLabel);
     this.generate(node.body);
-    // After body, jump back to condition check
     this.addInstruction(new JumpInstruction(conditionLabel));
+    this.newBlock(afterLabel);
+  }
 
-    // After block
-    const afterBlock = new BasicBlock(afterLabel, []);
-    this.blocks.push(afterBlock);
-    this.currentBlock = afterBlock;
+  generateAndExpression(node: AndNode, context: ExpressionContext): IRValue {
+    compilerAssert(context.valueCategory === 'rvalue', 'and-expression must be an RValue');
+    const rhsLabel = this.newLabel();
+    const afterLabel = this.newLabel();
+    const outReg = this.newRegister();
+    const lhsReg = this.generateExpression(node.left, { valueCategory: 'rvalue' });
+    compilerAssert(lhsReg instanceof RValue, 'Left-hand side of && must be an RValue');
+    this.addInstruction(new ConditionalJumpInstruction(lhsReg.register, rhsLabel, afterLabel));
+    this.newBlock(rhsLabel);
+    const rhsReg = this.generateExpression(node.right, { valueCategory: 'rvalue' });
+    compilerAssert(rhsReg instanceof RValue, 'Right-hand side of && must be an RValue');
+    this.addInstruction(new JumpInstruction(afterLabel));
+    this.newBlock(afterLabel);
+    this.addInstruction(new PhiInstruction(outReg, [lhsReg.register, rhsReg.register]))
+    return new RValue(outReg);
+  }
+
+  generateOrExpression(node: OrNode, context: ExpressionContext): IRValue {
+    compilerAssert(context.valueCategory === 'rvalue', 'or-expression must be an RValue');
+    const rhsLabel = this.newLabel();
+    const afterLabel = this.newLabel();
+    const outReg = this.newRegister();
+    const lhsReg = this.generateExpression(node.left, { valueCategory: 'rvalue' });
+    compilerAssert(lhsReg instanceof RValue, 'Left-hand side of || must be an RValue');
+    this.addInstruction(new ConditionalJumpInstruction(lhsReg.register, afterLabel, rhsLabel));
+    this.newBlock(rhsLabel);
+    const rhsReg = this.generateExpression(node.right, { valueCategory: 'rvalue' });
+    compilerAssert(rhsReg instanceof RValue, 'Right-hand side of || must be an RValue');
+    this.addInstruction(new JumpInstruction(afterLabel));
+    this.newBlock(afterLabel);
+    this.addInstruction(new PhiInstruction(outReg, [lhsReg.register, rhsReg.register]))
+    return new RValue(outReg);
   }
 
   generateBlockStatement(node: BlockStatementNode) {
@@ -237,6 +261,10 @@ export class CodeGenerator {
       return this.generateCallExpression(node, context);
     } else if (node instanceof CreateStructNode) {
       return this.generateCreateStructExpression(node, context);
+    } else if (node instanceof AndNode) {
+      return this.generateAndExpression(node, context);
+    } else if (node instanceof OrNode) {
+      return this.generateOrExpression(node, context);
     } else {
       throw new Error(`Unsupported expression type: ${node.nodeType}`);
     }
@@ -315,12 +343,12 @@ export class CodeGenerator {
       // compilerAssert(destReg., 'Variable must be an RValue');
       // Assign rightReg to destReg
       const type = destReg.type
-      const newReg = this.newRegister();
-      this.addInstruction(new AccessInstruction(newReg, destReg.register, [Capability.Set]));
 
       const rightReg = this.generateExpression(node.right, context);
       compilerAssert(rightReg instanceof RValue, 'Assignment right-hand side must be an RValue');
 
+      const newReg = this.newRegister();
+      this.addInstruction(new AccessInstruction(newReg, destReg.register, [Capability.Set]));
       this.addInstruction(new StoreToAddressInstruction(newReg, type, rightReg.register));
       return rightReg
     } else if (left instanceof MemberExpressionNode) {
@@ -376,8 +404,12 @@ export class CodeGenerator {
       if (!addressReg.isReference) {
         return new RValue(addressReg.register);
       } else {
+        const accessReg = this.newRegister();
         const valueReg = this.newRegister();
-        this.addInstruction(new LoadFromAddressInstruction(valueReg, addressReg.register));
+        // this.addInstruction(new LoadFromAddressInstruction(valueReg, addressReg.register));
+        // return new RValue(valueReg);
+        this.addInstruction(new AccessInstruction(accessReg, addressReg.register, [Capability.Let]));
+        this.addInstruction(new LoadFromAddressInstruction(valueReg, accessReg));
         return new RValue(valueReg);
       }
     }

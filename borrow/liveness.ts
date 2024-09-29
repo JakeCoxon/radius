@@ -55,6 +55,7 @@ const getLiveness = (usages: UsageMap, cfg: ControlFlowGraph) => {
     let occurrences: string[] = [];
     
     const instr = operandToInstrMap.get(operand);
+    if (!instr) continue
     compilerAssert(instr, `No instruction found for operand ${operand}`);
     // Collect all blocks in which the operand is being used.
     uses.forEach(use => occurrences.push(use.blockId));
@@ -196,7 +197,8 @@ export const insertCloseAccesses = (cfg: ControlFlowGraph, blocks: BasicBlock[])
   }
 
   for (const [blockId, inserts] of Object.entries(insertsMap)) {
-    inserts.sort((a, b) => a.at.instrId - b.at.instrId)
+    // Reverse sort so we dont mess up IDs
+    inserts.sort((a, b) => b.at.instrId - a.at.instrId)
 
     const block = blocks.find(x => x.label === blockId)!
 
