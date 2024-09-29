@@ -1,5 +1,8 @@
 import { ControlFlowGraph } from "./controlflow";
-import { BasicBlock, FunctionBlock, IRInstruction, InstructionId, LivenessMap, LivenessState, compilerAssert, getInstructionOperands, getInstructionResult } from "./defs";
+import { AccessInstruction, BasicBlock, EndAccessInstruction, FunctionBlock, IRInstruction, InstructionId, LivenessMap, LivenessState, LivenessType, compilerAssert, getInstructionOperands, getInstructionResult, printLivenessMap } from "./defs";
+
+type InsertMap = {[key: string]: { at: InstructionId, newInstr: IRInstruction }[]}
+type UsageMap = Map<string, InstructionId[]>;
 
 const createResultMap = (blocks: BasicBlock[]) => {
   const operandToInstrMap = new Map<string, InstructionId>();
@@ -15,7 +18,7 @@ const createResultMap = (blocks: BasicBlock[]) => {
   return operandToInstrMap;
 }
 
-export const createUsageMap = (blocks: BasicBlock[]) => {
+const createUsageMap = (blocks: BasicBlock[]) => {
 
   const usageMap = new Map<string, InstructionId[]>();
   for (const block of blocks) {
@@ -34,11 +37,13 @@ export const createUsageMap = (blocks: BasicBlock[]) => {
   return usageMap;
 }
 
-export const getLiveness = (cfg: ControlFlowGraph) => {
+
+
+const getLiveness = (usages: UsageMap, cfg: ControlFlowGraph) => {
   
   const blocks = cfg.blocks;
   const operandToInstrMap = createResultMap(blocks);
-  const usages = createUsageMap(blocks);
+  
   const allLiveness: LivenessMap = {};
 
   for (const [operand, uses] of usages) {
@@ -126,3 +131,96 @@ const lastUseOfOperand = (blocks: BasicBlock[], operand: string, blockId: string
   }
   throw new Error(`No use of operand ${operand} found in block ${blockId}`);
 };
+
+
+
+const extendLiveness = (liveness: LivenessMap, usages: UsageMap, cfg: ControlFlowGraph, register: string) => {
+  // TODO: This must be recursive to support extending from another access etc
+  // In that case we may repeatedly visit the same access multiple times, so we
+  // should be able to cache the extended livetime
+  
+  const uses = usages.get(register);
+  compilerAssert(uses, `No uses found for register ${register}`);
+
+  for (const use of uses) {
+    const block = cfg.blocks.find(b => b.label === use.blockId)!;
+    const instr = block.instructions[use.instrId];
+    if (instr instanceof AccessInstruction) {
+      mergeLivenessBlocks(liveness[register], liveness[instr.dest])
+    }
+  }
+}
+
+const mergeLivenessBlocks = (liveness: Record<string, LivenessState>, other: Record<string, LivenessState>) => {
+  for (const [blockId, state] of Object.entries(other)) {
+    
+    const livenessType = liveness[blockId].livenessType
+    const livenessTypeOther = other[blockId].livenessType
+    compilerAssert(livenessType, `No liveness found for block ${blockId}`)
+
+    if (livenessType === LivenessType.LiveIn && livenessTypeOther === LivenessType.LiveOut
+      || livenessType === LivenessType.LiveOut && livenessTypeOther === LivenessType.LiveIn
+    ) {
+      compilerAssert(false, 'Cannot extend live-in with live-out')
+    }
+    if (livenessType === LivenessType.LiveOut || livenessTypeOther === LivenessType.LiveOut) {
+      liveness[blockId] = LivenessState.LiveOut;
+    } else if (livenessType === LivenessType.LiveInAndOut || livenessTypeOther === LivenessType.LiveInAndOut) {
+      liveness[blockId] = LivenessState.LiveInAndOut;
+    } else if (livenessType === LivenessType.Closed && livenessTypeOther === LivenessType.Closed) {
+      compilerAssert(false, 'Not implemented yet')
+      // console.log('Last use', lastUse, lastUseOther)
+      // liveness[blockId] = LivenessState.Closed(null);
+    } else {
+      compilerAssert(false, 'Not implemented yet')
+      // liveness[blockId] = LivenessState.LiveIn(null);
+    }
+  }
+}
+
+export const insertCloseAccesses = (cfg: ControlFlowGraph, blocks: BasicBlock[]) => {
+
+  const usage = createUsageMap(blocks)
+  const liveness = getLiveness(usage, cfg)
+  printLivenessMap(liveness)
+
+  const insertsMap: InsertMap = {}
+
+  for (const block of blocks) {
+    for (let i = 0; i < block.instructions.length; i++) {
+      const instr = block.instructions[i]
+      if (instr instanceof AccessInstruction) {
+        closeAccess(cfg, liveness, usage, instr, insertsMap)
+      }
+    }
+  }
+
+  for (const [blockId, inserts] of Object.entries(insertsMap)) {
+    inserts.sort((a, b) => a.at.instrId - b.at.instrId)
+
+    const block = blocks.find(x => x.label === blockId)!
+
+    for (const insert of inserts) {
+      block.instructions.splice(insert.at.instrId, 0, insert.newInstr)
+    }
+  }
+
+}
+
+const closeAccess = (cfg: ControlFlowGraph, liveness: LivenessMap, usage: UsageMap, sourceInstr: AccessInstruction, inserts: InsertMap) => {
+  extendLiveness(liveness, usage, cfg, sourceInstr.dest)
+  const boundaries = liveness[sourceInstr.dest]
+  
+  for (const [blockId, liveness] of Object.entries(boundaries)) {
+    if (liveness.livenessType === LivenessType.Closed || liveness.livenessType === LivenessType.LiveIn) {
+      const newInstr = new EndAccessInstruction(sourceInstr.dest, sourceInstr.capabilities)
+      inserts[blockId] = inserts[blockId] || []
+      const at = liveness.lastUse ? 
+        new InstructionId(blockId, liveness.lastUse.instrId + 1)
+        : new InstructionId(blockId, 0)
+      inserts[blockId].push({ at, newInstr })
+      
+    }
+  }
+
+}

@@ -2,7 +2,7 @@ import { CodeGenerator } from "./codegen";
 import { buildCFG, printCFG, printDominators } from "./controlflow";
 import { AssignmentNode, BinaryExpressionNode, BlockStatementNode, CallExpressionNode, CreateStructNode, ExpressionStatementNode, FunctionDeclarationNode, FunctionParameter, FunctionParameterNode, IdentifierNode, IfStatementNode, IntType, LetConstNode, LiteralNode, MemberExpressionNode, PointType, ProgramNode, ReturnNode, VariableDeclarationNode, WhileStatementNode, printIR, printLivenessMap } from "./defs";
 import { InitializationCheckingPass } from "./initialization";
-import { getLiveness } from "./liveness";
+import { insertCloseAccesses } from "./liveness";
 
 
 function testWhileLoopThatMightNotExecute() {
@@ -85,8 +85,14 @@ const runTest = (name: string, ast: ProgramNode) => {
     }
     console.log("")
 
-    const liveness = getLiveness(cfg)
-    printLivenessMap(liveness)
+    insertCloseAccesses(cfg, codeGenerator.blocks)
+
+    for (const fn of codeGenerator.functionBlocks) {
+      console.log(``);
+      console.log(`Function ${fn.name}:`);
+      printIR(fn.blocks);
+    }
+
   } catch (error) {
     console.error(`${name} failed: ${error.message}`);
     console.error(error.stack)
@@ -278,7 +284,7 @@ function testWhileLoop() {
   runTest("testWhileLoop", ast)
 }
 
-testFunction()
+// testFunction()
 testStruct()
 testControlFlow()
 testWhileLoop()

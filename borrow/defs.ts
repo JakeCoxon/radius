@@ -42,58 +42,36 @@ export class BinaryOperationInstruction extends IRInstruction {     irType = 'bi
 export class CallInstruction extends IRInstruction {                irType = 'call';                  constructor(public dest: string, public functionName: string, public args: string[]) { super(); } }
 export class ReturnInstruction extends IRInstruction {              irType = 'return';                constructor(public value: string | null) { super(); } }
 export class AccessInstruction extends IRInstruction {              irType = 'access';                constructor(public dest: string, public source: string, public capabilities: Capability[]) { super(); } }
+export class EndAccessInstruction extends IRInstruction {           irType = 'end_access';            constructor(public source: string, public capabilities: Capability[]) { super(); } }
 export class StoreToAddressInstruction extends IRInstruction {      irType = 'store_to_address';      constructor(public address: string, public type: Type, public source: string) { super(); } }
 export class LoadFromAddressInstruction extends IRInstruction {     irType = 'load_from_address';     constructor(public dest: string, public address: string) { super(); } }
 export class AddressOfInstruction extends IRInstruction {           irType = 'addressof';             constructor(public dest: string, public source: string) { super(); } }
 export class ComputeFieldAddressInstruction extends IRInstruction { irType = 'compute_field_address'; constructor(public dest: string, public address: string, public field: string) { super(); } }
 
 export const getInstructionOperands = (instr: IRInstruction): string[] => {
-  if (instr instanceof AssignInstruction) {
-    return [instr.source];
-  } else if (instr instanceof BinaryOperationInstruction) {
-    return [instr.left, instr.right];
-  } else if (instr instanceof LoadFromAddressInstruction) {
-    return [instr.address];
-  } else if (instr instanceof StoreToAddressInstruction) {
-    return [instr.address, instr.source];
-  } else if (instr instanceof CallInstruction) {
-    return instr.args;
-  } else if (instr instanceof AccessInstruction) {
-    return [instr.source];
-  } else if (instr instanceof GetFieldPointerInstruction) {
-    return [instr.address];
-  } else if (instr instanceof ReturnInstruction) {
-    return instr.value ? [instr.value] : [];
-  } else {
-    return [];
-  }
+  if (instr instanceof AssignInstruction) { return [instr.source]; } 
+  else if (instr instanceof BinaryOperationInstruction) { return [instr.left, instr.right]; } 
+  else if (instr instanceof LoadFromAddressInstruction) { return [instr.address]; } 
+  else if (instr instanceof StoreToAddressInstruction) { return [instr.address, instr.source]; } 
+  else if (instr instanceof CallInstruction) { return instr.args; } 
+  else if (instr instanceof AccessInstruction) { return [instr.source]; } 
+  else if (instr instanceof GetFieldPointerInstruction) { return [instr.address]; } 
+  else if (instr instanceof ReturnInstruction) { return instr.value ? [instr.value] : []; } 
+  else { return []; }
 }
 export const getInstructionResult = (instr: IRInstruction): string | null => {
-  if (instr instanceof AssignInstruction) {
-    return instr.dest;
-  } else if (instr instanceof AllocInstruction) {
-    return instr.dest;
-  } else if (instr instanceof CallInstruction) {
-    return instr.dest;
-  } else if (instr instanceof GetFieldPointerInstruction) {
-    return instr.dest;
-  } else if (instr instanceof LoadFromAddressInstruction) {
-    return instr.dest
-  } else if (instr instanceof ComputeFieldAddressInstruction) {
-    return instr.dest;
-  } else if (instr instanceof ReturnInstruction) {
-    return null;
-  } else if (instr instanceof BinaryOperationInstruction) {
-    return instr.dest;
-  } else if (instr instanceof StoreToAddressInstruction) {
-    return instr.address;
-  } else if (instr instanceof AccessInstruction) {
-    return instr.dest;
-  } else if (instr instanceof LoadConstantInstruction) {
-    return instr.dest;
-  } else {
-    return null;
-  }
+  if (instr instanceof AssignInstruction) { return instr.dest; } 
+  else if (instr instanceof AllocInstruction) { return instr.dest; } 
+  else if (instr instanceof CallInstruction) { return instr.dest; } 
+  else if (instr instanceof GetFieldPointerInstruction) { return instr.dest; } 
+  else if (instr instanceof LoadFromAddressInstruction) { return instr.dest } 
+  else if (instr instanceof ComputeFieldAddressInstruction) { return instr.dest; } 
+  else if (instr instanceof ReturnInstruction) { return null; } 
+  else if (instr instanceof BinaryOperationInstruction) { return instr.dest; } 
+  else if (instr instanceof StoreToAddressInstruction) { return instr.address; } 
+  else if (instr instanceof AccessInstruction) { return instr.dest; } 
+  else if (instr instanceof LoadConstantInstruction) { return instr.dest; } 
+  else { return null; }
 }
 
 // Basic Block
@@ -178,6 +156,8 @@ export function formatInstruction(instr: IRInstruction): string {
     return `alloc ${instr.dest}: ${instr.type.shortName}`;
   } else if (instr instanceof AccessInstruction) {
     return `${instr.dest} = access [${instr.capabilities.join(', ')}] ${instr.source}`;
+  } else if (instr instanceof EndAccessInstruction) {
+    return `end_access [${instr.capabilities.join(', ')}] ${instr.source}`;
   } else if (instr instanceof GetFieldPointerInstruction) {
     return `${instr.dest} = address of ${instr.address}.${instr.field}`;
   } else {
@@ -245,6 +225,7 @@ export class LivenessState {
   private constructor(public livenessType: LivenessType, public lastUse: InstructionId | null = null) { }
 }
 
+// Register -> Block -> LivenessState
 export type LivenessMap = Record<string, Record<string, LivenessState>>
 
 export const printLivenessMap = (liveness: LivenessMap) => {
