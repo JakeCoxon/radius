@@ -1,27 +1,17 @@
 import { ControlFlowGraph, buildCFG } from "./controlflow";
-import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, compilerAssert, Type, StructType, Capability } from "./defs";
+import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, compilerAssert, Type, StructType, Capability, EndAccessInstruction, PhiInstruction, FunctionParameter, textColors, InstructionId } from "./defs";
 import { Worklist } from "./worklist";
 
-type ExclusivityState = Unique | Borrowed | Aggregate;
-
-interface Unique {
-  kind: 'Unique';
+type BorrowedItem = {
+  address: string;
+  subObject: string;
+  blockId: string
+  instructionId: number;
+  capability: Capability;
 }
-
-interface Borrowed {
-  kind: 'Borrowed';
-  instructioons: Set<string>;
-}
-
-interface Aggregate {
-  kind: 'Aggregate';
-  elements: ExclusivityState[];
-}
-
-const UNIQUE = { kind: 'Unique' } as const;
 
 type LocalMap = Map<string, Set<string>>;
-type MemoryMap = Map<string, ExclusivityState>;
+type MemoryMap = Map<string, BorrowedItem[]>;
 
 interface InterpreterState {
   locals: LocalMap; // Local variables/registers
@@ -37,6 +27,7 @@ export class ExclusivityCheckingPass {
   freshAddressCounter = 0;
   addressTypes = new Map<string, Type>(); // Quick lookup for address types
   debugLog = false
+  runs = 0
 
   constructor(fn: FunctionBlock) {
     this.function = fn;
@@ -58,8 +49,10 @@ export class ExclusivityCheckingPass {
 
     const entryState = createEmptyState();
 
+    console.log(textColors.green("\n\n#### Begin exclusivity check ####"))
+
     for (const param of this.function.params) {
-      this.initializeFunctionParam(entryState, param.name, param.type);
+      this.initializeFunctionParam(entryState, param);
     }
 
     const worklist = new Worklist(this.cfg);
@@ -68,7 +61,13 @@ export class ExclusivityCheckingPass {
     this.executeBlock(block, entryState);
     worklist.visited.add(block);
 
+
     worklist.fixedPoint((block) => {
+      this.runs += 1
+      if (this.runs > 100) {
+        compilerAssert(false, "Infinite loop")
+        return
+      }
       const predecessors = this.cfg.predecessors.get(block) || [];
       const state = this.blockStates.get(block.label)!;
       const inputStates = predecessors.map(pred => this.blockStates.get(pred.label)!).filter(x => x);
@@ -77,20 +76,23 @@ export class ExclusivityCheckingPass {
       }, inputStates[0].output);
       
       if (this.debugLog) {
-        console.log("\n## Block", block.label, "\n")
-        console.log("immediate dominator", this.cfg.getImmediateDominator(block)?.label)
-        console.log("num predecessors", predecessors.length)
-        console.log("num input states", inputStates.length)
-        console.log("predecessors", predecessors.map(pred => pred.label))
+        // console.log("\n## Block", block.label, "\n")
+        // console.log("immediate dominator", this.cfg.getImmediateDominator(block)?.label)
+        // console.log("num predecessors", predecessors.length)
+        // console.log("num input states", inputStates.length)
+        // console.log("predecessors", predecessors.map(pred => pred.label))
       }
 
       const allInputStates = inputStates.length === predecessors.length
+
 
       if (state && allInputStates && statesEqual(state.input, mergedInputState)) return
 
       this.executeBlock(block, mergedInputState);
       worklist.addWork(block);
       worklist.visited.add(block);
+
+      
     })
 
     console.log("All checked ok")
@@ -100,7 +102,7 @@ export class ExclusivityCheckingPass {
 
     this.state = cloneState(inputState)
     if (this.debugLog) {
-      console.log("\nExecuting block:", block.label);
+      console.log(textColors.red(`\nExecuting block: ${block.label}`));
       console.log("Input state for block:", block.label)
 
       printLocals(inputState.locals)
@@ -110,7 +112,8 @@ export class ExclusivityCheckingPass {
     let index = 0;
     while (index < block.instructions.length) {
       const instr = block.instructions[index];
-      this.execute(instr);
+      const instrId = new InstructionId(block.label, index);
+      this.execute(instrId, instr);
       index++;
     }
 
@@ -123,19 +126,40 @@ export class ExclusivityCheckingPass {
     this.blockStates.set(block.label, { input: inputState, output: cloneState(this.state) });
   }
 
-  execute(instr: IRInstruction): void {
+  execute(instrId: InstructionId, instr: IRInstruction): void {
     if (instr instanceof AssignInstruction) {
+      this.state.locals.set(instr.dest, this.state.locals.get(instr.source)!);
     } else if (instr instanceof LoadConstantInstruction) {
-    } else if (instr instanceof StoreToAddressInstruction) {
+      this.state.locals.set(instr.dest, new Set([]));
     } else if (instr instanceof AllocInstruction) {
+      const addr = this.newAddress(instr.type);
+      this.state.locals.set(instr.dest, new Set([addr]));
+      this.state.memory.set(addr, []);
     } else if (instr instanceof AccessInstruction) {
-    } else if (instr instanceof CallInstruction) {
-    } else if (instr instanceof BinaryOperationInstruction) {
+      this.access(instrId, instr);
+    // } else if (instr instanceof StoreToAddressInstruction) {
+    // } else if (instr instanceof CallInstruction) {
     } else if (instr instanceof LoadFromAddressInstruction) {
-    } else if (instr instanceof ReturnInstruction) {
+      this.state.locals.set(instr.dest, new Set([]));
+    // } else if (instr instanceof ReturnInstruction) {
     } else if (instr instanceof GetFieldPointerInstruction) {
+      const addresses = this.state.locals.get(instr.address);
+      compilerAssert(addresses, `Register ${instr.address} is not found`);
+      compilerAssert(this.state.locals.get(instr.dest) === undefined, `Register ${instr.dest} is already initialized`);
+      const fields = [...addresses].map(addr => `${addr}.${instr.field}`)
+      this.state.locals.set(instr.dest, new Set(fields));
+      fields.forEach(f => this.state.memory.set(f, []))
+      console.log(this.state.locals.get(instr.dest))
+    } else if (instr instanceof BinaryOperationInstruction) {
+      this.state.locals.set(instr.dest, new Set([]));
     } else if (instr instanceof JumpInstruction) {
+      // pass
     } else if (instr instanceof ConditionalJumpInstruction) {
+      // pass
+    } else if (instr instanceof EndAccessInstruction) {
+      this.endAccess(instrId, instr);
+    } else if (instr instanceof PhiInstruction) {
+      // this.state.locals.set(instr.dest, this.state.locals.get(instr.source)!);
     } else {
       console.error(`Unknown instruction in interp: ${instr.irType}`);
     }
@@ -148,18 +172,80 @@ export class ExclusivityCheckingPass {
   }
 
   initializeMemoryAddress(addr: string, rootType: Type) {
-    const ids = addr.split('.')
-    let current = this.state.memory.get(ids[0])
-    compilerAssert(current, `Address ${addr} is not initialized`)
-    const sd = addressPathToInitializationState(ids.slice(1), rootType)
-    const newSd = meetInitializationStateUpper(current, sd)
-    this.state.memory.set(ids[0], newSd)
+    compilerAssert(false, "Not implemented")
+    // const ids = addr.split('.')
+    // let current = this.state.memory.get(ids[0])
+    // compilerAssert(current, `Address ${addr} is not initialized`)
+    // const sd = addressPathToInitializationState(ids.slice(1), rootType)
+    // const newSd = meetInitializationStateUpper(current, sd)
+    // this.state.memory.set(ids[0], newSd)
   }
 
-  initializeFunctionParam(state: InterpreterState, param: string, type: Type) {
-    const addr = this.newAddress(type);
-    state.locals.set(param, new Set([addr]));
-    state.memory.set(addr, TOP);
+  initializeFunctionParam(state: InterpreterState, param: FunctionParameter) {
+    const addr = this.newAddress(param.type);
+    state.locals.set(param.name, new Set([addr]));
+    state.memory.set(addr, []); // TODO: Handle immutable/mutable
+  }
+
+  access(instrId: InstructionId, instr: AccessInstruction) {
+    const addrs = this.state.locals.get(instr.source);
+    compilerAssert(addrs, `No address found for ${instr.source}`);
+    compilerAssert(instr.capabilities.length === 1, "Capability must have been reified by now")
+    const capability = instr.capabilities[0];
+    const addrStr = Array.from(addrs).join(', ');
+    console.log(`Accessing ${instr.source} at ${addrStr} ${capability}`);
+
+    for (const addr of addrs) {
+      const ids = addr.split('.')
+      // compilerAssert(ids.length === 1, "Not implemented")
+      let existingBorrows = this.state.memory.get(addr);
+      compilerAssert(existingBorrows, `No memory state found for ${addr}`);
+      existingBorrows = [...existingBorrows];
+      this.state.memory.set(addr, existingBorrows);
+      const subObject = ids.slice(1).join('.')
+      const newBorrow: BorrowedItem = { address: addr, subObject, blockId: instrId.blockId, instructionId: instrId.instrId, capability }
+      if (existingBorrows.length === 0) {
+        existingBorrows.push(newBorrow);
+        console.log("Add access", addr)
+        printMemory(this.state.memory)
+        continue
+      }
+
+      for (const item of memoryArray) {
+        const itemKey = item.objectKey;
+        if (itemKey.startsWith(addr) && itemKey !== addr) {
+          compilerAssert(false, "Cannot borrow (parent)")
+        }
+        if (addr.startsWith(itemKey) && itemKey !== addr) {
+          compilerAssert(false, "Cannot borrow (child)")
+        }
+      }
+      existingBorrows.push(newBorrow);
+
+      console.log("Existing borrows", existingBorrows)
+      // compilerAssert(false, "Not implemented")
+    }
+    this.state.locals.set(instr.dest, addrs);
+  }
+
+  endAccess(instrId: InstructionId, instr: EndAccessInstruction) {
+    const addrs = this.state.locals.get(instr.source);
+    compilerAssert(addrs, `No address found for ${instr.source}`);
+    compilerAssert(instr.capabilities.length === 1, "Capability must have been reified by now")
+    const capability = instr.capabilities[0];
+    const addrStr = Array.from(addrs).join(', ');
+    console.log(`Ending access to ${instr.source} at ${addrStr} ${capability}`);
+
+    for (const addr of addrs) {
+      let existingBorrows = this.state.memory.get(addr);
+      compilerAssert(existingBorrows, `No memory state found for ${addr}`);
+      const toRemove: BorrowedItem = { address: addr, subObject: '', blockId: instrId.blockId, instructionId: instrId.instrId, capability };
+      const numBefore = existingBorrows.length
+      existingBorrows = existingBorrows.filter(b => borrowedItemEqual(b, toRemove))
+      compilerAssert(existingBorrows.length === numBefore - 1, "Could not find borrow to remove")
+      this.state.memory.set(addr, existingBorrows)
+    }
+    this.state.locals.delete(instr.source);
   }
 
 }
@@ -179,23 +265,56 @@ function printLocals(locals: LocalMap) {
 }
 function printMemory(memory: MemoryMap) {
   console.log("  Memory:", Array.from(memory.entries()).flatMap(([key, val]) => {
-    return `${key} -> ${initializationStateToString(val)}`
+    if (val === undefined) return `${key} -> undefined`
+    return `${key} -> ${borrowedItemsToString(val)}`
   }).join(' | '))
 }
 
-function initializationStateToString(sd: ExclusivityState): string {
-  if (sd.kind === 'Unique') return 'Unique'
-  if (sd.kind === 'Borrowed') return 'Borrowed'
-  if (sd.kind === 'Aggregate') {
-    return sd.elements.map(initializationStateToString).join(' | ')
+// function borrowedItemToKey(item: BorrowedItem): string {
+//   return `${item.instruction.blockId}_${item.instruction.instrId}_${item.capability}`
+// }
+
+// const getBorrows = (state: ExclusivityState, borrows: BorrowedItem[] = []): BorrowedItem[] => {
+//   if (state.kind === 'Unique') return borrows
+//   if (state.kind === 'Borrowed') {
+//     borrows.push(...Array.from(state.borrow.values())); return borrows
+//   }
+//   if (state.kind === 'Aggregate') {
+//     state.elements.forEach(e => getBorrows(e, borrows)); return borrows
+//   }
+//   compilerAssert(false, "Unknown state")
+// }
+
+function borrowedItemsToString(sd: BorrowedItem[]): string {
+  if (sd === undefined) compilerAssert(false, "Undefined state")
+  if (sd.length === 0) return 'Unique'
+  return sd.map(b => `${b.subObject}(${b.capability})`).join(' | ')
+}
+
+function meetInitializationStateUpper(a: BorrowedItem[], b: BorrowedItem[]): BorrowedItem[] {
+}
+
+function meetBorrowedItems(a: BorrowedItem[], b: BorrowedItem[]): BorrowedItem[] {
+  let mergedArray: BorrowedItem[] = [];
+  let i = 0, j = 0;
+
+  while (i < a.length || j < b.length) {
+    const item1 = a[i];
+    const item2 = b[j];
+
+    if (!item1) { mergedArray.push(item2); j++; continue; }
+    if (!item2) { mergedArray.push(item1); i++; continue; }
+
+    if (borrowedItemEqual(item1, item2)) {
+      mergedArray.push(item1); i++; j++;
+    } else if (item1.subObject < item2.subObject) {
+      mergedArray.push(item1); i++;
+    } else {
+      mergedArray.push(item2); j++;
+    }
   }
-  return '???';
-}
 
-function meetInitializationStateUpper(a: ExclusivityState, b: ExclusivityState): ExclusivityState {
-}
-
-function meetInitializationState(a: ExclusivityState, b: ExclusivityState): ExclusivityState {
+  return mergedArray;
 }
 
 function meetLocals(a: Set<string>, b: Set<string>): Set<string> {
@@ -224,12 +343,12 @@ function mergeMemoryMaps(
   map1: MemoryMap,
   map2: MemoryMap
 ): MemoryMap {
-  const result = new Map<string, ExclusivityState>();
+  const result = new Map<string, BorrowedItem[]>();
   const allAddresses = new Set([...map1.keys(), ...map2.keys()]);
   for (const addr of allAddresses) {
-    const val1 = map1.get(addr) || BOTTOM;
-    const val2 = map2.get(addr) || BOTTOM;
-    result.set(addr, meetInitializationState(val1, val2));
+    const val1 = map1.get(addr) ?? [];
+    const val2 = map2.get(addr) ?? [];
+    result.set(addr, meetBorrowedItems(val1, val2));
   }
   return result;
 }
@@ -271,7 +390,7 @@ function mapsEqual<K, V>(
 function statesEqual(state1: InterpreterState, state2: InterpreterState): boolean {
   return (
     mapsEqual(state1.locals, state2.locals, localsEqual) &&
-    mapsEqual(state1.memory, state2.memory, initializationStateEqual)
+    mapsEqual(state1.memory, state2.memory, borrowedItemsEqual)
   );
 }
 
@@ -287,24 +406,22 @@ function localsEqual(locals1: Set<string>, locals2: Set<string>): boolean {
   return true;
 }
 
-function initializationStateEqual(sd1: ExclusivityState, sd2: ExclusivityState): boolean {
-  if (sd1.kind !== sd2.kind) {
-    return false;
-  }
-  if (sd1.kind === 'Top' || sd1.kind === 'Bottom') {
-    return true;
-  }
-  if (sd1.kind === 'Sequence') {
-    if (sd2.kind !== 'Sequence') { return false; }
-    if (sd1.elements.length !== sd2.elements.length) {
+function borrowedItemsEqual(sd1: BorrowedItem[], sd2: BorrowedItem[]): boolean {
+  if (sd1.length !== sd2.length) return false;
+  for (const item of sd1) {
+    if (!sd2.find(i => borrowedItemEqual(i, item))) {
       return false;
     }
-    for (let i = 0; i < sd1.elements.length; i++) {
-      if (!initializationStateEqual(sd1.elements[i], sd2.elements[i])) {
-        return false;
-      }
-    }
-    return true;
   }
-  return false;
+  return true;
+}
+
+function borrowedItemEqual(item1: BorrowedItem, item2: BorrowedItem): boolean {
+  return (
+    item1.address === item2.address &&
+    item1.subObject === item2.subObject &&
+    item1.blockId === item2.blockId &&
+    item1.instructionId === item2.instructionId &&
+    item1.capability === item2.capability
+  );
 }

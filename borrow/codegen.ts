@@ -1,4 +1,4 @@
-import { ASTNode, AllocInstruction, AssignInstruction, AssignmentNode, BasicBlock, BinaryExpressionNode, BinaryOperationInstruction, BlockStatementNode, CallExpressionNode, CallInstruction, AccessInstruction, ConditionalJumpInstruction, CreateStructNode, ExpressionNode, ExpressionStatementNode, FunctionBlock, FunctionDeclarationNode, FunctionParameter, IRInstruction, IRValue, IdentifierNode, IfStatementNode, JumpInstruction, LValue, LetConstNode, LiteralNode, LoadConstantInstruction, LoadFromAddressInstruction, MemberExpressionNode, ProgramNode, RValue, ReturnInstruction, ReturnNode, StoreToAddressInstruction, StructType, Variable, VariableDeclarationNode, WhileStatementNode, compilerAssert, GetFieldPointerInstruction, Capability, AndNode, OrNode, PhiInstruction } from "./defs";
+import { ASTNode, AllocInstruction, AssignInstruction, AssignmentNode, BasicBlock, BinaryExpressionNode, BinaryOperationInstruction, BlockStatementNode, CallExpressionNode, CallInstruction, AccessInstruction, ConditionalJumpInstruction, CreateStructNode, ExpressionNode, ExpressionStatementNode, FunctionBlock, FunctionDeclarationNode, FunctionParameter, IRInstruction, IRValue, IdentifierNode, IfStatementNode, JumpInstruction, LValue, LetConstNode, LiteralNode, LoadConstantInstruction, LoadFromAddressInstruction, MemberExpressionNode, ProgramNode, RValue, ReturnInstruction, ReturnNode, StoreToAddressInstruction, StructType, Variable, VariableDeclarationNode, WhileStatementNode, compilerAssert, GetFieldPointerInstruction, Capability, AndNode, OrNode, PhiInstruction, Type, VoidType, CommentInstruction, MoveInstruction } from "./defs";
 
 type ExpressionContext = {
   valueCategory: 'rvalue' | 'lvalue';
@@ -283,14 +283,25 @@ export class CodeGenerator {
       const field = structType.fields[i]
       const fieldValue = fieldValues[i];
       compilerAssert(fieldValue instanceof RValue, 'Struct field value must be an RValue');
+      const fieldAccessReg = this.newRegister();
       const reg = this.newRegister();
       const fieldIndex = i;
       const type = field.type
+      this.addInstruction(new CommentInstruction(`Store field ${field.name} to ${structReg}`))
       this.addInstruction(new GetFieldPointerInstruction(reg, structReg, fieldIndex));
-      this.addInstruction(new StoreToAddressInstruction(reg, type, fieldValue.register));
+      this.addInstruction(new AccessInstruction(fieldAccessReg, reg, [Capability.Set]));
+      this.addInstruction(new StoreToAddressInstruction(fieldAccessReg, type, fieldValue.register));
       // this.addInstruction(new StoreFieldInstruction(structReg, field.name, fieldValue.register));
     }
     return new RValue(structReg)
+  }
+
+  storeResult(resultReg: string, type: Type, context: ExpressionContext) {
+    compilerAssert(context.valueCategory === 'rvalue', 'Result must be an RValue');
+    const reg = this.newRegister();
+    this.addFunctionInstruction(new AllocInstruction(reg, type));
+
+    return new RValue(resultReg)
   }
 
   generateCallExpression(node: CallExpressionNode, context: ExpressionContext): IRValue {
@@ -321,9 +332,12 @@ export class CodeGenerator {
 
     // Call the function
     const resultReg = this.newRegister();
-    this.addInstruction(new CallInstruction(resultReg, functionName, argRegs));
-
-    return new RValue(resultReg);
+    const accessReg = this.newRegister();
+    this.addFunctionInstruction(new AllocInstruction(resultReg, VoidType));
+    this.addInstruction(new AccessInstruction(accessReg, resultReg, [Capability.Set]));
+    this.addInstruction(new CallInstruction(accessReg, functionName, argRegs));
+    // return this.storeResult(resultReg, VoidType, context)
+    return new RValue(resultReg)
   }
 
   generateAssignmentExpression(node: AssignmentNode, context: ExpressionContext): IRValue {
@@ -348,8 +362,16 @@ export class CodeGenerator {
       compilerAssert(rightReg instanceof RValue, 'Assignment right-hand side must be an RValue');
 
       const newReg = this.newRegister();
+      const sourceAccessReg = this.newRegister();
       this.addInstruction(new AccessInstruction(newReg, destReg.register, [Capability.Set]));
-      this.addInstruction(new StoreToAddressInstruction(newReg, type, rightReg.register));
+      this.addInstruction(new AccessInstruction(sourceAccessReg, rightReg.register, [Capability.Let, Capability.Sink]));
+      // this.addInstruction(new CommentInstruction(`Move ${sourceAccessReg} to ${newReg}`))
+      this.addInstruction(new MoveInstruction(newReg, sourceAccessReg));
+      // if (type instanceof StructType) {
+      //   this.addInstruction(new CallInstruction(newReg, 'move', [newReg, sourceAccessReg]));
+      // } else {
+      //   this.addInstruction(new StoreToAddressInstruction(newReg, type, sourceAccessReg));
+      // }
       return rightReg
     } else if (left instanceof MemberExpressionNode) {
       // Assignment to object field
@@ -382,8 +404,8 @@ export class CodeGenerator {
     compilerAssert(leftReg instanceof RValue && rightReg instanceof RValue, 'BinaryExpression operands must be RValues');
     const resultReg = this.newRegister();
     // Create a BinaryOperationInstruction
-    const instr = new BinaryOperationInstruction(resultReg, node.operator, leftReg.register, rightReg.register);
-    this.addInstruction(instr);
+    this.addInstruction(new BinaryOperationInstruction(resultReg, node.operator, leftReg.register, rightReg.register));
+    this.storeResult(resultReg, VoidType, context)
     return new RValue(resultReg)
   }
 
@@ -418,8 +440,11 @@ export class CodeGenerator {
   generateLiteral(node: LiteralNode, context: ExpressionContext): IRValue {
     const value = node.value;
     const destReg = this.newRegister();
+    const pointerReg = this.newRegister();
+    this.addFunctionInstruction(new AllocInstruction(pointerReg, VoidType));
     this.addInstruction(new LoadConstantInstruction(destReg, value));
-    return new RValue(destReg);
+    this.addInstruction(new StoreToAddressInstruction(pointerReg, VoidType, destReg));
+    return new RValue(pointerReg);
   }
 
   generateMemberExpression(node: MemberExpressionNode, context: ExpressionContext): IRValue {

@@ -1,11 +1,13 @@
 import { CodeGenerator } from "./codegen";
 import { buildCFG, printCFG, printDominators } from "./controlflow";
-import { AndNode, AssignmentNode, BinaryExpressionNode, BlockStatementNode, BoolType, CallExpressionNode, CreateStructNode, ExpressionStatementNode, FunctionDeclarationNode, FunctionParameter, FunctionParameterNode, IdentifierNode, IfStatementNode, IntType, LetConstNode, LiteralNode, MemberExpressionNode, PointType, ProgramNode, ReturnNode, VariableDeclarationNode, WhileStatementNode, printIR, printLivenessMap } from "./defs";
+import { AndNode, AssignmentNode, BinaryExpressionNode, BlockStatementNode, BoolType, CallExpressionNode, CreateStructNode, ExpressionStatementNode, FunctionDeclarationNode, FunctionParameter, FunctionParameterNode, IdentifierNode, IfStatementNode, IntType, LetConstNode, LiteralNode, MemberExpressionNode, PointType, ProgramNode, ReturnNode, VariableDeclarationNode, WhileStatementNode, printIR, printLivenessMap, textColors } from "./defs";
+import { ExclusivityCheckingPass } from "./exclusivity";
 import { InitializationCheckingPass } from "./initialization";
 import { insertCloseAccesses } from "./liveness";
 
 
 const runTest = (name: string, ast: ProgramNode) => {
+  console.log(textColors.green(`\n\n#### Begin ${name} ####`));
   const codeGenerator = new CodeGenerator();
 
   try {
@@ -15,7 +17,7 @@ const runTest = (name: string, ast: ProgramNode) => {
     console.log("")
 
     for (const fn of codeGenerator.functionBlocks) {
-      console.log(`\n// ${fn.name} ///////////////////////////////////////////////////////////\n`);
+      console.log(textColors.yellow(`\n// ${fn.name} ///////////////////////////////////////////////////////////\n`));
       
       printIR(fn.blocks);
 
@@ -26,8 +28,14 @@ const runTest = (name: string, ast: ProgramNode) => {
       const interpreter = new InitializationCheckingPass(fn);
       interpreter.debugLog = true;
       interpreter.checkedInterpret();
+
       console.log("")
       insertCloseAccesses(cfg, fn.blocks)
+
+      const interpreter2 = new ExclusivityCheckingPass(fn)
+      interpreter2.debugLog = true;
+      interpreter2.checkedInterpret();
+      console.log("")
 
       console.log(``);
       printIR(fn.blocks);

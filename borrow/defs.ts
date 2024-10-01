@@ -47,7 +47,9 @@ export class StoreToAddressInstruction extends IRInstruction {      irType = 'st
 export class LoadFromAddressInstruction extends IRInstruction {     irType = 'load_from_address';     constructor(public dest: string, public address: string) { super(); } }
 export class AddressOfInstruction extends IRInstruction {           irType = 'addressof';             constructor(public dest: string, public source: string) { super(); } }
 export class ComputeFieldAddressInstruction extends IRInstruction { irType = 'compute_field_address'; constructor(public dest: string, public address: string, public field: string) { super(); } }
+export class MoveInstruction extends IRInstruction {                irType = 'move';                  constructor(public dest: string, public source: string) { super(); } }
 export class PhiInstruction extends IRInstruction {                 irType = 'phi';                   constructor(public dest: string, public sources: string[]) { super(); } }
+export class CommentInstruction extends IRInstruction {             irType = 'comment';               constructor(public comment: string) { super(); } }
 
 export const getInstructionOperands = (instr: IRInstruction): string[] => {
   if (instr instanceof AssignInstruction) { return [instr.source]; } 
@@ -60,6 +62,7 @@ export const getInstructionOperands = (instr: IRInstruction): string[] => {
   else if (instr instanceof ReturnInstruction) { return instr.value ? [instr.value] : []; } 
   else if (instr instanceof ComputeFieldAddressInstruction) { return [instr.address]; } 
   else if (instr instanceof AddressOfInstruction) { return [instr.source]; } 
+  else if (instr instanceof MoveInstruction) { return [instr.source]; }
   else if (instr instanceof PhiInstruction) { return instr.sources; }
   else { return []; }
 }
@@ -76,6 +79,7 @@ export const getInstructionResult = (instr: IRInstruction): string | null => {
   else if (instr instanceof AccessInstruction) { return instr.dest; } 
   else if (instr instanceof LoadConstantInstruction) { return instr.dest; } 
   else if (instr instanceof AddressOfInstruction) { return instr.dest; }
+  else if (instr instanceof MoveInstruction) { return instr.dest; }
   else if (instr instanceof PhiInstruction) { return instr.dest; }
   else { return null; }
 }
@@ -141,7 +145,7 @@ export function formatInstruction(instr: IRInstruction): string {
   if (instr instanceof AssignInstruction) {
     return `${instr.dest} = ${instr.source}`;
   } else if (instr instanceof LoadConstantInstruction) {
-    return `${instr.dest} = ${instr.value}`;
+    return `${instr.dest} = constant ${instr.value}`;
   } else if (instr instanceof BinaryOperationInstruction) {
     return `${instr.dest} = ${instr.left} ${instr.operator} ${instr.right}`;
   } else if (instr instanceof ConditionalJumpInstruction) {
@@ -149,11 +153,11 @@ export function formatInstruction(instr: IRInstruction): string {
   } else if (instr instanceof JumpInstruction) {
     return `goto ${instr.target}`;
   } else if (instr instanceof CallInstruction) {
-    return `${instr.dest} = call ${instr.functionName}(${instr.args.join(', ')})`;
+    return `into ${instr.dest} call ${instr.functionName}(${instr.args.join(', ')})`;
   } else if (instr instanceof ReturnInstruction) {
     return `return ${instr.value}`;
   } else if (instr instanceof StoreToAddressInstruction) {
-    return `store ${instr.source} into address ${instr.address}`;
+    return `into ${instr.address} store ${instr.source}`;
   } else if (instr instanceof LoadFromAddressInstruction) {
     return `${instr.dest} = load from address ${instr.address}`;
   } else if (instr instanceof AddressOfInstruction) {
@@ -168,8 +172,12 @@ export function formatInstruction(instr: IRInstruction): string {
     return `end_access [${instr.capabilities.join(', ')}] ${instr.source}`;
   } else if (instr instanceof GetFieldPointerInstruction) {
     return `${instr.dest} = address of ${instr.address}.${instr.field}`;
+  } else if (instr instanceof MoveInstruction) {
+    return `move ${instr.dest} from ${instr.source}`;
   } else if (instr instanceof PhiInstruction) {
     return `${instr.dest} = phi(${instr.sources.join(', ')})`;
+  } else if (instr instanceof CommentInstruction) {
+    return `# ${instr.comment}`;
   } else {
     return `Unknown instruction: ${instr.irType}`;
   }
@@ -245,4 +253,13 @@ export const printLivenessMap = (liveness: LivenessMap) => {
       console.log(`  ${blockId}: ${state.livenessType}${state.lastUse ? ` (last use: ${state.lastUse.blockId}:${state.lastUse.instrId})` : ''}`);
     }
   }
+}
+
+// https://gist.github.com/JBlond/2fea43a3049b38287e5e9cefc87b2124
+export const textColors = {
+  red: (string: string) => `\x1b[31m${string}\x1b[39m`,
+  yellow: (string: string) => `\x1b[33m${string}\x1b[39m`,
+  green: (string: string) => `\x1b[32m${string}\x1b[39m`,
+  cyan: (string: string) => `\x1b[36m${string}\x1b[39m`,
+  gray: (string: string) => `\x1b[38;5;242m${string}\x1b[39m`,
 }
