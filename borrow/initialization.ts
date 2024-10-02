@@ -1,5 +1,5 @@
 import { ControlFlowGraph, buildCFG } from "./controlflow";
-import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, compilerAssert, Type, StructType, Capability, EndAccessInstruction, PhiInstruction, MoveInstruction, VoidType } from "./defs";
+import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, compilerAssert, Type, StructType, Capability, EndAccessInstruction, PhiInstruction, MoveInstruction, VoidType, InstructionId, CommentInstruction } from "./defs";
 import { Worklist } from "./worklist";
 
 type InitializationState = Top | Bottom | Sequence;
@@ -39,6 +39,7 @@ export class InitializationCheckingPass {
   debugLog = false
   currentBlock: BasicBlock | null = null
   currentInstr: IRInstruction | null = null
+  instrIndex = 0
 
   constructor(fn: FunctionBlock) {
     this.function = fn;
@@ -110,12 +111,13 @@ export class InitializationCheckingPass {
     }
 
     this.currentBlock = block;
-    let index = 0;
-    while (index < block.instructions.length) {
-      const instr = block.instructions[index];
+    this.instrIndex = 0;
+    while (this.instrIndex < block.instructions.length) {
+      const instr = block.instructions[this.instrIndex];
       this.currentInstr = instr;
-      this.execute(instr);
-      index++;
+      const instrId = new InstructionId(block.label, this.instrIndex);
+      this.execute(instrId, instr);
+      this.instrIndex++;
     }
 
     if (this.debugLog) {
@@ -127,7 +129,7 @@ export class InitializationCheckingPass {
     this.blockStates.set(block.label, { input: inputState, output: cloneState(this.state) });
   }
 
-  execute(instr: IRInstruction): void {
+  execute(instrId: InstructionId, instr: IRInstruction): void {
     if (instr instanceof AssignInstruction) {
       this.ensureRegisterInitialized(instr.source);
       this.state.locals.set(instr.dest, this.state.locals.get(instr.source)!);
@@ -156,9 +158,18 @@ export class InitializationCheckingPass {
       } else if (instr.capabilities[0] === Capability.Sink) {
         this.ensureRegisterInitialized(instr.source);
       } else if (instr.capabilities[0] === Capability.Set) {
-        const isUninitialized = this.isDefinitelyUninitialized(instr.source);
-        const isInitialized = this.isDefinitelyInitialized(instr.source);
-        compilerAssert(isUninitialized || isInitialized, `Register ${instr.source} is not definitely initialized or uninitialized`);
+        // this.ensureRegisterUninitialized(instr.source);
+        if (!this.isDefinitelyUninitialized(instr.source)) {
+          // TODO: For trivial types/builtin types we can just mark as uninitialized
+          this.currentBlock!.instructions.splice(instrId.instrId, 0, new CommentInstruction(`Inserted uninitialize for ${instr.source}`))
+          this.state.locals.get(instr.source)!.forEach(addr => {
+            this.state.memory.set(addr, BOTTOM);
+          })
+          this.instrIndex++; // Skip the access instruction that would otherwise be visited since we inserted a new instruction
+        }
+        // const isUninitialized = this.isDefinitelyUninitialized(instr.source);
+        // const isInitialized = this.isDefinitelyInitialized(instr.source);
+        // compilerAssert(isUninitialized || isInitialized, `Register ${instr.source} is not definitely initialized or uninitialized`);
       }
       this.state.locals.set(instr.dest, this.state.locals.get(instr.source)!);
     } else if (instr instanceof CallInstruction) {
@@ -189,7 +200,12 @@ export class InitializationCheckingPass {
     } else if (instr instanceof EndAccessInstruction) {
       // pass
     } else if (instr instanceof MoveInstruction) {
-      this.ensureRegisterInitialized(instr.source);
+      if (this.isDefinitelyInitialized(instr.target)) {
+        this.emitMove(instrId, instr, Capability.Inout)
+      } else if (this.isDefinitelyUninitialized(instr.target)) {
+        this.emitMove(instrId, instr, Capability.Set)
+      } else compilerAssert(false, `Target is not definitely initialized or uninitialized`)
+      // this.ensureRegisterInitialized(instr.source);
       this.state.locals.get(instr.target)!.forEach(addr => {
         this.state.memory.set(addr, TOP);
       }) // Initialize the target
@@ -252,6 +268,16 @@ export class InitializationCheckingPass {
     const addr = this.newAddress(type);
     state.locals.set(param, new Set([addr]));
     state.memory.set(addr, TOP);
+  }
+
+  emitMove(instrId: InstructionId, instr: MoveInstruction, capability: Capability) {
+    const block = this.currentBlock!;
+    const instrs = [
+      new CommentInstruction(`Replaced move with ${capability} to ${instr.target} from ${instr.source}`),
+      // new AccessInstruction(instrId, instr.source, instr.target, [capability]),
+      // new EndAccessInstruction(instrId, instr.target)
+    ];
+    block.instructions.splice(instrId.instrId, 1, ...instrs);
   }
 
 }

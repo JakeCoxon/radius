@@ -30,6 +30,9 @@ const runTest = (name: string, ast: ProgramNode) => {
       reify.debugLog = true;
       reify.reifyAccesses();
 
+      console.log("Reified")
+      printIR(fn.blocks);
+
       const interpreter = new InitializationCheckingPass(fn);
       interpreter.debugLog = true;
       interpreter.checkedInterpret();

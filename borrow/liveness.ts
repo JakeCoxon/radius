@@ -1,5 +1,5 @@
 import { ControlFlowGraph } from "./controlflow";
-import { AccessInstruction, BasicBlock, EndAccessInstruction, FunctionBlock, IRInstruction, InstructionId, LivenessMap, LivenessState, LivenessType, UsageMap, compilerAssert, createUsageMap, getInstructionOperands, getInstructionResult, printLivenessMap } from "./defs";
+import { AccessInstruction, BasicBlock, EndAccessInstruction, FunctionBlock, IRInstruction, InstructionId, LivenessMap, LivenessState, LivenessType, Usage, UsageMap, compilerAssert, createUsageMap, getInstructionOperands, getInstructionResult, printLivenessMap } from "./defs";
 
 type InsertMap = {[key: string]: { at: InstructionId, newInstr: IRInstruction }[]}
 
@@ -191,9 +191,20 @@ export const insertCloseAccesses = (cfg: ControlFlowGraph, blocks: BasicBlock[])
 const closeAccess = (cfg: ControlFlowGraph, liveness: LivenessMap, usage: UsageMap, sourceInstr: AccessInstruction, inserts: InsertMap) => {
   extendLiveness(liveness, usage, cfg, sourceInstr.dest)
   const boundaries = liveness[sourceInstr.dest]
+
+  const alreadyClosed = (lastUse: InstructionId | null) => {
+    if (!lastUse) return false
+    const block = cfg.blocks.find(b => b.label === lastUse.blockId)!
+    const instr = block.instructions[lastUse.instrId]
+    if (instr instanceof EndAccessInstruction) {
+      return instr.source === sourceInstr.dest
+    }
+    return false
+  }
   
   for (const [blockId, liveness] of Object.entries(boundaries)) {
     if (liveness.livenessType === LivenessType.Closed || liveness.livenessType === LivenessType.LiveIn) {
+      if (alreadyClosed(liveness.lastUse)) continue
       const newInstr = new EndAccessInstruction(sourceInstr.dest, sourceInstr.capabilities)
       inserts[blockId] = inserts[blockId] || []
       const at = liveness.lastUse ? 

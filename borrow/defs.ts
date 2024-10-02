@@ -64,6 +64,7 @@ export const getInstructionOperands = (instr: IRInstruction): string[] => {
   else if (instr instanceof AddressOfInstruction) { return [instr.source]; } 
   else if (instr instanceof MoveInstruction) { return [instr.target, instr.source]; }
   else if (instr instanceof PhiInstruction) { return instr.sources; }
+  else if (instr instanceof EndAccessInstruction) { return [instr.source]; }
   else { return []; }
 }
 export const getInstructionResult = (instr: IRInstruction): string | null => {
@@ -173,7 +174,7 @@ export function formatInstruction(instr: IRInstruction): string {
   } else if (instr instanceof GetFieldPointerInstruction) {
     return `${instr.dest} = address of ${instr.address}.${instr.field}`;
   } else if (instr instanceof MoveInstruction) {
-    return `move ${instr.target} from ${instr.source}`;
+    return `into ${instr.target} move from ${instr.source}`;
   } else if (instr instanceof PhiInstruction) {
     return `${instr.dest} = phi(${instr.sources.join(', ')})`;
   } else if (instr instanceof CommentInstruction) {

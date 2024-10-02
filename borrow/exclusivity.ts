@@ -159,7 +159,9 @@ export class ExclusivityCheckingPass {
     } else if (instr instanceof EndAccessInstruction) {
       this.endAccess(instrId, instr);
     } else if (instr instanceof PhiInstruction) {
-      // this.state.locals.set(instr.dest, this.state.locals.get(instr.source)!);
+      // TODO: We should actually copy the state from the block
+      // that we came from. Need a test case for this
+      this.state.locals.set(instr.dest, new Set([]));
     } else {
       console.error(`Unknown instruction in exclusivity pass: ${instr.irType}`);
     }

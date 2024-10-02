@@ -1,4 +1,4 @@
-import { ASTNode, AllocInstruction, AssignInstruction, AssignmentNode, BasicBlock, BinaryExpressionNode, BinaryOperationInstruction, BlockStatementNode, CallExpressionNode, CallInstruction, AccessInstruction, ConditionalJumpInstruction, CreateStructNode, ExpressionNode, ExpressionStatementNode, FunctionBlock, FunctionDeclarationNode, FunctionParameter, IRInstruction, IRValue, IdentifierNode, IfStatementNode, JumpInstruction, LValue, LetConstNode, LiteralNode, LoadConstantInstruction, LoadFromAddressInstruction, MemberExpressionNode, ProgramNode, RValue, ReturnInstruction, ReturnNode, StoreToAddressInstruction, StructType, Variable, VariableDeclarationNode, WhileStatementNode, compilerAssert, GetFieldPointerInstruction, Capability, AndNode, OrNode, PhiInstruction, Type, VoidType, CommentInstruction, MoveInstruction } from "./defs";
+import { ASTNode, AllocInstruction, AssignInstruction, AssignmentNode, BasicBlock, BinaryExpressionNode, BinaryOperationInstruction, BlockStatementNode, CallExpressionNode, CallInstruction, AccessInstruction, ConditionalJumpInstruction, CreateStructNode, ExpressionNode, ExpressionStatementNode, FunctionBlock, FunctionDeclarationNode, FunctionParameter, IRInstruction, IRValue, IdentifierNode, IfStatementNode, JumpInstruction, LValue, LetConstNode, LiteralNode, LoadConstantInstruction, LoadFromAddressInstruction, MemberExpressionNode, ProgramNode, RValue, ReturnInstruction, ReturnNode, StoreToAddressInstruction, StructType, Variable, VariableDeclarationNode, WhileStatementNode, compilerAssert, GetFieldPointerInstruction, Capability, AndNode, OrNode, PhiInstruction, Type, VoidType, CommentInstruction, MoveInstruction, IntType, EndAccessInstruction } from "./defs";
 
 type ExpressionContext = {
   valueCategory: 'rvalue' | 'lvalue';
@@ -113,7 +113,7 @@ export class CodeGenerator {
     this.currentFunction = functionBlock;
     this.blocks = functionBlock.blocks
 
-    this.newBlock(functionLabel);
+    const initialBlock = this.newBlock(functionLabel);
 
     const savedFunctionInstructions = this.functionInstructions;
     this.functionInstructions = []
@@ -145,7 +145,7 @@ export class CodeGenerator {
     // Exit the function scope
     // this.exitScope();
 
-    this.currentBlock.instructions.unshift(...this.functionInstructions);
+    initialBlock.instructions.unshift(...this.functionInstructions);
     this.functionInstructions = savedFunctionInstructions;
 
     // Restore the previous block
@@ -287,7 +287,7 @@ export class CodeGenerator {
       const reg = this.newRegister();
       const fieldIndex = i;
       const type = field.type
-      this.addInstruction(new CommentInstruction(`Store field ${field.name} to ${structReg}`))
+      this.addInstruction(new CommentInstruction(`Store field ${field.name} of ${structReg}`))
       this.addInstruction(new GetFieldPointerInstruction(reg, structReg, fieldIndex));
       this.addInstruction(new AccessInstruction(fieldAccessReg, reg, [Capability.Set]));
       this.addInstruction(new StoreToAddressInstruction(fieldAccessReg, type, fieldValue.register));
@@ -362,17 +362,20 @@ export class CodeGenerator {
       compilerAssert(rightReg instanceof RValue, 'Assignment right-hand side must be an RValue');
 
       const newReg = this.newRegister();
-      const sourceAccessReg = this.newRegister();
-      this.addInstruction(new AccessInstruction(newReg, destReg.register, [Capability.Set]));
-      this.addInstruction(new AccessInstruction(sourceAccessReg, rightReg.register, [Capability.Let, Capability.Sink]));
+      // const sourceAccessReg = this.newRegister();
+      // this.addInstruction(new AccessInstruction(newReg, destReg.register, [Capability.Inout, Capability.Set]));
+      // this.addInstruction(new AccessInstruction(sourceAccessReg, rightReg.register, [Capability.Let, Capability.Sink]));
       // this.addInstruction(new CommentInstruction(`Move ${sourceAccessReg} to ${newReg}`))
-      this.addInstruction(new MoveInstruction(newReg, sourceAccessReg));
+      // this.generateMoveInstruction(newReg, rightReg.register, type)
+      this.generateMoveInstruction(destReg.register, rightReg.register, type)
+
+
       // if (type instanceof StructType) {
       //   this.addInstruction(new CallInstruction(newReg, 'move', [newReg, sourceAccessReg]));
       // } else {
       //   this.addInstruction(new StoreToAddressInstruction(newReg, type, sourceAccessReg));
       // }
-      return rightReg
+      return destReg
     } else if (left instanceof MemberExpressionNode) {
       // Assignment to object field
       const objReg = this.generateExpression(left.object, context);
@@ -398,6 +401,23 @@ export class CodeGenerator {
     }
   }
 
+  generateMoveInstruction(destReg: string, sourceReg: string, type: Type) {
+    if (type === IntType) {
+      const sourceAccessReg = this.newRegister();
+      const destAccessReg = this.newRegister();
+      const valueReg = this.newRegister();
+      this.addInstruction(new AccessInstruction(sourceAccessReg, sourceReg, [Capability.Sink]));
+      this.addInstruction(new AccessInstruction(destAccessReg, destReg, [Capability.Set]));
+      this.addInstruction(new LoadFromAddressInstruction(valueReg, sourceAccessReg));
+      this.addInstruction(new StoreToAddressInstruction(destAccessReg, type, valueReg));
+      this.addInstruction(new EndAccessInstruction(sourceAccessReg, [Capability.Sink]));
+      this.addInstruction(new EndAccessInstruction(destAccessReg, [Capability.Set]));
+    } else {
+      // compilerAssert(false, 'Unsupported type');
+      this.addInstruction(new MoveInstruction(destReg, sourceReg));
+    }
+  }
+
   generateBinaryExpression(node: BinaryExpressionNode, context: ExpressionContext): IRValue {
     const leftReg = this.generateExpression(node.left, context)
     const rightReg = this.generateExpression(node.right, context)
@@ -406,6 +426,8 @@ export class CodeGenerator {
     // Create a BinaryOperationInstruction
     this.addInstruction(new BinaryOperationInstruction(resultReg, node.operator, leftReg.register, rightReg.register));
     this.storeResult(resultReg, VoidType, context)
+    // TODO: Either store the result in a new stack alloc
+    // or make sure returning registers is handled properly
     return new RValue(resultReg)
   }
 
@@ -430,7 +452,7 @@ export class CodeGenerator {
         const valueReg = this.newRegister();
         // this.addInstruction(new LoadFromAddressInstruction(valueReg, addressReg.register));
         // return new RValue(valueReg);
-        this.addInstruction(new AccessInstruction(accessReg, addressReg.register, [Capability.Let]));
+        this.addInstruction(new AccessInstruction(accessReg, addressReg.register, [Capability.Sink]));
         this.addInstruction(new LoadFromAddressInstruction(valueReg, accessReg));
         return new RValue(valueReg);
       }
