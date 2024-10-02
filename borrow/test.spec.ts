@@ -4,6 +4,7 @@ import { AndNode, AssignmentNode, BinaryExpressionNode, BlockStatementNode, Bool
 import { ExclusivityCheckingPass } from "./exclusivity";
 import { InitializationCheckingPass } from "./initialization";
 import { insertCloseAccesses } from "./liveness";
+import { ReifyAccessPass } from "./reifyaccess";
 
 
 const runTest = (name: string, ast: ProgramNode) => {
@@ -24,6 +25,10 @@ const runTest = (name: string, ast: ProgramNode) => {
       const cfg = buildCFG(fn.blocks)
       printCFG(cfg)
       printDominators(cfg)
+
+      const reify = new ReifyAccessPass(cfg);
+      reify.debugLog = true;
+      reify.reifyAccesses();
 
       const interpreter = new InitializationCheckingPass(fn);
       interpreter.debugLog = true;

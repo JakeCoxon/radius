@@ -1,5 +1,5 @@
 import { ControlFlowGraph, buildCFG } from "./controlflow";
-import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, compilerAssert, Type, StructType, Capability, EndAccessInstruction, PhiInstruction } from "./defs";
+import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, compilerAssert, Type, StructType, Capability, EndAccessInstruction, PhiInstruction, MoveInstruction, VoidType } from "./defs";
 import { Worklist } from "./worklist";
 
 type InitializationState = Top | Bottom | Sequence;
@@ -165,7 +165,9 @@ export class InitializationCheckingPass {
       for (const arg of instr.args) {
         this.ensureRegisterInitialized(arg);
       }
-      this.state.locals.set(instr.dest, new Set([]));
+      this.state.locals.get(instr.target)!.forEach(addr => {
+        this.state.memory.set(addr, TOP);
+      }) // Initialize the target
     } else if (instr instanceof BinaryOperationInstruction) {
       this.ensureRegisterInitialized(instr.left);
       this.ensureRegisterInitialized(instr.right);
@@ -186,12 +188,20 @@ export class InitializationCheckingPass {
       this.ensureRegisterInitialized(instr.condition);
     } else if (instr instanceof EndAccessInstruction) {
       // pass
+    } else if (instr instanceof MoveInstruction) {
+      this.ensureRegisterInitialized(instr.source);
+      this.state.locals.get(instr.target)!.forEach(addr => {
+        this.state.memory.set(addr, TOP);
+      }) // Initialize the target
+      this.state.locals.get(instr.source)!.forEach(addr => {
+        this.state.memory.set(addr, BOTTOM);
+      }) // Uninitialize the source
     } else if (instr instanceof PhiInstruction) {
       // TODO: We should actually copy the state from the block
       // that we came from. Need a test case for this
       this.state.locals.set(instr.dest, new Set([]));
     } else {
-      console.error(`Unknown instruction in interp: ${instr.irType}`);
+      console.error(`Unknown instruction in initialization pass: ${instr.irType}`);
     }
   }
 

@@ -39,7 +39,7 @@ export class GetFieldPointerInstruction extends IRInstruction {     irType = 'ge
 export class JumpInstruction extends IRInstruction {                irType = 'jump';                  constructor(public target: string) { super(); } }
 export class ConditionalJumpInstruction extends IRInstruction {     irType = 'cjump';                 constructor(public condition: string, public targetLabel: string, public elseLabel: string) { super(); } }
 export class BinaryOperationInstruction extends IRInstruction {     irType = 'binaryop';              constructor(public dest: string, public operator: string, public left: string, public right: string) { super(); } }
-export class CallInstruction extends IRInstruction {                irType = 'call';                  constructor(public dest: string, public functionName: string, public args: string[]) { super(); } }
+export class CallInstruction extends IRInstruction {                irType = 'call';                  constructor(public target: string, public functionName: string, public args: string[]) { super(); } }
 export class ReturnInstruction extends IRInstruction {              irType = 'return';                constructor(public value: string | null) { super(); } }
 export class AccessInstruction extends IRInstruction {              irType = 'access';                constructor(public dest: string, public source: string, public capabilities: Capability[]) { super(); } }
 export class EndAccessInstruction extends IRInstruction {           irType = 'end_access';            constructor(public source: string, public capabilities: Capability[]) { super(); } }
@@ -47,7 +47,7 @@ export class StoreToAddressInstruction extends IRInstruction {      irType = 'st
 export class LoadFromAddressInstruction extends IRInstruction {     irType = 'load_from_address';     constructor(public dest: string, public address: string) { super(); } }
 export class AddressOfInstruction extends IRInstruction {           irType = 'addressof';             constructor(public dest: string, public source: string) { super(); } }
 export class ComputeFieldAddressInstruction extends IRInstruction { irType = 'compute_field_address'; constructor(public dest: string, public address: string, public field: string) { super(); } }
-export class MoveInstruction extends IRInstruction {                irType = 'move';                  constructor(public dest: string, public source: string) { super(); } }
+export class MoveInstruction extends IRInstruction {                irType = 'move';                  constructor(public target: string, public source: string) { super(); } }
 export class PhiInstruction extends IRInstruction {                 irType = 'phi';                   constructor(public dest: string, public sources: string[]) { super(); } }
 export class CommentInstruction extends IRInstruction {             irType = 'comment';               constructor(public comment: string) { super(); } }
 
@@ -56,20 +56,20 @@ export const getInstructionOperands = (instr: IRInstruction): string[] => {
   else if (instr instanceof BinaryOperationInstruction) { return [instr.left, instr.right]; } 
   else if (instr instanceof LoadFromAddressInstruction) { return [instr.address]; } 
   else if (instr instanceof StoreToAddressInstruction) { return [instr.address, instr.source]; } 
-  else if (instr instanceof CallInstruction) { return instr.args; } 
+  else if (instr instanceof CallInstruction) { return [instr.target, ...instr.args]; } 
   else if (instr instanceof AccessInstruction) { return [instr.source]; } 
   else if (instr instanceof GetFieldPointerInstruction) { return [instr.address]; } 
   else if (instr instanceof ReturnInstruction) { return instr.value ? [instr.value] : []; } 
   else if (instr instanceof ComputeFieldAddressInstruction) { return [instr.address]; } 
   else if (instr instanceof AddressOfInstruction) { return [instr.source]; } 
-  else if (instr instanceof MoveInstruction) { return [instr.source]; }
+  else if (instr instanceof MoveInstruction) { return [instr.target, instr.source]; }
   else if (instr instanceof PhiInstruction) { return instr.sources; }
   else { return []; }
 }
 export const getInstructionResult = (instr: IRInstruction): string | null => {
   if (instr instanceof AssignInstruction) { return instr.dest; } 
   else if (instr instanceof AllocInstruction) { return instr.dest; } 
-  else if (instr instanceof CallInstruction) { return instr.dest; } 
+  else if (instr instanceof CallInstruction) { return null; } 
   else if (instr instanceof GetFieldPointerInstruction) { return instr.dest; } 
   else if (instr instanceof LoadFromAddressInstruction) { return instr.dest } 
   else if (instr instanceof ComputeFieldAddressInstruction) { return instr.dest; } 
@@ -79,7 +79,7 @@ export const getInstructionResult = (instr: IRInstruction): string | null => {
   else if (instr instanceof AccessInstruction) { return instr.dest; } 
   else if (instr instanceof LoadConstantInstruction) { return instr.dest; } 
   else if (instr instanceof AddressOfInstruction) { return instr.dest; }
-  else if (instr instanceof MoveInstruction) { return instr.dest; }
+  else if (instr instanceof MoveInstruction) { return null; }
   else if (instr instanceof PhiInstruction) { return instr.dest; }
   else { return null; }
 }
@@ -153,7 +153,7 @@ export function formatInstruction(instr: IRInstruction): string {
   } else if (instr instanceof JumpInstruction) {
     return `goto ${instr.target}`;
   } else if (instr instanceof CallInstruction) {
-    return `into ${instr.dest} call ${instr.functionName}(${instr.args.join(', ')})`;
+    return `into ${instr.target} call ${instr.functionName}(${instr.args.join(', ')})`;
   } else if (instr instanceof ReturnInstruction) {
     return `return ${instr.value}`;
   } else if (instr instanceof StoreToAddressInstruction) {
@@ -173,7 +173,7 @@ export function formatInstruction(instr: IRInstruction): string {
   } else if (instr instanceof GetFieldPointerInstruction) {
     return `${instr.dest} = address of ${instr.address}.${instr.field}`;
   } else if (instr instanceof MoveInstruction) {
-    return `move ${instr.dest} from ${instr.source}`;
+    return `move ${instr.target} from ${instr.source}`;
   } else if (instr instanceof PhiInstruction) {
     return `${instr.dest} = phi(${instr.sources.join(', ')})`;
   } else if (instr instanceof CommentInstruction) {
@@ -254,6 +254,34 @@ export const printLivenessMap = (liveness: LivenessMap) => {
     }
   }
 }
+
+export type Usage = {
+  instrId: InstructionId,
+  operandIndex: number
+}
+export type UsageMap = Map<string, Usage[]>;
+
+export const createUsageMap = (blocks: BasicBlock[]): UsageMap => {
+
+  const usageMap = new Map<string, Usage[]>();
+  for (const block of blocks) {
+    for (let id = 0; id < block.instructions.length; id++) {
+      const instr = block.instructions[id];
+      const operands = getInstructionOperands(instr);
+      for (let i = 0; i < operands.length; i++) {
+        const operand = operands[i];
+        const usage = { instrId: new InstructionId(block.label, id), operandIndex: i };
+        if (usageMap.has(operand)) {
+          usageMap.get(operand)!.push(usage);
+        } else {
+          usageMap.set(operand, [usage]);
+        }
+      }
+    }
+  }
+  return usageMap;
+}
+
 
 // https://gist.github.com/JBlond/2fea43a3049b38287e5e9cefc87b2124
 export const textColors = {

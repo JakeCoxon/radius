@@ -161,7 +161,7 @@ export class ExclusivityCheckingPass {
     } else if (instr instanceof PhiInstruction) {
       // this.state.locals.set(instr.dest, this.state.locals.get(instr.source)!);
     } else {
-      console.error(`Unknown instruction in interp: ${instr.irType}`);
+      console.error(`Unknown instruction in exclusivity pass: ${instr.irType}`);
     }
   }
 

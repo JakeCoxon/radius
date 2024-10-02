@@ -1,8 +1,7 @@
 import { ControlFlowGraph } from "./controlflow";
-import { AccessInstruction, BasicBlock, EndAccessInstruction, FunctionBlock, IRInstruction, InstructionId, LivenessMap, LivenessState, LivenessType, compilerAssert, getInstructionOperands, getInstructionResult, printLivenessMap } from "./defs";
+import { AccessInstruction, BasicBlock, EndAccessInstruction, FunctionBlock, IRInstruction, InstructionId, LivenessMap, LivenessState, LivenessType, UsageMap, compilerAssert, createUsageMap, getInstructionOperands, getInstructionResult, printLivenessMap } from "./defs";
 
 type InsertMap = {[key: string]: { at: InstructionId, newInstr: IRInstruction }[]}
-type UsageMap = Map<string, InstructionId[]>;
 
 const createResultMap = (blocks: BasicBlock[]) => {
   const operandToInstrMap = new Map<string, InstructionId>();
@@ -17,26 +16,6 @@ const createResultMap = (blocks: BasicBlock[]) => {
   }
   return operandToInstrMap;
 }
-
-const createUsageMap = (blocks: BasicBlock[]) => {
-
-  const usageMap = new Map<string, InstructionId[]>();
-  for (const block of blocks) {
-    for (let id = 0; id < block.instructions.length; id++) {
-      const instr = block.instructions[id];
-      const operands = getInstructionOperands(instr);
-      for (const operand of operands) {
-        if (usageMap.has(operand)) {
-          usageMap.get(operand)!.push(new InstructionId(block.label, id));
-        } else {
-          usageMap.set(operand, [new InstructionId(block.label, id)]);
-        }
-      }
-    }
-  }
-  return usageMap;
-}
-
 
 
 const getLiveness = (usages: UsageMap, cfg: ControlFlowGraph) => {
@@ -58,7 +37,7 @@ const getLiveness = (usages: UsageMap, cfg: ControlFlowGraph) => {
     if (!instr) continue
     compilerAssert(instr, `No instruction found for operand ${operand}`);
     // Collect all blocks in which the operand is being used.
-    uses.forEach(use => occurrences.push(use.blockId));
+    uses.forEach(use => occurrences.push(use.instrId.blockId));
 
     while (occurrences.length > 0) {
       const occurrence = occurrences.shift()!;
@@ -79,7 +58,7 @@ const getLiveness = (usages: UsageMap, cfg: ControlFlowGraph) => {
 
     if (Object.keys(approximateCoverage).length === 0) {
       // No uses of the operand found in the function.
-      const blockId = uses[0].blockId;
+      const blockId = uses[0].instrId.blockId;
       allLiveness[operand] = { [blockId]: LivenessState.Closed(lastUseOfOperand(blocks, operand, blockId)) };
       continue
     }
@@ -144,8 +123,8 @@ const extendLiveness = (liveness: LivenessMap, usages: UsageMap, cfg: ControlFlo
   compilerAssert(uses, `No uses found for register ${register}`);
 
   for (const use of uses) {
-    const block = cfg.blocks.find(b => b.label === use.blockId)!;
-    const instr = block.instructions[use.instrId];
+    const block = cfg.blocks.find(b => b.label === use.instrId.blockId)!;
+    const instr = block.instructions[use.instrId.instrId];
     if (instr instanceof AccessInstruction) {
       mergeLivenessBlocks(liveness[register], liveness[instr.dest])
     }
