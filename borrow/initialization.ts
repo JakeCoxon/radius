@@ -1,5 +1,5 @@
 import { ControlFlowGraph, buildCFG } from "./controlflow";
-import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, compilerAssert, Type, StructType, Capability, EndAccessInstruction, PhiInstruction, MoveInstruction, VoidType, InstructionId, CommentInstruction } from "./defs";
+import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, compilerAssert, Type, StructType, Capability, EndAccessInstruction, PhiInstruction, MoveInstruction, VoidType, InstructionId, CommentInstruction, textColors } from "./defs";
 import { Worklist } from "./worklist";
 
 type InitializationState = Top | Bottom | Sequence;
@@ -89,6 +89,11 @@ export class InitializationCheckingPass {
 
       const allInputStates = inputStates.length === predecessors.length
 
+      if (true || block.label === 'L1' || block.label === 'L0') {
+        console.log('state.input a1', state && state.input.memory.get('a1'))
+        console.log('mergedInputState a1', mergedInputState.memory.get('a1'))
+      }
+
       if (state && allInputStates && statesEqual(state.input, mergedInputState)) return
 
       this.executeBlock(block, mergedInputState);
@@ -103,7 +108,7 @@ export class InitializationCheckingPass {
 
     this.state = cloneState(inputState)
     if (this.debugLog) {
-      console.log("\nExecuting block:", block.label);
+      console.log(textColors.red(`\nExecuting block: ${block.label}`));
       console.log("Input state for block:", block.label)
 
       printLocals(inputState.locals)
@@ -126,7 +131,7 @@ export class InitializationCheckingPass {
       printMemory(this.state.memory)
     }
 
-    this.blockStates.set(block.label, { input: inputState, output: cloneState(this.state) });
+    this.blockStates.set(block.label, { input: cloneState(inputState), output: cloneState(this.state) });
   }
 
   execute(instrId: InstructionId, instr: IRInstruction): void {

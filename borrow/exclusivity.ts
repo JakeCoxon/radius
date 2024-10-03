@@ -149,7 +149,7 @@ export class ExclusivityCheckingPass {
       const fields = [...addresses].map(addr => `${addr}.${instr.field}`)
       this.state.locals.set(instr.dest, new Set(fields));
       fields.forEach(f => this.state.memory.set(f, []))
-      console.log(this.state.locals.get(instr.dest))
+      // console.log(this.state.locals.get(instr.dest))
     } else if (instr instanceof BinaryOperationInstruction) {
       this.state.locals.set(instr.dest, new Set([]));
     } else if (instr instanceof JumpInstruction) {
