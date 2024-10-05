@@ -160,11 +160,11 @@ const mergeLivenessBlocks = (liveness: Record<string, LivenessState>, other: Rec
   }
 }
 
-export const insertCloseAccesses = (cfg: ControlFlowGraph, blocks: BasicBlock[]) => {
+export const insertCloseAccesses = (cfg: ControlFlowGraph, blocks: BasicBlock[], debugLog: boolean) => {
 
   const usage = createUsageMap(blocks)
   const liveness = getLiveness(usage, cfg)
-  printLivenessMap(liveness)
+  if (debugLog) printLivenessMap(liveness)
 
   const insertsMap: InsertMap = {}
 

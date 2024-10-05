@@ -150,11 +150,13 @@ export class InitializationCheckingPass {
         const ids = addr.split('.')
         const rootType = this.addressTypes.get(ids[0])
         compilerAssert(rootType, `Root type not found for address ${addr}`)
-        this.initializeMemoryAddress(addr, rootType);
+        this.updateMemoryAddressPathState(addr, rootType, TOP);
       }
-      if (this.debugLog) console.log("After StoreToAddressInstruction", instr.address, instr.source)
-      printLocals(this.state.locals)
-      printMemory(this.state.memory)
+      if (this.debugLog) {
+        console.log("After StoreToAddressInstruction", instr.address, instr.source)
+        printLocals(this.state.locals)
+        printMemory(this.state.memory)
+      }
     } else if (instr instanceof AllocInstruction) {
       const addr = this.newAddress(instr.type);
       this.state.locals.set(instr.dest, new Set([addr]));
@@ -177,9 +179,6 @@ export class InitializationCheckingPass {
           })
           this.instrIndex++; // Skip the access instruction that would otherwise be visited since we inserted a new instruction
         }
-        // const isUninitialized = this.isDefinitelyUninitialized(instr.source);
-        // const isInitialized = this.isDefinitelyInitialized(instr.source);
-        // compilerAssert(isUninitialized || isInitialized, `Register ${instr.source} is not definitely initialized or uninitialized`);
       }
       this.state.locals.set(instr.dest, this.state.locals.get(instr.source)!);
     } else if (instr instanceof CallInstruction) {
@@ -204,18 +203,22 @@ export class InitializationCheckingPass {
       compilerAssert(this.state.locals.get(instr.dest) === undefined, `Register ${instr.dest} is already initialized`);
       const fields = [...addresses].map(addr => `${addr}.${instr.field}`)
       this.state.locals.set(instr.dest, new Set(fields));
-      if (this.debugLog) console.log("After GetFieldPointerInstruction", instr.address, instr.dest, fields)
-      printLocals(this.state.locals)
-      printMemory(this.state.memory)
+      if (this.debugLog) {
+        console.log("After GetFieldPointerInstruction", instr.address, instr.dest, fields)
+        printLocals(this.state.locals)
+        printMemory(this.state.memory)
+      }
     } else if (instr instanceof JumpInstruction) {
     } else if (instr instanceof ConditionalJumpInstruction) {
       this.ensureRegisterInitialized(instr.condition);
     } else if (instr instanceof EndAccessInstruction) {
       // pass
     } else if (instr instanceof MoveInstruction) {
-      if (this.debugLog) console.log("MoveInstruction", instr.source, instr.target)
-      printLocals(this.state.locals)
-      printMemory(this.state.memory)
+      if (this.debugLog) {
+        console.log("MoveInstruction", instr.source, instr.target)
+        printLocals(this.state.locals)
+        printMemory(this.state.memory)
+      }
       if (this.isDefinitelyInitialized(instr.target)) {
         this.emitMove(instrId, instr, Capability.Inout)
       } else if (this.isDefinitelyUninitialized(instr.target)) {
@@ -224,14 +227,16 @@ export class InitializationCheckingPass {
     } else if (instr instanceof MarkInitializedInstruction) {
       const locals = this.state.locals.get(instr.target);
       compilerAssert(locals, `Register ${instr.target} is not found`);
-      if (instr.initialized) {
-        for (const addr of locals) {
-          this.state.memory.set(addr, TOP);
-        }
-      } else {
-        for (const addr of locals) {
-          this.state.memory.set(addr, BOTTOM);
-        }
+      const newState = instr.initialized ? TOP : BOTTOM; 
+      for (const addr of locals) {
+        const ids = addr.split('.')
+        const rootType = this.addressTypes.get(ids[0])
+        this.updateMemoryAddressPathState(addr, rootType!, newState)
+      }
+      if (this.debugLog) {
+        console.log("After MarkInitializedInstruction", instr.target, instr.initialized)
+        printLocals(this.state.locals)
+        printMemory(this.state.memory)
       }
     } else if (instr instanceof PhiInstruction) {
       // TODO: We should actually copy the state from the block
@@ -278,12 +283,13 @@ export class InitializationCheckingPass {
     return addr;
   }
 
-  initializeMemoryAddress(addr: string, rootType: Type) {
+  updateMemoryAddressPathState(addr: string, rootType: Type, newState: InitializationState) {
     const ids = addr.split('.')
     let current = this.state.memory.get(ids[0])
     compilerAssert(current, `Address ${addr} is not initialized`)
-    const sd = addressPathToInitializationState(ids.slice(1), rootType)
-    const newSd = meetInitializationStateUpper(current, sd)
+    
+    const statePath = createStatePathState(ids.slice(1), rootType)
+    const newSd = meetInitializationStatePath(current, statePath, newState)
     this.state.memory.set(ids[0], newSd)
   }
 
@@ -354,25 +360,41 @@ function initializationStateToString(sd: InitializationState): string {
   return '???';
 }
 
-function meetInitializationStateUpper(a: InitializationState, b: InitializationState): InitializationState {
-  if (a.kind === 'Top' || b.kind === 'Top') { return TOP; }
-  if (a.kind === 'Bottom') { return b; }
-  if (b.kind === 'Bottom') { return a; }
-  if (a.kind === 'Sequence' && b.kind === 'Sequence') {
-    const length = Math.max(a.elements.length, b.elements.length);
-    const elements: InitializationState[] = [];
-    let allTop = true;
-    for (let i = 0; i < length; i++) {
-      const elemA = a.elements[i] || BOTTOM;
-      const elemB = b.elements[i] || BOTTOM;
-      elements.push(meetInitializationStateUpper(elemA, elemB));
-      allTop = allTop && elements[i].kind === 'Top';
-    }
-    if (allTop) { return TOP; }
-    return { kind: 'Sequence', elements };
+const createStatePathState = (ids: string[], currentType: Type): { id: number, numFields: number }[] => {
+  if (ids.length === 0) return []
+  const [firstAddr, ...restAddrs] = ids
+  const index = parseInt(firstAddr, 10)
+  compilerAssert(currentType instanceof StructType, `Current type is not a struct type`, { currentType })
+  compilerAssert(!isNaN(index), `Index is not a number`)
+  compilerAssert(index >= 0, `Index is negative`)
+  compilerAssert(index < currentType.fields.length, `Index is out of bounds`)
+  const nextType = currentType.fields[index].type
+  return [{ id: index, numFields: currentType.fields.length }, ...createStatePathState(restAddrs, nextType)]
+}
+
+function meetInitializationStatePath(a: InitializationState, statePath: { id: number, numFields: number }[], newState: InitializationState): InitializationState {
+  if (statePath.length === 0) return newState;
+
+  const length = statePath[0].numFields;
+  const elements: InitializationState[] = [];
+  let allTop = true;
+  let allBottom = true;
+  for (let i = 0; i < length; i++) {
+    const elemA = a.kind === 'Sequence' ? a.elements[i] : a
+    let newElem = elemA
+
+    if (i === statePath[0].id) {
+      newElem = meetInitializationStatePath(elemA, statePath.slice(1), newState);
+    } 
+    elements.push(newElem);
+    
+    allTop = allTop && newElem.kind === 'Top';
+    allBottom = allBottom && newElem.kind === 'Bottom';
   }
-  // Incompatible types, default to Bottom
-  compilerAssert(false, `Incompatible types in meetSDUpper: ${a.kind} and ${b.kind}`);
+  
+  if (allTop) { return TOP; }
+  else if (allBottom) { return BOTTOM; }
+  return { kind: 'Sequence', elements };
 }
 
 function meetInitializationState(a: InitializationState, b: InitializationState): InitializationState {
@@ -394,25 +416,6 @@ function meetInitializationState(a: InitializationState, b: InitializationState)
   }
   // Incompatible types, default to Bottom
   compilerAssert(false, `Incompatible types in meetSD: ${a.kind} and ${b.kind}`);
-}
-
-function addressPathToInitializationState(addressPath: string[], currentType: Type): InitializationState {
-  if (addressPath.length === 0) { return TOP; }
-  const [firstAddr, ...restAddrs] = addressPath;
-  const index = parseInt(firstAddr, 10);
-
-  compilerAssert(currentType instanceof StructType, `Current type is not a struct type`)
-  compilerAssert(!isNaN(index), `Index is not a number`)
-  compilerAssert(index >= 0, `Index is negative`)
-  compilerAssert(index < currentType.fields.length, `Index is out of bounds`)
-
-  const nextType = currentType.fields[index].type
-  const nestedSD = addressPathToInitializationState(restAddrs, nextType);
-
-  const elements: InitializationState[] = new Array(currentType.fields.length).fill(BOTTOM);
-  elements[index] = nestedSD;
-
-  return { kind: 'Sequence', elements };
 }
 
 function meetLocals(a: Set<string>, b: Set<string>): Set<string> {

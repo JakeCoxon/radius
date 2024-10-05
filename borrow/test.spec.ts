@@ -1,12 +1,13 @@
 import { describe, it, expect } from "bun:test"
 import { CodeGenerator } from "./codegen";
 import { buildCFG, printCFG, printDominators } from "./controlflow";
-import { AndNode, AssignmentNode, BinaryExpressionNode, BlockStatementNode, BoolType, CallExpressionNode, CreateStructNode, ExpressionStatementNode, FunctionDeclarationNode, FunctionParameter, FunctionParameterNode, IdentifierNode, IfStatementNode, IntType, LetConstNode, LiteralNode, MemberExpressionNode, PointType, ProgramNode, ReturnNode, VariableDeclarationNode, WhileStatementNode, printIR, printLivenessMap, textColors } from "./defs";
+import { AndNode, AssignmentNode, BinaryExpressionNode, BlockStatementNode, BoolType, CallExpressionNode, CreateStructNode, ExpressionStatementNode, FunctionDeclarationNode, FunctionParameter, FunctionParameterNode, IdentifierNode, IfStatementNode, IntType, LetConstNode, LineType, LiteralNode, MemberExpressionNode, PointType, ProgramNode, ReturnNode, VariableDeclarationNode, WhileStatementNode, printIR, printLivenessMap, textColors } from "./defs";
 import { ExclusivityCheckingPass } from "./exclusivity";
 import { InitializationCheckingPass } from "./initialization";
 import { insertCloseAccesses } from "./liveness";
 import { ReifyAccessPass } from "./reifyaccess";
 
+const DebugLog = true
 
 const runTest = (name: string, ast: ProgramNode) => {
   console.log(textColors.green(`\n\n#### Begin ${name} ####`));
@@ -27,27 +28,27 @@ const runTest = (name: string, ast: ProgramNode) => {
       printDominators(cfg)
 
       const reify = new ReifyAccessPass(cfg);
-      reify.debugLog = true;
+      reify.debugLog = DebugLog;
       reify.reifyAccesses();
 
       console.log("Reified")
       printIR(fn.blocks);
 
       const interpreter = new InitializationCheckingPass(codeGenerator, fn);
-      interpreter.debugLog = true;
+      interpreter.debugLog = DebugLog;
       interpreter.checkedInterpret();
 
       console.log("Initialized")
       printIR(fn.blocks);
 
       console.log("")
-      insertCloseAccesses(cfg, fn.blocks)
+      insertCloseAccesses(cfg, fn.blocks, DebugLog)
 
       console.log("Closed access")
       printIR(fn.blocks);
 
       const interpreter2 = new ExclusivityCheckingPass(fn)
-      interpreter2.debugLog = true;
+      interpreter2.debugLog = DebugLog;
       interpreter2.checkedInterpret();
       console.log("")
 
@@ -1106,59 +1107,253 @@ describe("integration", () => {
     runTest("testStructMultipleCalls", ast);
   })
 
-  it.skip('testNestedStruct', () => {
+  it('testNestedStruct', () => {
     // AST representing:
-    // struct Inner { int z; }
-    // struct Outer { Inner inner; }
-    // function modifyInner(p: inout Outer) {
-    //   p.inner.z = p.inner.z + 1;
+    // function modify(l: inout Line, x: int) {
+    //   l.p1.x = l.p1.x + x;
+    //   l.p2.x = l.p2.x + x;
     // }
-    // let result = Outer{Inner{5}};
-    // modifyInner(result);
+    // var result = Line{Point{2, 3}, Point{3, 4}};
+    // modify(result, 3);
 
     const ast = new ProgramNode([
-      new LetConstNode('Inner', InnerType),
-      new LetConstNode('Outer', OuterType),
+      new LetConstNode('Point', PointType),
+      new LetConstNode('Line', LineType),
       new LetConstNode('int', IntType),
       new FunctionDeclarationNode(
-        'modifyInner',
-        [new FunctionParameterNode('p', 'Outer', true)],
+        'modify',
+        [
+          new FunctionParameterNode('l', 'Line', true), 
+          new FunctionParameterNode('x', 'int', false),
+        ],
         new BlockStatementNode([
           new ExpressionStatementNode(
             new AssignmentNode(
-              new MemberExpressionNode(
-                new MemberExpressionNode(new IdentifierNode('p'), 'Outer', 'inner'),
-                'Inner', 'z'
-              ),
+              new MemberExpressionNode(new MemberExpressionNode(new IdentifierNode('l'), 'Line', 'p1'), 'Point', 'x'),
               new BinaryExpressionNode(
                 '+',
-                new MemberExpressionNode(
-                  new MemberExpressionNode(new IdentifierNode('p'), 'Outer', 'inner'),
-                  'Inner', 'z'
-                ),
-                new LiteralNode(1)
+                new MemberExpressionNode(new MemberExpressionNode(new IdentifierNode('l'), 'Line', 'p1'), 'Point', 'x'),
+                new IdentifierNode('x')
+              )
+            )
+          ),
+          new ExpressionStatementNode(
+            new AssignmentNode(
+              new MemberExpressionNode(new MemberExpressionNode(new IdentifierNode('l'), 'Line', 'p2'), 'Point', 'x'),
+              new BinaryExpressionNode(
+                '+',
+                new MemberExpressionNode(new MemberExpressionNode(new IdentifierNode('l'), 'Line', 'p2'), 'Point', 'x'),
+                new IdentifierNode('x')
               )
             )
           )
         ])
       ),
-      new VariableDeclarationNode('result', true, 'Outer'),
-      new ExpressionStatementNode(
-        new AssignmentNode(
-          new IdentifierNode('result'),
-          new CreateStructNode(
-            'Outer',
-            [new CreateStructNode('Inner', [new LiteralNode(5)])]
-          )
+      new VariableDeclarationNode('result', true, 'Line',
+        new CreateStructNode(
+          'Line',
+          [
+            new CreateStructNode('Point', [new LiteralNode(2), new LiteralNode(3)]),
+            new CreateStructNode('Point', [new LiteralNode(3), new LiteralNode(4)]),
+          ]
         )
       ),
       new ExpressionStatementNode(
         new CallExpressionNode(
-          'modifyInner',
-          [new IdentifierNode('result')]
+          'modify',
+          [new IdentifierNode('result'), new LiteralNode(3)]
         )
       )
     ]);
     runTest("testNestedStruct", ast);
+  })
+
+  it('testNestedStructProject', () => {
+    // AST representing:
+    // function modify(l: inout Line) {
+    // }
+    // var result = Line{Point{2, 3}, Point{3, 4}};
+    // let p1 = result.p1;
+    // modify(result);
+    // use(p1.x);
+
+    const ast = new ProgramNode([
+      new LetConstNode('Point', PointType),
+      new LetConstNode('Line', LineType),
+      new LetConstNode('int', IntType),
+      new FunctionDeclarationNode(
+        'modify',
+        [
+          new FunctionParameterNode('l', 'Line', true), 
+        ],
+        new BlockStatementNode([])
+      ),
+      new FunctionDeclarationNode(
+        'use',
+        [
+          new FunctionParameterNode('z', 'int', false),
+        ],
+        new BlockStatementNode([])
+      ),
+      new VariableDeclarationNode('result', true, 'Line',
+        new CreateStructNode(
+          'Line',
+          [
+            new CreateStructNode('Point', [new LiteralNode(2), new LiteralNode(3)]),
+            new CreateStructNode('Point', [new LiteralNode(3), new LiteralNode(4)]),
+          ]
+        )
+      ),
+      new VariableDeclarationNode('p1', false, 'Point',
+        new MemberExpressionNode(new IdentifierNode('result'), 'Line', 'p1')
+      ),
+      new ExpressionStatementNode(
+        new CallExpressionNode(
+          'modify',
+          [new IdentifierNode('result')]
+        )
+      ),
+      new ExpressionStatementNode(
+        new CallExpressionNode(
+          'use',
+          [new MemberExpressionNode(new IdentifierNode('p1'), 'Point', 'x')]
+        )
+      )
+    ]);
+    expect(() => runTest("testNestedStructProject", ast)).toThrow("Cannot access");
+  })
+
+  it('testNestedStructProjectSeparate', () => {
+    // AST representing:
+    // function modify(p: inout Point) {
+    // }
+    // var result = Line{Point{2, 3}, Point{3, 4}};
+    // let p1 = result.p1;
+    // modify(result.p2);
+    // use(p1.x);
+
+    const ast = new ProgramNode([
+      new LetConstNode('Point', PointType),
+      new LetConstNode('Line', LineType),
+      new LetConstNode('int', IntType),
+      new FunctionDeclarationNode(
+        'modify',
+        [
+          new FunctionParameterNode('p', 'Point', true), 
+        ],
+        new BlockStatementNode([])
+      ),
+      new FunctionDeclarationNode(
+        'use',
+        [
+          new FunctionParameterNode('z', 'int', false),
+        ],
+        new BlockStatementNode([])
+      ),
+      new VariableDeclarationNode('result', true, 'Line',
+        new CreateStructNode(
+          'Line',
+          [
+            new CreateStructNode('Point', [new LiteralNode(2), new LiteralNode(3)]),
+            new CreateStructNode('Point', [new LiteralNode(3), new LiteralNode(4)]),
+          ]
+        )
+      ),
+      new VariableDeclarationNode('p1', false, 'Point',
+        new MemberExpressionNode(new IdentifierNode('result'), 'Line', 'p1')
+      ),
+      new ExpressionStatementNode(
+        new CallExpressionNode(
+          'modify',
+          [new MemberExpressionNode(new IdentifierNode('result'), 'Line', 'p2')]
+        )
+      ),
+      new ExpressionStatementNode(
+        new CallExpressionNode(
+          'use',
+          [new MemberExpressionNode(new IdentifierNode('p1'), 'Point', 'x')]
+        )
+      )
+    ]);
+    runTest("testNestedStructProjectSeparate", ast);
+  })
+
+  it('testNestedStructSink', () => {
+    // AST representing:
+    // function modify(l: inout Line, x: int) {
+    //   l.p1.x = l.p1.x + x;
+    //   l.p2.x = l.p2.x + x;
+    // }
+    // var result = Line{Point{2, 3}, Point{3, 4}};
+    // var p1 = result.p1;
+    // modify(result, 3);
+    // use(p1.x);
+
+    const ast = new ProgramNode([
+      new LetConstNode('Point', PointType),
+      new LetConstNode('Line', LineType),
+      new LetConstNode('int', IntType),
+      new FunctionDeclarationNode(
+        'modify',
+        [
+          new FunctionParameterNode('l', 'Line', true), 
+          new FunctionParameterNode('x', 'int', false),
+        ],
+        new BlockStatementNode([
+          new ExpressionStatementNode(
+            new AssignmentNode(
+              new MemberExpressionNode(new MemberExpressionNode(new IdentifierNode('l'), 'Line', 'p1'), 'Point', 'x'),
+              new BinaryExpressionNode(
+                '+',
+                new MemberExpressionNode(new MemberExpressionNode(new IdentifierNode('l'), 'Line', 'p1'), 'Point', 'x'),
+                new IdentifierNode('x')
+              )
+            )
+          ),
+          new ExpressionStatementNode(
+            new AssignmentNode(
+              new MemberExpressionNode(new MemberExpressionNode(new IdentifierNode('l'), 'Line', 'p2'), 'Point', 'x'),
+              new BinaryExpressionNode(
+                '+',
+                new MemberExpressionNode(new MemberExpressionNode(new IdentifierNode('l'), 'Line', 'p2'), 'Point', 'x'),
+                new IdentifierNode('x')
+              )
+            )
+          )
+        ])
+      ),
+      new FunctionDeclarationNode(
+        'use',
+        [
+          new FunctionParameterNode('z', 'int', false),
+        ],
+        new BlockStatementNode([])
+      ),
+      new VariableDeclarationNode('result', true, 'Line',
+        new CreateStructNode(
+          'Line',
+          [
+            new CreateStructNode('Point', [new LiteralNode(2), new LiteralNode(3)]),
+            new CreateStructNode('Point', [new LiteralNode(3), new LiteralNode(4)]),
+          ]
+        )
+      ),
+      new VariableDeclarationNode('p1', true, 'Point',
+        new MemberExpressionNode(new IdentifierNode('result'), 'Line', 'p1')
+      ),
+      new ExpressionStatementNode(
+        new CallExpressionNode(
+          'modify',
+          [new IdentifierNode('result'), new LiteralNode(3)]
+        )
+      ),
+      new ExpressionStatementNode(
+        new CallExpressionNode(
+          'use',
+          [new MemberExpressionNode(new IdentifierNode('p1'), 'Point', 'x')]
+        )
+      )
+    ]);
+    expect(() => runTest("testNestedStructSink", ast)).toThrow("not definitely initialized");
   })
 })

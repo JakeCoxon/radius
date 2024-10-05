@@ -237,6 +237,10 @@ export const PointType = new StructType('Point', [
   new TypeField('x', IntType),
   new TypeField('y', IntType)
 ]);
+export const LineType = new StructType('Line', [
+  new TypeField('p1', PointType),
+  new TypeField('p2', PointType)
+]);
 
 export class InstructionId {
   constructor(public blockId: string, public instrId: number) { }

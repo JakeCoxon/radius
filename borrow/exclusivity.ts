@@ -3,11 +3,13 @@ import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruc
 import { Worklist } from "./worklist";
 
 type BorrowedItem = {
+  rootAddress: string;
   address: string;
   subObject: string;
   blockId: string
   instructionId: number;
   capability: Capability;
+  resultReg: string;
 }
 
 type LocalMap = Map<string, Set<string>>;
@@ -150,10 +152,6 @@ export class ExclusivityCheckingPass {
       compilerAssert(this.state.locals.get(instr.dest) === undefined, `Register ${instr.dest} is already initialized`);
       const fields = [...addresses].map(addr => `${addr}.${instr.field}`)
       this.state.locals.set(instr.dest, new Set(fields));
-      fields.forEach(f => {
-        if (!this.state.memory.has(f)) this.state.memory.set(f, [])
-      })
-      // console.log(this.state.locals.get(instr.dest))
     } else if (instr instanceof BinaryOperationInstruction) {
       this.state.locals.set(instr.dest, new Set([]));
     } else if (instr instanceof JumpInstruction) {
@@ -179,16 +177,6 @@ export class ExclusivityCheckingPass {
     return addr;
   }
 
-  initializeMemoryAddress(addr: string, rootType: Type) {
-    compilerAssert(false, "Not implemented")
-    // const ids = addr.split('.')
-    // let current = this.state.memory.get(ids[0])
-    // compilerAssert(current, `Address ${addr} is not initialized`)
-    // const sd = addressPathToInitializationState(ids.slice(1), rootType)
-    // const newSd = meetInitializationStateUpper(current, sd)
-    // this.state.memory.set(ids[0], newSd)
-  }
-
   initializeFunctionParam(state: InterpreterState, param: FunctionParameter) {
     const addr = this.newAddress(param.type);
     state.locals.set(param.name, new Set([addr]));
@@ -205,45 +193,54 @@ export class ExclusivityCheckingPass {
 
     for (const addr of addrs) {
       const ids = addr.split('.')
-      let existingBorrows = this.state.memory.get(addr);
-      compilerAssert(existingBorrows, `No memory state found for ${addr}`);
+      const rootAddress = ids[0]
+      let existingBorrows = this.state.memory.get(rootAddress);
+      compilerAssert(existingBorrows, `No memory state found for ${rootAddress}`);
       const newBorrows = [...existingBorrows];
-      this.state.memory.set(addr, newBorrows);
+      this.state.memory.set(rootAddress, newBorrows);
       const subObject = ids.slice(1).join('.')
       const newBorrow: BorrowedItem = { 
+        rootAddress,
         address: addr, subObject, blockId: instrId.blockId, 
         instructionId: instrId.instrId, capability, resultReg: instr.dest }
       if (existingBorrows.length === 0) {
         newBorrows.push(newBorrow)
-        if (this.debugLog) console.log("Add access", newBorrow)
-        printMemory(this.state.memory)
+        if (this.debugLog) {
+          console.log("Add access", newBorrow)
+          printMemory(this.state.memory)
+        }
         continue
       }
 
       if (this.debugLog) console.log("Existing borrows for address", instrId, addr)
-      if (capability !== Capability.Let) {
-        const existingLetBorrows = existingBorrows.filter(b => b.capability === Capability.Let)
-        if (existingLetBorrows.length > 0) {
-          compilerAssert(false, "Cannot access (already borrowed)")
-        }
-      }
+      if (this.debugLog) console.log("existingBorrows", existingBorrows)
+
+      const newBorrowIsLet = capability === Capability.Let
+
+      const exclusiveBorrows: BorrowedItem[] = []
       for (const item of existingBorrows) {
         const itemKey = item.subObject;
-        if (itemKey.startsWith(subObject) && itemKey !== subObject) {
-          compilerAssert(false, "Cannot borrow (parent)")
-        }
-        if (subObject.startsWith(itemKey) && itemKey !== subObject) {
-          compilerAssert(false, "Cannot borrow (child)")
+        const existingBorrowIsLet = item.capability === Capability.Let
+        if (newBorrowIsLet && existingBorrowIsLet) continue
+
+        if (itemKey.startsWith(subObject) || subObject.startsWith(itemKey)) {
+          exclusiveBorrows.push(item)
         }
       }
+      if (exclusiveBorrows.length > 0) {
+        compilerAssert(false, "Cannot access (already mutably borrowed)", { exclusiveBorrows })
+      }
+      
       newBorrows.push(newBorrow)
 
       if (this.debugLog) console.log("newBorrows", newBorrows)
       // compilerAssert(false, "Not implemented")
     }
     this.state.locals.set(instr.dest, addrs);
-    if (this.debugLog) console.log("State after access")
-    printMemory(this.state.memory)
+    if (this.debugLog) {
+      console.log("State after access")
+      printMemory(this.state.memory)
+    }
   }
 
   endAccess(instrId: InstructionId, instr: EndAccessInstruction) {
@@ -255,7 +252,9 @@ export class ExclusivityCheckingPass {
     if (this.debugLog) console.log(`Ending access to ${instr.source} at ${addrStr} ${capability}`);
 
     for (const addr of addrs) {
-      let existingBorrows = this.state.memory.get(addr);
+      const ids = addr.split('.')
+      const rootAddress = ids[0]
+      let existingBorrows = this.state.memory.get(rootAddress);
       compilerAssert(existingBorrows, `No memory state found for ${addr}`);
       const removeIndex = existingBorrows.findIndex(b => {
         if (b.address !== addr) return false
@@ -265,13 +264,17 @@ export class ExclusivityCheckingPass {
         if (result !== instr.source) return false
         return true
       })
-      compilerAssert(removeIndex !== -1, "Could not find borrow to remove")
+      compilerAssert(removeIndex !== -1, "Could not find borrow to remove", {
+        rootAddress, addr, capability, instrId, instr, existingBorrows
+      })
       // Make sure to make a copy of the array
       const newBorrows = existingBorrows.filter((_, i) => i !== removeIndex)
-      this.state.memory.set(addr, newBorrows)
+      this.state.memory.set(rootAddress, newBorrows)
     }
-    if (this.debugLog) console.log("State after end access")
-    printMemory(this.state.memory)
+    if (this.debugLog) {
+      console.log("State after end access")
+      printMemory(this.state.memory)
+    }
     // this.state.locals.delete(instr.source);
   }
 
