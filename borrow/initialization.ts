@@ -1,5 +1,6 @@
+import { CodeGenerator } from "./codegen";
 import { ControlFlowGraph, buildCFG } from "./controlflow";
-import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, compilerAssert, Type, StructType, Capability, EndAccessInstruction, PhiInstruction, MoveInstruction, VoidType, InstructionId, CommentInstruction, textColors } from "./defs";
+import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, compilerAssert, Type, StructType, Capability, EndAccessInstruction, PhiInstruction, MoveInstruction, VoidType, InstructionId, CommentInstruction, textColors, MarkInitializedInstruction, formatInstruction } from "./defs";
 import { Worklist } from "./worklist";
 
 type InitializationState = Top | Bottom | Sequence;
@@ -40,9 +41,11 @@ export class InitializationCheckingPass {
   currentBlock: BasicBlock | null = null
   currentInstr: IRInstruction | null = null
   instrIndex = 0
+  codegen: CodeGenerator
 
-  constructor(fn: FunctionBlock) {
+  constructor(codegen: CodeGenerator, fn: FunctionBlock) {
     this.function = fn;
+    this.codegen = codegen;
     // Build the CFG
     this.cfg = buildCFG(fn.blocks);
   }
@@ -52,8 +55,11 @@ export class InitializationCheckingPass {
       this.interpret()
     } catch (e) {
       console.error(e)
-      console.log("State:")
-      console.log(this.state)
+      console.log("Current block", this.currentBlock?.label)
+      console.log("Current instr", this.currentInstr)
+      printLocals(this.state.locals)
+      printMemory(this.state.memory)
+      throw e
     }
   }
 
@@ -88,11 +94,6 @@ export class InitializationCheckingPass {
       }
 
       const allInputStates = inputStates.length === predecessors.length
-
-      if (true || block.label === 'L1' || block.label === 'L0') {
-        console.log('state.input a1', state && state.input.memory.get('a1'))
-        console.log('mergedInputState a1', mergedInputState.memory.get('a1'))
-      }
 
       if (state && allInputStates && statesEqual(state.input, mergedInputState)) return
 
@@ -135,6 +136,7 @@ export class InitializationCheckingPass {
   }
 
   execute(instrId: InstructionId, instr: IRInstruction): void {
+    if (this.debugLog) console.log(instrId.blockId, instrId.instrId+".", formatInstruction(instr))
     if (instr instanceof AssignInstruction) {
       this.ensureRegisterInitialized(instr.source);
       this.state.locals.set(instr.dest, this.state.locals.get(instr.source)!);
@@ -150,6 +152,9 @@ export class InitializationCheckingPass {
         compilerAssert(rootType, `Root type not found for address ${addr}`)
         this.initializeMemoryAddress(addr, rootType);
       }
+      if (this.debugLog) console.log("After StoreToAddressInstruction", instr.address, instr.source)
+      printLocals(this.state.locals)
+      printMemory(this.state.memory)
     } else if (instr instanceof AllocInstruction) {
       const addr = this.newAddress(instr.type);
       this.state.locals.set(instr.dest, new Set([addr]));
@@ -199,28 +204,41 @@ export class InitializationCheckingPass {
       compilerAssert(this.state.locals.get(instr.dest) === undefined, `Register ${instr.dest} is already initialized`);
       const fields = [...addresses].map(addr => `${addr}.${instr.field}`)
       this.state.locals.set(instr.dest, new Set(fields));
+      if (this.debugLog) console.log("After GetFieldPointerInstruction", instr.address, instr.dest, fields)
+      printLocals(this.state.locals)
+      printMemory(this.state.memory)
     } else if (instr instanceof JumpInstruction) {
     } else if (instr instanceof ConditionalJumpInstruction) {
       this.ensureRegisterInitialized(instr.condition);
     } else if (instr instanceof EndAccessInstruction) {
       // pass
     } else if (instr instanceof MoveInstruction) {
+      if (this.debugLog) console.log("MoveInstruction", instr.source, instr.target)
+      printLocals(this.state.locals)
+      printMemory(this.state.memory)
       if (this.isDefinitelyInitialized(instr.target)) {
         this.emitMove(instrId, instr, Capability.Inout)
       } else if (this.isDefinitelyUninitialized(instr.target)) {
         this.emitMove(instrId, instr, Capability.Set)
       } else compilerAssert(false, `Target is not definitely initialized or uninitialized`)
-      // this.ensureRegisterInitialized(instr.source);
-      this.state.locals.get(instr.target)!.forEach(addr => {
-        this.state.memory.set(addr, TOP);
-      }) // Initialize the target
-      this.state.locals.get(instr.source)!.forEach(addr => {
-        this.state.memory.set(addr, BOTTOM);
-      }) // Uninitialize the source
+    } else if (instr instanceof MarkInitializedInstruction) {
+      const locals = this.state.locals.get(instr.target);
+      compilerAssert(locals, `Register ${instr.target} is not found`);
+      if (instr.initialized) {
+        for (const addr of locals) {
+          this.state.memory.set(addr, TOP);
+        }
+      } else {
+        for (const addr of locals) {
+          this.state.memory.set(addr, BOTTOM);
+        }
+      }
     } else if (instr instanceof PhiInstruction) {
       // TODO: We should actually copy the state from the block
       // that we came from. Need a test case for this
       this.state.locals.set(instr.dest, new Set([]));
+    } else if (instr instanceof CommentInstruction) {
+      // pass
     } else {
       console.error(`Unknown instruction in initialization pass: ${instr.irType}`);
     }
@@ -277,12 +295,18 @@ export class InitializationCheckingPass {
 
   emitMove(instrId: InstructionId, instr: MoveInstruction, capability: Capability) {
     const block = this.currentBlock!;
+    const sourceAccessReg = this.codegen.newRegister();
+    const targetAccessReg = this.codegen.newRegister();
     const instrs = [
       new CommentInstruction(`Replaced move with ${capability} to ${instr.target} from ${instr.source}`),
-      // new AccessInstruction(instrId, instr.source, instr.target, [capability]),
+      new AccessInstruction(sourceAccessReg, instr.source, [Capability.Sink]),
+      new AccessInstruction(targetAccessReg, instr.target, [capability]),
+      new MarkInitializedInstruction(targetAccessReg, true),
+      new MarkInitializedInstruction(sourceAccessReg, false),
       // new EndAccessInstruction(instrId, instr.target)
     ];
     block.instructions.splice(instrId.instrId, 1, ...instrs);
+    this.instrIndex -- // Revert the index to the start of the inserted instructions
   }
 
 }

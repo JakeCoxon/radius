@@ -1,5 +1,6 @@
 export function compilerAssert(expected: unknown, message: string="", info: object={}): asserts expected {
   if (expected) return;
+  console.log(info)
   throw new Error(message, info)
 }
 
@@ -10,20 +11,21 @@ export enum Capability {
   Sink = "Sink",
 }
 
-export class LValue {
+export class Pointer {
   constructor(public address: string) {}
 }
-export class RValue {
+export class Value {
   constructor(public register: string) {}
 }
 
-export type IRValue =  LValue | RValue
+export type IRValue =  Pointer | Value
+
 export class Variable {
   constructor(
     public name: string, 
     public type: Type,
     public register: string,
-    public isReference: boolean
+    public capability: Capability
   ) {}
 }
 
@@ -48,6 +50,7 @@ export class LoadFromAddressInstruction extends IRInstruction {     irType = 'lo
 export class AddressOfInstruction extends IRInstruction {           irType = 'addressof';             constructor(public dest: string, public source: string) { super(); } }
 export class ComputeFieldAddressInstruction extends IRInstruction { irType = 'compute_field_address'; constructor(public dest: string, public address: string, public field: string) { super(); } }
 export class MoveInstruction extends IRInstruction {                irType = 'move';                  constructor(public target: string, public source: string) { super(); } }
+export class MarkInitializedInstruction extends IRInstruction {     irType = 'mark_initialized';      constructor(public target: string, public initialized: boolean) { super(); } }
 export class PhiInstruction extends IRInstruction {                 irType = 'phi';                   constructor(public dest: string, public sources: string[]) { super(); } }
 export class CommentInstruction extends IRInstruction {             irType = 'comment';               constructor(public comment: string) { super(); } }
 
@@ -65,6 +68,7 @@ export const getInstructionOperands = (instr: IRInstruction): string[] => {
   else if (instr instanceof MoveInstruction) { return [instr.target, instr.source]; }
   else if (instr instanceof PhiInstruction) { return instr.sources; }
   else if (instr instanceof EndAccessInstruction) { return [instr.source]; }
+  else if (instr instanceof MarkInitializedInstruction) { return [instr.target]; }
   else { return []; }
 }
 export const getInstructionResult = (instr: IRInstruction): string | null => {
@@ -105,7 +109,7 @@ export abstract class ExpressionNode extends ASTNode {}
 
 export class ProgramNode extends ASTNode {                 nodeType = 'Program';              constructor(public body: ASTNode[]) { super(); } }
 export class LetConstNode extends ASTNode {                nodeType = 'LetConst';             constructor(public name: string, public value: any) { super(); } }
-export class VariableDeclarationNode extends ASTNode {     nodeType = 'VariableDeclaration';  constructor(public name: string, public mutable: boolean, public type: string) { super(); } }
+export class VariableDeclarationNode extends ASTNode {     nodeType = 'VariableDeclaration';  constructor(public name: string, public mutable: boolean, public type: string, public initializer?: ExpressionNode | undefined) { super(); } }
 export class ExpressionStatementNode extends ASTNode {     nodeType = 'ExpressionStatement';  constructor(public expression: ExpressionNode) { super(); } }
 export class IfStatementNode extends ASTNode {             nodeType = 'IfStatement';          constructor(public condition: ExpressionNode, public consequent: ASTNode, public alternate?: ASTNode) { super(); } }
 export class WhileStatementNode extends ASTNode {          nodeType = 'WhileStatement';       constructor(public condition: ExpressionNode, public body: ASTNode) { super(); } }
@@ -136,8 +140,15 @@ export class FunctionParameter {
 export function printIR(blocks: BasicBlock[]) {
   for (const block of blocks) {
     console.log(`\nBlock ${block.label}:`);
+    let i = 0;
     for (const instr of block.instructions) {
-      console.log(`  ${formatInstruction(instr)}`);
+      
+      if ((instr instanceof CommentInstruction)) {
+        console.log(`  ${formatInstruction(instr)}`);
+      } else {
+        console.log(`${i}.  ${formatInstruction(instr)}`);
+      }
+      i++
     }
   }
 }
@@ -172,13 +183,15 @@ export function formatInstruction(instr: IRInstruction): string {
   } else if (instr instanceof EndAccessInstruction) {
     return `end_access [${instr.capabilities.join(', ')}] ${instr.source}`;
   } else if (instr instanceof GetFieldPointerInstruction) {
-    return `${instr.dest} = address of ${instr.address}.${instr.field}`;
+    return `${instr.dest} = offset address ${instr.address} .${instr.field}`;
   } else if (instr instanceof MoveInstruction) {
     return `into ${instr.target} move from ${instr.source}`;
+  } else if (instr instanceof MarkInitializedInstruction) {
+    return `mark ${instr.target} as ${instr.initialized ? 'initialized' : 'uninitialized'}`;
   } else if (instr instanceof PhiInstruction) {
     return `${instr.dest} = phi(${instr.sources.join(', ')})`;
   } else if (instr instanceof CommentInstruction) {
-    return `# ${instr.comment}`;
+    return `\n# ${instr.comment}`;
   } else {
     return `Unknown instruction: ${instr.irType}`;
   }

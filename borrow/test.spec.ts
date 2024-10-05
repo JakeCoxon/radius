@@ -33,12 +33,18 @@ const runTest = (name: string, ast: ProgramNode) => {
       console.log("Reified")
       printIR(fn.blocks);
 
-      const interpreter = new InitializationCheckingPass(fn);
+      const interpreter = new InitializationCheckingPass(codeGenerator, fn);
       interpreter.debugLog = true;
       interpreter.checkedInterpret();
 
+      console.log("Initialized")
+      printIR(fn.blocks);
+
       console.log("")
       insertCloseAccesses(cfg, fn.blocks)
+
+      console.log("Closed access")
+      printIR(fn.blocks);
 
       const interpreter2 = new ExclusivityCheckingPass(fn)
       interpreter2.debugLog = true;
@@ -53,6 +59,7 @@ const runTest = (name: string, ast: ProgramNode) => {
   } catch (error) {
     console.error(`${name} failed: ${error.message}`);
     console.error(error.stack)
+    throw error;
   }
 }
 
@@ -761,7 +768,7 @@ describe("integration", () => {
   })
 
   it('testLogicalAndInFunctionCall', () => {
-    // let x: int
+    // var x: int
     // x = 1
     // foo(x, x > 0 && x < 10)
     const ast = new ProgramNode([
@@ -776,12 +783,8 @@ describe("integration", () => {
         ],
         new BlockStatementNode([])
       ),
-      new VariableDeclarationNode('x', true, 'int'),
-      new ExpressionStatementNode(
-        new AssignmentNode(
-          new IdentifierNode('x'),
-          new LiteralNode(1)
-        )
+      new VariableDeclarationNode('x', true, 'int',
+        new LiteralNode(1)
       ),
       new ExpressionStatementNode(
         new CallExpressionNode(
@@ -862,6 +865,170 @@ describe("integration", () => {
       )
     ]);
     runTest("testStructFieldConditional", ast);
+  })
+
+  it('testStructFields', () => {
+    // AST representing:
+    // var point = Point{2, 3};
+    // let x = point.x
+    // let y = point.y
+    // let z = x + y
+    // point.x = z
+    
+    const ast = new ProgramNode([
+      new LetConstNode('Point', PointType),
+      new LetConstNode('int', IntType),
+      new VariableDeclarationNode('point', true, 'Point'),
+      new VariableDeclarationNode('x', true, 'int'),
+      new VariableDeclarationNode('y', true, 'int'),
+      new VariableDeclarationNode('z', true, 'int'),
+      new ExpressionStatementNode(
+        new AssignmentNode(
+          new IdentifierNode('point'),
+          new CreateStructNode(
+            'Point',
+            [new LiteralNode(2), new LiteralNode(3)]
+          )
+        )
+      ),
+      new ExpressionStatementNode(
+        new AssignmentNode(
+          new IdentifierNode('x'),
+          new MemberExpressionNode(new IdentifierNode('point'), 'Point', 'x')
+        )
+      ),
+      new ExpressionStatementNode(
+        new AssignmentNode(
+          new IdentifierNode('y'),
+          new MemberExpressionNode(new IdentifierNode('point'), 'Point', 'y')
+        )
+      ),
+      new ExpressionStatementNode(
+        new AssignmentNode(
+          new IdentifierNode('z'),
+          new BinaryExpressionNode(
+            '+',
+            new IdentifierNode('x'),
+            new IdentifierNode('y')
+          )
+        )
+      ),
+      new ExpressionStatementNode(
+        new AssignmentNode(
+          new MemberExpressionNode(new IdentifierNode('point'), 'Point', 'x'),
+          new IdentifierNode('z')
+        )
+      )
+      
+    ]);
+    runTest("testStructFields", ast);
+  })
+
+  it('testInvalidBorrow', () => {
+    // AST representing:
+    // var point = Point{2, 3};
+    // let x = point.x
+    // point.x = 2
+    // use(x)
+    
+    const ast = new ProgramNode([
+      new LetConstNode('Point', PointType),
+      new LetConstNode('int', IntType),
+      new VariableDeclarationNode('point', true, 'Point',
+        new CreateStructNode(
+          'Point',
+          [new LiteralNode(2), new LiteralNode(3)]
+        )
+      ),
+      new VariableDeclarationNode('x', false, 'int',
+        new MemberExpressionNode(new IdentifierNode('point'), 'Point', 'x')
+      ),
+      
+      new ExpressionStatementNode(
+        new AssignmentNode(
+          new MemberExpressionNode(new IdentifierNode('point'), 'Point', 'x'),
+          new LiteralNode(2)
+        )
+      ),
+      new FunctionDeclarationNode(
+        'use',
+        [
+          new FunctionParameterNode('p', 'int', false),
+        ],
+        new BlockStatementNode([])
+      ),
+      new ExpressionStatementNode(
+        new CallExpressionNode(
+          'use',
+          [new IdentifierNode('x')]
+        )
+      )
+      
+    ]);
+    expect(() => runTest("testInvalidBorrow", ast)).toThrow("Cannot access")
+  })
+
+  it('testImmutableStruct', () => {
+    // AST representing:
+    // let point = Point{2, 3};
+    // point.x = 5;
+    
+    const ast = new ProgramNode([
+      new LetConstNode('Point', PointType),
+      new LetConstNode('int', IntType),
+      new VariableDeclarationNode('point', false, 'Point',
+        new CreateStructNode(
+          'Point',
+          [new LiteralNode(2), new LiteralNode(3)]
+        )
+      ),
+      new ExpressionStatementNode(
+        new AssignmentNode(
+          new MemberExpressionNode(new IdentifierNode('point'), 'Point', 'x'),
+          new LiteralNode(5)
+        )
+      )
+    ]);
+    expect(() => runTest("testImmutableStruct", ast)).toThrow("Cannot assign")
+  })
+
+  it('testSink', () => {
+    // AST representing:
+    // let point = Point{2, 3};
+    // var point2 = point
+    // use(point)
+    
+    const ast = new ProgramNode([
+      new LetConstNode('Point', PointType),
+      new LetConstNode('int', IntType),
+      new FunctionDeclarationNode(
+        'use',
+        [
+          new FunctionParameterNode('p', 'Point', false),
+        ],
+        new BlockStatementNode([])
+      ),
+      new VariableDeclarationNode('point', false, 'Point', 
+        new CreateStructNode(
+          'Point',
+          [new LiteralNode(2), new LiteralNode(3)]
+        )
+      ),
+      new VariableDeclarationNode('point2', true, 'Point'),
+      new ExpressionStatementNode(
+        new AssignmentNode(
+          new IdentifierNode('point2'),
+          new IdentifierNode('point')
+        )
+      ),
+      new ExpressionStatementNode(
+        new CallExpressionNode(
+          'use',
+          [new IdentifierNode('point')]
+        )
+      )
+    ]);
+    expect(() => runTest("testSink", ast)).toThrow("not definitely initialized");
   })
 
   it('testStructMultipleCalls', () => {

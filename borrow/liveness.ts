@@ -148,9 +148,11 @@ const mergeLivenessBlocks = (liveness: Record<string, LivenessState>, other: Rec
     } else if (livenessType === LivenessType.LiveInAndOut || livenessTypeOther === LivenessType.LiveInAndOut) {
       liveness[blockId] = LivenessState.LiveInAndOut;
     } else if (livenessType === LivenessType.Closed && livenessTypeOther === LivenessType.Closed) {
-      compilerAssert(false, 'Not implemented yet')
-      // console.log('Last use', lastUse, lastUseOther)
-      // liveness[blockId] = LivenessState.Closed(null);
+      const a = liveness[blockId].lastUse
+      const b = other[blockId].lastUse
+      compilerAssert(a && b, 'No last use found')
+      const lastUse = a.instrId > b.instrId ? a : b
+      liveness[blockId] = LivenessState.Closed(lastUse);
     } else {
       compilerAssert(false, 'Not implemented yet')
       // liveness[blockId] = LivenessState.LiveIn(null);

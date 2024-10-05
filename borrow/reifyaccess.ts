@@ -42,8 +42,8 @@ export class ReifyAccessPass {
       }, { min: 0, max: 0 })
 
       if (min === max) {
-        const cap = instr.capabilities.find(x => CapabilityRanking.indexOf(x) >= min)
-        compilerAssert(cap !== undefined, 'No capability found')
+        const cap = instr.capabilities.find(x => CapabilityRanking.indexOf(x) >= min) ?? minCapability(instr.capabilities)
+        compilerAssert(cap !== undefined, 'No capability found', { capabilities: instr.capabilities, min, max })
         instr.capabilities = [cap]
       } else {
         compilerAssert(false, 'Not implemented yet')
@@ -54,6 +54,16 @@ export class ReifyAccessPass {
 
 }
 
+const minCapability = (arr: Capability[]) => {
+  let min = arr[0]
+  for (const x of arr) {
+    if (CapabilityRanking.indexOf(x) < CapabilityRanking.indexOf(min)) {
+      min = x
+    }
+  }
+  return min
+}
+
 const capabilitiesOfInstr = (instr: IRInstruction, operandIndex: number) => {
   if (instr instanceof AccessInstruction) {
     return instr.capabilities
@@ -62,7 +72,7 @@ const capabilitiesOfInstr = (instr: IRInstruction, operandIndex: number) => {
       /* target */ [Capability.Inout] :  // Assume Inout vs Set for now, we don't know which until later
       /* source */ [Capability.Sink]
   } else if (instr instanceof LoadFromAddressInstruction) {
-    return [Capability.Sink]
+    return []
   } else if (instr instanceof StoreToAddressInstruction) {
     return [Capability.Set]
   } else return []

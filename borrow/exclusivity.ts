@@ -1,5 +1,5 @@
 import { ControlFlowGraph, buildCFG } from "./controlflow";
-import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, compilerAssert, Type, StructType, Capability, EndAccessInstruction, PhiInstruction, FunctionParameter, textColors, InstructionId } from "./defs";
+import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, compilerAssert, Type, StructType, Capability, EndAccessInstruction, PhiInstruction, FunctionParameter, textColors, InstructionId, CommentInstruction, getInstructionResult } from "./defs";
 import { Worklist } from "./worklist";
 
 type BorrowedItem = {
@@ -42,6 +42,7 @@ export class ExclusivityCheckingPass {
       console.error(e)
       console.log("State:")
       console.log(this.state)
+      throw e
     }
   }
 
@@ -127,6 +128,7 @@ export class ExclusivityCheckingPass {
   }
 
   execute(instrId: InstructionId, instr: IRInstruction): void {
+    if (this.debugLog) console.log(`Executing ${instr.irType} ${instrId.blockId}:${instrId.instrId}`);
     if (instr instanceof AssignInstruction) {
       this.state.locals.set(instr.dest, this.state.locals.get(instr.source)!);
     } else if (instr instanceof LoadConstantInstruction) {
@@ -148,7 +150,9 @@ export class ExclusivityCheckingPass {
       compilerAssert(this.state.locals.get(instr.dest) === undefined, `Register ${instr.dest} is already initialized`);
       const fields = [...addresses].map(addr => `${addr}.${instr.field}`)
       this.state.locals.set(instr.dest, new Set(fields));
-      fields.forEach(f => this.state.memory.set(f, []))
+      fields.forEach(f => {
+        if (!this.state.memory.has(f)) this.state.memory.set(f, [])
+      })
       // console.log(this.state.locals.get(instr.dest))
     } else if (instr instanceof BinaryOperationInstruction) {
       this.state.locals.set(instr.dest, new Set([]));
@@ -162,6 +166,8 @@ export class ExclusivityCheckingPass {
       // TODO: We should actually copy the state from the block
       // that we came from. Need a test case for this
       this.state.locals.set(instr.dest, new Set([]));
+    } else if (instr instanceof CommentInstruction) {
+      // pass
     } else {
       console.error(`Unknown instruction in exclusivity pass: ${instr.irType}`);
     }
@@ -195,39 +201,49 @@ export class ExclusivityCheckingPass {
     compilerAssert(instr.capabilities.length === 1, "Capability must have been reified by now")
     const capability = instr.capabilities[0];
     const addrStr = Array.from(addrs).join(', ');
-    console.log(`Accessing ${instr.source} at ${addrStr} ${capability}`);
+    if (this.debugLog) console.log(`Accessing ${instr.source} at ${addrStr} ${capability} to ${instr.dest}`);
 
     for (const addr of addrs) {
       const ids = addr.split('.')
-      // compilerAssert(ids.length === 1, "Not implemented")
       let existingBorrows = this.state.memory.get(addr);
       compilerAssert(existingBorrows, `No memory state found for ${addr}`);
-      existingBorrows = [...existingBorrows];
-      this.state.memory.set(addr, existingBorrows);
+      const newBorrows = [...existingBorrows];
+      this.state.memory.set(addr, newBorrows);
       const subObject = ids.slice(1).join('.')
-      const newBorrow: BorrowedItem = { address: addr, subObject, blockId: instrId.blockId, instructionId: instrId.instrId, capability }
+      const newBorrow: BorrowedItem = { 
+        address: addr, subObject, blockId: instrId.blockId, 
+        instructionId: instrId.instrId, capability, resultReg: instr.dest }
       if (existingBorrows.length === 0) {
-        existingBorrows.push(newBorrow);
-        console.log("Add access", addr)
+        newBorrows.push(newBorrow)
+        if (this.debugLog) console.log("Add access", newBorrow)
         printMemory(this.state.memory)
         continue
       }
 
-      for (const item of memoryArray) {
-        const itemKey = item.objectKey;
-        if (itemKey.startsWith(addr) && itemKey !== addr) {
+      if (this.debugLog) console.log("Existing borrows for address", instrId, addr)
+      if (capability !== Capability.Let) {
+        const existingLetBorrows = existingBorrows.filter(b => b.capability === Capability.Let)
+        if (existingLetBorrows.length > 0) {
+          compilerAssert(false, "Cannot access (already borrowed)")
+        }
+      }
+      for (const item of existingBorrows) {
+        const itemKey = item.subObject;
+        if (itemKey.startsWith(subObject) && itemKey !== subObject) {
           compilerAssert(false, "Cannot borrow (parent)")
         }
-        if (addr.startsWith(itemKey) && itemKey !== addr) {
+        if (subObject.startsWith(itemKey) && itemKey !== subObject) {
           compilerAssert(false, "Cannot borrow (child)")
         }
       }
-      existingBorrows.push(newBorrow);
+      newBorrows.push(newBorrow)
 
-      console.log("Existing borrows", existingBorrows)
+      if (this.debugLog) console.log("newBorrows", newBorrows)
       // compilerAssert(false, "Not implemented")
     }
     this.state.locals.set(instr.dest, addrs);
+    if (this.debugLog) console.log("State after access")
+    printMemory(this.state.memory)
   }
 
   endAccess(instrId: InstructionId, instr: EndAccessInstruction) {
@@ -236,18 +252,27 @@ export class ExclusivityCheckingPass {
     compilerAssert(instr.capabilities.length === 1, "Capability must have been reified by now")
     const capability = instr.capabilities[0];
     const addrStr = Array.from(addrs).join(', ');
-    console.log(`Ending access to ${instr.source} at ${addrStr} ${capability}`);
+    if (this.debugLog) console.log(`Ending access to ${instr.source} at ${addrStr} ${capability}`);
 
     for (const addr of addrs) {
       let existingBorrows = this.state.memory.get(addr);
       compilerAssert(existingBorrows, `No memory state found for ${addr}`);
-      const toRemove: BorrowedItem = { address: addr, subObject: '', blockId: instrId.blockId, instructionId: instrId.instrId, capability };
-      const numBefore = existingBorrows.length
-      existingBorrows = existingBorrows.filter(b => borrowedItemEqual(b, toRemove))
-      compilerAssert(existingBorrows.length === numBefore - 1, "Could not find borrow to remove")
-      this.state.memory.set(addr, existingBorrows)
+      const removeIndex = existingBorrows.findIndex(b => {
+        if (b.address !== addr) return false
+        if (b.capability !== capability) return false
+        const block = this.cfg.blocks.find(bl => bl.label === b.blockId)!;
+        const result = getInstructionResult(block.instructions[b.instructionId])
+        if (result !== instr.source) return false
+        return true
+      })
+      compilerAssert(removeIndex !== -1, "Could not find borrow to remove")
+      // Make sure to make a copy of the array
+      const newBorrows = existingBorrows.filter((_, i) => i !== removeIndex)
+      this.state.memory.set(addr, newBorrows)
     }
-    this.state.locals.delete(instr.source);
+    if (this.debugLog) console.log("State after end access")
+    printMemory(this.state.memory)
+    // this.state.locals.delete(instr.source);
   }
 
 }
@@ -290,7 +315,8 @@ function printMemory(memory: MemoryMap) {
 function borrowedItemsToString(sd: BorrowedItem[]): string {
   if (sd === undefined) compilerAssert(false, "Undefined state")
   if (sd.length === 0) return 'Unique'
-  return sd.map(b => `${b.subObject}(${b.capability})`).join(' | ')
+  const r = sd.map(b => `${b.capability}(${b.subObject})`).join(', ')
+  return `<${r}>`
 }
 
 function meetInitializationStateUpper(a: BorrowedItem[], b: BorrowedItem[]): BorrowedItem[] {
