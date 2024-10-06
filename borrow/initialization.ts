@@ -5,15 +5,13 @@ import { Worklist } from "./worklist";
 
 type InitializationState = Top | Bottom | Sequence;
 
-interface Top {
-  kind: 'Top'; // Represents ⊤ (fully initialized)
-}
+// Represents ⊤ (fully initialized)
+type Top = { kind: 'Top'; }
 
-interface Bottom {
-  kind: 'Bottom'; // Represents ⊥ (fully uninitialized)
-}
+// Represents ⊥ (fully uninitialized)
+type Bottom = { kind: 'Bottom'; }
 
-interface Sequence {
+type Sequence = {
   kind: 'Sequence';
   elements: InitializationState[]; // Array of SD elements representing fields
 }
@@ -24,7 +22,7 @@ const TOP = { kind: 'Top' } as const;
 type LocalMap = Map<string, Set<string>>;
 type MemoryMap = Map<string, InitializationState>;
 
-interface InterpreterState {
+type InterpreterState = {
   locals: LocalMap; // Local variables/registers
   memory: MemoryMap // Memory addresses
 }
@@ -54,12 +52,12 @@ export class InitializationCheckingPass {
     try {
       this.interpret()
     } catch (e) {
-      console.error(e)
-      console.log("Current block", this.currentBlock?.label)
-      console.log("Current instr", this.currentInstr)
-      printLocals(this.state.locals)
-      printMemory(this.state.memory)
-      throw e
+      console.error(e);
+      console.log("Current block", this.currentBlock?.label);
+      console.log("Current instr", this.currentInstr);
+      printLocals(this.state.locals);
+      printMemory(this.state.memory);
+      throw e;
     }
   }
 
@@ -86,34 +84,36 @@ export class InitializationCheckingPass {
       }, inputStates[0].output);
       
       if (this.debugLog) {
-        console.log("\n## Block", block.label, "\n")
-        console.log("immediate dominator", this.cfg.getImmediateDominator(block)?.label)
-        console.log("num predecessors", predecessors.length)
-        console.log("num input states", inputStates.length)
-        console.log("predecessors", predecessors.map(pred => pred.label))
+        console.log("\n## Block", block.label, "\n");
+        console.log("immediate dominator", this.cfg.getImmediateDominator(block)?.label);
+        console.log("num predecessors", predecessors.length);
+        console.log("num input states", inputStates.length);
+        console.log("predecessors", predecessors.map(pred => pred.label));
       }
 
-      const allInputStates = inputStates.length === predecessors.length
+      const allInputStates = inputStates.length === predecessors.length;
 
-      if (state && allInputStates && statesEqual(state.input, mergedInputState)) return
+      // Skip re-executing the block if the input state hasn't changed
+      // This ensures we avoid redundant work and helps reach a fixed point efficiently.
+      if (state && allInputStates && statesEqual(state.input, mergedInputState)) return;
 
       this.executeBlock(block, mergedInputState);
       worklist.addWork(block);
       worklist.visited.add(block);
-    })
+    });
 
-    console.log("All checked ok")
+    console.log("All checked ok");
   }
 
   executeBlock(block: BasicBlock, inputState: InterpreterState) {
 
-    this.state = cloneState(inputState)
+    this.state = cloneState(inputState);
     if (this.debugLog) {
       console.log(textColors.red(`\nExecuting block: ${block.label}`));
-      console.log("Input state for block:", block.label)
+      console.log("Input state for block:", block.label);
 
-      printLocals(inputState.locals)
-      printMemory(inputState.memory)
+      printLocals(inputState.locals);
+      printMemory(inputState.memory);
     }
 
     this.currentBlock = block;
@@ -122,130 +122,157 @@ export class InitializationCheckingPass {
       const instr = block.instructions[this.instrIndex];
       this.currentInstr = instr;
       const instrId = new InstructionId(block.label, this.instrIndex);
-      this.execute(instrId, instr);
+      this.executeInstruction(instrId, instr);
       this.instrIndex++;
     }
 
     if (this.debugLog) {
-      console.log("Computed state for block:", block.label)
-      printLocals(this.state.locals)
-      printMemory(this.state.memory)
+      console.log("Computed state for block:", block.label);
+      printLocals(this.state.locals);
+      printMemory(this.state.memory);
     }
 
     this.blockStates.set(block.label, { input: cloneState(inputState), output: cloneState(this.state) });
   }
 
-  execute(instrId: InstructionId, instr: IRInstruction): void {
-    if (this.debugLog) console.log(instrId.blockId, instrId.instrId+".", formatInstruction(instr))
-    if (instr instanceof AssignInstruction) {
+  executeInstruction(instrId: InstructionId, instr: IRInstruction): void {
+    if (this.debugLog) console.log(`${instrId.blockId} ${instrId.instrId}.`, formatInstruction(instr));
+    if (instr instanceof AssignInstruction)               this.executeAssign(instr);
+    else if (instr instanceof LoadConstantInstruction)    this.executeLoadConstant(instr);
+    else if (instr instanceof StoreToAddressInstruction)  this.executeStoreToAddress(instr);
+    else if (instr instanceof AllocInstruction)           this.executeAlloc(instr);
+    else if (instr instanceof AccessInstruction)          this.executeAccess(instr);
+    else if (instr instanceof CallInstruction)            this.executeCall(instr);
+    else if (instr instanceof BinaryOperationInstruction) this.executeBinaryOperation(instr);
+    else if (instr instanceof LoadFromAddressInstruction) this.executeLoadFromAddress(instr);
+    else if (instr instanceof ReturnInstruction)          this.executeReturn(instr);
+    else if (instr instanceof GetFieldPointerInstruction) this.executeGetFieldPointer(instr);
+    else if (instr instanceof JumpInstruction)            { }
+    else if (instr instanceof ConditionalJumpInstruction) this.executeConditionalJump(instr);
+    else if (instr instanceof EndAccessInstruction)       { }
+    else if (instr instanceof MoveInstruction)            this.executeMove(instrId, instr);
+    else if (instr instanceof MarkInitializedInstruction) this.executeMarkInitialized(instr);
+    else if (instr instanceof PhiInstruction)             this.executePhi(instr);
+    else if (instr instanceof CommentInstruction)         { }
+    else console.error(`Unknown instruction in initialization pass: ${instr.irType}`);
+  }
+
+  executeAssign(instr: AssignInstruction): void {
+    this.ensureRegisterInitialized(instr.source);
+    this.state.locals.set(instr.dest, this.state.locals.get(instr.source)!);
+  }
+
+  executeLoadConstant(instr: LoadConstantInstruction): void {
+    this.state.locals.set(instr.dest, new Set([]));
+  }
+
+  executeStoreToAddress(instr: StoreToAddressInstruction): void {
+    this.ensureRegisterInitialized(instr.source);
+    this.updateMemoryForRegister(instr.address, TOP);
+    if (this.debugLog) {
+      console.log("After StoreToAddressInstruction", instr.address, instr.source);
+      printLocals(this.state.locals);
+      printMemory(this.state.memory);
+    }
+  }
+
+  executeAlloc(instr: AllocInstruction): void {
+    const addr = this.newAddress(instr.type);
+    this.state.locals.set(instr.dest, new Set([addr]));
+    this.state.memory.set(addr, BOTTOM);
+  }
+
+  executeAccess(instr: AccessInstruction): void {
+    compilerAssert(instr.capabilities.length === 1, `Access instruction with multiple capabilities not supported`);
+    if (instr.capabilities[0] === Capability.Inout) {
       this.ensureRegisterInitialized(instr.source);
-      this.state.locals.set(instr.dest, this.state.locals.get(instr.source)!);
-    } else if (instr instanceof LoadConstantInstruction) {
-      this.state.locals.set(instr.dest, new Set([]));
-    } else if (instr instanceof StoreToAddressInstruction) {
+    } else if (instr.capabilities[0] === Capability.Let) {
       this.ensureRegisterInitialized(instr.source);
-      const addresses = this.state.locals.get(instr.address);
-      compilerAssert(addresses, `Register ${instr.address} is not found`);
-      for (const addr of addresses) {
-        const ids = addr.split('.')
-        const rootType = this.addressTypes.get(ids[0])
-        compilerAssert(rootType, `Root type not found for address ${addr}`)
-        this.updateMemoryAddressPathState(addr, rootType, TOP);
+    } else if (instr.capabilities[0] === Capability.Sink) {
+      this.ensureRegisterInitialized(instr.source);
+    } else if (instr.capabilities[0] === Capability.Set) {
+      if (!this.isDefinitelyUninitialized(instr.source)) {
+        this.currentBlock!.instructions.splice(this.instrIndex, 0, new CommentInstruction(`Inserted uninitialize for ${instr.source}`));
+        this.updateMemoryForRegister(instr.source, BOTTOM);
+        this.instrIndex++;
       }
-      if (this.debugLog) {
-        console.log("After StoreToAddressInstruction", instr.address, instr.source)
-        printLocals(this.state.locals)
-        printMemory(this.state.memory)
-      }
-    } else if (instr instanceof AllocInstruction) {
-      const addr = this.newAddress(instr.type);
-      this.state.locals.set(instr.dest, new Set([addr]));
-      this.state.memory.set(addr, BOTTOM);
-    } else if (instr instanceof AccessInstruction) {
-      compilerAssert(instr.capabilities.length === 1, `Access instruction with multiple capabilities not supported`)
-      if (instr.capabilities[0] === Capability.Inout) {
-        this.ensureRegisterInitialized(instr.source);
-      } else if (instr.capabilities[0] === Capability.Let) {
-        this.ensureRegisterInitialized(instr.source);
-      } else if (instr.capabilities[0] === Capability.Sink) {
-        this.ensureRegisterInitialized(instr.source);
-      } else if (instr.capabilities[0] === Capability.Set) {
-        // this.ensureRegisterUninitialized(instr.source);
-        if (!this.isDefinitelyUninitialized(instr.source)) {
-          // TODO: For trivial types/builtin types we can just mark as uninitialized
-          this.currentBlock!.instructions.splice(instrId.instrId, 0, new CommentInstruction(`Inserted uninitialize for ${instr.source}`))
-          this.state.locals.get(instr.source)!.forEach(addr => {
-            this.state.memory.set(addr, BOTTOM);
-          })
-          this.instrIndex++; // Skip the access instruction that would otherwise be visited since we inserted a new instruction
-        }
-      }
-      this.state.locals.set(instr.dest, this.state.locals.get(instr.source)!);
-    } else if (instr instanceof CallInstruction) {
-      for (const arg of instr.args) {
-        this.ensureRegisterInitialized(arg);
-      }
-      this.state.locals.get(instr.target)!.forEach(addr => {
-        this.state.memory.set(addr, TOP);
-      }) // Initialize the target
-    } else if (instr instanceof BinaryOperationInstruction) {
-      this.ensureRegisterInitialized(instr.left);
-      this.ensureRegisterInitialized(instr.right);
-      this.state.locals.set(instr.dest, new Set([]));
-    } else if (instr instanceof LoadFromAddressInstruction) {
-      this.ensureRegisterInitialized(instr.address);
-      this.state.locals.set(instr.dest, this.state.locals.get(instr.address)!);
-    } else if (instr instanceof ReturnInstruction) {
-      if (instr.value) this.ensureRegisterInitialized(instr.value);
-    } else if (instr instanceof GetFieldPointerInstruction) {
-      const addresses = this.state.locals.get(instr.address);
-      compilerAssert(addresses, `Register ${instr.address} is not found`);
-      compilerAssert(this.state.locals.get(instr.dest) === undefined, `Register ${instr.dest} is already initialized`);
-      const fields = [...addresses].map(addr => `${addr}.${instr.field}`)
-      this.state.locals.set(instr.dest, new Set(fields));
-      if (this.debugLog) {
-        console.log("After GetFieldPointerInstruction", instr.address, instr.dest, fields)
-        printLocals(this.state.locals)
-        printMemory(this.state.memory)
-      }
-    } else if (instr instanceof JumpInstruction) {
-    } else if (instr instanceof ConditionalJumpInstruction) {
-      this.ensureRegisterInitialized(instr.condition);
-    } else if (instr instanceof EndAccessInstruction) {
-      // pass
-    } else if (instr instanceof MoveInstruction) {
-      if (this.debugLog) {
-        console.log("MoveInstruction", instr.source, instr.target)
-        printLocals(this.state.locals)
-        printMemory(this.state.memory)
-      }
-      if (this.isDefinitelyInitialized(instr.target)) {
-        this.emitMove(instrId, instr, Capability.Inout)
-      } else if (this.isDefinitelyUninitialized(instr.target)) {
-        this.emitMove(instrId, instr, Capability.Set)
-      } else compilerAssert(false, `Target is not definitely initialized or uninitialized`)
-    } else if (instr instanceof MarkInitializedInstruction) {
-      const locals = this.state.locals.get(instr.target);
-      compilerAssert(locals, `Register ${instr.target} is not found`);
-      const newState = instr.initialized ? TOP : BOTTOM; 
-      for (const addr of locals) {
-        const ids = addr.split('.')
-        const rootType = this.addressTypes.get(ids[0])
-        this.updateMemoryAddressPathState(addr, rootType!, newState)
-      }
-      if (this.debugLog) {
-        console.log("After MarkInitializedInstruction", instr.target, instr.initialized)
-        printLocals(this.state.locals)
-        printMemory(this.state.memory)
-      }
-    } else if (instr instanceof PhiInstruction) {
-      // TODO: We should actually copy the state from the block
-      // that we came from. Need a test case for this
-      this.state.locals.set(instr.dest, new Set([]));
-    } else if (instr instanceof CommentInstruction) {
-      // pass
-    } else {
-      console.error(`Unknown instruction in initialization pass: ${instr.irType}`);
+    }
+    this.state.locals.set(instr.dest, this.state.locals.get(instr.source)!);
+  }
+
+  executeCall(instr: CallInstruction): void {
+    for (const arg of instr.args) {
+      this.ensureRegisterInitialized(arg);
+    }
+    this.updateMemoryForRegister(instr.target, TOP);
+  }
+
+  executeBinaryOperation(instr: BinaryOperationInstruction): void {
+    this.ensureRegisterInitialized(instr.left);
+    this.ensureRegisterInitialized(instr.right);
+    this.state.locals.set(instr.dest, new Set([]));
+  }
+
+  executeLoadFromAddress(instr: LoadFromAddressInstruction): void {
+    this.ensureRegisterInitialized(instr.address);
+    this.state.locals.set(instr.dest, this.state.locals.get(instr.address)!);
+  }
+
+  executeReturn(instr: ReturnInstruction): void {
+    if (instr.value) this.ensureRegisterInitialized(instr.value);
+  }
+
+  executeGetFieldPointer(instr: GetFieldPointerInstruction): void {
+    const addresses = this.state.locals.get(instr.address);
+    compilerAssert(addresses, `Register ${instr.address} is not found`);
+    compilerAssert(this.state.locals.get(instr.dest) === undefined, `Register ${instr.dest} is already initialized`);
+    const fields = [...addresses].map(addr => `${addr}.${instr.field}`);
+    this.state.locals.set(instr.dest, new Set(fields));
+    if (this.debugLog) {
+      console.log("After GetFieldPointerInstruction", instr.address, instr.dest, fields);
+      printLocals(this.state.locals);
+      printMemory(this.state.memory);
+    }
+  }
+
+  executeConditionalJump(instr: ConditionalJumpInstruction): void {
+    this.ensureRegisterInitialized(instr.condition);
+  }
+
+  executeMove(instrId: InstructionId, instr: MoveInstruction): void {
+    if (this.debugLog) {
+      console.log("MoveInstruction", instr.source, instr.target);
+      printLocals(this.state.locals);
+      printMemory(this.state.memory);
+    }
+    if (this.isDefinitelyInitialized(instr.target)) {
+      this.emitMove(instrId, instr, Capability.Inout);
+    } else if (this.isDefinitelyUninitialized(instr.target)) {
+      this.emitMove(instrId, instr, Capability.Set);
+    } else compilerAssert(false, `Target is not definitely initialized or uninitialized`);
+  }
+
+  executeMarkInitialized(instr: MarkInitializedInstruction): void {
+    this.updateMemoryForRegister(instr.target, instr.initialized ? TOP : BOTTOM);
+    if (this.debugLog) {
+      console.log("After MarkInitializedInstruction", instr.target, instr.initialized);
+      printLocals(this.state.locals);
+      printMemory(this.state.memory);
+    }
+  }
+
+  executePhi(instr: PhiInstruction): void {
+    this.state.locals.set(instr.dest, new Set([]));
+  }
+
+  updateMemoryForRegister(register: string, newState: InitializationState): void {
+    const addresses = this.state.locals.get(register);
+    compilerAssert(addresses, `Register ${register} is not found`);
+    for (const addr of addresses) {
+      const ids = addr.split('.');
+      const rootType = this.addressTypes.get(ids[0]);
+      compilerAssert(rootType, `Root type not found for address ${addr}`);
+      this.updateMemoryAddressPathState(addr, rootType!, newState);
     }
   }
 
@@ -264,6 +291,7 @@ export class InitializationCheckingPass {
       return !isStatePathInitialized(this.state.memory, addr);
     })
   }
+
   ensureRegisterInitialized(register: string) {
     const isInitialized = this.isDefinitelyInitialized(register);
     compilerAssert(isInitialized, `Register ${register} is not definitely initialized`);
@@ -272,9 +300,6 @@ export class InitializationCheckingPass {
   ensureRegisterUninitialized(register: string) {
     const isUninitialized = this.isDefinitelyUninitialized(register);
     compilerAssert(isUninitialized, `Register ${register} is not definitely uninitialized`);
-  }
-
-  ensureAddressInitialized(addr: string) {
   }
 
   newAddress(type: Type): string {
@@ -309,7 +334,8 @@ export class InitializationCheckingPass {
       new AccessInstruction(targetAccessReg, instr.target, [capability]),
       new MarkInitializedInstruction(targetAccessReg, true),
       new MarkInitializedInstruction(sourceAccessReg, false),
-      // new EndAccessInstruction(instrId, instr.target)
+      new EndAccessInstruction(sourceAccessReg, [Capability.Sink]),
+      new EndAccessInstruction(targetAccessReg, [capability]),
     ];
     block.instructions.splice(instrId.instrId, 1, ...instrs);
     this.instrIndex -- // Revert the index to the start of the inserted instructions
@@ -345,6 +371,7 @@ function printLocals(locals: LocalMap) {
     return `${key} -> ${Array.from(val).join(', ')}`
   }).join(' | '))
 }
+
 function printMemory(memory: MemoryMap) {
   console.log("  Memory:", Array.from(memory.entries()).flatMap(([key, val]) => {
     return `${key} -> ${initializationStateToString(val)}`

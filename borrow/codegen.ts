@@ -1,4 +1,4 @@
-import { ASTNode, AllocInstruction, AssignInstruction, AssignmentNode, BasicBlock, BinaryExpressionNode, BinaryOperationInstruction, BlockStatementNode, CallExpressionNode, CallInstruction, AccessInstruction, ConditionalJumpInstruction, CreateStructNode, ExpressionNode, ExpressionStatementNode, FunctionBlock, FunctionDeclarationNode, FunctionParameter, IRInstruction, IRValue, IdentifierNode, IfStatementNode, JumpInstruction, LetConstNode, LiteralNode, LoadConstantInstruction, LoadFromAddressInstruction, MemberExpressionNode, ProgramNode, Pointer, Value, ReturnInstruction, ReturnNode, StoreToAddressInstruction, StructType, Variable, VariableDeclarationNode, WhileStatementNode, compilerAssert, GetFieldPointerInstruction, Capability, AndNode, OrNode, PhiInstruction, Type, VoidType, CommentInstruction, MoveInstruction, IntType, EndAccessInstruction } from "./defs";
+import { ASTNode, AllocInstruction, AssignInstruction, AssignmentNode, BasicBlock, BinaryExpressionNode, BinaryOperationInstruction, BlockStatementNode, CallExpressionNode, CallInstruction, AccessInstruction, ConditionalJumpInstruction, CreateStructNode, ExpressionNode, ExpressionStatementNode, FunctionBlock, FunctionDeclarationNode, FunctionParameter, IRInstruction, IRValue, IdentifierNode, IfStatementNode, JumpInstruction, LetConstNode, LiteralNode, LoadConstantInstruction, LoadFromAddressInstruction, MemberExpressionNode, ProgramNode, Pointer, Value, ReturnInstruction, ReturnNode, StoreToAddressInstruction, StructType, Variable, VariableDeclarationNode, WhileStatementNode, compilerAssert, GetFieldPointerInstruction, Capability, AndNode, OrNode, PhiInstruction, Type, VoidType, CommentInstruction, MoveInstruction, IntType, EndAccessInstruction, printIR } from "./defs";
 
 type ExpressionContext = {
   valueCategory: 'rvalue' | 'lvalue';
@@ -460,7 +460,7 @@ export class CodeGenerator {
       this.addInstruction(new StoreToAddressInstruction(destAccessReg, type, value.register));
       this.addInstruction(new EndAccessInstruction(destAccessReg, [Capability.Set]));
     } else {
-      compilerAssert(false, 'Not implemented for type', { type })
+      compilerAssert(false, 'Not implemented for type', { value, type })
       this.addInstruction(new MoveInstruction(destReg, value.register));
     }
   }

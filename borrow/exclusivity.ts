@@ -131,44 +131,55 @@ export class ExclusivityCheckingPass {
 
   execute(instrId: InstructionId, instr: IRInstruction): void {
     if (this.debugLog) console.log(`Executing ${instr.irType} ${instrId.blockId}:${instrId.instrId}`);
-    if (instr instanceof AssignInstruction) {
-      this.state.locals.set(instr.dest, this.state.locals.get(instr.source)!);
-    } else if (instr instanceof LoadConstantInstruction) {
-      this.state.locals.set(instr.dest, new Set([]));
-    } else if (instr instanceof AllocInstruction) {
-      const addr = this.newAddress(instr.type);
-      this.state.locals.set(instr.dest, new Set([addr]));
-      this.state.memory.set(addr, []);
-    } else if (instr instanceof AccessInstruction) {
-      this.access(instrId, instr);
-    // } else if (instr instanceof StoreToAddressInstruction) {
-    // } else if (instr instanceof CallInstruction) {
-    } else if (instr instanceof LoadFromAddressInstruction) {
-      this.state.locals.set(instr.dest, new Set([]));
-    // } else if (instr instanceof ReturnInstruction) {
-    } else if (instr instanceof GetFieldPointerInstruction) {
-      const addresses = this.state.locals.get(instr.address);
-      compilerAssert(addresses, `Register ${instr.address} is not found`);
-      compilerAssert(this.state.locals.get(instr.dest) === undefined, `Register ${instr.dest} is already initialized`);
-      const fields = [...addresses].map(addr => `${addr}.${instr.field}`)
-      this.state.locals.set(instr.dest, new Set(fields));
-    } else if (instr instanceof BinaryOperationInstruction) {
-      this.state.locals.set(instr.dest, new Set([]));
-    } else if (instr instanceof JumpInstruction) {
-      // pass
-    } else if (instr instanceof ConditionalJumpInstruction) {
-      // pass
-    } else if (instr instanceof EndAccessInstruction) {
-      this.endAccess(instrId, instr);
-    } else if (instr instanceof PhiInstruction) {
-      // TODO: We should actually copy the state from the block
-      // that we came from. Need a test case for this
-      this.state.locals.set(instr.dest, new Set([]));
-    } else if (instr instanceof CommentInstruction) {
-      // pass
-    } else {
-      console.error(`Unknown instruction in exclusivity pass: ${instr.irType}`);
-    }
+    if (instr instanceof AssignInstruction)               this.handleAssignInstruction(instr);
+    else if (instr instanceof LoadConstantInstruction)    this.handleLoadConstantInstruction(instr);
+    else if (instr instanceof AllocInstruction)           this.handleAllocInstruction(instr);
+    else if (instr instanceof AccessInstruction)          this.access(instrId, instr);
+    else if (instr instanceof LoadFromAddressInstruction) this.handleLoadFromAddressInstruction(instr);
+    else if (instr instanceof GetFieldPointerInstruction) this.handleGetFieldPointerInstruction(instr);
+    else if (instr instanceof BinaryOperationInstruction) this.handleBinaryOperationInstruction(instr);
+    else if (instr instanceof JumpInstruction)            { }
+    else if (instr instanceof ConditionalJumpInstruction) { }
+    else if (instr instanceof EndAccessInstruction)       this.endAccess(instrId, instr);
+    else if (instr instanceof PhiInstruction)             this.handlePhiInstruction(instr);
+    else if (instr instanceof CommentInstruction)         { }
+    else console.error(`Unknown instruction in exclusivity pass: ${instr.irType}`)
+  }
+
+  handleAssignInstruction(instr: AssignInstruction): void {
+    this.state.locals.set(instr.dest, this.state.locals.get(instr.source)!);
+  }
+
+  handleLoadConstantInstruction(instr: LoadConstantInstruction): void {
+    this.state.locals.set(instr.dest, new Set([]));
+  }
+
+  handleAllocInstruction(instr: AllocInstruction): void {
+    const addr = this.newAddress(instr.type);
+    this.state.locals.set(instr.dest, new Set([addr]));
+    this.state.memory.set(addr, []);
+  }
+
+  handleLoadFromAddressInstruction(instr: LoadFromAddressInstruction): void {
+    this.state.locals.set(instr.dest, new Set([]));
+  }
+
+  handleGetFieldPointerInstruction(instr: GetFieldPointerInstruction): void {
+    const addresses = this.state.locals.get(instr.address);
+    compilerAssert(addresses, `Register ${instr.address} is not found`);
+    compilerAssert(this.state.locals.get(instr.dest) === undefined, `Register ${instr.dest} is already initialized`);
+    const fields = [...addresses].map(addr => `${addr}.${instr.field}`);
+    this.state.locals.set(instr.dest, new Set(fields));
+  }
+
+  handleBinaryOperationInstruction(instr: BinaryOperationInstruction): void {
+    this.state.locals.set(instr.dest, new Set([]));
+  }
+
+  handlePhiInstruction(instr: PhiInstruction): void {
+    // TODO: We should actually copy the state from the block
+    // that we came from. Need a test case for this
+    this.state.locals.set(instr.dest, new Set([]));
   }
 
   newAddress(type: Type): string {
@@ -300,29 +311,11 @@ function printMemory(memory: MemoryMap) {
   }).join(' | '))
 }
 
-// function borrowedItemToKey(item: BorrowedItem): string {
-//   return `${item.instruction.blockId}_${item.instruction.instrId}_${item.capability}`
-// }
-
-// const getBorrows = (state: ExclusivityState, borrows: BorrowedItem[] = []): BorrowedItem[] => {
-//   if (state.kind === 'Unique') return borrows
-//   if (state.kind === 'Borrowed') {
-//     borrows.push(...Array.from(state.borrow.values())); return borrows
-//   }
-//   if (state.kind === 'Aggregate') {
-//     state.elements.forEach(e => getBorrows(e, borrows)); return borrows
-//   }
-//   compilerAssert(false, "Unknown state")
-// }
-
 function borrowedItemsToString(sd: BorrowedItem[]): string {
   if (sd === undefined) compilerAssert(false, "Undefined state")
   if (sd.length === 0) return 'Unique'
   const r = sd.map(b => `${b.capability}(${b.subObject})`).join(', ')
   return `<${r}>`
-}
-
-function meetInitializationStateUpper(a: BorrowedItem[], b: BorrowedItem[]): BorrowedItem[] {
 }
 
 function meetBorrowedItems(a: BorrowedItem[], b: BorrowedItem[]): BorrowedItem[] {
