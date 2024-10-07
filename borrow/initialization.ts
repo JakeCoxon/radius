@@ -5,6 +5,9 @@ import { Worklist } from "./worklist";
 
 type InitializationState = Top | Bottom | Sequence;
 
+// TODO: Ensure initialization state for parameters and return values
+// TODO: Init types and deinit stack memory on function exit
+
 // Represents ⊤ (fully initialized)
 type Top = { kind: 'Top'; }
 

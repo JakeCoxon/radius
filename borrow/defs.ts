@@ -105,6 +105,9 @@ export abstract class ASTNode {
 // Base Expression Node Class
 export abstract class ExpressionNode extends ASTNode {}
 
+// TODO: These become TestUtil nodes and we create a transformation
+// into proper typed AST nodes, which gives us a way to test just
+// the IR generation and optimization passes in a more isolated way
 export class ProgramNode extends ASTNode {                 nodeType = 'Program';              constructor(public body: ASTNode[]) { super(); } }
 export class LetConstNode extends ASTNode {                nodeType = 'LetConst';             constructor(public name: string, public value: any) { super(); } }
 export class VariableDeclarationNode extends ASTNode {     nodeType = 'VariableDeclaration';  constructor(public name: string, public mutable: boolean, public type: string, public initializer?: ExpressionNode | undefined) { super(); } }
