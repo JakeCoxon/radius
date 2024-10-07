@@ -1,5 +1,6 @@
+import { Capability } from "../src/defs";
 import { ControlFlowGraph } from "./controlflow";
-import { AccessInstruction, Capability, FunctionBlock, IRInstruction, InstructionId, LoadFromAddressInstruction, MoveInstruction, StoreToAddressInstruction, compilerAssert, createUsageMap } from "./defs";
+import { AccessInstruction, FunctionBlock, IRInstruction, InstructionId, LoadFromAddressInstruction, MoveInstruction, StoreToAddressInstruction, compilerAssert, createUsageMap } from "./defs";
 
 const CapabilityRanking = [Capability.Let, Capability.Set, Capability.Inout, Capability.Sink]
 

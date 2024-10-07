@@ -1,7 +1,7 @@
-import { Binding, ConcreteClassType, Type } from "../src/defs";
+import { Binding, Capability, ConcreteClassType, Type } from "../src/defs";
 import { CodeGenerator } from "./codegen";
 import { ControlFlowGraph, buildCFG } from "./controlflow";
-import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, compilerAssert, Capability, EndAccessInstruction, PhiInstruction, MoveInstruction, InstructionId, CommentInstruction, textColors, MarkInitializedInstruction, formatInstruction, Module } from "./defs";
+import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, compilerAssert, EndAccessInstruction, PhiInstruction, MoveInstruction, InstructionId, CommentInstruction, textColors, MarkInitializedInstruction, formatInstruction, Module } from "./defs";
 import { Worklist } from "./worklist";
 
 type InitializationState = Top | Bottom | Sequence;
@@ -215,7 +215,7 @@ export class InitializationCheckingPass {
     compilerAssert(fn, `Function ${fnName} not found`);
     compilerAssert(fn.argBindings.length === instr.args.length, `Function ${fnName} expects ${fn.argBindings.length} arguments, got ${instr.args.length}`);
     for (let i = 0; i < fn.argBindings.length; i++) {
-      const capability = Capability.Let; // TODO: Get capability from function signature
+      const capability = fn.parameters[i].capability
       if (capability === Capability.Let || capability === Capability.Inout || capability === Capability.Sink) {
         this.ensureRegisterInitialized(instr.args[i]);
       } else if (capability === Capability.Set) {

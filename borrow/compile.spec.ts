@@ -1,6 +1,6 @@
 import { describe, it, expect } from "bun:test"
-import { NumberAst, SourceLocation, IntType, Binding, Ast, VoidAst, VoidType, LetAst, isType, OperatorAst, SetAst, BindingAst, StatementsAst, TypeInfo, TypeField, ConcreteClassType, CompiledClass, ConstructorAst, FieldAst, SetFieldAst, FunctionDefinition, CompiledFunction, CallAst, ReturnAst, IfAst, BoolType, AndAst, WhileAst } from "../src/defs";
-import { ASTNode, AndNode, AssignmentNode, BinaryExpressionNode, BlockStatementNode, CallExpressionNode, Capability, CreateStructNode, ExpressionStatementNode, FunctionDeclarationNode, FunctionParameter, FunctionParameterNode, IdentifierNode, IfStatementNode, LetConstNode, LiteralNode, MemberExpressionNode, Module, ProgramNode, ReturnNode, VariableDeclarationNode, WhileStatementNode, compilerAssert, printIR, printLivenessMap, textColors } from "./defs";
+import { NumberAst, SourceLocation, IntType, Binding, Ast, VoidAst, VoidType, LetAst, isType, OperatorAst, SetAst, BindingAst, StatementsAst, TypeInfo, TypeField, ConcreteClassType, CompiledClass, ConstructorAst, FieldAst, SetFieldAst, FunctionDefinition, CompiledFunction, CallAst, ReturnAst, IfAst, BoolType, AndAst, WhileAst, FunctionParameter, Capability } from "../src/defs";
+import { ASTNode, AndNode, AssignmentNode, BinaryExpressionNode, BlockStatementNode, CallExpressionNode, CreateStructNode, ExpressionStatementNode, FunctionDeclarationNode, FunctionParameterNode, IdentifierNode, IfStatementNode, LetConstNode, LiteralNode, MemberExpressionNode, Module, ProgramNode, ReturnNode, VariableDeclarationNode, WhileStatementNode, compilerAssert, printIR, printLivenessMap, textColors } from "./defs";
 
 class Scope {
   constants: Record<string, any> = {}
@@ -94,7 +94,7 @@ export class BasicCompiler {
       const binding = new Binding(node.name, type)
       this.scope.variables[node.name] = binding
       const value = node.initializer ? this.compile(node.initializer) : null
-      return new LetAst(VoidType, SourceLocation.anon, binding, value)
+      return new LetAst(VoidType, SourceLocation.anon, binding, value, node.mutable)
     }
     
     if (node instanceof LiteralNode) {
@@ -170,7 +170,9 @@ export class BasicCompiler {
       const returnType = this.getType(node.returnType)
       const funcDef = null!
 
-      const compiledFunc = new CompiledFunction(binding, funcDef, returnType, concreteTypes, body, argBindings, [], 0)
+      const parameters = argBindings.map((x, i) => new FunctionParameter(x, x.type, node.params[i].capability))
+
+      const compiledFunc = new CompiledFunction(binding, funcDef, returnType, concreteTypes, body, argBindings, parameters, [], 0)
       this.scope.functions[node.name] = compiledFunc
       this.allFunctions.set(binding, compiledFunc)
 
@@ -225,7 +227,6 @@ export class BasicCompiler {
 const runTest = (node: ProgramNode) => {
   const c = new BasicCompiler()
   const ast = c.compile(node)
-  console.log(ast)
 }
 
 const common = [

@@ -1,7 +1,7 @@
 import { BytecodeDefault, BytecodeSecondOrder, callFunctionFromValueTask, compileClassTask, compileFunctionPrototype, createBytecodeVmAndExecuteTask, pushBytecode, pushGeneratedBytecode, unknownToAst, visitParseNode, visitParseNodeAndError } from "./compiler";
 import { externalBuiltinBindings, getEnumOf } from "./compiler_sugar";
 import { getCommonType, hashValues, normalizeNumberType, numberTypeToConcrete, propagateLiteralType, propagatedLiteralAst, typeMatcherEquals } from "./compilter_types";
-import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, CallAst, IntType, Closure, UserCallAst, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition, ParseCall, TypeVariable, TypeMatcher, SourceLocation, ExternalTypeConstructor, ScopeParentSymbol, SubCompilerState, CompilerFunction, IntLiteralType, FloatLiteralType, FloatType, RawPointerType, AddressAst, BindingAst, UnknownObject, NeverType, CompilerFunctionCallContext, CompileTimeObjectType, CompTimeObjAst, ParseString, NamedArgAst, TypeCheckResult, u8Type, TypeCheckVar, ParseFreshIden, NumberAst, BoolAst, createStatements, ExternalFunction, BlockAst, LabelBlock, ConstructorAst, VariantCastAst, EnumVariantAst } from "./defs";
+import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, CallAst, IntType, Closure, UserCallAst, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition, ParseCall, TypeVariable, TypeMatcher, SourceLocation, ExternalTypeConstructor, ScopeParentSymbol, SubCompilerState, CompilerFunction, IntLiteralType, FloatLiteralType, FloatType, RawPointerType, AddressAst, BindingAst, UnknownObject, NeverType, CompilerFunctionCallContext, CompileTimeObjectType, CompTimeObjAst, ParseString, NamedArgAst, TypeCheckResult, u8Type, TypeCheckVar, ParseFreshIden, NumberAst, BoolAst, createStatements, ExternalFunction, BlockAst, LabelBlock, ConstructorAst, VariantCastAst, EnumVariantAst, FunctionParameter, Capability } from "./defs";
 import { Task, TaskDef, Unit } from "./tasks";
 
 
@@ -230,8 +230,9 @@ export function functionTemplateTypeCheckAndCompileTask(ctx: TaskContext, { func
         compilerAssert(false, "Invalid return type got $got expected $expected", { got: ast.type, expected: result.returnType })
       }
       
+      const parameters = argBindings.map(x => new FunctionParameter(x, x.type, Capability.Let))
       const compiledFunction = new CompiledFunction(
-          binding, func, returnType, result.concreteTypes, ast, argBindings, typeArgs, typeParamHash);
+          binding, func, returnType, result.concreteTypes, ast, argBindings, parameters, typeArgs, typeParamHash);
       ctx.globalCompiler.compiledFunctions.set(binding, compiledFunction);
       func.compiledFunctions.push(compiledFunction)
       

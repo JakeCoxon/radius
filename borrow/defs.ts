@@ -1,16 +1,9 @@
-import { Binding, CompiledFunction, Type } from "../src/defs";
+import { Binding, Capability, CompiledFunction, FunctionParameter, Type } from "../src/defs";
 
 export function compilerAssert(expected: unknown, message: string="", info: object={}): asserts expected {
   if (expected) return;
   console.log(info)
   throw new Error(message, info)
-}
-
-export enum Capability {
-  Let = "Let",
-  Set = "Set",
-  Inout = "Inout",
-  Sink = "Sink",
 }
 
 export class Pointer {
@@ -135,10 +128,6 @@ export class FunctionParameterNode extends ASTNode {
   constructor(public name: string, public type: string, public capability: Capability) {
     super();
   }
-}
-
-export class FunctionParameter {
-  constructor(public name: string, public type: Type, public capability: Capability) {}
 }
 
 export function printIR(blocks: BasicBlock[]) {

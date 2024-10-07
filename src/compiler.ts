@@ -1763,7 +1763,7 @@ const createInitializerFunctionTask = (ctx: TaskContext) => {
 
   const binding = ctx.globalCompiler.initializerFunctionBinding
   const compiledFunction = new CompiledFunction(
-      binding, func, VoidType, [], ast, [], [], 0)
+      binding, func, VoidType, [], ast, [], [], [], 0)
   ctx.globalCompiler.compiledFunctions.set(binding, compiledFunction)
   func.compiledFunctions.push(compiledFunction)
   ctx.globalCompiler.initializerFunction = compiledFunction
@@ -1790,7 +1790,7 @@ const createEntryFunctionTask = (ctx: TaskContext) => {
   const id = func.compiledFunctions.length
   const binding = new Binding(`${func.debugName} compiled ${id}`, FunctionType)
   const compiledFunction = new CompiledFunction(
-      binding, func, IntType, [], ast, [], [], 0)
+      binding, func, IntType, [], ast, [], [], [], 0)
   ctx.globalCompiler.compiledFunctions.set(binding, compiledFunction)
   func.compiledFunctions.push(compiledFunction)
   ctx.globalCompiler.entryFunction = compiledFunction

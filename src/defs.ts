@@ -327,6 +327,13 @@ export type ParseTreeTable = {
   [E in ParseNode as E['key']]: (out: BytecodeWriter, node: E) => void;
 }
 
+export enum Capability {
+  Let = "Let",
+  Set = "Set",
+  Inout = "Inout",
+  Sink = "Sink",
+}
+
 export class CompiledFunction {
   constructor(
     public binding: Binding,
@@ -335,8 +342,17 @@ export class CompiledFunction {
     public concreteTypes: Type[],
     public body: Ast,
     public argBindings: Binding[],
+    public parameters: FunctionParameter[],
     public typeParameters: unknown[],
     public typeParamHash: unknown) {}
+}
+
+export class FunctionParameter {
+  constructor(
+    public binding: Binding,
+    public type: Type,
+    public capability: Capability
+  ) {}
 }
 
 export class FunctionDefinition {
@@ -448,7 +464,7 @@ export class NumberAst extends AstRoot {        key = 'number' as const;        
 export class StringAst extends AstRoot {        key = 'string' as const;         constructor(public type: Type, public location: SourceLocation, public value: string) { super() } }
 export class BindingAst extends AstRoot {       key = 'binding' as const;        constructor(public type: Type, public location: SourceLocation, public binding: Binding) { super() } }
 export class BoolAst extends AstRoot {          key = 'bool' as const;           constructor(public type: Type, public location: SourceLocation, public value: boolean) { super() } }
-export class LetAst extends AstRoot {           key = 'let' as const;            constructor(public type: Type, public location: SourceLocation, public binding: Binding, public value: Ast | null) { super() } }
+export class LetAst extends AstRoot {           key = 'let' as const;            constructor(public type: Type, public location: SourceLocation, public binding: Binding, public value: Ast | null, public mutable: boolean) { super() } }
 export class SetAst extends AstRoot {           key = 'set' as const;            constructor(public type: Type, public location: SourceLocation, public binding: Binding, public value: Ast) { super() } }
 export class OperatorAst extends AstRoot {      key = 'operator' as const;       constructor(public type: Type, public location: SourceLocation, public operator: string, public args: Ast[]) { super() } }
 export class IfAst extends AstRoot {            key = 'if' as const;             constructor(public type: Type, public location: SourceLocation, public expr: Ast, public trueBody: Ast, public falseBody: Ast | null) { super() } }
