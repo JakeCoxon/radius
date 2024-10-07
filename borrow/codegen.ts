@@ -1,4 +1,4 @@
-import { ASTNode, AllocInstruction, AssignInstruction, AssignmentNode, BasicBlock, BinaryExpressionNode, BinaryOperationInstruction, BlockStatementNode, CallExpressionNode, CallInstruction, AccessInstruction, ConditionalJumpInstruction, CreateStructNode, ExpressionNode, ExpressionStatementNode, FunctionBlock, FunctionDeclarationNode, FunctionParameter, IRInstruction, IRValue, IdentifierNode, IfStatementNode, JumpInstruction, LetConstNode, LiteralNode, LoadConstantInstruction, LoadFromAddressInstruction, MemberExpressionNode, ProgramNode, Pointer, Value, ReturnInstruction, ReturnNode, StoreToAddressInstruction, StructType, Variable, VariableDeclarationNode, WhileStatementNode, compilerAssert, GetFieldPointerInstruction, Capability, AndNode, OrNode, PhiInstruction, Type, VoidType, CommentInstruction, MoveInstruction, IntType, EndAccessInstruction, printIR } from "./defs";
+import { ASTNode, AllocInstruction, AssignInstruction, AssignmentNode, BasicBlock, BinaryExpressionNode, BinaryOperationInstruction, BlockStatementNode, CallExpressionNode, CallInstruction, AccessInstruction, ConditionalJumpInstruction, CreateStructNode, ExpressionNode, ExpressionStatementNode, FunctionBlock, FunctionDeclarationNode, FunctionParameter, IRInstruction, IRValue, IdentifierNode, IfStatementNode, JumpInstruction, LetConstNode, LiteralNode, LoadConstantInstruction, LoadFromAddressInstruction, MemberExpressionNode, ProgramNode, Pointer, Value, ReturnInstruction, ReturnNode, StoreToAddressInstruction, StructType, Variable, VariableDeclarationNode, WhileStatementNode, compilerAssert, GetFieldPointerInstruction, Capability, AndNode, OrNode, PhiInstruction, Type, VoidType, CommentInstruction, MoveInstruction, IntType, EndAccessInstruction, printIR, MarkInitializedInstruction, InstructionId } from "./defs";
 
 type ExpressionContext = {
   valueCategory: 'rvalue' | 'lvalue';
@@ -137,13 +137,13 @@ export class CodeGenerator {
       const paramReg = this.newRegister();
       const type = this.constants[param.type];
       compilerAssert(type, `Type not found: ${param.type}`);
-      const capability = param.byReference ? Capability.Inout : Capability.Let
+      const capability = param.capability
       this.variableMap.set(param.name, new Variable(param.name, type, paramReg, capability));
       // this.declareVariable(param, paramReg);
       // Assume that the arguments are passed in registers named 'arg0', 'arg1', etc.
       const argIndex = i++
       const argReg = `arg${argIndex}`;
-      functionBlock.params.push(new FunctionParameter(argReg, type, param.byReference));
+      functionBlock.params.push(new FunctionParameter(argReg, type, param.capability));
       this.addInstruction(new AssignInstruction(paramReg, argReg));
     }
 
@@ -361,7 +361,7 @@ export class CodeGenerator {
     for (const arg of node.args) {
       const argIndex = i++;
       const newReg = this.newRegister();
-      if (fn.params[argIndex].byReference) {
+      if (fn.params[argIndex].capability === Capability.Inout) {
         const argReg = this.generateExpression(arg, { valueCategory: 'lvalue' });
         compilerAssert(argReg instanceof Pointer, 'Function argument must be an pointer');
         this.addInstruction(new AccessInstruction(newReg, argReg.address, [Capability.Inout]));
@@ -449,7 +449,7 @@ export class CodeGenerator {
       this.addInstruction(new StoreToAddressInstruction(targetAccessReg, type, valueReg));
       this.addInstruction(new EndAccessInstruction(targetAccessReg, [Capability.Set]));
     } else {
-      this.addInstruction(new MoveInstruction(targetPtr, pointer.address));
+      this.addInstruction(new MoveInstruction(targetPtr, pointer.address, type));
     }
   }
 
@@ -461,7 +461,6 @@ export class CodeGenerator {
       this.addInstruction(new EndAccessInstruction(destAccessReg, [Capability.Set]));
     } else {
       compilerAssert(false, 'Not implemented for type', { value, type })
-      this.addInstruction(new MoveInstruction(destReg, value.register));
     }
   }
 
@@ -508,5 +507,25 @@ export class CodeGenerator {
     const fieldIndex = type.fields.findIndex((field) => field.name === fieldName);
     this.addInstruction(new GetFieldPointerInstruction(destReg, objReg.address, fieldIndex));
     return new Pointer(destReg);
+  }
+
+  replaceMoveInstruction(block: BasicBlock, instrId: InstructionId, instr: MoveInstruction, capability: Capability) {
+    const sourceAccessReg = this.newRegister();
+    const targetAccessReg = this.newRegister();
+    const callReg = this.newRegister();
+    compilerAssert(capability === Capability.Set || capability === Capability.Inout, 'Invalid capability');
+    const moveFn = capability === Capability.Set ? `moveInit${instr.type.shortName}` : `moveAssign${instr.type.shortName}`;
+    const instrs = [
+      new CommentInstruction(`Replaced move with ${capability} to ${instr.target} from ${instr.source}`),
+      new AllocInstruction(callReg, instr.type),
+      new AccessInstruction(sourceAccessReg, instr.source, [Capability.Sink]),
+      new AccessInstruction(targetAccessReg, instr.target, [capability]),
+      new CallInstruction(callReg, moveFn, [sourceAccessReg, targetAccessReg]),
+      new MarkInitializedInstruction(targetAccessReg, true),
+      new MarkInitializedInstruction(sourceAccessReg, false),
+      new EndAccessInstruction(sourceAccessReg, [Capability.Sink]),
+      new EndAccessInstruction(targetAccessReg, [capability]),
+    ];
+    block.instructions.splice(instrId.instrId, 1, ...instrs);
   }
 }

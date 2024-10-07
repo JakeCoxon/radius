@@ -1,6 +1,6 @@
 import { CodeGenerator } from "./codegen";
 import { ControlFlowGraph, buildCFG } from "./controlflow";
-import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, compilerAssert, Type, StructType, Capability, EndAccessInstruction, PhiInstruction, MoveInstruction, VoidType, InstructionId, CommentInstruction, textColors, MarkInitializedInstruction, formatInstruction } from "./defs";
+import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, compilerAssert, Type, StructType, Capability, EndAccessInstruction, PhiInstruction, MoveInstruction, VoidType, InstructionId, CommentInstruction, textColors, MarkInitializedInstruction, formatInstruction, Module } from "./defs";
 import { Worklist } from "./worklist";
 
 type InitializationState = Top | Bottom | Sequence;
@@ -41,7 +41,7 @@ export class InitializationCheckingPass {
   instrIndex = 0
   codegen: CodeGenerator
 
-  constructor(codegen: CodeGenerator, fn: FunctionBlock) {
+  constructor(codegen: CodeGenerator, public module: Module, fn: FunctionBlock) {
     this.function = fn;
     this.codegen = codegen;
     // Build the CFG
@@ -201,8 +201,16 @@ export class InitializationCheckingPass {
   }
 
   executeCall(instr: CallInstruction): void {
-    for (const arg of instr.args) {
-      this.ensureRegisterInitialized(arg);
+    const fn = this.module.functions.find(f => f.name === instr.functionName);
+    compilerAssert(fn, `Function ${instr.functionName} not found`);
+    compilerAssert(fn.params.length === instr.args.length, `Function ${instr.functionName} expects ${fn.params.length} arguments, got ${instr.args.length}`);
+    for (let i = 0; i < fn.params.length; i++) {
+      const param = fn.params[i];
+      if (param.capability === Capability.Let || param.capability === Capability.Inout || param.capability === Capability.Sink) {
+        this.ensureRegisterInitialized(instr.args[i]);
+      } else if (param.capability === Capability.Set) {
+        this.ensureRegisterUninitialized(instr.args[i]);
+      } else compilerAssert(false, `Unknown capability ${param.capability}`);
     }
     this.updateMemoryForRegister(instr.target, TOP);
   }
@@ -246,10 +254,16 @@ export class InitializationCheckingPass {
       printMemory(this.state.memory);
     }
     if (this.isDefinitelyInitialized(instr.target)) {
-      this.emitMove(instrId, instr, Capability.Inout);
+      this.replaceMove(instrId, instr, Capability.Inout);
     } else if (this.isDefinitelyUninitialized(instr.target)) {
-      this.emitMove(instrId, instr, Capability.Set);
+      this.replaceMove(instrId, instr, Capability.Set);
     } else compilerAssert(false, `Target is not definitely initialized or uninitialized`);
+  }
+
+  replaceMove(instrId: InstructionId, instr: MoveInstruction, capability: Capability) {
+    const block = this.currentBlock!;
+    this.codegen.replaceMoveInstruction(block, instrId, instr, capability);
+    this.instrIndex -- // Revert the index to the start of the inserted instructions
   }
 
   executeMarkInitialized(instr: MarkInitializedInstruction): void {
@@ -322,23 +336,6 @@ export class InitializationCheckingPass {
     const addr = this.newAddress(type);
     state.locals.set(param, new Set([addr]));
     state.memory.set(addr, TOP);
-  }
-
-  emitMove(instrId: InstructionId, instr: MoveInstruction, capability: Capability) {
-    const block = this.currentBlock!;
-    const sourceAccessReg = this.codegen.newRegister();
-    const targetAccessReg = this.codegen.newRegister();
-    const instrs = [
-      new CommentInstruction(`Replaced move with ${capability} to ${instr.target} from ${instr.source}`),
-      new AccessInstruction(sourceAccessReg, instr.source, [Capability.Sink]),
-      new AccessInstruction(targetAccessReg, instr.target, [capability]),
-      new MarkInitializedInstruction(targetAccessReg, true),
-      new MarkInitializedInstruction(sourceAccessReg, false),
-      new EndAccessInstruction(sourceAccessReg, [Capability.Sink]),
-      new EndAccessInstruction(targetAccessReg, [capability]),
-    ];
-    block.instructions.splice(instrId.instrId, 1, ...instrs);
-    this.instrIndex -- // Revert the index to the start of the inserted instructions
   }
 
 }

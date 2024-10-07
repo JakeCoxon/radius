@@ -47,9 +47,7 @@ export class AccessInstruction extends IRInstruction {              irType = 'ac
 export class EndAccessInstruction extends IRInstruction {           irType = 'end_access';            constructor(public source: string, public capabilities: Capability[]) { super(); } }
 export class StoreToAddressInstruction extends IRInstruction {      irType = 'store_to_address';      constructor(public address: string, public type: Type, public source: string) { super(); } }
 export class LoadFromAddressInstruction extends IRInstruction {     irType = 'load_from_address';     constructor(public dest: string, public address: string) { super(); } }
-export class AddressOfInstruction extends IRInstruction {           irType = 'addressof';             constructor(public dest: string, public source: string) { super(); } }
-export class ComputeFieldAddressInstruction extends IRInstruction { irType = 'compute_field_address'; constructor(public dest: string, public address: string, public field: string) { super(); } }
-export class MoveInstruction extends IRInstruction {                irType = 'move';                  constructor(public target: string, public source: string) { super(); } }
+export class MoveInstruction extends IRInstruction {                irType = 'move';                  constructor(public target: string, public source: string, public type: Type) { super(); } }
 export class MarkInitializedInstruction extends IRInstruction {     irType = 'mark_initialized';      constructor(public target: string, public initialized: boolean) { super(); } }
 export class PhiInstruction extends IRInstruction {                 irType = 'phi';                   constructor(public dest: string, public sources: string[]) { super(); } }
 export class CommentInstruction extends IRInstruction {             irType = 'comment';               constructor(public comment: string) { super(); } }
@@ -63,8 +61,6 @@ export const getInstructionOperands = (instr: IRInstruction): string[] => {
   else if (instr instanceof AccessInstruction) { return [instr.source]; } 
   else if (instr instanceof GetFieldPointerInstruction) { return [instr.address]; } 
   else if (instr instanceof ReturnInstruction) { return instr.value ? [instr.value] : []; } 
-  else if (instr instanceof ComputeFieldAddressInstruction) { return [instr.address]; } 
-  else if (instr instanceof AddressOfInstruction) { return [instr.source]; } 
   else if (instr instanceof MoveInstruction) { return [instr.target, instr.source]; }
   else if (instr instanceof PhiInstruction) { return instr.sources; }
   else if (instr instanceof EndAccessInstruction) { return [instr.source]; }
@@ -77,13 +73,11 @@ export const getInstructionResult = (instr: IRInstruction): string | null => {
   else if (instr instanceof CallInstruction) { return null; } 
   else if (instr instanceof GetFieldPointerInstruction) { return instr.dest; } 
   else if (instr instanceof LoadFromAddressInstruction) { return instr.dest } 
-  else if (instr instanceof ComputeFieldAddressInstruction) { return instr.dest; } 
   else if (instr instanceof ReturnInstruction) { return null; } 
   else if (instr instanceof BinaryOperationInstruction) { return instr.dest; } 
   else if (instr instanceof StoreToAddressInstruction) { return instr.address; } 
   else if (instr instanceof AccessInstruction) { return instr.dest; } 
   else if (instr instanceof LoadConstantInstruction) { return instr.dest; } 
-  else if (instr instanceof AddressOfInstruction) { return instr.dest; }
   else if (instr instanceof MoveInstruction) { return null; }
   else if (instr instanceof PhiInstruction) { return instr.dest; }
   else { return null; }
@@ -96,6 +90,10 @@ export class BasicBlock {
 
 export class FunctionBlock {
   constructor(public name: string, public params: FunctionParameter[], public blocks: BasicBlock[]) {}
+}
+
+export class Module {
+  constructor(public functions: FunctionBlock[]) {}
 }
 
 // Base AST Node Class
@@ -128,13 +126,13 @@ export class OrNode extends ExpressionNode {               nodeType = 'OrExpress
 
 export class FunctionParameterNode extends ASTNode {
   nodeType = 'FunctionParameter';
-  constructor(public name: string, public type: string, public byReference: boolean) {
+  constructor(public name: string, public type: string, public capability: Capability) {
     super();
   }
 }
 
 export class FunctionParameter {
-  constructor(public name: string, public type: Type, public byReference: boolean) {}
+  constructor(public name: string, public type: Type, public capability: Capability) {}
 }
 
 export function printIR(blocks: BasicBlock[]) {
@@ -172,10 +170,6 @@ export function formatInstruction(instr: IRInstruction): string {
     return `into ${instr.address} store ${instr.source}`;
   } else if (instr instanceof LoadFromAddressInstruction) {
     return `${instr.dest} = load from address ${instr.address}`;
-  } else if (instr instanceof AddressOfInstruction) {
-    return `${instr.dest} = &${instr.source}`;
-  } else if (instr instanceof ComputeFieldAddressInstruction) {
-    return `${instr.dest} = &${instr.address}.${instr.field}`;
   } else if (instr instanceof AllocInstruction) {
     return `alloc ${instr.dest}: ${instr.type.shortName}`;
   } else if (instr instanceof AccessInstruction) {
