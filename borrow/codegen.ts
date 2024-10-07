@@ -1,4 +1,5 @@
-import { ASTNode, AllocInstruction, AssignInstruction, AssignmentNode, BasicBlock, BinaryExpressionNode, BinaryOperationInstruction, BlockStatementNode, CallExpressionNode, CallInstruction, AccessInstruction, ConditionalJumpInstruction, CreateStructNode, ExpressionNode, ExpressionStatementNode, FunctionBlock, FunctionDeclarationNode, FunctionParameter, IRInstruction, IRValue, IdentifierNode, IfStatementNode, JumpInstruction, LetConstNode, LiteralNode, LoadConstantInstruction, LoadFromAddressInstruction, MemberExpressionNode, ProgramNode, Pointer, Value, ReturnInstruction, ReturnNode, StoreToAddressInstruction, StructType, Variable, VariableDeclarationNode, WhileStatementNode, compilerAssert, GetFieldPointerInstruction, Capability, AndNode, OrNode, PhiInstruction, Type, VoidType, CommentInstruction, MoveInstruction, IntType, EndAccessInstruction, printIR, MarkInitializedInstruction, InstructionId } from "./defs";
+import { AndAst, Ast, Binding, BindingAst, CallAst, CompiledFunction, ConstructorAst, FieldAst, IfAst, IntType, LetAst, NumberAst, OperatorAst, OrAst, ReturnAst, SetAst, SetFieldAst, StatementsAst, Type, VoidAst, WhileAst } from "../src/defs";
+import { ASTNode, AllocInstruction, AssignInstruction, AssignmentNode, BasicBlock, BinaryExpressionNode, BinaryOperationInstruction, BlockStatementNode, CallExpressionNode, CallInstruction, AccessInstruction, ConditionalJumpInstruction, CreateStructNode, ExpressionNode, ExpressionStatementNode, FunctionBlock, FunctionDeclarationNode, FunctionParameter, IRInstruction, IRValue, IdentifierNode, IfStatementNode, JumpInstruction, LetConstNode, LiteralNode, LoadConstantInstruction, LoadFromAddressInstruction, MemberExpressionNode, ProgramNode, Pointer, Value, ReturnInstruction, ReturnNode, StoreToAddressInstruction, Variable, VariableDeclarationNode, WhileStatementNode, compilerAssert, GetFieldPointerInstruction, Capability, AndNode, OrNode, PhiInstruction, CommentInstruction, MoveInstruction, EndAccessInstruction, printIR, MarkInitializedInstruction, InstructionId } from "./defs";
 
 type ExpressionContext = {
   valueCategory: 'rvalue' | 'lvalue';
@@ -11,10 +12,12 @@ export class CodeGenerator {
   currentFunction: FunctionBlock
   labelCount: number = 0;
   registerCount: number = 0;
-  variableMap: Map<string, Variable> = new Map(); // variable name -> register name
+  variableMap: Map<Binding, Variable> = new Map(); // variable bidning -> register name
   constants: { [name: string]: any } = {};
 
   functionInstructions: IRInstruction[] = [];
+
+  functions: Map<Binding, CompiledFunction> = new Map();
 
   constructor() {
     // Initialize with an entry block
@@ -58,43 +61,125 @@ export class CodeGenerator {
     return new Value(reg);
   }
 
-  generate(node: ASTNode): void {
-    if (node instanceof LetConstNode) {
-      this.constants[node.name] = node.value;
-    } else if (node instanceof ProgramNode) {
-      this.generateProgram(node);
-    } else if (node instanceof VariableDeclarationNode) {
-      this.generateVariableDeclaration(node);
-    } else if (node instanceof ExpressionStatementNode) {
-      this.generateExpression(node.expression, { valueCategory: 'rvalue' });
-    } else if (node instanceof IfStatementNode) {
-      this.generateIfStatement(node);
-    } else if (node instanceof WhileStatementNode) {
-      this.generateWhileStatement(node);
-    } else if (node instanceof BlockStatementNode) {
-      this.generateBlockStatement(node);
-    } else if (node instanceof FunctionDeclarationNode) {
-      this.generateFunctionDeclaration(node);
-    } else if (node instanceof ReturnNode) {
-      this.generateReturnStatement(node);
-    } else {
-      throw new Error(`Unsupported AST node type: ${node.nodeType}`);
+  generate(ast: Ast): void {
+
+    if (ast instanceof StatementsAst) {
+      for (const stmt of ast.statements) {
+        this.generate(stmt);
+      }
+      return
     }
+    if (ast instanceof VoidAst) return
+
+    if (ast instanceof LetAst) {
+      return this.generateVariableDeclaration(ast)
+    }
+    if (ast instanceof SetAst) {
+      this.generateAssignmentExpression(ast, { valueCategory: 'rvalue' })
+      return
+    }
+    if (ast instanceof IfAst) {
+      return this.generateIfStatement(ast)
+    }
+    if (ast instanceof WhileAst) {
+      return this.generateWhileStatement(ast)
+    }
+    if (ast instanceof ReturnAst) {
+      return this.generateReturnStatement(ast)
+    }
+    if (ast instanceof SetFieldAst) {
+      return this.generateAssignmentField(ast)
+    }
+
+    this.generateExpression(ast, { valueCategory: 'rvalue' })
+    
+    // if (node instanceof LetConstNode) {
+    //   this.constants[node.name] = node.value;
+    // } else if (node instanceof ProgramNode) {
+    //   this.generateProgram(node);
+    // } else if (node instanceof VariableDeclarationNode) {
+    //   this.generateVariableDeclaration(node);
+    // } else if (node instanceof ExpressionStatementNode) {
+    //   this.generateExpression(node.expression, { valueCategory: 'rvalue' });
+    // } else if (node instanceof IfStatementNode) {
+    //   this.generateIfStatement(node);
+    // } else if (node instanceof WhileStatementNode) {
+    //   this.generateWhileStatement(node);
+    // } else if (node instanceof BlockStatementNode) {
+    //   this.generateBlockStatement(node);
+    // } else if (node instanceof FunctionDeclarationNode) {
+    //   this.generateFunctionDeclaration(node);
+    // } else if (node instanceof ReturnNode) {
+    //   this.generateReturnStatement(node);
+    // } else {
+      // throw new Error(`Unsupported AST node type: ${node.nodeType}`);
+    // }
+
+    // if (node instanceof AssignmentNode) {
+    //   return this.generateAssignmentExpression(node, context);
+    // } else if (node instanceof BinaryExpressionNode) {
+    //   return this.generateBinaryExpression(node, context);
+    // } else if (node instanceof IdentifierNode) {
+    //   return this.generateIdentifier(node, context);
+    // } else if (node instanceof LiteralNode) {
+    //   return this.generateLiteral(node, context);
+    // } else if (node instanceof MemberExpressionNode) {
+    //   return this.generateMemberExpression(node, context);
+    // } else if (node instanceof CallExpressionNode) {
+    //   return this.generateCallExpression(node, context);
+    // } else if (node instanceof CreateStructNode) {
+    //   return this.generateCreateStructExpression(node, context);
+    // } else if (node instanceof AndNode) {
+    //   return this.generateAndExpression(node, context);
+    // } else if (node instanceof OrNode) {
+    //   return this.generateOrExpression(node, context);
+    // } else {
+    //   throw new Error(`Unsupported expression type: ${node.nodeType}`);
+    // }
+    // compilerAssert(false, 'Not implemented codegen', { ast })
   }
 
-  generateProgram(node: ProgramNode) {
-    for (const stmt of node.body) {
-      this.generate(stmt);
+  generateExpression(ast: Ast, context: ExpressionContext): IRValue {
+    if (ast instanceof NumberAst) {
+      return this.generateNumberLiteral(ast, context)
     }
+    if (ast instanceof CallAst) {
+      return this.generateCallExpression(ast, context)
+    }
+    if (ast instanceof ConstructorAst) {
+      return this.generateCreateStructExpression(ast, context)
+    }
+    if (ast instanceof BindingAst) {
+      return this.generateBinding(ast, context)
+    }
+    if (ast instanceof FieldAst) {
+      return this.generateMemberExpression(ast, context)
+    }
+    if (ast instanceof AndAst) {
+      return this.generateAndExpression(ast, context)
+    }
+    if (ast instanceof OrAst) {
+      return this.generateOrExpression(ast, context)
+    }
+    if (ast instanceof OperatorAst) {
+      return this.generateBinaryExpression(ast, context)
+    }
+    
+    compilerAssert(false, 'Not implemented expression', { ast })
+    // this.generate(ast, context)
+  }
+
+  generateTopLevel(ast: Ast) {
+    this.generate(ast)
     this.blocks[0].instructions.unshift(...this.functionInstructions);
     this.functionInstructions = []
   }
 
-  generateReturnStatement(node: ReturnNode) {
-    if (!node.argument) {
+  generateReturnStatement(ast: ReturnAst) {
+    if (!ast.expr) {
       this.addInstruction(new ReturnInstruction(null));
     } else {
-      const returnReg = this.generateExpression(node.argument, { valueCategory: 'rvalue' });
+      const returnReg = this.generateExpression(ast.expr, { valueCategory: 'rvalue' });
       compilerAssert(returnReg instanceof Value, 'Return argument must be an RValue');
       this.addInstruction(new ReturnInstruction(returnReg.register));
     }
@@ -165,36 +250,38 @@ export class CodeGenerator {
     this.blocks = savedFunction.blocks
   }
 
-  generateVariableDeclaration(node: VariableDeclarationNode) {
-    this.addInstruction(new CommentInstruction(`${node.mutable ? 'var' : 'let'} ${node.name}`))
-    const value = node.initializer ? this.generateExpression(node.initializer, { valueCategory: 'rvalue' }) : null
+  generateVariableDeclaration(ast: LetAst) {
+    const mutable = true // ast.mutable
+    this.addInstruction(new CommentInstruction(`${mutable ? 'var' : 'let'} ${ast.binding.name}`))
+    const value = ast.value ? this.generateExpression(ast.value, { valueCategory: 'rvalue' }) : null
 
-    if (node.mutable) {
-      this.generateMutableVariableDeclaration(node, value);
+    if (mutable) {
+      this.generateMutableVariableDeclaration(ast, value);
     } else {
-      this.generateProjection(node, value);
+      this.generateProjection(ast, value);
     }
   }
 
-  generateProjection(node: VariableDeclarationNode, value: IRValue | null) {
-    const type = this.constants[node.type];
+  generateProjection(ast: LetAst, value: IRValue | null) {
+    const type = ast.binding.type
     const reg = this.newRegister();
     const capability = Capability.Let
-    this.variableMap.set(node.name, new Variable(node.name, type, reg, capability));
+    this.variableMap.set(ast.binding, new Variable(ast.binding.name, type, reg, capability));
     compilerAssert(value, 'Let binding must have an initializer');
-    this.addInstruction(new CommentInstruction(`Initialize ${node.name}`))
+    this.addInstruction(new CommentInstruction(`Initialize ${ast.binding.name}`))
     const ptr = this.storeResult(type, value)
     // compilerAssert(value instanceof Pointer, 'Let binding must have an lvalue initializer');
     this.addInstruction(new AccessInstruction(reg, ptr.address, [Capability.Let]));
   }
 
-  generateMutableVariableDeclaration(node: VariableDeclarationNode, value: IRValue | null) {
+  generateMutableVariableDeclaration(ast: LetAst, value: IRValue | null) {
     const reg = this.newRegister();
-    const type = this.constants[node.type];
-    compilerAssert(type, `Type not found: ${node.type}`);
-    const capability = node.mutable ? Capability.Inout : Capability.Let
-    this.variableMap.set(node.name, new Variable(node.name, type, reg, capability));
+    const type = ast.binding.type
+    const mutable = true // ast.binding.mutable
+    const capability = mutable ? Capability.Inout : Capability.Let
+    this.variableMap.set(ast.binding, new Variable(ast.binding.name, type, reg, capability));
     
+    console.log("Alloc instruction", reg, type)
     this.addFunctionInstruction(new AllocInstruction(reg, type));
     if (value) {
       
@@ -203,12 +290,12 @@ export class CodeGenerator {
       } else {
         this.generateMovePointerInstruction(reg, value, type)
       }
-      this.addInstruction(new CommentInstruction(`end Initialize ${node.name}`))
+      this.addInstruction(new CommentInstruction(`end Initialize ${ast.binding.name}`))
     }
   }
 
-  generateIfStatement(node: IfStatementNode) {
-    const conditionReg = this.generateExpression(node.condition, { valueCategory: 'rvalue' });
+  generateIfStatement(ast: IfAst) {
+    const conditionReg = this.generateExpression(ast.expr, { valueCategory: 'rvalue' });
     compilerAssert(conditionReg instanceof Value, 'If condition must be an RValue');
     const thenLabel = this.newLabel();
     const elseLabel = this.newLabel();
@@ -217,18 +304,16 @@ export class CodeGenerator {
     this.addInstruction(new ConditionalJumpInstruction(conditionReg.register, thenLabel, elseLabel));
 
     this.newBlock(thenLabel);
-    this.generate(node.consequent);
+    this.generate(ast.trueBody);
     this.addInstruction(new JumpInstruction(afterLabel));
 
     this.newBlock(elseLabel);
-    if (node.alternate) {
-      this.generate(node.alternate);
-    }
+    if (ast.falseBody) this.generate(ast.falseBody);
     this.addInstruction(new JumpInstruction(afterLabel));
     this.newBlock(afterLabel);
   }
 
-  generateWhileStatement(node: WhileStatementNode) {
+  generateWhileStatement(ast: WhileAst) {
     const conditionLabel = this.newLabel();
     const bodyLabel = this.newLabel();
     const afterLabel = this.newLabel();
@@ -239,26 +324,26 @@ export class CodeGenerator {
     const conditionBlock = new BasicBlock(conditionLabel, []);
     this.blocks.push(conditionBlock);
     this.currentBlock = conditionBlock;
-    const conditionReg = this.generateExpression(node.condition, { valueCategory: 'rvalue' });
+    const conditionReg = this.generateExpression(ast.condition, { valueCategory: 'rvalue' });
     compilerAssert(conditionReg instanceof Value, 'While condition must be an RValue');
     this.addInstruction(new ConditionalJumpInstruction(conditionReg.register, bodyLabel, afterLabel));
 
     this.newBlock(bodyLabel);
-    this.generate(node.body);
+    this.generate(ast.body);
     this.addInstruction(new JumpInstruction(conditionLabel));
     this.newBlock(afterLabel);
   }
 
-  generateAndExpression(node: AndNode, context: ExpressionContext): IRValue {
+  generateAndExpression(ast: AndAst, context: ExpressionContext): IRValue {
     compilerAssert(context.valueCategory === 'rvalue', 'and-expression must be an RValue');
     const rhsLabel = this.newLabel();
     const afterLabel = this.newLabel();
     const outReg = this.newRegister();
-    const lhsReg = this.generateExpression(node.left, { valueCategory: 'rvalue' });
+    const lhsReg = this.generateExpression(ast.args[0], { valueCategory: 'rvalue' });
     compilerAssert(lhsReg instanceof Value, 'Left-hand side of && must be an RValue');
     this.addInstruction(new ConditionalJumpInstruction(lhsReg.register, rhsLabel, afterLabel));
     this.newBlock(rhsLabel);
-    const rhsReg = this.generateExpression(node.right, { valueCategory: 'rvalue' });
+    const rhsReg = this.generateExpression(ast.args[1], { valueCategory: 'rvalue' });
     compilerAssert(rhsReg instanceof Value, 'Right-hand side of && must be an RValue');
     this.addInstruction(new JumpInstruction(afterLabel));
     this.newBlock(afterLabel);
@@ -266,16 +351,16 @@ export class CodeGenerator {
     return new Value(outReg);
   }
 
-  generateOrExpression(node: OrNode, context: ExpressionContext): IRValue {
+  generateOrExpression(ast: OrAst, context: ExpressionContext): IRValue {
     compilerAssert(context.valueCategory === 'rvalue', 'or-expression must be an RValue');
     const rhsLabel = this.newLabel();
     const afterLabel = this.newLabel();
     const outReg = this.newRegister();
-    const lhsReg = this.generateExpression(node.left, { valueCategory: 'rvalue' });
+    const lhsReg = this.generateExpression(ast.args[0], { valueCategory: 'rvalue' });
     compilerAssert(lhsReg instanceof Value, 'Left-hand side of || must be an RValue');
     this.addInstruction(new ConditionalJumpInstruction(lhsReg.register, afterLabel, rhsLabel));
     this.newBlock(rhsLabel);
-    const rhsReg = this.generateExpression(node.right, { valueCategory: 'rvalue' });
+    const rhsReg = this.generateExpression(ast.args[1], { valueCategory: 'rvalue' });
     compilerAssert(rhsReg instanceof Value, 'Right-hand side of || must be an RValue');
     this.addInstruction(new JumpInstruction(afterLabel));
     this.newBlock(afterLabel);
@@ -289,53 +374,28 @@ export class CodeGenerator {
     }
   }
 
-  generateExpression(node: ExpressionNode, context: ExpressionContext): IRValue {
-    
-    if (node instanceof AssignmentNode) {
-      return this.generateAssignmentExpression(node, context);
-    } else if (node instanceof BinaryExpressionNode) {
-      return this.generateBinaryExpression(node, context);
-    } else if (node instanceof IdentifierNode) {
-      return this.generateIdentifier(node, context);
-    } else if (node instanceof LiteralNode) {
-      return this.generateLiteral(node, context);
-    } else if (node instanceof MemberExpressionNode) {
-      return this.generateMemberExpression(node, context);
-    } else if (node instanceof CallExpressionNode) {
-      return this.generateCallExpression(node, context);
-    } else if (node instanceof CreateStructNode) {
-      return this.generateCreateStructExpression(node, context);
-    } else if (node instanceof AndNode) {
-      return this.generateAndExpression(node, context);
-    } else if (node instanceof OrNode) {
-      return this.generateOrExpression(node, context);
-    } else {
-      throw new Error(`Unsupported expression type: ${node.nodeType}`);
-    }
-  }
-
-  generateCreateStructExpression(node: CreateStructNode, context: ExpressionContext): IRValue {
+  generateCreateStructExpression(ast: ConstructorAst, context: ExpressionContext): IRValue {
     compilerAssert(context.valueCategory === 'rvalue', 'Struct creation must be an RValue');
-    const structName = node.name;
-    const structType = this.constants[structName];
-    compilerAssert(structType && structType instanceof StructType, `Struct type not found: ${structName}`);
-    const fieldValues = node.fields.map((field) => {
+    const structType = ast.type
+    compilerAssert(structType, `Struct type not found`);
+    compilerAssert(ast.args.length === structType.typeInfo.fields.length, 'Field count mismatch');
+    const fieldValues = ast.args.map((field) => {
       return this.generateExpression(field, context);
     });
     const structReg = this.newRegister();
     this.addFunctionInstruction(new AllocInstruction(structReg, structType));
     for (let i = 0; i < fieldValues.length; i++) {
-      const field = structType.fields[i]
+      const field = structType.typeInfo.fields[i]
       const fieldValue = this.toValue(fieldValues[i])
       // compilerAssert(fieldValue instanceof Value, 'Struct field value must be an RValue');
       const fieldAccessReg = this.newRegister();
       const reg = this.newRegister();
       const fieldIndex = i;
-      const type = field.type
+      const fieldType = field.fieldType
       this.addInstruction(new CommentInstruction(`Store field ${field.name} of ${structReg}`))
       this.addInstruction(new GetFieldPointerInstruction(reg, structReg, fieldIndex));
       this.addInstruction(new AccessInstruction(fieldAccessReg, reg, [Capability.Set]));
-      this.addInstruction(new StoreToAddressInstruction(fieldAccessReg, type, fieldValue.register));
+      this.addInstruction(new StoreToAddressInstruction(fieldAccessReg, fieldType, fieldValue.register));
       // this.addInstruction(new StoreFieldInstruction(structReg, field.name, fieldValue.register));
     }
     return new Pointer(structReg)
@@ -350,24 +410,29 @@ export class CodeGenerator {
     return new Pointer(reg)
   }
 
-  generateCallExpression(node: CallExpressionNode, context: ExpressionContext): IRValue {
+  generateCallExpression(ast: CallAst, context: ExpressionContext): IRValue {
     // Generate code for arguments
-    const fn = this.functionBlocks.find((fn) => fn.name === node.callee);
-    compilerAssert(fn, `Function ${node.callee} not found`);
-    this.addInstruction(new CommentInstruction(`Call ${node.callee}`))
+    // const fn = this.functionBlocks.find((fn) => fn.name === node.callee);
+    const fn = this.functions.get(ast.binding)
+    compilerAssert(fn, `Function ${ast.binding.name} not found`);
+    this.addInstruction(new CommentInstruction(`Call ${ast.binding.name}`))
+
+    compilerAssert(ast.args.length === fn.argBindings.length, 'Argument count mismatch');
     
     const argRegs: string[] = [];
     let i = 0
-    for (const arg of node.args) {
+    for (const arg of fn.argBindings) {
       const argIndex = i++;
+      const givenArg = ast.args[argIndex];
       const newReg = this.newRegister();
-      if (fn.params[argIndex].capability === Capability.Inout) {
-        const argReg = this.generateExpression(arg, { valueCategory: 'lvalue' });
+      const inout = false // fn.params[argIndex].capability === Capability.Inout
+      if (inout) {
+        const argReg = this.generateExpression(givenArg, { valueCategory: 'lvalue' });
         compilerAssert(argReg instanceof Pointer, 'Function argument must be an pointer');
         this.addInstruction(new AccessInstruction(newReg, argReg.address, [Capability.Inout]));
         argRegs.push(newReg);
       } else {
-        const argReg = this.generateExpression(arg, { valueCategory: 'rvalue' });
+        const argReg = this.generateExpression(givenArg, { valueCategory: 'rvalue' });
         const reg = argReg instanceof Value ? argReg.register : argReg.address;
         // const value = this.toValue(argReg)
         this.addInstruction(new AccessInstruction(newReg, reg, [Capability.Let]));
@@ -375,67 +440,56 @@ export class CodeGenerator {
       }
     }
 
-    const functionName = node.callee;
-
+    const functionName = ast.binding.name;
+  
     // Call the function
     const resultReg = this.newRegister();
     const accessReg = this.newRegister();
-    this.addFunctionInstruction(new AllocInstruction(resultReg, VoidType));
+    this.addFunctionInstruction(new AllocInstruction(resultReg, fn.returnType));
     this.addInstruction(new AccessInstruction(accessReg, resultReg, [Capability.Set]));
-    this.addInstruction(new CallInstruction(accessReg, functionName, argRegs));
+    this.addInstruction(new CallInstruction(accessReg, ast.binding, argRegs));
     return new Pointer(resultReg)
   }
 
-  generateAssignmentExpression(node: AssignmentNode, context: ExpressionContext): IRValue {
-    const left = node.left;
+  generateAssignmentExpression(ast: SetAst, context: ExpressionContext): IRValue {
+    // const left = ast.
+
+    // Simple assignment to variable
+    let variable = this.variableMap.get(ast.binding)
+    compilerAssert(variable, `Undefined variable: ${ast.binding.name}`);
+    const type = variable.type
+
+    const newLocal = this.generateExpression(ast.value, { valueCategory: 'rvalue' });
+    const lvalue = this.storeResult(type, newLocal)
+
+    // const val = this.toValue(rightVal)
+    this.generateMovePointerInstruction(variable.register, lvalue, type)
+    compilerAssert(variable.capability === Capability.Inout, 'Cannot assign to a let variable');
+    return new Pointer(variable.register);
+  }
+  generateAssignmentField(ast: SetFieldAst) {
+    // const checkMutable = (node: MemberExpressionNode) => {
+    //   if (node.object instanceof IdentifierNode) {
+    //     const variable = this.variableMap.get(node.object.name);
+    //     compilerAssert(variable, `Undefined variable: ${node.object.name}`);
+    //     return variable.capability === Capability.Inout
+    //   } else if (node.object instanceof MemberExpressionNode) {
+    //     return checkMutable(node.object)
+    //   }
+    // }
+    // compilerAssert(checkMutable(left), 'Cannot assign to a member of an immutable struct');
+    // TODO: Check mutable
+    const objReg = this.generateExpression(ast.left, { valueCategory: 'lvalue' });
+    compilerAssert(objReg instanceof Pointer, 'Object must be an pointer');
     
+    const fieldType = ast.field.fieldType
+    compilerAssert(fieldType, `Struct type not found`);
+    const reg = this.newRegister();
 
-    if (left instanceof IdentifierNode) {
-      // Simple assignment to variable
-      const varName = left.name;
-      let variable = this.variableMap.get(varName);
-      compilerAssert(variable, `Undefined variable: ${varName}`);
-      const type = variable.type
-
-      const newLocal = this.generateExpression(node.right, { valueCategory: 'rvalue' });
-      // compilerAssert(newLocal instanceof Pointer, 'Assignment right-hand side must be an lvalue', { right: node.right });
-      const lvalue = this.storeResult(type, newLocal)
-      // compilerAssert(lvalue instanceof Pointer, 'Assignment right-hand side must be an lvalue');
-
-      // const val = this.toValue(rightVal)
-      this.generateMovePointerInstruction(variable.register, lvalue, type)
-      compilerAssert(variable.capability === Capability.Inout, 'Cannot assign to a let variable');
-      return new Pointer(variable.register);
-    } else if (left instanceof MemberExpressionNode) {
-      const checkMutable = (node: MemberExpressionNode) => {
-        if (node.object instanceof IdentifierNode) {
-          const variable = this.variableMap.get(node.object.name);
-          compilerAssert(variable, `Undefined variable: ${node.object.name}`);
-          return variable.capability === Capability.Inout
-        } else if (node.object instanceof MemberExpressionNode) {
-          return checkMutable(node.object)
-        }
-      }
-      compilerAssert(checkMutable(left), 'Cannot assign to a member of an immutable struct');
-      // Assignment to object field
-      const objReg = this.generateExpression(left.object, { valueCategory: 'lvalue' });
-      compilerAssert(objReg instanceof Pointer, 'Object must be an pointer');
-      
-      const fieldName = left.property;
-      const type = this.constants[left.type];
-      compilerAssert(type && type instanceof StructType, `Struct type not found: ${left.type}`);
-      const fieldIndex = type.fields.findIndex((field) => field.name === fieldName);
-      const reg = this.newRegister();
-      const fieldType = type.fields[fieldIndex].type
-
-      const newValue = this.generateExpression(node.right, { valueCategory: 'rvalue' });
-      const rightReg = this.storeResult(fieldType, newValue)
-      this.addInstruction(new GetFieldPointerInstruction(reg, objReg.address, fieldIndex));
-      this.generateMovePointerInstruction(reg, rightReg, type);
-      return rightReg;
-    } else {
-      throw new Error(`Unsupported left-hand side in assignment`);
-    }
+    const newValue = this.generateExpression(ast.value, { valueCategory: 'rvalue' });
+    const rightReg = this.storeResult(fieldType, newValue)
+    this.addInstruction(new GetFieldPointerInstruction(reg, objReg.address, ast.field.index));
+    this.generateMovePointerInstruction(reg, rightReg, fieldType);
   }
 
   generateMovePointerInstruction(targetPtr: string, pointer: Pointer, type: Type) {
@@ -464,23 +518,22 @@ export class CodeGenerator {
     }
   }
 
-  generateBinaryExpression(node: BinaryExpressionNode, context: ExpressionContext): IRValue {
-    const leftReg = this.toValue(this.generateExpression(node.left, context))
-    const rightReg = this.toValue(this.generateExpression(node.right, context))
+  generateBinaryExpression(ast: OperatorAst, context: ExpressionContext): IRValue {
+    const leftReg = this.toValue(this.generateExpression(ast.args[0], context))
+    const rightReg = this.toValue(this.generateExpression(ast.args[1], context))
 
     const resultReg = this.newRegister();
-    this.addInstruction(new BinaryOperationInstruction(resultReg, node.operator, leftReg.register, rightReg.register));
+    this.addInstruction(new BinaryOperationInstruction(resultReg, ast.operator, leftReg.register, rightReg.register));
     if (context.valueCategory === 'lvalue') {
       return this.storeResult(IntType, new Value(resultReg))
     }
     return new Value(resultReg)
   }
 
-  generateIdentifier(node: IdentifierNode, context: ExpressionContext): IRValue {
-    const varName = node.name;
-    const addressReg = this.variableMap.get(varName);
+  generateBinding(ast: BindingAst, context: ExpressionContext): IRValue {
+    const addressReg = this.variableMap.get(ast.binding);
 
-    compilerAssert(addressReg, `Undefined variable: ${varName}`);
+    compilerAssert(addressReg, `Undefined variable: ${ast.binding.name}`);
 
     if (context.valueCategory === 'lvalue') {
       return new Pointer(addressReg.register);
@@ -489,23 +542,19 @@ export class CodeGenerator {
     }
   }
 
-  generateLiteral(node: LiteralNode, context: ExpressionContext): IRValue {
+  generateNumberLiteral(ast: NumberAst, context: ExpressionContext): IRValue {
     compilerAssert(context.valueCategory === 'rvalue', 'Literal must be an RValue');
-    const value = node.value;
+    const value = ast.value;
     const destReg = this.newRegister();
     this.addInstruction(new LoadConstantInstruction(destReg, value));
     return new Value(destReg);
   }
 
-  generateMemberExpression(node: MemberExpressionNode, context: ExpressionContext): IRValue {
-    const objReg = this.generateExpression(node.object, { valueCategory: 'lvalue' });
+  generateMemberExpression(ast: FieldAst, context: ExpressionContext): IRValue {
+    const objReg = this.generateExpression(ast.left, { valueCategory: 'lvalue' });
     compilerAssert(objReg instanceof Pointer, 'Object must be an pointer');
-    const fieldName = node.property;
     const destReg = this.newRegister();
-    const type = this.constants[node.type];
-    compilerAssert(type && type instanceof StructType, `Struct type not found: ${node.type}`);
-    const fieldIndex = type.fields.findIndex((field) => field.name === fieldName);
-    this.addInstruction(new GetFieldPointerInstruction(destReg, objReg.address, fieldIndex));
+    this.addInstruction(new GetFieldPointerInstruction(destReg, objReg.address, ast.field.index));
     return new Pointer(destReg);
   }
 
@@ -514,13 +563,15 @@ export class CodeGenerator {
     const targetAccessReg = this.newRegister();
     const callReg = this.newRegister();
     compilerAssert(capability === Capability.Set || capability === Capability.Inout, 'Invalid capability');
-    const moveFn = capability === Capability.Set ? `moveInit${instr.type.shortName}` : `moveAssign${instr.type.shortName}`;
+    const moveFnName = capability === Capability.Set ? `moveInit${instr.type.shortName}` : `moveAssign${instr.type.shortName}`;
+    const moveFn = Array.from(this.functions.values()).find(fn => fn.binding.name === moveFnName); // hacks
+    compilerAssert(moveFn, `Function not found: ${moveFnName}`);
     const instrs = [
       new CommentInstruction(`Replaced move with ${capability} to ${instr.target} from ${instr.source}`),
       new AllocInstruction(callReg, instr.type),
       new AccessInstruction(sourceAccessReg, instr.source, [Capability.Sink]),
       new AccessInstruction(targetAccessReg, instr.target, [capability]),
-      new CallInstruction(callReg, moveFn, [sourceAccessReg, targetAccessReg]),
+      new CallInstruction(callReg, moveFn.binding, [sourceAccessReg, targetAccessReg]),
       new MarkInitializedInstruction(targetAccessReg, true),
       new MarkInitializedInstruction(sourceAccessReg, false),
       new EndAccessInstruction(sourceAccessReg, [Capability.Sink]),

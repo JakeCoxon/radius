@@ -1,17 +1,25 @@
 import { describe, it, expect } from "bun:test"
-import { NumberAst, SourceLocation, IntType, Binding, Ast, VoidAst, VoidType, LetAst, isType, OperatorAst, SetAst, BindingAst, StatementsAst, TypeInfo, TypeField, ConcreteClassType, CompiledClass, ConstructorAst, FieldAst, SetFieldAst, FunctionDefinition, CompiledFunction, CallAst } from "../src/defs";
-import { ASTNode, AndNode, AssignmentNode, BinaryExpressionNode, BlockStatementNode, BoolType, CallExpressionNode, Capability, CreateStructNode, ExpressionStatementNode, FunctionDeclarationNode, FunctionParameter, FunctionParameterNode, IdentifierNode, IfStatementNode, LetConstNode, LineType, LiteralNode, MemberExpressionNode, Module, PointType, ProgramNode, ReturnNode, VariableDeclarationNode, WhileStatementNode, compilerAssert, printIR, printLivenessMap, textColors } from "./defs";
+import { NumberAst, SourceLocation, IntType, Binding, Ast, VoidAst, VoidType, LetAst, isType, OperatorAst, SetAst, BindingAst, StatementsAst, TypeInfo, TypeField, ConcreteClassType, CompiledClass, ConstructorAst, FieldAst, SetFieldAst, FunctionDefinition, CompiledFunction, CallAst, ReturnAst, IfAst, BoolType, AndAst, WhileAst } from "../src/defs";
+import { ASTNode, AndNode, AssignmentNode, BinaryExpressionNode, BlockStatementNode, CallExpressionNode, Capability, CreateStructNode, ExpressionStatementNode, FunctionDeclarationNode, FunctionParameter, FunctionParameterNode, IdentifierNode, IfStatementNode, LetConstNode, LiteralNode, MemberExpressionNode, Module, ProgramNode, ReturnNode, VariableDeclarationNode, WhileStatementNode, compilerAssert, printIR, printLivenessMap, textColors } from "./defs";
 
-class BasicCompiler {
-
+class Scope {
   constants: Record<string, any> = {}
   variables: Record<string, Binding> = {}
   functions: Record<string, CompiledFunction> = {}
+}
+
+export class BasicCompiler {
+
+  scopeStack: Scope[] = [new Scope()]
+  rootScope: Scope = this.scopeStack[0]
+  scope: Scope = this.rootScope
+
+  allFunctions: Map<Binding, CompiledFunction> = new Map()
   
   constructor() {
-    this.constants['int'] = IntType
-    this.constants['bool'] = BoolType
-    this.constants['void'] = VoidType
+    this.defineConstant('int', IntType)
+    this.defineConstant('bool', BoolType)
+    this.defineConstant('void', VoidType)
     this.defineType('Point', [
       { name: 'x', type: 'int' },
       { name: 'y', type: 'int' },
@@ -20,6 +28,34 @@ class BasicCompiler {
       { name: 'p1', type: 'Point' },
       { name: 'p2', type: 'Point' },
     ])
+  }
+
+  defineConstant(name: string, value: any) {
+    this.scope.constants[name] = value
+  }
+
+  getConstant(name: string) {
+    let i = this.scopeStack.length - 1
+    while (i >= 0) {
+      if (this.scopeStack[i].constants[name]) { return this.scopeStack[i].constants[name] }
+      i--
+    }
+  }
+
+  getVariable(name: string) {
+    let i = this.scopeStack.length - 1
+    while (i >= 0) {
+      if (this.scopeStack[i].variables[name]) { return this.scopeStack[i].variables[name] }
+      i--
+    }
+  }
+
+  getFunction(name: string) {
+    let i = this.scopeStack.length - 1
+    while (i >= 0) {
+      if (this.scopeStack[i].functions[name]) { return this.scopeStack[i].functions[name] }
+      i--
+    }
   }
 
   defineType(name: string, fields: { name: string, type: string }[]) {
@@ -32,7 +68,7 @@ class BasicCompiler {
       const type = this.getType(f.type)
       typeFields[i] = new TypeField(SourceLocation.anon, f.name, classType, i, type)
     })
-    this.constants[name] = classType
+    this.defineConstant(name, classType)
     return classType
   }
 
@@ -49,14 +85,14 @@ class BasicCompiler {
     }
 
     if (node instanceof LetConstNode) {
-      this.constants[node.name] = node.value
+      this.defineConstant(node.name, node.value)
       return new VoidAst(VoidType, SourceLocation.anon)
     }
     
     if (node instanceof VariableDeclarationNode) {
       const type = this.getType(node.type)
       const binding = new Binding(node.name, type)
-      this.variables[node.name] = binding
+      this.scope.variables[node.name] = binding
       const value = node.initializer ? this.compile(node.initializer) : null
       return new LetAst(VoidType, SourceLocation.anon, binding, value)
     }
@@ -65,7 +101,7 @@ class BasicCompiler {
       if (typeof node.value === 'number') {
         return new NumberAst(IntType, SourceLocation.anon, node.value)
       }
-      compilerAssert(false, 'Not implemented', { ast: node })
+      compilerAssert(false, 'Not implemented LiteralNode', { ast: node })
     }
     
     if (node instanceof ExpressionStatementNode) {
@@ -83,7 +119,7 @@ class BasicCompiler {
     if (node instanceof AssignmentNode) {
       const left = this.compile(node.left)
       const right = this.compile(node.right)
-      compilerAssert(left.type === right.type, 'Type mismatch', { left, right })
+      compilerAssert(left.type === right.type, 'Type mismatch', { left, right, leftType: left.type, rightType: right.type })
       if (left instanceof BindingAst) {
         return new SetAst(left.type, SourceLocation.anon, left.binding, right)
       }
@@ -94,7 +130,7 @@ class BasicCompiler {
     }
 
     if (node instanceof IdentifierNode) {
-      const binding = this.variables[node.name]
+      const binding = this.getVariable(node.name)
       compilerAssert(binding, 'Variable not found', { ast: node })
       return new BindingAst(binding.type, SourceLocation.anon, binding)
     }
@@ -110,43 +146,78 @@ class BasicCompiler {
       const field = node.property
       const type = object.type
       const fieldIndex = type.typeInfo.fields.findIndex(x => x.name === field)
-      compilerAssert(fieldIndex >= 0, 'Field not found', { object, field })
+      compilerAssert(fieldIndex >= 0, 'Field not found', { object, field, type })
       return new FieldAst(type.typeInfo.fields[fieldIndex].fieldType, SourceLocation.anon, object, type.typeInfo.fields[fieldIndex])
     }
 
     if (node instanceof FunctionDeclarationNode) {
-      compilerAssert(!this.functions[node.name], 'Function already defined', { ast: node })
-      const body = this.compile(node.body)
+      compilerAssert(!this.getFunction(node.name), 'Function already defined', { ast: node })
+      this.scopeStack.push(new Scope())
+      this.scope = this.scopeStack[this.scopeStack.length - 1]
 
-      const binding = new Binding(node.name, VoidType)
-      const returnType = VoidType
-      const funcDef = null!
       const concreteTypes = node.params.map(x => this.getType(x.type))
       const argBindings = node.params.map((x, i) => new Binding(x.name, concreteTypes[i]))
 
+      argBindings.forEach((param, i) => {
+        this.scope.variables[param.name] = param
+      })
+      const body = this.compile(node.body)
+
+      this.scopeStack.pop()
+      this.scope = this.scopeStack[this.scopeStack.length - 1]
+
+      const binding = new Binding(node.name, VoidType)
+      const returnType = this.getType(node.returnType)
+      const funcDef = null!
+
       const compiledFunc = new CompiledFunction(binding, funcDef, returnType, concreteTypes, body, argBindings, [], 0)
-      this.functions[node.name] = compiledFunc
+      this.scope.functions[node.name] = compiledFunc
+      this.allFunctions.set(binding, compiledFunc)
 
       return new VoidAst(VoidType, SourceLocation.anon)
     }
 
+    if (node instanceof ReturnNode) {
+      const value = node.argument ? this.compile(node.argument) : null
+      return new ReturnAst(VoidType, SourceLocation.anon, value)
+    }
+
     if (node instanceof CallExpressionNode) {
-      const func = this.functions[node.callee]
+      const func = this.getFunction(node.callee)
       compilerAssert(func, 'Function not found', { ast: node })
       const args = node.args.map(x => this.compile(x))
       const binding = func.binding
       return new CallAst(func.returnType, SourceLocation.anon, binding, args, [])
     }
 
-    compilerAssert(false, 'Not implemented', { ast: node })
+    if (node instanceof IfStatementNode) {
+      const test = this.compile(node.condition)
+      const consequent = this.compile(node.consequent)
+      const alternate = node.alternate ? this.compile(node.alternate) : null
+      return new IfAst(VoidType, SourceLocation.anon, test, consequent, alternate)
+    }
+
+    if (node instanceof AndNode) {
+      const left = this.compile(node.left)
+      const right = this.compile(node.right)
+      return new AndAst(BoolType, SourceLocation.anon, [left, right])
+    }
+
+    if (node instanceof WhileStatementNode) {
+      const test = this.compile(node.condition)
+      const body = this.compile(node.body)
+      return new WhileAst(VoidType, SourceLocation.anon, test, body)
+    }
+
+    compilerAssert(false, 'AST Not implemented', { ast: node })
 
   }
 
   getType(typeName: string) {
-    compilerAssert(this.constants[typeName], 'Constant not found', { type: typeName })
-    const t = this.constants[typeName]
-    compilerAssert(isType(t), 'Not a type', { type: typeName })
-    return t
+    const constant = this.getConstant(typeName)
+    compilerAssert(constant, 'Constant not found', { type: typeName })
+    compilerAssert(isType(constant), 'Not a type', { type: typeName })
+    return constant
   }
 }
 
@@ -167,6 +238,7 @@ const common = [
       new FunctionParameterNode('src', 'Line', Capability.Sink),
       new FunctionParameterNode('dst', 'Line', Capability.Set),
     ],
+    'void',
     new BlockStatementNode([])
   ),
   new FunctionDeclarationNode(
@@ -175,6 +247,7 @@ const common = [
       new FunctionParameterNode('src', 'Line', Capability.Sink),
       new FunctionParameterNode('dst', 'Line', Capability.Inout),
     ],
+    'void',
     new BlockStatementNode([])
   ),
   new FunctionDeclarationNode(
@@ -183,6 +256,7 @@ const common = [
       new FunctionParameterNode('src', 'Point', Capability.Sink),
       new FunctionParameterNode('dst', 'Point', Capability.Set),
     ],
+    'void',
     new BlockStatementNode([])
   ),
   new FunctionDeclarationNode(
@@ -191,6 +265,7 @@ const common = [
       new FunctionParameterNode('src', 'Point', Capability.Sink),
       new FunctionParameterNode('dst', 'Point', Capability.Inout),
     ],
+    'void',
     new BlockStatementNode([])
   ),
 ]
@@ -252,7 +327,7 @@ describe("compile", () => {
       ),
       new FunctionDeclarationNode('foo', [
         new FunctionParameterNode('p', 'Point', Capability.Sink),
-      ], new BlockStatementNode([
+      ], 'void', new BlockStatementNode([
         new ExpressionStatementNode(new BinaryExpressionNode('+', new LiteralNode(5), 
           new MemberExpressionNode(new IdentifierNode('p'), 'int', 'y'))
         ),

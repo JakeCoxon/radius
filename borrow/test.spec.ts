@@ -1,26 +1,32 @@
 import { describe, it, expect } from "bun:test"
 import { CodeGenerator } from "./codegen";
 import { buildCFG, printCFG, printDominators } from "./controlflow";
-import { AndNode, AssignmentNode, BinaryExpressionNode, BlockStatementNode, BoolType, CallExpressionNode, Capability, CreateStructNode, ExpressionStatementNode, FunctionDeclarationNode, FunctionParameter, FunctionParameterNode, IdentifierNode, IfStatementNode, IntType, LetConstNode, LineType, LiteralNode, MemberExpressionNode, Module, PointType, ProgramNode, ReturnNode, VariableDeclarationNode, WhileStatementNode, printIR, printLivenessMap, textColors } from "./defs";
+import { AndNode, AssignmentNode, BinaryExpressionNode, BlockStatementNode, CallExpressionNode, Capability, CreateStructNode, ExpressionStatementNode, FunctionDeclarationNode, FunctionParameter, FunctionParameterNode, IdentifierNode, IfStatementNode, LiteralNode, MemberExpressionNode, Module, ProgramNode, ReturnNode, VariableDeclarationNode, WhileStatementNode, compilerAssert, printIR, printLivenessMap, textColors } from "./defs";
 import { ExclusivityCheckingPass } from "./exclusivity";
 import { InitializationCheckingPass } from "./initialization";
 import { insertCloseAccesses } from "./liveness";
 import { ReifyAccessPass } from "./reifyaccess";
+import { BasicCompiler } from "./compile.spec";
 
 const DebugLog = true
 
-const runTest = (name: string, ast: ProgramNode) => {
+const runTest = (name: string, node: ProgramNode) => {
   console.log(textColors.green(`\n\n#### Begin ${name} ####`));
+  const c = new BasicCompiler()
+  const ast = c.compile(node)
+
   const codeGenerator = new CodeGenerator();
+  for (const fn of c.allFunctions.values()) {
+    codeGenerator.functions.set(fn.binding, fn);
+  }
 
   try {
-    codeGenerator.generate(ast);   
+    codeGenerator.generateTopLevel(ast);   
     console.log(codeGenerator.functionBlocks)
     console.log("")
 
-    const mod: Module = {
-      functions: codeGenerator.functionBlocks
-    }
+    const mod = new Module()
+    mod.functionMap = codeGenerator.functions
 
     for (const fn of codeGenerator.functionBlocks) {
       console.log(textColors.yellow(`\n// ${fn.name} ///////////////////////////////////////////////////////////\n`));
@@ -69,15 +75,13 @@ const runTest = (name: string, ast: ProgramNode) => {
 }
 
 const common = [
-  new LetConstNode('Point', PointType),
-  new LetConstNode('Line', LineType),
-  new LetConstNode('int', IntType),
   new FunctionDeclarationNode(
     'moveInitLine',
     [
       new FunctionParameterNode('src', 'Line', Capability.Sink),
       new FunctionParameterNode('dst', 'Line', Capability.Set),
     ],
+    'void',
     new BlockStatementNode([])
   ),
   new FunctionDeclarationNode(
@@ -86,6 +90,7 @@ const common = [
       new FunctionParameterNode('src', 'Line', Capability.Sink),
       new FunctionParameterNode('dst', 'Line', Capability.Inout),
     ],
+    'void',
     new BlockStatementNode([])
   ),
   new FunctionDeclarationNode(
@@ -94,6 +99,7 @@ const common = [
       new FunctionParameterNode('src', 'Point', Capability.Sink),
       new FunctionParameterNode('dst', 'Point', Capability.Set),
     ],
+    'void',
     new BlockStatementNode([])
   ),
   new FunctionDeclarationNode(
@@ -102,6 +108,7 @@ const common = [
       new FunctionParameterNode('src', 'Point', Capability.Sink),
       new FunctionParameterNode('dst', 'Point', Capability.Inout),
     ],
+    'void',
     new BlockStatementNode([])
   ),
 ]
@@ -109,7 +116,7 @@ const common = [
 describe("integration", () => {
   it('testFunction', () => {
     // AST representing:
-    // function add(a, b) {
+    // function add(a: int, b: int) {
     //   return a + b;
     // }
     // var result;
@@ -118,13 +125,13 @@ describe("integration", () => {
     // result = add(foo, 3);
     
     const ast = new ProgramNode([
-      new LetConstNode('int', IntType),
       new FunctionDeclarationNode(
         'add',
         [
-          new FunctionParameterNode('a', 'int', Capability.Inout), 
+          new FunctionParameterNode('a', 'int', Capability.Let), 
           new FunctionParameterNode('b', 'int', Capability.Let)
         ],
+        'int',
         new BlockStatementNode([
           new ReturnNode(
             new BinaryExpressionNode(
@@ -169,6 +176,7 @@ describe("integration", () => {
           new FunctionParameterNode('p', 'Point', Capability.Inout), 
           new FunctionParameterNode('x', 'int', Capability.Let),
         ],
+        'void',
         new BlockStatementNode([
           new ExpressionStatementNode(
             new AssignmentNode(
@@ -212,13 +220,13 @@ describe("integration", () => {
     // }
     // use(x + 3)
     const ast = new ProgramNode([
-      new LetConstNode('int', IntType),
       new VariableDeclarationNode('x', true, 'int'),
       new FunctionDeclarationNode(
         'use',
         [
           new FunctionParameterNode('z', 'int', Capability.Let),
         ],
+        'void',
         new BlockStatementNode([])
       ),
       new IfStatementNode(
@@ -262,7 +270,6 @@ describe("integration", () => {
     //   x = 2;
     // }
     const ast = new ProgramNode([
-      new LetConstNode('int', IntType),
       new VariableDeclarationNode('x', false, 'int',
         new LiteralNode(0)
       ),
@@ -271,6 +278,7 @@ describe("integration", () => {
         [
           new FunctionParameterNode('z', 'int', Capability.Let),
         ],
+        'void',
         new BlockStatementNode([])
       ),
       new IfStatementNode(
@@ -304,7 +312,6 @@ describe("integration", () => {
     //   x = x + 1
     // }
     const ast = new ProgramNode([
-      new LetConstNode('int', IntType),
       new VariableDeclarationNode('x', true, 'int'),
       new ExpressionStatementNode(
         new AssignmentNode(
@@ -345,7 +352,6 @@ describe("integration", () => {
     //   x = x + 1
     // }
     const ast = new ProgramNode([
-      new LetConstNode('int', IntType),
       new VariableDeclarationNode('x', true, 'int'),
       new VariableDeclarationNode('y', true, 'int'),
       new ExpressionStatementNode(
@@ -388,7 +394,6 @@ describe("integration", () => {
     // y = 5
     // y = y + 2
     const ast = new ProgramNode([
-      new LetConstNode('int', IntType),
       new VariableDeclarationNode('y', true, 'int'),
       new ExpressionStatementNode(
         new AssignmentNode(
@@ -421,7 +426,6 @@ describe("integration", () => {
     //   }
     // }
     const ast = new ProgramNode([
-      new LetConstNode('int', IntType),
       new VariableDeclarationNode('a', true, 'int'),
       new VariableDeclarationNode('b', true, 'int'),
       new ExpressionStatementNode(
@@ -487,7 +491,6 @@ describe("integration", () => {
     //   w = z + 5
     // }
     const ast = new ProgramNode([
-      new LetConstNode('int', IntType),
       new VariableDeclarationNode('z', true, 'int'),
       new VariableDeclarationNode('w', true, 'int'),
       new ExpressionStatementNode(
@@ -543,7 +546,6 @@ describe("integration", () => {
     //   }
     // }
     const ast = new ProgramNode([
-      new LetConstNode('int', IntType),
       new VariableDeclarationNode('i', true, 'int'),
       new ExpressionStatementNode(
         new AssignmentNode(
@@ -596,7 +598,6 @@ describe("integration", () => {
     //   a = b
     // }
     const ast = new ProgramNode([
-      new LetConstNode('int', IntType),
       new VariableDeclarationNode('a', true, 'int'),
       new ExpressionStatementNode(
         new AssignmentNode(
@@ -644,7 +645,6 @@ describe("integration", () => {
     // }
     // x = x * 2    // Block 3 (post-branch)
     const ast = new ProgramNode([
-      new LetConstNode('int', IntType),
       new VariableDeclarationNode('x', true, 'int'),
       new ExpressionStatementNode(
         new AssignmentNode(
@@ -708,7 +708,6 @@ describe("integration", () => {
     //   x = x + 1    // Block 1 (inside loop)
     // }              // Block 2 (after loop)
     const ast = new ProgramNode([
-      new LetConstNode('int', IntType),
       new VariableDeclarationNode('x', true, 'int'),
       new ExpressionStatementNode(
         new AssignmentNode(
@@ -757,7 +756,6 @@ describe("integration", () => {
     //   a = a + b  // Block 1
     // }
     const ast = new ProgramNode([
-      new LetConstNode('int', IntType),
       new VariableDeclarationNode('a', true, 'int'),
       new VariableDeclarationNode('b', true, 'int'),
       new ExpressionStatementNode(
@@ -801,7 +799,6 @@ describe("integration", () => {
     //   x = x + 1      // Block 2
     // }
     const ast = new ProgramNode([
-      new LetConstNode('int', IntType),
       new VariableDeclarationNode('x', true, 'int'),
       new VariableDeclarationNode('y', true, 'int'),
       new ExpressionStatementNode(
@@ -858,8 +855,6 @@ describe("integration", () => {
     // x = 1
     // foo(x, x > 0 && x < 10)
     const ast = new ProgramNode([
-      new LetConstNode('int', IntType),
-      new LetConstNode('bool', BoolType),
 
       new FunctionDeclarationNode(
         'foo',
@@ -867,6 +862,7 @@ describe("integration", () => {
           new FunctionParameterNode('z', 'int', Capability.Let),
           new FunctionParameterNode('w', 'bool', Capability.Let),
         ],
+        'void',
         new BlockStatementNode([])
       ),
       new VariableDeclarationNode('x', true, 'int',
@@ -914,6 +910,7 @@ describe("integration", () => {
           new FunctionParameterNode('p', 'Point', Capability.Inout), 
           new FunctionParameterNode('x', 'int', Capability.Let),
         ],
+        'void',
         new BlockStatementNode([
           new IfStatementNode(
             new BinaryExpressionNode('>', new IdentifierNode('x'), new LiteralNode(0)),
@@ -1038,6 +1035,7 @@ describe("integration", () => {
         [
           new FunctionParameterNode('p', 'int', Capability.Let),
         ],
+        'void',
         new BlockStatementNode([])
       ),
       new ExpressionStatementNode(
@@ -1057,8 +1055,7 @@ describe("integration", () => {
     // point.x = 5;
     
     const ast = new ProgramNode([
-      new LetConstNode('Point', PointType),
-      new LetConstNode('int', IntType),
+      ...common,
       new VariableDeclarationNode('point', false, 'Point',
         new CreateStructNode(
           'Point',
@@ -1088,6 +1085,7 @@ describe("integration", () => {
         [
           new FunctionParameterNode('p', 'Point', Capability.Let),
         ],
+        'void',
         new BlockStatementNode([])
       ),
       new VariableDeclarationNode('point', false, 'Point', 
@@ -1129,6 +1127,7 @@ describe("integration", () => {
           new FunctionParameterNode('p', 'Point', Capability.Inout), 
           new FunctionParameterNode('x', 'int', Capability.Let),
         ],
+        'void',
         new BlockStatementNode([
           new ExpressionStatementNode(
             new AssignmentNode(
@@ -1148,6 +1147,7 @@ describe("integration", () => {
           new FunctionParameterNode('p', 'Point', Capability.Inout), 
           new FunctionParameterNode('y', 'int', Capability.Let),
         ],
+        'void',
         new BlockStatementNode([
           new ExpressionStatementNode(
             new AssignmentNode(
@@ -1204,6 +1204,7 @@ describe("integration", () => {
           new FunctionParameterNode('l', 'Line', Capability.Inout), 
           new FunctionParameterNode('x', 'int', Capability.Let),
         ],
+        'void',
         new BlockStatementNode([
           new ExpressionStatementNode(
             new AssignmentNode(
@@ -1262,6 +1263,7 @@ describe("integration", () => {
         [
           new FunctionParameterNode('l', 'Line', Capability.Inout), 
         ],
+        'void',
         new BlockStatementNode([])
       ),
       new FunctionDeclarationNode(
@@ -1269,6 +1271,7 @@ describe("integration", () => {
         [
           new FunctionParameterNode('z', 'int', Capability.Let),
         ],
+        'void',
         new BlockStatementNode([])
       ),
       new VariableDeclarationNode('result', true, 'Line',
@@ -1315,6 +1318,7 @@ describe("integration", () => {
         [
           new FunctionParameterNode('p', 'Point', Capability.Inout), 
         ],
+        'void',
         new BlockStatementNode([])
       ),
       new FunctionDeclarationNode(
@@ -1322,6 +1326,7 @@ describe("integration", () => {
         [
           new FunctionParameterNode('z', 'int', Capability.Let),
         ],
+        'void',
         new BlockStatementNode([])
       ),
       new VariableDeclarationNode('result', true, 'Line',
@@ -1369,6 +1374,7 @@ describe("integration", () => {
           new FunctionParameterNode('l', 'Line', Capability.Inout), 
           new FunctionParameterNode('x', 'int', Capability.Let),
         ],
+        'void',
         new BlockStatementNode([])
       ),
       new FunctionDeclarationNode(
@@ -1376,6 +1382,7 @@ describe("integration", () => {
         [
           new FunctionParameterNode('z', 'int', Capability.Let),
         ],
+        'void',
         new BlockStatementNode([])
       ),
       new VariableDeclarationNode('result', true, 'Line',
@@ -1425,7 +1432,7 @@ describe("integration", () => {
         )
       ),
       new VariableDeclarationNode('p1', false, 'Point',
-        new MemberExpressionNode(new IdentifierNode('result'), 'Point', 'x')
+        new MemberExpressionNode(new IdentifierNode('result'), 'Point', 'p1')
       ),
       new ExpressionStatementNode(
         new AssignmentNode(
@@ -1440,6 +1447,7 @@ describe("integration", () => {
         [
           new FunctionParameterNode('z', 'int', Capability.Let),
         ],
+        'void',
         new BlockStatementNode([])
       ),
       new ExpressionStatementNode(

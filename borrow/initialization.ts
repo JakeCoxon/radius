@@ -1,6 +1,7 @@
+import { Binding, ConcreteClassType, Type } from "../src/defs";
 import { CodeGenerator } from "./codegen";
 import { ControlFlowGraph, buildCFG } from "./controlflow";
-import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, compilerAssert, Type, StructType, Capability, EndAccessInstruction, PhiInstruction, MoveInstruction, VoidType, InstructionId, CommentInstruction, textColors, MarkInitializedInstruction, formatInstruction, Module } from "./defs";
+import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, compilerAssert, Capability, EndAccessInstruction, PhiInstruction, MoveInstruction, InstructionId, CommentInstruction, textColors, MarkInitializedInstruction, formatInstruction, Module } from "./defs";
 import { Worklist } from "./worklist";
 
 type InitializationState = Top | Bottom | Sequence;
@@ -139,7 +140,11 @@ export class InitializationCheckingPass {
   }
 
   executeInstruction(instrId: InstructionId, instr: IRInstruction): void {
-    if (this.debugLog) console.log(`${instrId.blockId} ${instrId.instrId}.`, formatInstruction(instr));
+    if (this.debugLog) {
+      if (!(instr instanceof CommentInstruction)) {
+        console.log(`${instrId.blockId} ${instrId.instrId}.`, formatInstruction(instr));
+      }
+    }
     if (instr instanceof AssignInstruction)               this.executeAssign(instr);
     else if (instr instanceof LoadConstantInstruction)    this.executeLoadConstant(instr);
     else if (instr instanceof StoreToAddressInstruction)  this.executeStoreToAddress(instr);
@@ -204,16 +209,18 @@ export class InitializationCheckingPass {
   }
 
   executeCall(instr: CallInstruction): void {
-    const fn = this.module.functions.find(f => f.name === instr.functionName);
-    compilerAssert(fn, `Function ${instr.functionName} not found`);
-    compilerAssert(fn.params.length === instr.args.length, `Function ${instr.functionName} expects ${fn.params.length} arguments, got ${instr.args.length}`);
-    for (let i = 0; i < fn.params.length; i++) {
-      const param = fn.params[i];
-      if (param.capability === Capability.Let || param.capability === Capability.Inout || param.capability === Capability.Sink) {
+    compilerAssert(instr.binding && instr.binding instanceof Binding, `Function binding not found`, { instr, b: instr.binding });
+    const fn = this.module.functionMap.get(instr.binding)
+    const fnName = instr.binding.name
+    compilerAssert(fn, `Function ${fnName} not found`);
+    compilerAssert(fn.argBindings.length === instr.args.length, `Function ${fnName} expects ${fn.argBindings.length} arguments, got ${instr.args.length}`);
+    for (let i = 0; i < fn.argBindings.length; i++) {
+      const capability = Capability.Let; // TODO: Get capability from function signature
+      if (capability === Capability.Let || capability === Capability.Inout || capability === Capability.Sink) {
         this.ensureRegisterInitialized(instr.args[i]);
-      } else if (param.capability === Capability.Set) {
+      } else if (capability === Capability.Set) {
         this.ensureRegisterUninitialized(instr.args[i]);
-      } else compilerAssert(false, `Unknown capability ${param.capability}`);
+      } else compilerAssert(false, `Unknown capability ${capability}`);
     }
     this.updateMemoryForRegister(instr.target, TOP);
   }
@@ -391,12 +398,12 @@ const createStatePathState = (ids: string[], currentType: Type): { id: number, n
   if (ids.length === 0) return []
   const [firstAddr, ...restAddrs] = ids
   const index = parseInt(firstAddr, 10)
-  compilerAssert(currentType instanceof StructType, `Current type is not a struct type`, { currentType })
+  compilerAssert(currentType instanceof ConcreteClassType, `Current type is not a struct type`, { currentType })
   compilerAssert(!isNaN(index), `Index is not a number`)
   compilerAssert(index >= 0, `Index is negative`)
-  compilerAssert(index < currentType.fields.length, `Index is out of bounds`)
-  const nextType = currentType.fields[index].type
-  return [{ id: index, numFields: currentType.fields.length }, ...createStatePathState(restAddrs, nextType)]
+  compilerAssert(index < currentType.typeInfo.fields.length, `Index is out of bounds`)
+  const nextType = currentType.typeInfo.fields[index].fieldType
+  return [{ id: index, numFields: currentType.typeInfo.fields.length }, ...createStatePathState(restAddrs, nextType)]
 }
 
 function meetInitializationStatePath(a: InitializationState, statePath: { id: number, numFields: number }[], newState: InitializationState): InitializationState {
