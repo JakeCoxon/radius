@@ -1,3 +1,4 @@
+import { FunctionBlock, IRInstruction } from "../borrow/defs";
 import { Event, Task } from "./tasks";
 
 export type UnknownObject = {[key:string]:unknown}
@@ -836,6 +837,7 @@ export type GlobalCompilerState = {
   externalCompilerOptions: ExternalCompilerOptions,
   exports: {[key:string]: CompiledFunction},
   rootScope: Scope
+  compiledIr: Map<Binding, FunctionBlock>
 }
 export type ExternalCompilerOptions = {
   buildName: string
@@ -1097,6 +1099,7 @@ export type LlvmWriter = {
   mallocBinding: Binding,
 
   astVisitMap: Map<Ast, boolean>,
+  registers: Map<string, Binding>,
 
   writer: LlvmWriter // weirdness for formatting
   currentOutput: string[]

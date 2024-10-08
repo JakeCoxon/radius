@@ -69,8 +69,10 @@ export class InitializationCheckingPass {
 
     const entryState = createEmptyState();
 
+    let i = 0
     for (const param of this.function.params) {
-      this.initializeFunctionParam(entryState, param.name, param.type);
+      const argIndex = i++;
+      this.initializeFunctionParam(entryState, param.binding, this.function.parameterRegisters[argIndex], param.type);
     }
 
     const worklist = new Worklist(this.cfg);
@@ -222,7 +224,7 @@ export class InitializationCheckingPass {
         this.ensureRegisterUninitialized(instr.args[i]);
       } else compilerAssert(false, `Unknown capability ${capability}`);
     }
-    this.updateMemoryForRegister(instr.target, TOP);
+    if (instr.target) this.updateMemoryForRegister(instr.target, TOP);
   }
 
   executeBinaryOperation(instr: BinaryOperationInstruction): void {
@@ -342,9 +344,9 @@ export class InitializationCheckingPass {
     this.state.memory.set(ids[0], newSd)
   }
 
-  initializeFunctionParam(state: InterpreterState, param: string, type: Type) {
+  initializeFunctionParam(state: InterpreterState, binding: Binding, reg: string, type: Type) {
     const addr = this.newAddress(type);
-    state.locals.set(param, new Set([addr]));
+    state.locals.set(reg, new Set([addr]));
     state.memory.set(addr, TOP);
   }
 

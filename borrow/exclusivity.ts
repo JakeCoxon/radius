@@ -55,8 +55,10 @@ export class ExclusivityCheckingPass {
 
     console.log(textColors.green("\n\n#### Begin exclusivity check ####"))
 
+    let i = 0
     for (const param of this.function.params) {
-      this.initializeFunctionParam(entryState, param);
+      const argIndex = i++;
+      this.initializeFunctionParam(entryState, param.binding, this.function.parameterRegisters[argIndex]);
     }
 
     const worklist = new Worklist(this.cfg);
@@ -189,9 +191,9 @@ export class ExclusivityCheckingPass {
     return addr;
   }
 
-  initializeFunctionParam(state: InterpreterState, param: FunctionParameter) {
+  initializeFunctionParam(state: InterpreterState, param: FunctionParameter, reg: string) {
     const addr = this.newAddress(param.type);
-    state.locals.set(param.name, new Set([addr]));
+    state.locals.set(reg, new Set([addr]));
     state.memory.set(addr, []); // TODO: Handle immutable/mutable
   }
 

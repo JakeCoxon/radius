@@ -1,71 +1,92 @@
 import { describe, it, expect } from "bun:test"
 import { CodeGenerator } from "./codegen";
 import { buildCFG, printCFG, printDominators } from "./controlflow";
-import { AndNode, AssignmentNode, BinaryExpressionNode, BlockStatementNode, CallExpressionNode, CreateStructNode, ExpressionStatementNode, FunctionDeclarationNode, FunctionParameterNode, IdentifierNode, IfStatementNode, LiteralNode, MemberExpressionNode, Module, ProgramNode, ReturnNode, VariableDeclarationNode, WhileStatementNode, compilerAssert, printIR, printLivenessMap, textColors } from "./defs";
+import { AndNode, AssignmentNode, BinaryExpressionNode, BlockStatementNode, CallExpressionNode, CreateStructNode, ExpressionStatementNode, FunctionBlock, FunctionDeclarationNode, FunctionParameterNode, IdentifierNode, IfStatementNode, LiteralNode, MemberExpressionNode, Module, ProgramNode, ReturnNode, VariableDeclarationNode, WhileStatementNode, compilerAssert, printIR, printLivenessMap, textColors } from "./defs";
 import { ExclusivityCheckingPass } from "./exclusivity";
 import { InitializationCheckingPass } from "./initialization";
 import { insertCloseAccesses } from "./liveness";
 import { ReifyAccessPass } from "./reifyaccess";
 import { BasicCompiler } from "./compile.spec";
-import { Capability } from "../src/defs";
+import { Binding, Capability, GlobalCompilerState, VoidType } from "../src/defs";
+import { writeLlvmBytecode } from "./codegen_llvm";
 
 const DebugLog = true
 
+const runMandatoryPasses = (codeGenerator: CodeGenerator, mod: Module, fn: FunctionBlock) => {
+  console.log(textColors.yellow(`\n// ${fn.name} ///////////////////////////////////////////////////////////\n`));
+  
+  printIR(fn.blocks);
+
+  const cfg = buildCFG(fn.blocks)
+  printCFG(cfg)
+  printDominators(cfg)
+
+  const reify = new ReifyAccessPass(cfg);
+  reify.debugLog = DebugLog;
+  reify.reifyAccesses();
+
+  console.log("Reified")
+  printIR(fn.blocks);
+
+  const interpreter = new InitializationCheckingPass(codeGenerator, mod, fn);
+  interpreter.debugLog = DebugLog;
+  interpreter.checkedInterpret();
+
+  console.log("Initialized")
+  printIR(fn.blocks);
+
+  console.log("")
+  insertCloseAccesses(cfg, fn.blocks, DebugLog)
+
+  console.log("Closed access")
+  printIR(fn.blocks);
+
+  const interpreter2 = new ExclusivityCheckingPass(fn)
+  interpreter2.debugLog = DebugLog;
+  interpreter2.checkedInterpret();
+  console.log("")
+
+  console.log(``);
+  printIR(fn.blocks);
+}
 const runTest = (name: string, node: ProgramNode) => {
   console.log(textColors.green(`\n\n#### Begin ${name} ####`));
-  const c = new BasicCompiler()
-  const ast = c.compile(node)
+  const compiler = new BasicCompiler()
+  compiler.compile(node)
 
   const codeGenerator = new CodeGenerator();
-  for (const fn of c.allFunctions.values()) {
+  for (const fn of compiler.allFunctions.values()) {
     codeGenerator.functions.set(fn.binding, fn);
   }
 
+  const globalCompilerState: GlobalCompilerState = {
+    compiledIr: new Map(),
+    externalDefinitions: [],
+    initializerFunctionBinding: new Binding('initializer', VoidType),
+    exports: {},
+    globalLets: [],
+    compiledFunctions: new Map(),
+  }
+
+  const mod = new Module()
+  mod.functionMap = codeGenerator.functions
+
+  for (const fn of codeGenerator.functions.values()) {
+    const ir = codeGenerator.generateFunction(fn.binding, fn.parameters, fn.returnType, fn.body)
+    runMandatoryPasses(codeGenerator, mod, ir)
+
+    globalCompilerState.compiledIr.set(fn.binding, ir)
+  }
+
   try {
-    codeGenerator.generateTopLevel(ast);   
-    console.log(codeGenerator.functionBlocks)
-    console.log("")
 
-    const mod = new Module()
-    mod.functionMap = codeGenerator.functions
+    globalCompilerState.compiledFunctions = codeGenerator.functions
 
-    for (const fn of codeGenerator.functionBlocks) {
-      console.log(textColors.yellow(`\n// ${fn.name} ///////////////////////////////////////////////////////////\n`));
-      
-      printIR(fn.blocks);
+    const file = Bun.file(`./output/${name}.ll`)
+    const bytecodeWriter = file.writer()
 
-      const cfg = buildCFG(fn.blocks)
-      printCFG(cfg)
-      printDominators(cfg)
-
-      const reify = new ReifyAccessPass(cfg);
-      reify.debugLog = DebugLog;
-      reify.reifyAccesses();
-
-      console.log("Reified")
-      printIR(fn.blocks);
-
-      const interpreter = new InitializationCheckingPass(codeGenerator, mod, fn);
-      interpreter.debugLog = DebugLog;
-      interpreter.checkedInterpret();
-
-      console.log("Initialized")
-      printIR(fn.blocks);
-
-      console.log("")
-      insertCloseAccesses(cfg, fn.blocks, DebugLog)
-
-      console.log("Closed access")
-      printIR(fn.blocks);
-
-      const interpreter2 = new ExclusivityCheckingPass(fn)
-      interpreter2.debugLog = DebugLog;
-      interpreter2.checkedInterpret();
-      console.log("")
-
-      console.log(``);
-      printIR(fn.blocks);
-    }
+    writeLlvmBytecode(globalCompilerState, bytecodeWriter)
+    bytecodeWriter.end()
 
 
   } catch (error) {

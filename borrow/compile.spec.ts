@@ -75,8 +75,8 @@ export class BasicCompiler {
   compile(node: ASTNode): Ast {
 
     if (node instanceof ProgramNode) {
-      const program = node.body.map(x => this.compile(x))
-      return new StatementsAst(VoidType, SourceLocation.anon, program)
+      const body = new BlockStatementNode(node.body)
+      return this.compile(new FunctionDeclarationNode('main', [], 'void', body))
     }
 
     if (node instanceof BlockStatementNode) {
@@ -168,7 +168,7 @@ export class BasicCompiler {
 
       const binding = new Binding(node.name, VoidType)
       const returnType = this.getType(node.returnType)
-      const funcDef = null!
+      const funcDef: FunctionDefinition = { debugName: node.name } as any // Just need debugName for now
 
       const parameters = argBindings.map((x, i) => new FunctionParameter(x, x.type, node.params[i].capability))
 
