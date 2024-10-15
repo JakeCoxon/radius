@@ -352,6 +352,8 @@ export class FunctionParameter {
   constructor(
     public binding: Binding,
     public type: Type,
+    public reference: boolean,
+    public passingType: Type,
     public capability: Capability
   ) {}
 }

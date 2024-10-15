@@ -1,4 +1,4 @@
-import { AndAst, Ast, Binding, BindingAst, CallAst, Capability, CompiledFunction, ConstructorAst, FieldAst, FunctionParameter, IfAst, IntType, LetAst, NumberAst, OperatorAst, OrAst, PrimitiveType, ReturnAst, SetAst, SetFieldAst, StatementsAst, Type, VoidAst, VoidType, WhileAst } from "../src/defs";
+import { AndAst, Ast, Binding, BindingAst, CallAst, Capability, CompiledFunction, ConstructorAst, FieldAst, FunctionParameter, IfAst, IntType, LetAst, NumberAst, OperatorAst, OrAst, PrimitiveType, RawPointerType, ReturnAst, SetAst, SetFieldAst, SourceLocation, StatementsAst, Type, VoidAst, VoidType, WhileAst } from "../src/defs";
 import { ASTNode, AllocInstruction, AssignInstruction, AssignmentNode, BasicBlock, BinaryExpressionNode, BinaryOperationInstruction, BlockStatementNode, CallExpressionNode, CallInstruction, AccessInstruction, ConditionalJumpInstruction, CreateStructNode, ExpressionNode, ExpressionStatementNode, FunctionBlock, FunctionDeclarationNode, IRInstruction, IRValue, IdentifierNode, IfStatementNode, JumpInstruction, LetConstNode, LiteralNode, LoadConstantInstruction, LoadFromAddressInstruction, MemberExpressionNode, ProgramNode, Pointer, Value, ReturnInstruction, ReturnNode, StoreToAddressInstruction, Variable, VariableDeclarationNode, WhileStatementNode, compilerAssert, GetFieldPointerInstruction, AndNode, OrNode, PhiInstruction, CommentInstruction, MoveInstruction, EndAccessInstruction, printIR, MarkInitializedInstruction, InstructionId, PhiSource } from "./defs";
 
 type ExpressionContext = {
@@ -45,12 +45,12 @@ export class CodeGenerator {
     this.functionInstructions.push(instr);
   }
 
-  toValue(value: IRValue): Value {
+  toValue(type: Type, value: IRValue): Value {
     if (value instanceof Value) { return value; }
     const reg = this.newRegister();
     const accessReg = this.newRegister();
     this.addInstruction(new AccessInstruction(accessReg, value.address, [Capability.Let, Capability.Sink]));
-    this.addInstruction(new LoadFromAddressInstruction(reg, accessReg));
+    this.addInstruction(new LoadFromAddressInstruction(reg, type, accessReg));
     return new Value(reg);
   }
 
@@ -261,29 +261,34 @@ export class CodeGenerator {
   }
 
   generateCreateStructExpression(ast: ConstructorAst, context: ExpressionContext): IRValue {
-    compilerAssert(context.valueCategory === 'rvalue', 'Struct creation must be an RValue');
+    // compilerAssert(context.valueCategory === 'rvalue', 'Struct creation must be an RValue');
     const structType = ast.type
     compilerAssert(structType, `Struct type not found`);
     compilerAssert(ast.args.length === structType.typeInfo.fields.length, 'Field count mismatch');
-    const fieldValues = ast.args.map((field) => {
-      return this.generateExpression(field, context);
-    });
+    const fnBinding = structType.typeInfo.metaobject.constructorBinding
+    compilerAssert(fnBinding && fnBinding instanceof Binding, `Constructor not found for ${structType.shortName}`);
+
+    // @ParameterPassing
     const structReg = this.newRegister();
     this.addFunctionInstruction(new AllocInstruction(structReg, structType));
-    for (let i = 0; i < fieldValues.length; i++) {
-      const field = structType.typeInfo.fields[i]
-      const fieldValue = this.toValue(fieldValues[i])
-      // compilerAssert(fieldValue instanceof Value, 'Struct field value must be an RValue');
-      const fieldAccessReg = this.newRegister();
-      const reg = this.newRegister();
-      const fieldIndex = i;
-      const fieldType = field.fieldType
-      this.addInstruction(new CommentInstruction(`Store field ${field.name} of ${structReg}`))
-      this.addInstruction(new GetFieldPointerInstruction(reg, fieldType, structReg, fieldIndex));
-      this.addInstruction(new AccessInstruction(fieldAccessReg, reg, [Capability.Set]));
-      this.addInstruction(new StoreToAddressInstruction(fieldAccessReg, fieldType, fieldValue.register));
-      // this.addInstruction(new StoreFieldInstruction(structReg, field.name, fieldValue.register));
+    // this.generateCallExpression(new CallAst(VoidType, SourceLocation.anon, fnBinding, [...ast.args], []), context)
+    const fn = this.functions.get(fnBinding)
+    compilerAssert(fn, `Function ${fnBinding.name} not found`);
+
+    const fields = structType.typeInfo.fields
+    const argRegs: string[] = [];
+
+    const structAccessReg = this.newRegister();
+    this.addInstruction(new AccessInstruction(structAccessReg, structReg, [Capability.Set]));
+    argRegs.push(structAccessReg)
+
+    for (let i = 0; i < fields.length; i++) {
+      const param = fn.parameters[i + 1]
+      const reg = this.generateFunctionArgument(ast.args[i], param.reference, param.passingType, Capability.Sink)
+      argRegs.push(reg)
     }
+    this.addInstruction(new CallInstruction(null, VoidType, fnBinding, argRegs));
+    // this.addInstruction(new MarkInitializedInstruction(structReg, true));
     return new Pointer(structReg)
   }
 
@@ -294,6 +299,30 @@ export class CodeGenerator {
     this.generateMoveInstruction(reg, value, type)
 
     return new Pointer(reg)
+  }
+
+  generateFunctionArgument(ast: Ast, reference: boolean, passingType: Type, capability: Capability): string {
+
+    // @ParameterPassing
+    const newReg = this.newRegister();
+    if (reference) {
+      const argReg = this.generateExpression(ast, { valueCategory: 'lvalue' });
+      compilerAssert(argReg instanceof Pointer, 'Function argument must be an pointer', { ast, capability, passingType });
+      this.addInstruction(new AccessInstruction(newReg, argReg.address, [Capability.Inout]));
+      return newReg
+    }
+
+    const argReg = this.generateExpression(ast, { valueCategory: 'rvalue' });
+    // if (ast.type instanceof PrimitiveType) {
+      const value = this.toValue(ast.type, argReg)
+      this.addInstruction(new AccessInstruction(newReg, value.register, [Capability.Let]));
+    // } else {
+      // compilerAssert(argReg instanceof Pointer, "Expected pointer")
+      // this.addInstruction(new AccessInstruction(newReg, argReg.address, [Capability.Let]));
+    // }
+
+    return newReg
+
   }
 
   generateCallExpression(ast: CallAst, context: ExpressionContext): IRValue {
@@ -308,26 +337,9 @@ export class CodeGenerator {
     let i = 0
     for (const givenArg of ast.args) {
       const argIndex = i++;
-      const newReg = this.newRegister();
-      const inout = fn.parameters[argIndex].capability === Capability.Inout
-      if (inout) {
-        const argReg = this.generateExpression(givenArg, { valueCategory: 'lvalue' });
-        compilerAssert(argReg instanceof Pointer, 'Function argument must be an pointer');
-        this.addInstruction(new AccessInstruction(newReg, argReg.address, [Capability.Inout]));
-        argRegs.push(newReg);
-      } else {
-        const argReg = this.generateExpression(givenArg, { valueCategory: 'rvalue' });
-        if (argReg instanceof Value) {
-          this.addInstruction(new AccessInstruction(newReg, argReg.register, [Capability.Let]));
-        } else if (givenArg.type instanceof PrimitiveType) {
-          const value = this.toValue(argReg)
-          this.addInstruction(new AccessInstruction(newReg, value.register, [Capability.Let]));
-        } else {
-          this.addInstruction(new AccessInstruction(newReg, argReg.address, [Capability.Let]));
-        }
-
-        argRegs.push(newReg);
-      }
+      const param = fn.parameters[argIndex]
+      const argReg = this.generateFunctionArgument(givenArg, param.reference, param.passingType, param.capability);
+      argRegs.push(argReg);
     }
 
     // Call the function
@@ -376,7 +388,7 @@ export class CodeGenerator {
 
     const newValue = this.generateExpression(ast.value, { valueCategory: 'rvalue' });
     const rightReg = this.storeResult(fieldType, newValue)
-    this.addInstruction(new GetFieldPointerInstruction(reg, fieldType, objReg.address, ast.field.index));
+    this.addInstruction(new GetFieldPointerInstruction(reg, objReg.address, ast.field));
     this.generateMovePointerInstruction(reg, rightReg, fieldType);
   }
 
@@ -386,7 +398,7 @@ export class CodeGenerator {
       const sourceAccessReg = this.newRegister();
       const valueReg = this.newRegister();
       this.addInstruction(new AccessInstruction(sourceAccessReg, pointer.address, [Capability.Sink]));
-      this.addInstruction(new LoadFromAddressInstruction(valueReg, sourceAccessReg));
+      this.addInstruction(new LoadFromAddressInstruction(valueReg, type, sourceAccessReg));
       this.addInstruction(new AccessInstruction(targetAccessReg, targetPtr, [Capability.Set]));
       this.addInstruction(new StoreToAddressInstruction(targetAccessReg, type, valueReg));
       this.addInstruction(new EndAccessInstruction(targetAccessReg, [Capability.Set]));
@@ -404,8 +416,8 @@ export class CodeGenerator {
   }
 
   generateBinaryExpression(ast: OperatorAst, context: ExpressionContext): IRValue {
-    const leftReg = this.toValue(this.generateExpression(ast.args[0], context))
-    const rightReg = this.toValue(this.generateExpression(ast.args[1], context))
+    const leftReg = this.toValue(ast.args[0].type, this.generateExpression(ast.args[0], context))
+    const rightReg = this.toValue(ast.args[1].type, this.generateExpression(ast.args[1], context))
 
     const resultReg = this.newRegister();
     this.addInstruction(new BinaryOperationInstruction(resultReg, ast.type, ast.operator, leftReg.register, rightReg.register));
@@ -433,24 +445,22 @@ export class CodeGenerator {
     const objReg = this.generateExpression(ast.left, { valueCategory: 'lvalue' });
     compilerAssert(objReg instanceof Pointer, 'Object must be an pointer');
     const destReg = this.newRegister();
-    this.addInstruction(new GetFieldPointerInstruction(destReg, ast.field.fieldType, objReg.address, ast.field.index));
+    this.addInstruction(new GetFieldPointerInstruction(destReg, objReg.address, ast.field));
     return new Pointer(destReg);
   }
 
   replaceMoveInstruction(block: BasicBlock, instrId: InstructionId, instr: MoveInstruction, capability: Capability) {
     const sourceAccessReg = this.newRegister();
     const targetAccessReg = this.newRegister();
-    const callReg = this.newRegister();
     compilerAssert(capability === Capability.Set || capability === Capability.Inout, 'Invalid capability');
     const moveFnName = capability === Capability.Set ? `moveInit${instr.type.shortName}` : `moveAssign${instr.type.shortName}`;
     const moveFn = Array.from(this.functions.values()).find(fn => fn.binding.name === moveFnName); // hacks
     compilerAssert(moveFn, `Function not found: ${moveFnName}`);
     const instrs = [
       new CommentInstruction(`Replaced move with ${capability} to ${instr.target} from ${instr.source}`),
-      new AllocInstruction(callReg, instr.type),
       new AccessInstruction(sourceAccessReg, instr.source, [Capability.Sink]),
       new AccessInstruction(targetAccessReg, instr.target, [capability]),
-      new CallInstruction(callReg, VoidType, moveFn.binding, [sourceAccessReg, targetAccessReg]),
+      new CallInstruction(null, VoidType, moveFn.binding, [sourceAccessReg, targetAccessReg]),
       new MarkInitializedInstruction(targetAccessReg, true),
       new MarkInitializedInstruction(sourceAccessReg, false),
       new EndAccessInstruction(sourceAccessReg, [Capability.Sink]),

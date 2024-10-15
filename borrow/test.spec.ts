@@ -50,35 +50,35 @@ const runMandatoryPasses = (codeGenerator: CodeGenerator, mod: Module, fn: Funct
   printIR(fn.blocks);
 }
 const runTest = (name: string, node: ProgramNode) => {
-  console.log(textColors.green(`\n\n#### Begin ${name} ####`));
-  const compiler = new BasicCompiler()
-  compiler.compile(node)
-
-  const codeGenerator = new CodeGenerator();
-  for (const fn of compiler.allFunctions.values()) {
-    codeGenerator.functions.set(fn.binding, fn);
-  }
-
-  const globalCompilerState: GlobalCompilerState = {
-    compiledIr: new Map(),
-    externalDefinitions: [],
-    initializerFunctionBinding: new Binding('initializer', VoidType),
-    exports: {},
-    globalLets: [],
-    compiledFunctions: new Map(),
-  }
-
-  const mod = new Module()
-  mod.functionMap = codeGenerator.functions
-
-  for (const fn of codeGenerator.functions.values()) {
-    const ir = codeGenerator.generateFunction(fn.binding, fn.parameters, fn.returnType, fn.body)
-    runMandatoryPasses(codeGenerator, mod, ir)
-
-    globalCompilerState.compiledIr.set(fn.binding, ir)
-  }
-
   try {
+    console.log(textColors.green(`\n\n#### Begin ${name} ####`));
+    const compiler = new BasicCompiler()
+    compiler.compile(node)
+
+    const codeGenerator = new CodeGenerator();
+    for (const fn of compiler.allFunctions.values()) {
+      codeGenerator.functions.set(fn.binding, fn);
+    }
+
+    const globalCompilerState: GlobalCompilerState = {
+      compiledIr: new Map(),
+      externalDefinitions: [],
+      initializerFunctionBinding: new Binding('initializer', VoidType),
+      exports: {},
+      globalLets: [],
+      compiledFunctions: new Map(),
+    }
+
+    const mod = new Module()
+    mod.functionMap = codeGenerator.functions
+
+    for (const fn of codeGenerator.functions.values()) {
+      const ir = codeGenerator.generateFunction(fn.binding, fn.parameters, fn.returnType, fn.body)
+      runMandatoryPasses(codeGenerator, mod, ir)
+
+      globalCompilerState.compiledIr.set(fn.binding, ir)
+    }
+
 
     globalCompilerState.compiledFunctions = codeGenerator.functions
 
@@ -92,6 +92,7 @@ const runTest = (name: string, node: ProgramNode) => {
   } catch (error) {
     console.error(`${name} failed: ${error.message}`);
     console.error(error.stack)
+    console.error(error.info)
     throw error;
   }
 }

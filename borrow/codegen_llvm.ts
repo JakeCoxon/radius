@@ -1,6 +1,5 @@
-import { access } from "fs";
 import { externalBuiltinBindings } from "../src/compiler_sugar";
-import { Ast, AstType, AstWriterTable, Binding, BindingAst, BlockAst, BoolType, CallAst, CompiledFunction, ConcreteClassType, ConstructorAst, DefaultConsAst, DoubleType, FileWriter, FloatType, FunctionType, GlobalCompilerState, IntType, LetAst, ListTypeConstructor, LlvmFunctionWriter, LlvmWriter, NeverType, NumberAst, ParameterizedType, Pointer, PrimitiveType, RawPointerType, Register, SetAst, SourceLocation, StatementsAst, StringType, Type, TypeField, UserCallAst, ValueFieldAst, VoidType, compilerAssert, isAst, isType, textColors, u64Type, u8Type } from "../src/defs";
+import { Ast, AstType, AstWriterTable, Binding, BindingAst, BlockAst, BoolType, CallAst, Capability, CompiledFunction, ConcreteClassType, ConstructorAst, DefaultConsAst, DoubleType, FileWriter, FloatType, FunctionType, GlobalCompilerState, IntType, LetAst, ListTypeConstructor, LlvmFunctionWriter, LlvmWriter, NeverType, NumberAst, ParameterizedType, Pointer, PrimitiveType, RawPointerType, Register, SetAst, SourceLocation, StatementsAst, StringType, Type, TypeField, UserCallAst, ValueFieldAst, VoidType, compilerAssert, isAst, isType, textColors, u64Type, u8Type } from "../src/defs";
 import { AccessInstruction, AllocInstruction, BinaryOperationInstruction, CallInstruction, CommentInstruction, ConditionalJumpInstruction, EndAccessInstruction, formatInstruction, FunctionBlock, GetFieldPointerInstruction, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, MarkInitializedInstruction, PhiInstruction, ReturnInstruction, StoreToAddressInstruction } from "./defs";
 
 // Some useful commands
@@ -177,13 +176,18 @@ const instructionWriter = {
     const returnType = fn.returnType
     const result = instr.type !== VoidType && defineRegister(writer, "", returnType)
     const paramTypes = fn.parameters.map(x => x.type)
-    const argStr = paramTypes.map((type, i) => `${getTypeName(writer.writer, type)} ${getRegisterName(writer, args[i])}`).join(", ")
+    const argStr = paramTypes.map((type, i) => {
+      const reg = writer.writer.registers.get(args[i])
+      compilerAssert(reg, "Register not found", { instr })
+
+      return `${getTypeName(writer.writer, reg.type)} ${generateName(writer.writer, reg)}`
+    }).join(", ")
 
     if (result) { format(writer, `  $ = `, result) }
     else { format(writer, `  `) }
 
     format(writer, "call $ $($)\n", returnType, funcName, argStr)
-    if (result) format(writer, "  store $ $, $ $\n", returnType, result, 'ptr', register(instr.target))
+    if (result) format(writer, "  store $ $, $ $\n", returnType, result, 'ptr', register(instr.target!))
   },
 
   return: (writer: LlvmFunctionWriter, instr: ReturnInstruction) => {
@@ -209,17 +213,17 @@ const instructionWriter = {
   load_from_address: (writer: LlvmFunctionWriter, instr: LoadFromAddressInstruction) => {
     const addr = writer.writer.registers.get(instr.address)
     compilerAssert(addr, "Register not found", { instr })
-    defineRegister(writer, instr.dest, addr.type)
-    format(writer, "  $ = load $, $ $\n", register(instr.dest), addr.type, getPointerName(writer, addr.type), addr)
+    defineRegister(writer, instr.dest, instr.type)
+    format(writer, "  $ = load $, $ $\n", register(instr.dest), instr.type, getPointerName(writer, addr.type), addr)
   },
 
   getfieldptr: (writer: LlvmFunctionWriter, instr: GetFieldPointerInstruction) => {
     const source = writer.writer.registers.get(instr.address)
     compilerAssert(source, "Register not found", { instr })
-    const field = source.type.typeInfo.fields[instr.field]
-    const dest = defineRegister(writer, instr.dest, instr.type)
-    const sourceType = getDataTypeName(writer.writer, source.type);
-    const pointerType = getPointerName(writer, source.type);
+    const field = instr.field
+    const dest = defineRegister(writer, instr.dest, instr.field.fieldType)
+    const sourceType = getDataTypeName(writer.writer, field.sourceType);
+    const pointerType = getPointerName(writer, field.sourceType);
     format(writer, "  $ = getelementptr inbounds $, $ $, $ $\n", dest, sourceType, pointerType, source, 'i32', field.index)
   },
 
@@ -242,7 +246,7 @@ const instructionWriter = {
   },
 
   alloc: (writer: LlvmFunctionWriter, instr: AllocInstruction) => {
-    const dest = defineRegister(writer, instr.dest, instr.type)
+    const dest = defineRegister(writer, instr.dest, RawPointerType)
     format(writer, "  $ = alloca $ ; $\n", dest, instr.type, getDataTypeName(writer.writer, instr.type))
   },
 
@@ -441,28 +445,38 @@ const writeLlvmBytecodeFunction = (bytecodeWriter: LlvmWriter, func: CompiledFun
   
   funcWriter.currentOutput = bytecodeWriter.outputStrings
 
+  const argValueBindings = func.parameters.map(param => {
+    if (param.reference) return param.binding
+    return new Binding(param.binding.name, param.binding.type)
+  })
+
+  format(funcWriter, `; `)
+  func.parameters.forEach((param, i) => {
+    if (i !== 0) format(funcWriter, ", ")
+    format(funcWriter, `$: $ $`, param.binding.name, param.capability.toLowerCase(), param.type.shortName)
+  })
+  format(funcWriter, `\n`)
   format(funcWriter, `define $ $(`, func.returnType, name)
 
-  const argValueBindings = func.argBindings.map(binding => 
-    new Binding(binding.name, binding.type))
-
-  func.argBindings.forEach((binding, i) => {
+  func.parameters.forEach((param, i) => {
     if (i !== 0) format(funcWriter, ", ")
-    const storageType = binding.storage === 'ref' ? RawPointerType : binding.type
-  
-    format(funcWriter, `$ $`, storageType, argValueBindings[i])
+    // @ParameterPassing
+    format(funcWriter, `$ $`, param.passingType, argValueBindings[i])
   })
   format(funcWriter, `) {\n`, func.returnType, name)
 
-  func.argBindings.forEach((binding, i) => {
+  func.parameters.forEach((param, i) => {
     const regName = fnIr.parameterRegisters[i]
-    const reg = defineRegister(funcWriter, regName, binding.type)
+    const reg = defineRegister(funcWriter, regName, param.passingType)
     generateName(bytecodeWriter, reg)
 
-    const storageType = binding.storage === 'ref' ? RawPointerType : binding.type
-
-    format(funcWriter, "  $ = alloca $ ; $\n", reg, reg.type, getDataTypeName(funcWriter.writer, reg.type))
-    format(funcWriter, "  store $ $, $ $\n", storageType, argValueBindings[i], 'ptr', reg)
+    // @ParameterPassing
+    if (!param.reference) {
+      format(funcWriter, "  $ = alloca $ ; $\n", reg, reg.type, getDataTypeName(funcWriter.writer, reg.type))
+      format(funcWriter, "  store $ $, $ $\n", param.passingType, argValueBindings[i], 'ptr', reg)
+    } else {
+      format(funcWriter, "  $ = bitcast ptr $ to ptr ; $*\n", reg, argValueBindings[i], argValueBindings[i].type.shortName)
+    }
   })
   format(funcWriter, "\n")
   format(funcWriter, "  br label %$\n", fnIr.blocks[0].label)

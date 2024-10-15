@@ -171,7 +171,7 @@ export class ExclusivityCheckingPass {
     const addresses = this.state.locals.get(instr.address);
     compilerAssert(addresses, `Register ${instr.address} is not found`);
     compilerAssert(this.state.locals.get(instr.dest) === undefined, `Register ${instr.dest} is already initialized`);
-    const fields = [...addresses].map(addr => `${addr}.${instr.field}`);
+    const fields = [...addresses].map(addr => `${addr}.${instr.field.index}`);
     this.state.locals.set(instr.dest, new Set(fields));
   }
 

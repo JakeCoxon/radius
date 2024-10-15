@@ -222,6 +222,7 @@ export class InitializationCheckingPass {
         this.ensureRegisterInitialized(instr.args[i]);
       } else if (capability === Capability.Set) {
         this.ensureRegisterUninitialized(instr.args[i]);
+        this.updateMemoryForRegister(instr.args[i], TOP); // Initialized
       } else compilerAssert(false, `Unknown capability ${capability}`);
     }
     if (instr.target) this.updateMemoryForRegister(instr.target, TOP);
@@ -246,7 +247,7 @@ export class InitializationCheckingPass {
     const addresses = this.state.locals.get(instr.address);
     compilerAssert(addresses, `Register ${instr.address} is not found`);
     compilerAssert(this.state.locals.get(instr.dest) === undefined, `Register ${instr.dest} is already initialized`);
-    const fields = [...addresses].map(addr => `${addr}.${instr.field}`);
+    const fields = [...addresses].map(addr => `${addr}.${instr.field.index}`);
     this.state.locals.set(instr.dest, new Set(fields));
     if (this.debugLog) {
       console.log("After GetFieldPointerInstruction", instr.address, instr.dest, fields);
