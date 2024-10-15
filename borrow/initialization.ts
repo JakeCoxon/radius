@@ -72,7 +72,7 @@ export class InitializationCheckingPass {
     let i = 0
     for (const param of this.function.params) {
       const argIndex = i++;
-      this.initializeFunctionParam(entryState, param.binding, this.function.parameterRegisters[argIndex], param.type);
+      this.initializeFunctionParam(entryState, param.binding, this.function.parameterRegisters[argIndex], param.type, param.capability);
     }
 
     const worklist = new Worklist(this.cfg);
@@ -345,10 +345,10 @@ export class InitializationCheckingPass {
     this.state.memory.set(ids[0], newSd)
   }
 
-  initializeFunctionParam(state: InterpreterState, binding: Binding, reg: string, type: Type) {
+  initializeFunctionParam(state: InterpreterState, binding: Binding, reg: string, type: Type, capability: Capability) {
     const addr = this.newAddress(type);
     state.locals.set(reg, new Set([addr]));
-    state.memory.set(addr, TOP);
+    state.memory.set(addr, capability === Capability.Set ? BOTTOM : TOP); // Initialized
   }
 
 }

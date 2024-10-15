@@ -1,6 +1,6 @@
-import { Capability, Type } from "../src/defs";
+import { Capability, FunctionParameter, Type } from "../src/defs";
 import { ControlFlowGraph, buildCFG } from "./controlflow";
-import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, compilerAssert, EndAccessInstruction, PhiInstruction, FunctionParameter, textColors, InstructionId, CommentInstruction, getInstructionResult } from "./defs";
+import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, compilerAssert, EndAccessInstruction, PhiInstruction, textColors, InstructionId, CommentInstruction, getInstructionResult } from "./defs";
 import { Worklist } from "./worklist";
 
 type BorrowedItem = {
@@ -58,7 +58,7 @@ export class ExclusivityCheckingPass {
     let i = 0
     for (const param of this.function.params) {
       const argIndex = i++;
-      this.initializeFunctionParam(entryState, param.binding, this.function.parameterRegisters[argIndex]);
+      this.initializeFunctionParam(entryState, param, this.function.parameterRegisters[argIndex]);
     }
 
     const worklist = new Worklist(this.cfg);
@@ -194,7 +194,19 @@ export class ExclusivityCheckingPass {
   initializeFunctionParam(state: InterpreterState, param: FunctionParameter, reg: string) {
     const addr = this.newAddress(param.type);
     state.locals.set(reg, new Set([addr]));
-    state.memory.set(addr, []); // TODO: Handle immutable/mutable
+
+    // Exclusive borrow
+    if (param.capability !== Capability.Let) {
+      state.memory.set(addr, [])
+      return
+    }
+    
+    const newBorrow: BorrowedItem = { 
+      rootAddress: addr,
+      address: addr, subObject: "", blockId: "", 
+      instructionId: -1, capability: param.capability, resultReg: null! }
+
+    state.memory.set(addr, [newBorrow])
   }
 
   access(instrId: InstructionId, instr: AccessInstruction) {
@@ -273,6 +285,7 @@ export class ExclusivityCheckingPass {
       const removeIndex = existingBorrows.findIndex(b => {
         if (b.address !== addr) return false
         if (b.capability !== capability) return false
+        if (b.blockId === "" || b.instructionId === -1) return false // Parameter borrow
         const block = this.cfg.blocks.find(bl => bl.label === b.blockId)!;
         const result = getInstructionResult(block.instructions[b.instructionId])
         if (result !== instr.source) return false

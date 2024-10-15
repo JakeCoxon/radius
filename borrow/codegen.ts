@@ -1,3 +1,4 @@
+import { externalBuiltinBindings } from "../src/compiler_sugar";
 import { AndAst, Ast, Binding, BindingAst, CallAst, Capability, CompiledFunction, ConstructorAst, FieldAst, FunctionParameter, IfAst, IntType, LetAst, NumberAst, OperatorAst, OrAst, PrimitiveType, RawPointerType, ReturnAst, SetAst, SetFieldAst, SourceLocation, StatementsAst, Type, VoidAst, VoidType, WhileAst } from "../src/defs";
 import { ASTNode, AllocInstruction, AssignInstruction, AssignmentNode, BasicBlock, BinaryExpressionNode, BinaryOperationInstruction, BlockStatementNode, CallExpressionNode, CallInstruction, AccessInstruction, ConditionalJumpInstruction, CreateStructNode, ExpressionNode, ExpressionStatementNode, FunctionBlock, FunctionDeclarationNode, IRInstruction, IRValue, IdentifierNode, IfStatementNode, JumpInstruction, LetConstNode, LiteralNode, LoadConstantInstruction, LoadFromAddressInstruction, MemberExpressionNode, ProgramNode, Pointer, Value, ReturnInstruction, ReturnNode, StoreToAddressInstruction, Variable, VariableDeclarationNode, WhileStatementNode, compilerAssert, GetFieldPointerInstruction, AndNode, OrNode, PhiInstruction, CommentInstruction, MoveInstruction, EndAccessInstruction, printIR, MarkInitializedInstruction, InstructionId, PhiSource } from "./defs";
 
@@ -308,7 +309,7 @@ export class CodeGenerator {
     if (reference) {
       const argReg = this.generateExpression(ast, { valueCategory: 'lvalue' });
       compilerAssert(argReg instanceof Pointer, 'Function argument must be an pointer', { ast, capability, passingType });
-      this.addInstruction(new AccessInstruction(newReg, argReg.address, [Capability.Inout]));
+      this.addInstruction(new AccessInstruction(newReg, argReg.address, [capability]));
       return newReg
     }
 
@@ -325,13 +326,35 @@ export class CodeGenerator {
 
   }
 
+  generateCopy(ast: Ast, context: ExpressionContext): IRValue {
+    // const dest = this.newRegister();
+    // const source = this.generateExpression(ast, { valueCategory: 'rvalue' });
+    // this.addFunctionInstruction(new AllocInstruction(dest, ast.type));
+
+    const binding = new Binding('copy', ast.type)
+    if (ast.type instanceof PrimitiveType) {
+      this.generate(new LetAst(VoidType, SourceLocation.anon, binding, ast, false))
+      return this.generateBinding(new BindingAst(binding.type, SourceLocation.anon, binding), context)
+    }
+    
+    this.generate(new LetAst(VoidType, SourceLocation.anon, binding, null, true))
+    const bindingAst = new BindingAst(binding.type, SourceLocation.anon, binding)
+    const copyConstructor = ast.type.typeInfo.metaobject.copyConstructorBinding
+    compilerAssert(copyConstructor && copyConstructor instanceof Binding, `Copy constructor not found for ${ast.type.shortName}`);
+    this.generateCallExpression(new CallAst(ast.type, SourceLocation.anon, copyConstructor, [bindingAst, ast], []), context)
+    return this.generateBinding(new BindingAst(binding.type, SourceLocation.anon, binding), context)
+  }
+
   generateCallExpression(ast: CallAst, context: ExpressionContext): IRValue {
+    if (ast.binding === externalBuiltinBindings.copy) {
+      return this.generateCopy(ast.args[0], context)
+    }
     // Generate code for arguments
     const fn = this.functions.get(ast.binding)
     compilerAssert(fn, `Function ${ast.binding.name} not found`);
     this.addInstruction(new CommentInstruction(`Call ${ast.binding.name}`))
 
-    compilerAssert(ast.args.length === fn.argBindings.length, 'Argument count mismatch');
+    compilerAssert(ast.args.length === fn.argBindings.length, 'Argument count mismatch', { binding: ast.binding, got: ast.args.length, expected: fn.argBindings.length });
     
     const argRegs: string[] = [];
     let i = 0
@@ -372,7 +395,7 @@ export class CodeGenerator {
       if (ast instanceof BindingAst) {
         const variable = this.variableMap.get(ast.binding);
         compilerAssert(variable, `Undefined variable: ${ast.binding.name}`);
-        return variable.capability === Capability.Inout
+        return variable.capability === Capability.Inout || variable.capability === Capability.Set
       } else if (ast instanceof FieldAst) {
         return checkMutable(ast.left)
       }
@@ -460,7 +483,7 @@ export class CodeGenerator {
       new CommentInstruction(`Replaced move with ${capability} to ${instr.target} from ${instr.source}`),
       new AccessInstruction(sourceAccessReg, instr.source, [Capability.Sink]),
       new AccessInstruction(targetAccessReg, instr.target, [capability]),
-      new CallInstruction(null, VoidType, moveFn.binding, [sourceAccessReg, targetAccessReg]),
+      new CallInstruction(null, VoidType, moveFn.binding, [targetAccessReg, sourceAccessReg]),
       new MarkInitializedInstruction(targetAccessReg, true),
       new MarkInitializedInstruction(sourceAccessReg, false),
       new EndAccessInstruction(sourceAccessReg, [Capability.Sink]),

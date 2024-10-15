@@ -1,6 +1,8 @@
 import { describe, it, expect } from "bun:test"
 import { NumberAst, SourceLocation, IntType, Binding, Ast, VoidAst, VoidType, LetAst, isType, OperatorAst, SetAst, BindingAst, StatementsAst, TypeInfo, TypeField, ConcreteClassType, CompiledClass, ConstructorAst, FieldAst, SetFieldAst, FunctionDefinition, CompiledFunction, CallAst, ReturnAst, IfAst, BoolType, AndAst, WhileAst, FunctionParameter, Capability, RawPointerType, Type, PrimitiveType } from "../src/defs";
 import { ASTNode, AndNode, AssignmentNode, BinaryExpressionNode, BlockStatementNode, CallExpressionNode, CreateStructNode, ExpressionStatementNode, FunctionDeclarationNode, FunctionParameterNode, IdentifierNode, IfStatementNode, LetConstNode, LiteralNode, MemberExpressionNode, Module, ProgramNode, ReturnNode, VariableDeclarationNode, WhileStatementNode, compilerAssert, printIR, printLivenessMap, textColors } from "./defs";
+import { CodeGenerator } from "./codegen";
+import { externalBuiltinBindings } from "../src/compiler_sugar";
 
 class Scope {
   constants: Record<string, any> = {}
@@ -16,7 +18,7 @@ export class BasicCompiler {
 
   allFunctions: Map<Binding, CompiledFunction> = new Map()
   
-  constructor() {
+  constructor(public codegen: CodeGenerator) {
     this.defineConstant('int', IntType)
     this.defineConstant('bool', BoolType)
     this.defineConstant('void', VoidType)
@@ -64,30 +66,86 @@ export class BasicCompiler {
     const typeInfo: TypeInfo = { sizeof: 0, fields: typeFields, metaobject: {}, isReferenceType: false }
     const binding = new Binding(name, VoidType)
     const compiledClass = new CompiledClass(SourceLocation.anon, name, binding, null!, null!, null!, typeFields, [], 0)
-    let classType = new ConcreteClassType(compiledClass, typeInfo)
+    let structType = new ConcreteClassType(compiledClass, typeInfo)
+
+    fields.forEach((f, i) => {
+      const type = this.getType(f.type)
+      typeFields[i] = new TypeField(SourceLocation.anon, f.name, structType, i, type)
+    })
+
+    this.defineConstant(name, structType)
+    this.generateConstructor(name, structType)
+    const moveInitBinding = this.generateMoveFunction(structType, `moveInit${name}`, Capability.Set, Capability.Sink)
+    const moveAssignBinding = this.generateMoveFunction(structType, `moveAssign${name}`, Capability.Inout, Capability.Sink)
+    const copyConstructorBinding = this.generateMoveFunction(structType, `copy${name}`, Capability.Set, Capability.Let)
+    Object.assign(typeInfo.metaobject, { moveInitBinding, moveAssignBinding, copyConstructorBinding })
+    
+    return structType
+  }
+
+  generateConstructor(structName: string, structType: Type) {
     const funcParams: FunctionParameter[] = []
     const argBindings: Binding[] = []
     const concreteTypes: Type[] = []
 
-    const setArgBinding = new Binding('param', classType)
+    const setArgBinding = new Binding('param', structType)
     argBindings.push(setArgBinding)
-    funcParams.push(new FunctionParameter(setArgBinding, classType, true, RawPointerType, Capability.Set))
-    concreteTypes.push(classType)
+    funcParams.push(new FunctionParameter(setArgBinding, structType, true, RawPointerType, Capability.Set))
+    concreteTypes.push(structType)
     
-
+    const fields = structType.typeInfo.fields
     fields.forEach((f, i) => {
-      const type = this.getType(f.type)
-      typeFields[i] = new TypeField(SourceLocation.anon, f.name, classType, i, type)
+      const type = f.fieldType
+      fields[i] = new TypeField(SourceLocation.anon, f.name, structType, i, type)
       const argBinding = new Binding(f.name, type)
       funcParams.push(this.createParameter(argBinding, Capability.Sink))
       argBindings.push(argBinding)
       concreteTypes.push(type)
     })
-    const constructorBinding = typeInfo.metaobject.constructorBinding = new Binding(`constructor${name}`, VoidType)
-    this.defineConstant(name, classType)
-    const compiledFunc = new CompiledFunction(constructorBinding, {} as any, VoidType, concreteTypes, new VoidAst(VoidType, SourceLocation.anon), argBindings, funcParams, [], 0)
+    const constructorBinding = structType.typeInfo.metaobject.constructorBinding = new Binding(`constructor${structName}`, VoidType)
+    
+    const [param, ...fieldBindings] = argBindings
+    const fieldAsts = fields.map((field, i) => {
+      const valueBinding = new BindingAst(field.fieldType, SourceLocation.anon, fieldBindings[i])
+      const struct = new BindingAst(structType, SourceLocation.anon, param);
+      return new SetFieldAst(VoidType, SourceLocation.anon, struct, field, valueBinding)
+    })
+    const constructorBody = new StatementsAst(VoidType, SourceLocation.anon, fieldAsts)
+
+    const compiledFunc = new CompiledFunction(constructorBinding, {} as any, VoidType, concreteTypes, constructorBody, argBindings, funcParams, [], 0)
+    this.allFunctions.set(constructorBinding, compiledFunc)
+  }
+
+  generateMoveFunction(structType: Type, fnName: string, destCapability: Capability, sourceCapability: Capability) {
+    const funcParams: FunctionParameter[] = []
+    const argBindings: Binding[] = []
+    const concreteTypes: Type[] = []
+
+    const setArgBinding = new Binding('dst', structType)
+    argBindings.push(setArgBinding)
+    funcParams.push(new FunctionParameter(setArgBinding, structType, true, RawPointerType, destCapability))
+    concreteTypes.push(structType)
+    
+    const srcArgBinding = new Binding('src', structType)
+    argBindings.push(srcArgBinding)
+    funcParams.push(new FunctionParameter(srcArgBinding, structType, true, RawPointerType, sourceCapability))
+    concreteTypes.push(structType)
+
+    const binding = new Binding(fnName, VoidType)
+    const constructorBinding = structType.typeInfo.metaobject.constructorBinding as Binding
+
+    const passFieldAsts = structType.typeInfo.fields.map((f, i) => {
+      const arg = new BindingAst(structType, SourceLocation.anon, srcArgBinding);
+      const field = new FieldAst(f.fieldType, SourceLocation.anon, arg, f)
+      if (sourceCapability === Capability.Sink) return field
+      return new CallAst(f.fieldType, SourceLocation.anon, externalBuiltinBindings.copy, [field], [])
+    })
+    const call = new CallAst(structType, SourceLocation.anon, constructorBinding, [new BindingAst(setArgBinding.type, SourceLocation.anon, setArgBinding), ...passFieldAsts], [])
+    const body = new StatementsAst(VoidType, SourceLocation.anon, [call])
+
+    const compiledFunc = new CompiledFunction(binding, {} as any, VoidType, concreteTypes, body, argBindings, funcParams, [], 0)
     this.allFunctions.set(binding, compiledFunc)
-    return classType
+    return binding
   }
 
   createParameter(binding: Binding, capability: Capability) {
@@ -258,52 +316,10 @@ export class BasicCompiler {
 
 
 const runTest = (node: ProgramNode) => {
-  const c = new BasicCompiler()
+  const codegen = new CodeGenerator()
+  const c = new BasicCompiler(codegen)
   const ast = c.compile(node)
 }
-
-const common = [
-  // new LetConstNode('Point', PointType),
-  // new LetConstNode('Line', LineType),
-  new LetConstNode('int', IntType),
-  new LetConstNode('ptr', RawPointerType),
-  new FunctionDeclarationNode(
-    'moveInitLine',
-    [
-      new FunctionParameterNode('src', 'ptr', Capability.Sink),
-      new FunctionParameterNode('dst', 'ptr', Capability.Set),
-    ],
-    'void',
-    new BlockStatementNode([])
-  ),
-  new FunctionDeclarationNode(
-    'moveAssignLine',
-    [
-      new FunctionParameterNode('src', 'ptr', Capability.Sink),
-      new FunctionParameterNode('dst', 'ptr', Capability.Inout),
-    ],
-    'void',
-    new BlockStatementNode([])
-  ),
-  new FunctionDeclarationNode(
-    'moveInitPoint',
-    [
-      new FunctionParameterNode('src', 'ptr', Capability.Sink),
-      new FunctionParameterNode('dst', 'ptr', Capability.Set),
-    ],
-    'void',
-    new BlockStatementNode([])
-  ),
-  new FunctionDeclarationNode(
-    'moveAssignPoint',
-    [
-      new FunctionParameterNode('src', 'ptr', Capability.Sink),
-      new FunctionParameterNode('dst', 'ptr', Capability.Inout),
-    ],
-    'void',
-    new BlockStatementNode([])
-  ),
-]
 
 describe("compile", () => {
   it('testBasic', () => {
@@ -312,7 +328,6 @@ describe("compile", () => {
     // result = 3 + 2
 
     const ast = new ProgramNode([
-      ...common,
       new VariableDeclarationNode('result', true, 'int', new LiteralNode(2)),
       new ExpressionStatementNode(new AssignmentNode(
         new IdentifierNode('result'),
@@ -329,7 +344,6 @@ describe("compile", () => {
     // p.x = 5 + p.y
 
     const ast = new ProgramNode([
-      ...common,
       new VariableDeclarationNode('p', true, 'Point', 
         new CreateStructNode('Point', 
           [new LiteralNode(3), new LiteralNode(4)]
@@ -354,7 +368,6 @@ describe("compile", () => {
     // foo(p)
 
     const ast = new ProgramNode([
-      ...common,
       new VariableDeclarationNode('p', true, 'Point', 
         new CreateStructNode('Point', 
           [new LiteralNode(3), new LiteralNode(4)]

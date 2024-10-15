@@ -52,10 +52,11 @@ const runMandatoryPasses = (codeGenerator: CodeGenerator, mod: Module, fn: Funct
 const runTest = (name: string, node: ProgramNode) => {
   try {
     console.log(textColors.green(`\n\n#### Begin ${name} ####`));
-    const compiler = new BasicCompiler()
+    const codeGenerator = new CodeGenerator();
+
+    const compiler = new BasicCompiler(codeGenerator)
     compiler.compile(node)
 
-    const codeGenerator = new CodeGenerator();
     for (const fn of compiler.allFunctions.values()) {
       codeGenerator.functions.set(fn.binding, fn);
     }
@@ -96,45 +97,6 @@ const runTest = (name: string, node: ProgramNode) => {
     throw error;
   }
 }
-
-const common = [
-  new FunctionDeclarationNode(
-    'moveInitLine',
-    [
-      new FunctionParameterNode('src', 'Line', Capability.Sink),
-      new FunctionParameterNode('dst', 'Line', Capability.Set),
-    ],
-    'void',
-    new BlockStatementNode([])
-  ),
-  new FunctionDeclarationNode(
-    'moveAssignLine',
-    [
-      new FunctionParameterNode('src', 'Line', Capability.Sink),
-      new FunctionParameterNode('dst', 'Line', Capability.Inout),
-    ],
-    'void',
-    new BlockStatementNode([])
-  ),
-  new FunctionDeclarationNode(
-    'moveInitPoint',
-    [
-      new FunctionParameterNode('src', 'Point', Capability.Sink),
-      new FunctionParameterNode('dst', 'Point', Capability.Set),
-    ],
-    'void',
-    new BlockStatementNode([])
-  ),
-  new FunctionDeclarationNode(
-    'moveAssignPoint',
-    [
-      new FunctionParameterNode('src', 'Point', Capability.Sink),
-      new FunctionParameterNode('dst', 'Point', Capability.Inout),
-    ],
-    'void',
-    new BlockStatementNode([])
-  ),
-]
 
 describe("integration", () => {
   it('testFunction', () => {
@@ -192,7 +154,6 @@ describe("integration", () => {
     // addX(result, 3);
     
     const ast = new ProgramNode([
-      ...common,
       new FunctionDeclarationNode(
         'addX',
         [
@@ -926,7 +887,6 @@ describe("integration", () => {
     // modifyIfPositive(point, 3);
     
     const ast = new ProgramNode([
-      ...common,
       new FunctionDeclarationNode(
         'modifyIfPositive',
         [
@@ -981,7 +941,6 @@ describe("integration", () => {
     // point.x = z
     
     const ast = new ProgramNode([
-      ...common,
       new VariableDeclarationNode('point', true, 'Point'),
       new VariableDeclarationNode('x', true, 'int'),
       new VariableDeclarationNode('y', true, 'int'),
@@ -1036,7 +995,6 @@ describe("integration", () => {
     // use(x)
     
     const ast = new ProgramNode([
-      ...common,
       new VariableDeclarationNode('point', true, 'Point',
         new CreateStructNode(
           'Point',
@@ -1078,7 +1036,6 @@ describe("integration", () => {
     // point.x = 5;
     
     const ast = new ProgramNode([
-      ...common,
       new VariableDeclarationNode('point', false, 'Point',
         new CreateStructNode(
           'Point',
@@ -1102,7 +1059,6 @@ describe("integration", () => {
     // use(point)
     
     const ast = new ProgramNode([
-      ...common,
       new FunctionDeclarationNode(
         'use',
         [
@@ -1143,7 +1099,6 @@ describe("integration", () => {
     // addY(result, 2);
 
     const ast = new ProgramNode([
-      ...common,
       new FunctionDeclarationNode(
         'addX',
         [
@@ -1220,7 +1175,6 @@ describe("integration", () => {
     // modify(result, 3);
 
     const ast = new ProgramNode([
-      ...common,
       new FunctionDeclarationNode(
         'modify',
         [
@@ -1280,7 +1234,6 @@ describe("integration", () => {
     // use(p1.x);
 
     const ast = new ProgramNode([
-      ...common,
       new FunctionDeclarationNode(
         'modify',
         [
@@ -1335,7 +1288,6 @@ describe("integration", () => {
     // use(p1.x);
 
     const ast = new ProgramNode([
-      ...common,
       new FunctionDeclarationNode(
         'modify',
         [
@@ -1390,7 +1342,6 @@ describe("integration", () => {
     // use(p1.x);
 
     const ast = new ProgramNode([
-      ...common,
       new FunctionDeclarationNode(
         'modify',
         [
@@ -1444,7 +1395,6 @@ describe("integration", () => {
     // use(p1.x);
 
     const ast = new ProgramNode([
-      ...common,
       new VariableDeclarationNode('result', true, 'Line',
         new CreateStructNode(
           'Line',

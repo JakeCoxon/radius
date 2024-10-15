@@ -152,6 +152,7 @@ export const externalBuiltinBindings: {[key:string]: Binding} = {
   free: new Binding('free', FunctionType),
   sizeof: new Binding('sizeof', FunctionType),
   exit: new Binding('exit', FunctionType),
+  copy: new Binding('copy', FunctionType),
 }
 
 export const assert = new CompilerFunction('assert', (ctx, typeArgs: unknown[], args: Ast[]) => {

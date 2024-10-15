@@ -221,10 +221,10 @@ const instructionWriter = {
     const source = writer.writer.registers.get(instr.address)
     compilerAssert(source, "Register not found", { instr })
     const field = instr.field
-    const dest = defineRegister(writer, instr.dest, instr.field.fieldType)
+    const dest = defineRegister(writer, instr.dest, RawPointerType)
     const sourceType = getDataTypeName(writer.writer, field.sourceType);
     const pointerType = getPointerName(writer, field.sourceType);
-    format(writer, "  $ = getelementptr inbounds $, $ $, $ $\n", dest, sourceType, pointerType, source, 'i32', field.index)
+    format(writer, "  $ = getelementptr inbounds $, $ $, i32 0, i32 $\n", dest, sourceType, pointerType, source, field.index)
   },
 
   phi: (writer: LlvmFunctionWriter, instr: PhiInstruction) => {
