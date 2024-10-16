@@ -345,10 +345,20 @@ export class CodeGenerator {
     return this.generateBinding(new BindingAst(binding.type, SourceLocation.anon, binding), context)
   }
 
+  generatePrint(ast: Ast, context: ExpressionContext): IRValue {
+    const value = this.generateExpression(ast, { valueCategory: 'rvalue' });
+    const valueReg = this.toValue(ast.type, value)
+    this.addInstruction(new CallInstruction(null, VoidType, externalBuiltinBindings.print, [valueReg.register]));
+    return new Pointer('')
+  }
+
   generateCallExpression(ast: CallAst, context: ExpressionContext): IRValue {
     if (ast.binding === externalBuiltinBindings.copy) {
       return this.generateCopy(ast.args[0], context)
+    } else if (ast.binding === externalBuiltinBindings.print) {
+      return this.generatePrint(ast.args[0], context)
     }
+
     // Generate code for arguments
     const fn = this.functions.get(ast.binding)
     compilerAssert(fn, `Function ${ast.binding.name} not found`);

@@ -345,6 +345,17 @@ export const writeLlvmBytecode = (globalCompilerState: GlobalCompilerState, outp
   bytecodeWriter.outputHeaders.push("declare i32 @printf(i8*, ...)\n\n")
   bytecodeWriter.outputHeaders.push(`\n`)
 
+  // Hack for now
+  format(bytecodeWriter, `
+@int_format_str = private constant [4 x i8] c"%d\\0A\\00"  ; "%d\\n"
+define void @printInt(i32 %value) {
+entry:
+  %format_str_ptr = getelementptr [4 x i8], [4 x i8]* @int_format_str, i32 0, i32 0
+  call i32 (i8*, ...) @printf(i8* %format_str_ptr, i32 %value)
+  ret void
+}
+`)
+
   globalCompilerState.globalLets.forEach(globalLet => {
     const name = generateName(bytecodeWriter, globalLet.binding, true)
     format(bytecodeWriter, "$ = global $ $\n", name, globalLet.binding.type, defaultValueLiteral(bytecodeWriter, globalLet.binding.type))
@@ -353,6 +364,7 @@ export const writeLlvmBytecode = (globalCompilerState: GlobalCompilerState, outp
 
   Array.from(globalCompilerState.compiledFunctions.values()).map(func => {
     generateName(bytecodeWriter, func.binding, true)
+    if (!func.body) return
     const fnIr = globalCompilerState.compiledIr.get(func.binding)
     compilerAssert(fnIr, `No instructions found for ${func.binding.name}`)
     const funcWriter = writeLlvmBytecodeFunction(bytecodeWriter, func, fnIr)

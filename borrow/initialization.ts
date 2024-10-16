@@ -108,6 +108,16 @@ export class InitializationCheckingPass {
       worklist.visited.add(block);
     });
 
+    i = 0
+    for (const param of this.function.params) {
+      const argIndex = i++;
+      if (param.capability === Capability.Sink) {
+        // this.ensureRegisterUninitialized(this.function.parameterRegisters[argIndex]);
+      } else {
+        this.ensureRegisterInitialized(this.function.parameterRegisters[argIndex]);
+      }
+    }
+
     console.log("All checked ok");
   }
 

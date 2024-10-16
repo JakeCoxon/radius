@@ -146,6 +146,7 @@ export const createListConstructor = (vm: Vm, elementType: Type, values: Ast[]) 
 
 export const externalBuiltinBindings: {[key:string]: Binding} = {
   print: new Binding('print', FunctionType),
+  printInt: new Binding('printInt', FunctionType),
   printf: new Binding('printf', FunctionType),
   malloc: new Binding('malloc', FunctionType),
   realloc: new Binding('realloc', FunctionType),

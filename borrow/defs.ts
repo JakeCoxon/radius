@@ -132,6 +132,7 @@ export class ReturnNode extends ASTNode {                  nodeType = 'ReturnSta
 export class FunctionDeclarationNode extends ASTNode {     nodeType = 'FunctionDeclaration';  constructor(public name: string, public params: FunctionParameterNode[], public returnType: string, public body: BlockStatementNode) { super(); } }
 export class AndNode extends ExpressionNode {              nodeType = 'AndExpression';        constructor(public left: ExpressionNode, public right: ExpressionNode) { super(); } }
 export class OrNode extends ExpressionNode {               nodeType = 'OrExpression';         constructor(public left: ExpressionNode, public right: ExpressionNode) { super(); } }
+export class PrintNode extends ExpressionNode {            nodeType = 'Print';                constructor(public value: ExpressionNode) { super(); } }
 
 export class FunctionParameterNode extends ASTNode {
   nodeType = 'FunctionParameter';
@@ -195,51 +196,6 @@ export function formatInstruction(instr: IRInstruction): string {
     return `Unknown instruction: ${instr.irType}`;
   }
 }
-
-// export class PrimitiveType {
-//   constructor(public name: string) {}
-//   get shortName() { return this.name }
-// }
-// export class ArrayType {
-//   constructor(public elementType: Type) {}
-//   get shortName() { return 'array' }
-// }
-// export class TypeField {
-//   constructor(public name: string, public type: Type) {}
-// }
-// export class StructType {
-//   constructor(public name: string, public fields: TypeField[]) {}
-//   get shortName() { return this.name }
-// }
-// export class GenericParameterType {
-//   constructor(public name: string) {}
-//   get shortName() { return this.name }
-// }
-// export class TypeConstructorType {
-//   constructor(public name: string, public typeParameters: Type[]) {}
-//   get shortName() { return this.name }
-// }
-// export class GenericInstanceType {
-//   constructor(public constructorType: TypeConstructorType, public typeArguments: Type[]) {}
-//   get shortName() { return this.constructorType.shortName }
-// }
-
-// export type Type = PrimitiveType | ArrayType | StructType | GenericParameterType | TypeConstructorType | GenericInstanceType
-
-// export const IntType = new PrimitiveType('int');
-// export const BoolType = new PrimitiveType('bool');
-// export const VoidType = new PrimitiveType('void');
-// export const StringType = new PrimitiveType('string');
-// export const FloatType = new PrimitiveType('float');
-
-// export const PointType = new StructType('Point', [
-//   new TypeField('x', IntType),
-//   new TypeField('y', IntType)
-// ]);
-// export const LineType = new StructType('Line', [
-//   new TypeField('p1', PointType),
-//   new TypeField('p2', PointType)
-// ]);
 
 export class InstructionId {
   constructor(public blockId: string, public instrId: number) { }

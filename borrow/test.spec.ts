@@ -1,14 +1,15 @@
 import { describe, it, expect } from "bun:test"
 import { CodeGenerator } from "./codegen";
 import { buildCFG, printCFG, printDominators } from "./controlflow";
-import { AndNode, AssignmentNode, BinaryExpressionNode, BlockStatementNode, CallExpressionNode, CreateStructNode, ExpressionStatementNode, FunctionBlock, FunctionDeclarationNode, FunctionParameterNode, IdentifierNode, IfStatementNode, LiteralNode, MemberExpressionNode, Module, ProgramNode, ReturnNode, VariableDeclarationNode, WhileStatementNode, compilerAssert, printIR, printLivenessMap, textColors } from "./defs";
+import { AndNode, AssignmentNode, BinaryExpressionNode, BlockStatementNode, CallExpressionNode, CreateStructNode, ExpressionStatementNode, FunctionBlock, FunctionDeclarationNode, FunctionParameterNode, IdentifierNode, IfStatementNode, LiteralNode, MemberExpressionNode, Module, PrintNode, ProgramNode, ReturnNode, VariableDeclarationNode, WhileStatementNode, compilerAssert, printIR, printLivenessMap, textColors } from "./defs";
 import { ExclusivityCheckingPass } from "./exclusivity";
 import { InitializationCheckingPass } from "./initialization";
 import { insertCloseAccesses } from "./liveness";
 import { ReifyAccessPass } from "./reifyaccess";
 import { BasicCompiler } from "./compile.spec";
-import { Binding, Capability, GlobalCompilerState, VoidType } from "../src/defs";
+import { Binding, Capability, CompiledFunction, FunctionParameter, GlobalCompilerState, IntType, VoidType } from "../src/defs";
 import { writeLlvmBytecode } from "./codegen_llvm";
+import { externalBuiltinBindings } from "../src/compiler_sugar";
 
 const DebugLog = true
 
@@ -53,6 +54,12 @@ const runTest = (name: string, node: ProgramNode) => {
   try {
     console.log(textColors.green(`\n\n#### Begin ${name} ####`));
     const codeGenerator = new CodeGenerator();
+    const printInt = externalBuiltinBindings.printInt
+    const printArg = new Binding('printArg', VoidType)
+    codeGenerator.functions.set(printInt,
+      new CompiledFunction(printInt, {} as any, VoidType, [IntType], null!, [printArg], [
+        new FunctionParameter(printArg, IntType, false, IntType, Capability.Let)
+      ], [], 0))
 
     const compiler = new BasicCompiler(codeGenerator)
     compiler.compile(node)
@@ -74,6 +81,7 @@ const runTest = (name: string, node: ProgramNode) => {
     mod.functionMap = codeGenerator.functions
 
     for (const fn of codeGenerator.functions.values()) {
+      if (!fn.body) continue
       const ir = codeGenerator.generateFunction(fn.binding, fn.parameters, fn.returnType, fn.body)
       runMandatoryPasses(codeGenerator, mod, ir)
 
@@ -1327,6 +1335,11 @@ describe("integration", () => {
           'use',
           [new MemberExpressionNode(new IdentifierNode('p1'), 'Point', 'x')]
         )
+      ),
+      new ExpressionStatementNode(
+        new PrintNode(
+          new MemberExpressionNode(new IdentifierNode('p1'), 'Point', 'x')
+        )
       )
     ]);
     runTest("testNestedStructProjectSeparate", ast);
@@ -1431,5 +1444,105 @@ describe("integration", () => {
       )
     ]);
     expect(() => runTest("testMutateBorrowedField", ast)).toThrow("Cannot access");
+  });
+
+  it('testMutableLetArgument', () => {
+    // AST representing:
+    // var p1 = Point{2, 3}
+    // fn thing(p: let Point) {
+    //   p.x = 5
+    // }
+    // thing(p1)
+
+    const ast = new ProgramNode([
+      new VariableDeclarationNode('p1', false, 'Point',
+        new CreateStructNode('Point', [new LiteralNode(2), new LiteralNode(3)])
+      ),
+      new FunctionDeclarationNode(
+        'thing',
+        [
+          new FunctionParameterNode('p', 'Point', Capability.Let),
+        ],
+        'void',
+        new BlockStatementNode([
+          new ExpressionStatementNode(
+            new AssignmentNode(
+              new MemberExpressionNode(new IdentifierNode('p'), 'Point', 'x'),
+              new LiteralNode(5)
+            )
+          ),
+        ])
+      ),
+      new ExpressionStatementNode(
+        new CallExpressionNode('thing', [new IdentifierNode('p1')])
+      )
+    ]);
+    expect(() => runTest("testMutableLetArgument", ast)).toThrow("Cannot assign");
+  });
+
+  it('testInvalidBorrowParam', () => {
+    // AST representing:
+    // fn thing(p: inout Point) {
+    // }
+    // let p1 = Point{2, 3}
+    // thing(p1)
+
+    const ast = new ProgramNode([
+      new FunctionDeclarationNode(
+        'thing',
+        [
+          new FunctionParameterNode('p', 'Point', Capability.Inout),
+        ],
+        'void',
+        new BlockStatementNode([])
+      ),
+      new VariableDeclarationNode('p1', false, 'Point',
+        new CreateStructNode('Point', [new LiteralNode(2), new LiteralNode(3)])
+      ),
+      new ExpressionStatementNode(
+        new CallExpressionNode('thing', [new IdentifierNode('p1')])
+      )
+    ]);
+    expect(() => runTest("testInvalidBorrowParam", ast)).toThrow("Cannot access");
+  });
+
+  it('testInoutArgumentMoved', () => {
+    // AST representing:
+    // var p1 = Point{2, 3}
+    // fn thing(p: inout Point) {
+    //   p.x = 5
+    //   var p1 = p
+    // }
+    // thing(p1)
+
+    const ast = new ProgramNode([
+      new VariableDeclarationNode('p1', true, 'Point',
+        new CreateStructNode('Point', [new LiteralNode(2), new LiteralNode(3)])
+      ),
+      new FunctionDeclarationNode(
+        'thing',
+        [
+          new FunctionParameterNode('p', 'Point', Capability.Inout),
+        ],
+        'void',
+        new BlockStatementNode([
+          new ExpressionStatementNode(
+            new AssignmentNode(
+              new MemberExpressionNode(new IdentifierNode('p'), 'Point', 'x'),
+              new LiteralNode(5)
+            )
+          ),
+          new ExpressionStatementNode(
+            new VariableDeclarationNode(
+              'p1', true, 'Point', new IdentifierNode('p')
+            )
+          ),
+        ])
+      ),
+      new ExpressionStatementNode(
+        new CallExpressionNode('thing', [new IdentifierNode('p1')])
+      )
+    ]);
+    expect(() => runTest("testInoutArgumentMoved", ast)).toThrow("not definitely initialized");
   });
 })

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "bun:test"
 import { NumberAst, SourceLocation, IntType, Binding, Ast, VoidAst, VoidType, LetAst, isType, OperatorAst, SetAst, BindingAst, StatementsAst, TypeInfo, TypeField, ConcreteClassType, CompiledClass, ConstructorAst, FieldAst, SetFieldAst, FunctionDefinition, CompiledFunction, CallAst, ReturnAst, IfAst, BoolType, AndAst, WhileAst, FunctionParameter, Capability, RawPointerType, Type, PrimitiveType } from "../src/defs";
-import { ASTNode, AndNode, AssignmentNode, BinaryExpressionNode, BlockStatementNode, CallExpressionNode, CreateStructNode, ExpressionStatementNode, FunctionDeclarationNode, FunctionParameterNode, IdentifierNode, IfStatementNode, LetConstNode, LiteralNode, MemberExpressionNode, Module, ProgramNode, ReturnNode, VariableDeclarationNode, WhileStatementNode, compilerAssert, printIR, printLivenessMap, textColors } from "./defs";
+import { ASTNode, AndNode, AssignmentNode, BinaryExpressionNode, BlockStatementNode, CallExpressionNode, CreateStructNode, ExpressionStatementNode, FunctionDeclarationNode, FunctionParameterNode, IdentifierNode, IfStatementNode, LetConstNode, LiteralNode, MemberExpressionNode, Module, PrintNode, ProgramNode, ReturnNode, VariableDeclarationNode, WhileStatementNode, compilerAssert, printIR, printLivenessMap, textColors } from "./defs";
 import { CodeGenerator } from "./codegen";
 import { externalBuiltinBindings } from "../src/compiler_sugar";
 
@@ -281,6 +281,12 @@ export class BasicCompiler {
       const args = node.args.map(x => this.compile(x))
       const binding = func.binding
       return new CallAst(func.returnType, SourceLocation.anon, binding, args, [])
+    }
+
+    if (node instanceof PrintNode) {
+      const value = this.compile(node.value)
+      if (value.type === IntType) return new CallAst(VoidType, SourceLocation.anon, externalBuiltinBindings.printInt, [value], [])
+      return new CallAst(VoidType, SourceLocation.anon, externalBuiltinBindings.print, [value], [])
     }
 
     if (node instanceof IfStatementNode) {
