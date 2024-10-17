@@ -509,7 +509,7 @@ const writeLlvmBytecodeFunction = (bytecodeWriter: LlvmWriter, func: CompiledFun
     // const v = toRegister(funcWriter, result)
     // format(funcWriter, `  ret $ $\n`, func.returnType, v)
   } else {
-    format(funcWriter, `  ret void\n`)
+    // format(funcWriter, `  ret void\n`)
   }
   format(funcWriter, `}\n\n`)
 

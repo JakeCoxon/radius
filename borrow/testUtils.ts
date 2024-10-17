@@ -1,8 +1,8 @@
 import { externalBuiltinBindings } from "../src/compiler_sugar";
-import { CompiledFunction, IntType, BoolType, VoidType, RawPointerType, TypeField, TypeInfo, CompiledClass, SourceLocation, ConcreteClassType, FunctionParameter, SetFieldAst, PrimitiveType, VoidAst, LetAst, OperatorAst, ConstructorAst, FunctionDefinition, ReturnAst, IfAst, AndAst, WhileAst, isType, Binding, Type, BindingAst, StatementsAst, FieldAst, CallAst, Ast, NumberAst, SetAst, Capability } from "../src/defs";
+import { CompiledFunction, IntType, BoolType, VoidType, RawPointerType, TypeField, TypeInfo, CompiledClass, SourceLocation, ConcreteClassType, FunctionParameter, SetFieldAst, PrimitiveType, VoidAst, LetAst, OperatorAst, ConstructorAst, FunctionDefinition, ReturnAst, IfAst, AndAst, WhileAst, isType, Binding, Type, BindingAst, StatementsAst, FieldAst, CallAst, Ast, NumberAst, SetAst, Capability, BreakAst, NeverType, BlockAst } from "../src/defs";
 import { createParameter, generateConstructor, generateMoveFunction } from "./codegen_ast";
 import { CodeGenerator } from "./codegen_ir";
-import { ASTNode, ProgramNode, BlockStatementNode, FunctionDeclarationNode, LetConstNode, VariableDeclarationNode, LiteralNode, compilerAssert, ExpressionStatementNode, BinaryExpressionNode, AssignmentNode, IdentifierNode, CreateStructNode, MemberExpressionNode, ReturnNode, CallExpressionNode, PrintNode, IfStatementNode, AndNode, WhileStatementNode } from "./defs";
+import { ASTNode, ProgramNode, BlockStatementNode, FunctionDeclarationNode, LetConstNode, VariableDeclarationNode, LiteralNode, compilerAssert, ExpressionStatementNode, BinaryExpressionNode, AssignmentNode, IdentifierNode, CreateStructNode, MemberExpressionNode, ReturnNode, CallExpressionNode, BuiltinNode, IfStatementNode, AndNode, WhileStatementNode, BreakStatementNode, ContinueStatementNode } from "./defs";
 
 class Scope {
   constants: Record<string, any> = {};
@@ -17,6 +17,9 @@ export class BasicCompiler {
   scope: Scope = this.rootScope;
 
   allFunctions: Map<Binding, CompiledFunction> = new Map();
+
+  breakBinding: Binding | null = null;
+  continueBinding: Binding | null = null;
 
   constructor(public codegen: CodeGenerator) {
     this.defineConstant('int', IntType);
@@ -104,7 +107,8 @@ export class BasicCompiler {
 
     if (node instanceof BlockStatementNode) {
       const statements = node.body.map(x => this.compile(x));
-      return new StatementsAst(VoidType, SourceLocation.anon, statements);
+      const type = statements.length ? statements[statements.length - 1].type : VoidType;
+      return new StatementsAst(type, SourceLocation.anon, statements);
     }
 
     if (node instanceof LetConstNode) {
@@ -223,10 +227,14 @@ export class BasicCompiler {
       return new CallAst(func.returnType, SourceLocation.anon, binding, args, []);
     }
 
-    if (node instanceof PrintNode) {
+    if (node instanceof BuiltinNode) {
       const value = this.compile(node.value);
-      if (value.type === IntType) return new CallAst(VoidType, SourceLocation.anon, externalBuiltinBindings.printInt, [value], []);
-      return new CallAst(VoidType, SourceLocation.anon, externalBuiltinBindings.print, [value], []);
+      if (node.name === 'print') {
+        if (value.type === IntType) return new CallAst(VoidType, SourceLocation.anon, externalBuiltinBindings.printInt, [value], []);
+        return new CallAst(VoidType, SourceLocation.anon, externalBuiltinBindings.print, [value], []);
+      } else if (node.name === 'copy') {
+        return new CallAst(VoidType, SourceLocation.anon, externalBuiltinBindings.copy, [value], []);
+      } else compilerAssert(false, 'Builtin not found', { ast: node });
     }
 
     if (node instanceof IfStatementNode) {
@@ -243,9 +251,29 @@ export class BasicCompiler {
     }
 
     if (node instanceof WhileStatementNode) {
-      const test = this.compile(node.condition);
-      const body = this.compile(node.body);
-      return new WhileAst(VoidType, SourceLocation.anon, test, body);
+      const prevBreak = this.breakBinding
+      const prevContinue = this.continueBinding
+      const breakBinding = this.breakBinding = new Binding('break', VoidType)
+      const continueBinding = this.continueBinding = new Binding('continue', VoidType)
+      const test = this.compile(node.condition)
+      const body = this.compile(node.body)
+      this.breakBinding = prevBreak
+      this.continueBinding = prevContinue
+      return new BlockAst(VoidType, SourceLocation.anon, breakBinding, null,
+         new WhileAst(VoidType, SourceLocation.anon, test, 
+            new BlockAst(VoidType, SourceLocation.anon, continueBinding, null, body)
+         )
+      )
+    }
+
+    if (node instanceof BreakStatementNode) {
+      compilerAssert(this.breakBinding, 'Break outside of loop', { ast: node });
+      return new BreakAst(NeverType, SourceLocation.anon, this.breakBinding, null)
+    }
+
+    if (node instanceof ContinueStatementNode) {
+      compilerAssert(this.continueBinding, 'Continue outside of loop', { ast: node });
+      return new BreakAst(NeverType, SourceLocation.anon, this.continueBinding, null)
     }
 
     compilerAssert(false, 'AST Not implemented', { ast: node });

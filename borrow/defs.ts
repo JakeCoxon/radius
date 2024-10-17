@@ -129,10 +129,12 @@ export class BinaryExpressionNode extends ExpressionNode { nodeType = 'BinaryExp
 export class CallExpressionNode extends ExpressionNode {   nodeType = 'CallExpression';       constructor(public callee: string, public args: ExpressionNode[]) { super(); } }
 export class CreateStructNode extends ExpressionNode {     nodeType = 'CreateStruct';         constructor(public name: string, public fields: ExpressionNode[]) { super(); } }
 export class ReturnNode extends ASTNode {                  nodeType = 'ReturnStatement';      constructor(public argument: ExpressionNode | undefined = undefined) { super(); } }
+export class BreakStatementNode extends ASTNode {          nodeType = 'BreakStatement';       constructor(public expression: ExpressionNode | undefined = undefined) { super(); } }
+export class ContinueStatementNode extends ASTNode {       nodeType = 'ContinueStatement';    constructor() { super(); } }
 export class FunctionDeclarationNode extends ASTNode {     nodeType = 'FunctionDeclaration';  constructor(public name: string, public params: FunctionParameterNode[], public returnType: string, public body: BlockStatementNode) { super(); } }
 export class AndNode extends ExpressionNode {              nodeType = 'AndExpression';        constructor(public left: ExpressionNode, public right: ExpressionNode) { super(); } }
 export class OrNode extends ExpressionNode {               nodeType = 'OrExpression';         constructor(public left: ExpressionNode, public right: ExpressionNode) { super(); } }
-export class PrintNode extends ExpressionNode {            nodeType = 'Print';                constructor(public value: ExpressionNode) { super(); } }
+export class BuiltinNode extends ExpressionNode {          nodeType = 'Builtin';              constructor(public name: string, public value: ExpressionNode) { super(); } }
 
 export class FunctionParameterNode extends ASTNode {
   nodeType = 'FunctionParameter';

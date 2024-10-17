@@ -1,7 +1,7 @@
 import { describe, it, expect } from "bun:test"
 import { CodeGenerator } from "./codegen_ir";
 import { buildCFG, printCFG, printDominators } from "./controlflow";
-import { AndNode, AssignmentNode, BinaryExpressionNode, BlockStatementNode, CallExpressionNode, CreateStructNode, ExpressionStatementNode, FunctionBlock, FunctionDeclarationNode, FunctionParameterNode, IdentifierNode, IfStatementNode, LiteralNode, MemberExpressionNode, Module, PrintNode, ProgramNode, ReturnNode, VariableDeclarationNode, WhileStatementNode, compilerAssert, printIR, printLivenessMap, textColors } from "./defs";
+import { AndNode, AssignmentNode, BinaryExpressionNode, BlockStatementNode, BreakStatementNode, CallExpressionNode, ContinueStatementNode, CreateStructNode, ExpressionStatementNode, FunctionBlock, FunctionDeclarationNode, FunctionParameterNode, IdentifierNode, IfStatementNode, LiteralNode, MemberExpressionNode, Module, BuiltinNode, ProgramNode, ReturnNode, VariableDeclarationNode, WhileStatementNode, compilerAssert, printIR, printLivenessMap, textColors } from "./defs";
 import { ExclusivityCheckingPass } from "./exclusivity";
 import { InitializationCheckingPass } from "./initialization";
 import { insertCloseAccesses } from "./liveness";
@@ -15,6 +15,10 @@ const DebugLog = true
 
 const runMandatoryPasses = (codeGenerator: CodeGenerator, mod: Module, fn: FunctionBlock) => {
   console.log(textColors.yellow(`\n// ${fn.name} ///////////////////////////////////////////////////////////\n`));
+
+  // Filter out blocks that are not reachable from the entry block
+  const cfgFirst = buildCFG(fn.blocks)
+  fn.blocks = cfgFirst.blocks.filter(b => cfgFirst.predecessors.get(b)!.length > 0 || b === cfgFirst.entry)
   
   printIR(fn.blocks);
 
@@ -526,7 +530,7 @@ describe("integration", () => {
     runTest("testIfElseBranches", ast);
   })
 
-  it.skip('testLoopWithBreakContinue', () => {
+  it('testLoopWithBreakContinue', () => {
     // var i: int
     // i = 0
     // while (i < 10) {
@@ -559,7 +563,7 @@ describe("integration", () => {
               new LiteralNode(5)
             ),
             new BlockStatementNode([
-              // new BreakStatementNode()
+              new BreakStatementNode()
             ]),
             new BlockStatementNode([
               new ExpressionStatementNode(
@@ -572,7 +576,7 @@ describe("integration", () => {
                   )
                 )
               ),
-              // new ContinueStatementNode()
+              new ContinueStatementNode()
             ])
           )
         ])
@@ -1337,7 +1341,7 @@ describe("integration", () => {
         )
       ),
       new ExpressionStatementNode(
-        new PrintNode(
+        new BuiltinNode('print',
           new MemberExpressionNode(new IdentifierNode('p1'), 'Point', 'x')
         )
       )
@@ -1544,5 +1548,89 @@ describe("integration", () => {
       )
     ]);
     expect(() => runTest("testInoutArgumentMoved", ast)).toThrow("not definitely initialized");
+  });
+
+  it('testReturnPrimitive', () => {
+    // AST representing:
+    // var p1 = Point{2, 3}
+    // fn thing(p: let Point) {
+    //   p.x
+    // }
+    // var x = thing(p1)
+
+    const ast = new ProgramNode([
+      new VariableDeclarationNode('p1', true, 'Point',
+        new CreateStructNode('Point', [new LiteralNode(2), new LiteralNode(3)])
+      ),
+      new FunctionDeclarationNode(
+        'thing',
+        [
+          new FunctionParameterNode('p', 'Point', Capability.Let),
+        ],
+        'int',
+        new BlockStatementNode([
+          new MemberExpressionNode(new IdentifierNode('p'), 'Point', 'x')
+        ])
+      ),
+      new VariableDeclarationNode('x', true, 'int',
+        new CallExpressionNode('thing', [new IdentifierNode('p1')])
+      )
+    ]);
+    runTest("testReturnPrimitive", ast)
+  });
+
+  it('testCopy', () => {
+    // AST representing:
+    // fn thing(p: let Point) {
+    //   p.x
+    // }
+    // fn use(p: Point) {
+    // }
+    // var p1 = Point{2, 3}
+    // var p2 = p1.copy
+    // thing(p1)
+    // thing(p2)
+    // use(p2)
+    // use(p1)
+
+    const ast = new ProgramNode([
+      new FunctionDeclarationNode(
+        'thing',
+        [
+          new FunctionParameterNode('p', 'Point', Capability.Let),
+        ],
+        'int',
+        new BlockStatementNode([
+          new MemberExpressionNode(new IdentifierNode('p'), 'Point', 'x')
+        ])
+      ),
+      new FunctionDeclarationNode(
+        'use',
+        [
+          new FunctionParameterNode('p', 'Point', Capability.Let),
+        ],
+        'void',
+        new BlockStatementNode([])
+      ),
+      new VariableDeclarationNode('p1', true, 'Point',
+        new CreateStructNode('Point', [new LiteralNode(2), new LiteralNode(3)])
+      ),
+      new VariableDeclarationNode('p2', true, 'Point',
+        new BuiltinNode('copy', new IdentifierNode('p1'))
+      ),
+      new ExpressionStatementNode(
+        new CallExpressionNode('thing', [new IdentifierNode('p1')])
+      ),
+      new ExpressionStatementNode(
+        new CallExpressionNode('thing', [new IdentifierNode('p2')])
+      ),
+      new ExpressionStatementNode(
+        new CallExpressionNode('use', [new IdentifierNode('p2')])
+      ),
+      new ExpressionStatementNode(
+        new CallExpressionNode('use', [new IdentifierNode('p1')])
+      )
+    ]);
+    runTest("testCopy", ast)
   });
 })

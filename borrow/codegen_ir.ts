@@ -1,5 +1,5 @@
 import { externalBuiltinBindings } from "../src/compiler_sugar";
-import { AndAst, Ast, Binding, BindingAst, CallAst, Capability, CompiledFunction, ConstructorAst, FieldAst, FunctionParameter, IfAst, IntType, LetAst, NumberAst, OperatorAst, OrAst, PrimitiveType, RawPointerType, ReturnAst, SetAst, SetFieldAst, SourceLocation, StatementsAst, Type, VoidAst, VoidType, WhileAst } from "../src/defs";
+import { AndAst, Ast, Binding, BindingAst, BlockAst, BreakAst, CallAst, Capability, CompiledFunction, ConstructorAst, FieldAst, FunctionParameter, IfAst, IntType, LetAst, NumberAst, OperatorAst, OrAst, PrimitiveType, RawPointerType, ReturnAst, SetAst, SetFieldAst, SourceLocation, StatementsAst, Type, VoidAst, VoidType, WhileAst } from "../src/defs";
 import { ASTNode, AllocInstruction, AssignInstruction, AssignmentNode, BasicBlock, BinaryExpressionNode, BinaryOperationInstruction, BlockStatementNode, CallExpressionNode, CallInstruction, AccessInstruction, ConditionalJumpInstruction, CreateStructNode, ExpressionNode, ExpressionStatementNode, FunctionBlock, FunctionDeclarationNode, IRInstruction, IRValue, IdentifierNode, IfStatementNode, JumpInstruction, LetConstNode, LiteralNode, LoadConstantInstruction, LoadFromAddressInstruction, MemberExpressionNode, ProgramNode, Pointer, Value, ReturnInstruction, ReturnNode, StoreToAddressInstruction, Variable, VariableDeclarationNode, WhileStatementNode, compilerAssert, GetFieldPointerInstruction, AndNode, OrNode, PhiInstruction, CommentInstruction, MoveInstruction, EndAccessInstruction, printIR, MarkInitializedInstruction, InstructionId, PhiSource } from "./defs";
 
 type ExpressionContext = {
@@ -17,6 +17,7 @@ export class CodeGenerator {
   constants: { [name: string]: any } = {};
 
   functionInstructions: IRInstruction[] = [];
+  breakLabels: Map<Binding, string> = new Map();
 
   functions: Map<Binding, CompiledFunction> = new Map();
   unusedBlocks: Set<string> = new Set();
@@ -75,7 +76,13 @@ export class CodeGenerator {
 
     this.currentFunction = new FunctionBlock(binding.name, binding, params, paramRegs, blocks!);
 
-    this.generate(body);
+    if (returnType !== VoidType) {
+      this.generate(new ReturnAst(body.type, SourceLocation.anon, body))
+    } else {
+      this.generate(body);
+      this.addInstruction(new ReturnInstruction(null));
+    }
+
     this.blocks[0].instructions.unshift(...this.functionInstructions);
     this.functionInstructions = []
     this.functionBlocks.push(this.currentFunction);
@@ -102,6 +109,8 @@ export class CodeGenerator {
     if (ast instanceof WhileAst)    { return this.generateWhileStatement(ast) }
     if (ast instanceof ReturnAst)   { return this.generateReturnStatement(ast) }
     if (ast instanceof SetFieldAst) { return this.generateAssignmentField(ast) }
+    if (ast instanceof BlockAst)    { return this.generateBlockExpression(ast) }
+    if (ast instanceof BreakAst)    { return this.generateBreakStatement(ast) }
 
     this.generateExpression(ast, { valueCategory: 'rvalue' })
     
@@ -116,6 +125,17 @@ export class CodeGenerator {
     if (ast instanceof AndAst)         { return this.generateAndExpression(ast, context) }
     if (ast instanceof OrAst)          { return this.generateOrExpression(ast, context) }
     if (ast instanceof OperatorAst)    { return this.generateBinaryExpression(ast, context) }
+    if (ast instanceof StatementsAst) {
+      for (const stmt of ast.statements.slice(0, -1)) {
+        this.generate(stmt);
+      }
+      if (ast.type !== VoidType) {
+        return this.generateExpression(ast.statements[ast.statements.length - 1], context);
+      } else {
+        this.generate(ast.statements[ast.statements.length - 1])
+        return new Pointer('')
+      }
+    }
     
     compilerAssert(false, 'Not implemented expression', { ast })
   }
@@ -126,20 +146,46 @@ export class CodeGenerator {
     this.functionInstructions = []
   }
 
+  _createUnusedBlock() {
+    // This is a trick to make sure that subsequent instructions
+    // are generated but are not added to the final IR. This is
+    // because no statements can come after a return/break/continue
+    const afterLabel = this.newLabel();
+    this.newBlock(afterLabel);
+    this.addInstruction(new CommentInstruction('Unused block'));
+    this.unusedBlocks.add(afterLabel);
+  }
+
+  generateBlockExpression(ast: BlockAst) {
+    const label = this.newLabel()
+    this.breakLabels.set(ast.binding, label)
+    this.generate(ast.body)
+    this.addInstruction(new JumpInstruction(label))
+    this.newBlock(label)
+  }
+
+  generateBreakStatement(ast: BreakAst) {
+    const label = this.breakLabels.get(ast.binding)
+    compilerAssert(label, `Break label not found: ${ast.binding.name}`)
+    this.addInstruction(new JumpInstruction(label))
+    this._createUnusedBlock()
+  }
+
   generateReturnStatement(ast: ReturnAst) {
     if (!ast.expr) {
       this.addInstruction(new ReturnInstruction(null));
     } else {
       const returnReg = this.generateExpression(ast.expr, { valueCategory: 'rvalue' });
-      compilerAssert(returnReg instanceof Value, 'Return argument must be an RValue');
-      this.addInstruction(new ReturnInstruction(returnReg.register));
+      if (ast.expr.type instanceof PrimitiveType) {
+        const value = this.toValue(ast.type, returnReg)
+        this.addInstruction(new ReturnInstruction(value.register));
+      } else {
+        compilerAssert(false, 'Not implemented return statement', { ast })
+      }
     }
-    // This is a trick to make sure that subsequent instructions
-    // are generated but are not added to the final IR
-    const afterLabel = this.newLabel()
-    this.newBlock(afterLabel)
-    this.unusedBlocks.add(afterLabel)
+    this._createUnusedBlock();
   }
+
 
   generateVariableDeclaration(ast: LetAst) {
     const mutable = ast.mutable
