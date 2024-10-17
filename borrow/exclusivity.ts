@@ -1,6 +1,6 @@
 import { Capability, FunctionParameter, Type } from "../src/defs";
 import { ControlFlowGraph, buildCFG } from "./controlflow";
-import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, compilerAssert, EndAccessInstruction, PhiInstruction, textColors, InstructionId, CommentInstruction, getInstructionResult } from "./defs";
+import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, compilerAssert, EndAccessInstruction, PhiInstruction, textColors, InstructionId, CommentInstruction, getInstructionResult, DeallocStackInstruction } from "./defs";
 import { Worklist } from "./worklist";
 
 type BorrowedItem = {
@@ -144,6 +144,7 @@ export class ExclusivityCheckingPass {
     else if (instr instanceof JumpInstruction)            { }
     else if (instr instanceof ConditionalJumpInstruction) { }
     else if (instr instanceof EndAccessInstruction)       this.endAccess(instrId, instr);
+    else if (instr instanceof DeallocStackInstruction)    this.handleDeallocStackInstruction(instr);
     else if (instr instanceof PhiInstruction)             this.handlePhiInstruction(instr);
     else if (instr instanceof CommentInstruction)         { }
     else console.error(`Unknown instruction in exclusivity pass: ${instr.irType}`)
@@ -303,6 +304,13 @@ export class ExclusivityCheckingPass {
       printMemory(this.state.memory)
     }
     // this.state.locals.delete(instr.source);
+  }
+
+  handleDeallocStackInstruction(instr: DeallocStackInstruction) {
+    const locals = this.state.locals.get(instr.target);
+    compilerAssert(locals, `Register ${instr.target} is not found`);
+    compilerAssert(locals.size === 1, `Register ${instr.target} has multiple addresses`);
+    this.state.memory.delete([...locals.values()][0]);
   }
 
 }

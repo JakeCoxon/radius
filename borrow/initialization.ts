@@ -1,7 +1,7 @@
-import { Binding, Capability, ConcreteClassType, Type } from "../src/defs";
+import { Binding, Capability, ConcreteClassType, PrimitiveType, Type } from "../src/defs";
 import { CodeGenerator } from "./codegen_ir";
 import { ControlFlowGraph, buildCFG } from "./controlflow";
-import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, compilerAssert, EndAccessInstruction, PhiInstruction, MoveInstruction, InstructionId, CommentInstruction, textColors, MarkInitializedInstruction, formatInstruction, Module } from "./defs";
+import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, compilerAssert, EndAccessInstruction, PhiInstruction, MoveInstruction, InstructionId, CommentInstruction, textColors, MarkInitializedInstruction, formatInstruction, Module, DeallocStackInstruction } from "./defs";
 import { Worklist } from "./worklist";
 
 type InitializationState = Top | Bottom | Sequence;
@@ -23,8 +23,10 @@ type Sequence = {
 const BOTTOM = { kind: 'Bottom' } as const;
 const TOP = { kind: 'Top' } as const;
 
+// Register -> Set of addresses
+// Empty set means unknown
 type LocalMap = Map<string, Set<string>>;
-type MemoryMap = Map<string, InitializationState>;
+type MemoryMap = Map<string, InitializationState>; // Address -> Initialization state
 
 type InterpreterState = {
   locals: LocalMap; // Local variables/registers
@@ -40,8 +42,9 @@ export class InitializationCheckingPass {
   freshAddressCounter = 0;
   addressTypes = new Map<string, Type>(); // Quick lookup for address types
   debugLog = false
-  currentBlock: BasicBlock | null = null
+  currentBlock: BasicBlock
   currentInstr: IRInstruction | null = null
+  currentInstrId: InstructionId
   instrIndex = 0
   codegen: CodeGenerator
 
@@ -108,16 +111,6 @@ export class InitializationCheckingPass {
       worklist.visited.add(block);
     });
 
-    i = 0
-    for (const param of this.function.params) {
-      const argIndex = i++;
-      if (param.capability === Capability.Sink) {
-        // this.ensureRegisterUninitialized(this.function.parameterRegisters[argIndex]);
-      } else {
-        this.ensureRegisterInitialized(this.function.parameterRegisters[argIndex]);
-      }
-    }
-
     console.log("All checked ok");
   }
 
@@ -137,8 +130,8 @@ export class InitializationCheckingPass {
     while (this.instrIndex < block.instructions.length) {
       const instr = block.instructions[this.instrIndex];
       this.currentInstr = instr;
-      const instrId = new InstructionId(block.label, this.instrIndex);
-      this.executeInstruction(instrId, instr);
+      this.currentInstrId = new InstructionId(block.label, this.instrIndex);
+      this.executeInstruction(instr);
       this.instrIndex++;
     }
 
@@ -151,10 +144,10 @@ export class InitializationCheckingPass {
     this.blockStates.set(block.label, { input: cloneState(inputState), output: cloneState(this.state) });
   }
 
-  executeInstruction(instrId: InstructionId, instr: IRInstruction): void {
+  executeInstruction(instr: IRInstruction): void {
     if (this.debugLog) {
       if (!(instr instanceof CommentInstruction)) {
-        console.log(`${instrId.blockId} ${instrId.instrId}.`, formatInstruction(instr));
+        console.log(`${this.currentInstrId.blockId} ${this.currentInstrId.instrId}.`, formatInstruction(instr));
       }
     }
     if (instr instanceof AssignInstruction)               this.executeAssign(instr);
@@ -170,8 +163,9 @@ export class InitializationCheckingPass {
     else if (instr instanceof JumpInstruction)            { }
     else if (instr instanceof ConditionalJumpInstruction) this.executeConditionalJump(instr);
     else if (instr instanceof EndAccessInstruction)       { }
-    else if (instr instanceof MoveInstruction)            this.executeMove(instrId, instr);
+    else if (instr instanceof MoveInstruction)            this.executeMove(instr);
     else if (instr instanceof MarkInitializedInstruction) this.executeMarkInitialized(instr);
+    else if (instr instanceof DeallocStackInstruction)    this.executeDeallocStackInstruction(instr);
     else if (instr instanceof PhiInstruction)             this.executePhi(instr);
     else if (instr instanceof CommentInstruction)         { }
     else console.error(`Unknown instruction in initialization pass: ${instr.irType}`);
@@ -251,6 +245,17 @@ export class InitializationCheckingPass {
 
   executeReturn(instr: ReturnInstruction): void {
     if (instr.value) this.ensureRegisterInitialized(instr.value);
+
+    let i = 0
+    for (const param of this.function.params) {
+      const argIndex = i++;
+      if (param.capability === Capability.Sink) {
+        // this.ensureRegisterUninitialized(this.function.parameterRegisters[argIndex]);
+        // TODO: Ensure uninitialized by inserting deinit.
+      } else {
+        this.ensureRegisterInitialized(this.function.parameterRegisters[argIndex]);
+      }
+    }
   }
 
   executeGetFieldPointer(instr: GetFieldPointerInstruction): void {
@@ -270,7 +275,8 @@ export class InitializationCheckingPass {
     this.ensureRegisterInitialized(instr.condition);
   }
 
-  executeMove(instrId: InstructionId, instr: MoveInstruction): void {
+  executeMove(instr: MoveInstruction): void {
+    const instrId = this.currentInstrId;
     if (this.debugLog) {
       console.log("MoveInstruction", instr.source, instr.target);
       printLocals(this.state.locals);
@@ -283,12 +289,6 @@ export class InitializationCheckingPass {
     } else compilerAssert(false, `Target is not definitely initialized or uninitialized`);
   }
 
-  replaceMove(instrId: InstructionId, instr: MoveInstruction, capability: Capability) {
-    const block = this.currentBlock!;
-    this.codegen.replaceMoveInstruction(block, instrId, instr, capability);
-    this.instrIndex -- // Revert the index to the start of the inserted instructions
-  }
-
   executeMarkInitialized(instr: MarkInitializedInstruction): void {
     this.updateMemoryForRegister(instr.target, instr.initialized ? TOP : BOTTOM);
     if (this.debugLog) {
@@ -298,8 +298,32 @@ export class InitializationCheckingPass {
     }
   }
 
+  executeDeallocStackInstruction(instr: DeallocStackInstruction): void {
+    const instrId = this.currentInstrId;
+    if (instr.type instanceof PrimitiveType) {
+      // Do nothing for now
+    } else {
+      if (this.isDefinitelyUninitialized(instr.target)) {
+      } else if (this.isDefinitelyInitialized(instr.target)) {
+        this.codegen.replaceDeallocStackInstruction(this.currentBlock, instrId, instr);
+        this.instrIndex -- // Revert the index to the start of the inserted instructions
+      } else compilerAssert(false, `Target is not definitely initialized or uninitialized`);
+    }
+    const addrs = this.state.locals.get(instr.target)
+    compilerAssert(addrs, `Register ${instr.target} is not found`);
+    compilerAssert(addrs.size === 1, `DeallocStackInstruction expects a single address`);
+    const addr = Array.from(addrs)[0];
+    this.state.memory.delete(addr);
+  }
+
   executePhi(instr: PhiInstruction): void {
     this.state.locals.set(instr.dest, new Set([]));
+  }
+
+  replaceMove(instrId: InstructionId, instr: MoveInstruction, capability: Capability) {
+    const block = this.currentBlock!;
+    this.codegen.replaceMoveInstruction(block, instrId, instr, capability);
+    this.instrIndex -- // Revert the index to the start of the inserted instructions
   }
 
   updateMemoryForRegister(register: string, newState: InitializationState): void {

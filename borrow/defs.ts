@@ -48,6 +48,7 @@ export class StoreToAddressInstruction extends IRInstruction {      irType = 'st
 export class LoadFromAddressInstruction extends IRInstruction {     irType = 'load_from_address';     constructor(public dest: string, public type: Type, public address: string) { super(); } }
 export class MoveInstruction extends IRInstruction {                irType = 'move';                  constructor(public target: string, public source: string, public type: Type) { super(); } }
 export class MarkInitializedInstruction extends IRInstruction {     irType = 'mark_initialized';      constructor(public target: string, public initialized: boolean) { super(); } }
+export class DeallocStackInstruction extends IRInstruction {        irType = 'dealloc_stack';         constructor(public target: string, public type: Type) { super(); } }
 export class PhiInstruction extends IRInstruction {                 irType = 'phi';                   constructor(public dest: string, public type: Type, public sources: PhiSource[]) { super(); } }
 export class CommentInstruction extends IRInstruction {             irType = 'comment';               constructor(public comment: string) { super(); } }
 
@@ -150,9 +151,9 @@ export function printIR(blocks: BasicBlock[]) {
     for (const instr of block.instructions) {
       
       if ((instr instanceof CommentInstruction)) {
-        console.log(`  ${formatInstruction(instr)}`);
+        console.log(`\n  # ${instr.comment}`);
       } else {
-        console.log(`${i}.  ${formatInstruction(instr)}`);
+        console.log(`  ${i}.  ${formatInstruction(instr)}`);
       }
       i++
     }
@@ -190,10 +191,12 @@ export function formatInstruction(instr: IRInstruction): string {
     return `into ${instr.target} move from ${instr.source}`;
   } else if (instr instanceof MarkInitializedInstruction) {
     return `mark ${instr.target} as ${instr.initialized ? 'initialized' : 'uninitialized'}`;
+  } else if (instr instanceof DeallocStackInstruction) {
+    return `dealloc_stack ${instr.target}: ${instr.type.shortName}`;
   } else if (instr instanceof PhiInstruction) {
     return `${instr.dest} = phi(${instr.sources.map(x => `${x.value} @ ${x.block}`).join(', ')})`;
   } else if (instr instanceof CommentInstruction) {
-    return `\n# ${instr.comment}`;
+    return `${instr.comment}`;
   } else {
     return `Unknown instruction: ${instr.irType}`;
   }
