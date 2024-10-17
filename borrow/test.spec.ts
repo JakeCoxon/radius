@@ -1,12 +1,12 @@
 import { describe, it, expect } from "bun:test"
-import { CodeGenerator } from "./codegen";
+import { CodeGenerator } from "./codegen_ir";
 import { buildCFG, printCFG, printDominators } from "./controlflow";
 import { AndNode, AssignmentNode, BinaryExpressionNode, BlockStatementNode, CallExpressionNode, CreateStructNode, ExpressionStatementNode, FunctionBlock, FunctionDeclarationNode, FunctionParameterNode, IdentifierNode, IfStatementNode, LiteralNode, MemberExpressionNode, Module, PrintNode, ProgramNode, ReturnNode, VariableDeclarationNode, WhileStatementNode, compilerAssert, printIR, printLivenessMap, textColors } from "./defs";
 import { ExclusivityCheckingPass } from "./exclusivity";
 import { InitializationCheckingPass } from "./initialization";
 import { insertCloseAccesses } from "./liveness";
 import { ReifyAccessPass } from "./reifyaccess";
-import { BasicCompiler } from "./compile.spec";
+import { BasicCompiler } from "./testUtils";
 import { Binding, Capability, CompiledFunction, FunctionParameter, GlobalCompilerState, IntType, VoidType } from "../src/defs";
 import { writeLlvmBytecode } from "./codegen_llvm";
 import { externalBuiltinBindings } from "../src/compiler_sugar";

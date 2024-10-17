@@ -1,5 +1,5 @@
 import { Binding, Capability, ConcreteClassType, Type } from "../src/defs";
-import { CodeGenerator } from "./codegen";
+import { CodeGenerator } from "./codegen_ir";
 import { ControlFlowGraph, buildCFG } from "./controlflow";
 import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, compilerAssert, EndAccessInstruction, PhiInstruction, MoveInstruction, InstructionId, CommentInstruction, textColors, MarkInitializedInstruction, formatInstruction, Module } from "./defs";
 import { Worklist } from "./worklist";

@@ -159,7 +159,6 @@ export class CodeGenerator {
     const capability = Capability.Let
     this.variableMap.set(ast.binding, new Variable(ast.binding.name, type, reg, capability));
     compilerAssert(value, 'Let binding must have an initializer');
-    this.addInstruction(new CommentInstruction(`Initialize ${ast.binding.name}`))
     const ptr = this.storeResult(type, value)
     // compilerAssert(value instanceof Pointer, 'Let binding must have an lvalue initializer');
     this.addInstruction(new AccessInstruction(reg, ptr.address, [Capability.Let]));
@@ -179,7 +178,6 @@ export class CodeGenerator {
       } else {
         this.generateMovePointerInstruction(reg, value, type)
       }
-      this.addInstruction(new CommentInstruction(`end Initialize ${ast.binding.name}`))
     }
   }
 
@@ -358,6 +356,7 @@ export class CodeGenerator {
     } else if (ast.binding === externalBuiltinBindings.print) {
       return this.generatePrint(ast.args[0], context)
     }
+    compilerAssert(ast.binding instanceof Binding, 'Expected binding', { ast });
 
     // Generate code for arguments
     const fn = this.functions.get(ast.binding)

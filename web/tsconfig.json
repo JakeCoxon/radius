@@ -3,6 +3,7 @@
     "lib": ["DOM"],
     "types": [],
     "strictNullChecks": true,
-    "target": "ES2015"
-  }
+    "target": "ES2015",
+  },
+  "exclude": ["stuff"]
 }

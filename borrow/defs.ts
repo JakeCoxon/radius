@@ -2,7 +2,7 @@ import { Binding, Capability, CompiledFunction, FunctionParameter, Type, TypeFie
 
 export function compilerAssert(expected: unknown, message: string="", info: object={}): asserts expected {
   if (expected) return;
-  console.log(info)
+  console.dir(info, { depth: 4 })
   throw new Error(message, info)
 }
 
