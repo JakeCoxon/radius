@@ -40,7 +40,7 @@ export class GetFieldPointerInstruction extends IRInstruction {     irType = 'ge
 export class JumpInstruction extends IRInstruction {                irType = 'jump';                  constructor(public target: string) { super(); } }
 export class ConditionalJumpInstruction extends IRInstruction {     irType = 'cjump';                 constructor(public condition: string, public targetLabel: string, public elseLabel: string) { super(); } }
 export class BinaryOperationInstruction extends IRInstruction {     irType = 'binaryop';              constructor(public dest: string, public type: Type, public operator: string, public left: string, public right: string) { super(); } }
-export class CallInstruction extends IRInstruction {                irType = 'call';                  constructor(public target: string | null, public type: Type, public binding: Binding, public args: string[]) { super(); } }
+export class CallInstruction extends IRInstruction {                irType = 'call';                  constructor(public target: string | null, public type: Type, public binding: Binding, public args: string[], public paramTypes: Type[], public capabilities: Capability[]) { super(); } }
 export class ReturnInstruction extends IRInstruction {              irType = 'return';                constructor(public value: string | null) { super(); } }
 export class AccessInstruction extends IRInstruction {              irType = 'access';                constructor(public dest: string, public source: string, public capabilities: Capability[]) { super(); } }
 export class EndAccessInstruction extends IRInstruction {           irType = 'end_access';            constructor(public source: string, public capabilities: Capability[]) { super(); } }
@@ -146,12 +146,12 @@ export class FunctionParameterNode extends ASTNode {
 
 export function printIR(blocks: BasicBlock[]) {
   for (const block of blocks) {
-    console.log(`\nBlock ${block.label}:`);
+    console.log(textColors.cyan(`\nBlock ${block.label}:`));
     let i = 0;
     for (const instr of block.instructions) {
       
       if ((instr instanceof CommentInstruction)) {
-        console.log(`\n  # ${instr.comment}`);
+        console.log(textColors.gray(`\n  # ${instr.comment}`));
       } else {
         console.log(`  ${i}.  ${formatInstruction(instr)}`);
       }

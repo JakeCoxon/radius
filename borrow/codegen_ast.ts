@@ -1,5 +1,5 @@
 import { externalBuiltinBindings } from "../src/compiler_sugar";
-import { Binding, BindingAst, CallAst, Capability, CompiledClass, CompiledFunction, ConcreteClassType, FieldAst, FunctionParameter, PrimitiveType, RawPointerType, SetFieldAst, SourceLocation, StatementsAst, Type, TypeField, TypeInfo, VoidType } from "../src/defs";
+import { Binding, BindingAst, CallAst, Capability, CompiledClass, CompiledFunction, ConcreteClassType, FieldAst, FunctionParameter, PrimitiveType, RawPointerType, SetFieldAst, SourceLocation, StatementsAst, Type, TypeField, TypeInfo, UserCallAst, VoidType } from "../src/defs";
 import { compilerAssert } from "./defs";
 
 export const generateConstructor = (structName: string, structType: Type) => {
@@ -31,7 +31,7 @@ export const generateConstructor = (structName: string, structType: Type) => {
   });
   const constructorBody = new StatementsAst(VoidType, SourceLocation.anon, fieldAsts);
 
-  const compiledFunc = new CompiledFunction(constructorBinding, {} as any, VoidType, concreteTypes, constructorBody, argBindings, funcParams, [], 0);
+  const compiledFunc = new CompiledFunction(constructorBinding, { debugName: constructorBinding.name } as any, VoidType, concreteTypes, constructorBody, argBindings, funcParams, [], 0);
   return compiledFunc
   // this.allFunctions.set(constructorBinding, compiledFunc);
 }
@@ -59,12 +59,12 @@ export const generateMoveFunction = (structType: Type, fnName: string, destCapab
     const arg = new BindingAst(structType, SourceLocation.anon, srcArgBinding);
     const field = new FieldAst(f.fieldType, SourceLocation.anon, arg, f);
     if (sourceCapability === Capability.Sink) return field;
-    return new CallAst(f.fieldType, SourceLocation.anon, externalBuiltinBindings.copy, [field], []);
+    return new UserCallAst(f.fieldType, SourceLocation.anon, externalBuiltinBindings.copy, [field], []);
   });
-  const call = new CallAst(structType, SourceLocation.anon, constructorBinding, [new BindingAst(setArgBinding.type, SourceLocation.anon, setArgBinding), ...passFieldAsts], []);
+  const call = new UserCallAst(structType, SourceLocation.anon, constructorBinding, [new BindingAst(setArgBinding.type, SourceLocation.anon, setArgBinding), ...passFieldAsts], []);
   const body = new StatementsAst(VoidType, SourceLocation.anon, [call]);
 
-  const compiledFunc = new CompiledFunction(binding, {} as any, VoidType, concreteTypes, body, argBindings, funcParams, [], 0);
+  const compiledFunc = new CompiledFunction(binding, { debugName: fnName } as any, VoidType, concreteTypes, body, argBindings, funcParams, [], 0);
   return compiledFunc
   // this.allFunctions.set(binding, compiledFunc);
   // return binding;

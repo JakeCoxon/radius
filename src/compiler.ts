@@ -1,9 +1,10 @@
-import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, ParseMeta, createAnonymousParserFunctionDecl, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol, ScopeParentSymbol, isPlainObject, ParseLet, ParseList, ParseExpand, ParseBlock, findLabelByBinding, ParseSubscript, ParseNumber, ParseQuote, ParseWhile, ParseOperator, ParseBytecode, ParseOpEq, ParseSet, ParseFreshIden, UnknownObject, ParseNote, DefaultConsAst, RawPointerType, ValueFieldAst, SetValueFieldAst, FloatLiteralType, IntLiteralType, CompilerFunction, DerefAst, SetDerefAst, ParseSlice, CompilerFunctionCallContext, NeverType, LoopObject, CompTimeObjAst, CompileTimeObjectType, NamedArgAst, TypeCheckVar, TypeCheckConfig, u8Type, u64Type, FreshBindingToken, isCompilerCallable, ParseIs, VariantCastAst, EnumVariantAst } from "./defs";
+import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, ParseMeta, createAnonymousParserFunctionDecl, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol, ScopeParentSymbol, isPlainObject, ParseLet, ParseList, ParseExpand, ParseBlock, findLabelByBinding, ParseSubscript, ParseNumber, ParseQuote, ParseWhile, ParseOperator, ParseBytecode, ParseOpEq, ParseSet, ParseFreshIden, UnknownObject, ParseNote, DefaultConsAst, RawPointerType, ValueFieldAst, SetValueFieldAst, FloatLiteralType, IntLiteralType, CompilerFunction, DerefAst, SetDerefAst, ParseSlice, CompilerFunctionCallContext, NeverType, LoopObject, CompTimeObjAst, CompileTimeObjectType, NamedArgAst, TypeCheckVar, TypeCheckConfig, u8Type, u64Type, FreshBindingToken, isCompilerCallable, ParseIs, VariantCastAst, EnumVariantAst, Capability } from "./defs";
 import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, functionCompileTimeCompileTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, compileExportedFunctionTask } from "./compiler_functions";
 import { Event, Task, TaskDef, Unit, isTask, isTaskResult, withContext } from "./tasks";
 import { createCompilerModuleTask, createListConstructor, defaultMetaFunction, guardSugar, ifMultiSugar, isSugar, matchSugar, optionBlockSugar, optionCastSugar, orElseSugar, print, questionSugar } from "./compiler_sugar";
 import { expandDotsSugar, expandFuncAllSugar, expandFuncAnySugar, expandFuncConcatSugar, expandFuncFirstSugar, expandFuncLastSugar, expandFuncMaxSugar, expandFuncMinSugar, expandFuncSumSugar, expandIteratorSugar, foldSugar, forExprSugar, forLoopSugar, listComprehensionSugar, listConstructorSugar, sliceSugar, whileExprSugar } from "./compiler_iterator"
 import { OptionTypeConstructor, calculateSizeOfType, canAssignTypeTo, createParameterizedExternalType, getCommonType, hashValues, isParameterizedTypeOf, propagateLiteralType, propagatedLiteralAst, typeTableGetOrInsert, typecheckEquality, typecheckNumberComparison, typecheckNumberOperator } from "./compilter_types";
+import { generateConstructor, generateMoveFunction } from "../borrow/codegen_ast";
 
 export const pushBytecode = <T extends BytecodeInstr>(out: BytecodeWriter, token: Token, instr: T) => {
   out.bytecode.locations.push(token.location);
@@ -1527,6 +1528,31 @@ export function compileClassTask(ctx: TaskContext, { classDef, typeArgs }: { cla
   
 }
 
+export const generateTypeMethods = (globalCompiler: GlobalCompilerState, type: Type) => {
+
+  const name = type.shortName
+  const typeInfo = type.typeInfo
+
+  const constructor = generateConstructor(name, type);
+  typeInfo.metaobject.constructorBinding = constructor.binding;
+
+  const moveInit = generateMoveFunction(type, `moveInit${name}`, Capability.Set, Capability.Sink);
+  const moveAssign = generateMoveFunction(type, `moveAssign${name}`, Capability.Inout, Capability.Sink);
+  const copyConstructor = generateMoveFunction(type, `copy${name}`, Capability.Set, Capability.Let);
+
+  Object.assign(typeInfo.metaobject, { 
+    moveInitBinding: moveInit.binding,
+    moveAssignBinding: moveAssign.binding,
+    copyConstructorBinding: copyConstructor.binding,
+  })
+
+  globalCompiler.compiledFunctions.set(constructor.binding, constructor)
+  globalCompiler.compiledFunctions.set(moveInit.binding, moveInit)
+  globalCompiler.compiledFunctions.set(moveAssign.binding, moveAssign)
+  globalCompiler.compiledFunctions.set(copyConstructor.binding, copyConstructor)
+
+}
+
 
 function topLevelFunctionDefinitionTask(ctx: TaskContext, funcDecl: ParserFunctionDecl, scope: Scope) {
   const funcDef = insertFunctionDefinition(ctx.globalCompiler, funcDecl)
@@ -1781,10 +1807,14 @@ const createEntryFunctionTask = (ctx: TaskContext) => {
 
   compilerAssert(ctx.globalCompiler.mainFunction, "Expected main function")
 
+  const return_ = ctx.globalCompiler.mainFunction.returnType === VoidType ? 
+    [new NumberAst(IntType, SourceLocation.anon, 0)] : []
+
   // Call initializer and main
-  const ast = new StatementsAst(VoidType, SourceLocation.anon, [
+  const ast = createStatements(SourceLocation.anon, [
     new UserCallAst(VoidType, SourceLocation.anon, ctx.globalCompiler.initializerFunctionBinding, []),
     new UserCallAst(VoidType, SourceLocation.anon, ctx.globalCompiler.mainFunction.binding, []),
+    ...return_,
   ])
 
   const id = func.compiledFunctions.length

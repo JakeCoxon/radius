@@ -8,7 +8,7 @@ import { insertCloseAccesses } from "./liveness";
 import { ReifyAccessPass } from "./reifyaccess";
 import { BasicCompiler } from "./testUtils";
 import { Ast, Binding, Capability, CompiledFunction, FunctionParameter, GlobalCompilerState, IntType, VoidType } from "../src/defs";
-import { writeLlvmBytecode } from "./codegen_llvm";
+import { writeLlvmBytecodeBorrow as writeLlvmBytecodeBorrow } from "./codegen_llvm";
 import { externalBuiltinBindings } from "../src/compiler_sugar";
 
 const DebugLog = true
@@ -82,7 +82,8 @@ const runTest = (name: string, node: ProgramNode) => {
     const globalCompilerState: GlobalCompilerState = {
       compiledIr: new Map(),
       externalDefinitions: [],
-      initializerFunctionBinding: new Binding('initializer', VoidType),
+      // initializerFunctionBinding: new Binding('initializer', VoidType),
+      initializerFunctionBinding: externalBuiltinBindings.initializer,
       exports: {},
       globalLets: [],
       compiledFunctions: new Map(),
@@ -105,7 +106,7 @@ const runTest = (name: string, node: ProgramNode) => {
     const file = Bun.file(`./output/${name}.ll`)
     const bytecodeWriter = file.writer()
 
-    writeLlvmBytecode(globalCompilerState, bytecodeWriter)
+    writeLlvmBytecodeBorrow(globalCompilerState, bytecodeWriter)
     bytecodeWriter.end()
 
 

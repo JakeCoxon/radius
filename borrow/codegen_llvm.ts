@@ -157,6 +157,10 @@ const instructionWriter = {
       format(writer, `  $ = bitcast ptr null to ptr; literal null\n`, dest)
       return
     }
+    if (instr.type === BoolType) {
+      format(writer, `  $ = icmp eq $ 0, 0 ; literal false\n`, dest, instr.type)
+      return
+    }
     compilerAssert(instr.type === IntType || instr.type === u8Type || instr.type === u64Type || instr.type === FloatType || instr.type === DoubleType, "Expected number type got $type", { instr, type: instr.type })
     
     if (instr.type === FloatType) {
@@ -169,13 +173,19 @@ const instructionWriter = {
   },
 
   call: (writer: LlvmFunctionWriter, instr: CallInstruction) => {
+
+    if (instr.binding === externalBuiltinBindings.printf) {
+      format(writer, "  ; TODO printf \n")
+      return
+    }
     const funcName = generateName(writer.writer, instr.binding)
     const args = instr.args
     const fn = writer.writer.globalCompilerState.compiledFunctions.get(instr.binding)
-    compilerAssert(fn, "No function found")
+    compilerAssert(fn, "No function found", { instr })
     const returnType = fn.returnType
     const result = instr.type !== VoidType && defineRegister(writer, "", returnType)
     const paramTypes = fn.parameters.map(x => x.type)
+    
     const argStr = paramTypes.map((type, i) => {
       const reg = writer.writer.registers.get(args[i])
       compilerAssert(reg, "Register not found", { instr })
@@ -200,6 +210,10 @@ const instructionWriter = {
 
   binaryop: (writer: LlvmFunctionWriter, instr: BinaryOperationInstruction) => {
     const dest = defineRegister(writer, instr.dest, instr.type)
+    if (instr.operator === "!") {
+      format(writer, "  $ = xor $ 1, $ ; not\n", dest, instr.type, register(instr.left))
+      return
+    }
     const operatorMap = instr.type === IntType || instr.type === u64Type ? operatorMapSignedInt : instr.type === FloatType || instr.type === DoubleType ? operatorMapFloat : operatorMapLogical
     const operator = operatorMap[instr.operator]
     compilerAssert(operator, "Operator not found", { instr })
@@ -283,7 +297,7 @@ const writeInstructions = (writer: LlvmFunctionWriter, fnIr: FunctionBlock) => {
   })
 }
 
-export const writeLlvmBytecode = (globalCompilerState: GlobalCompilerState, outputWriter: FileWriter) => {
+export const writeLlvmBytecodeBorrow = (globalCompilerState: GlobalCompilerState, outputWriter: FileWriter) => {
   const bytecodeWriter: LlvmWriter = {
     functions: [],
     globalCompilerState,

@@ -120,18 +120,20 @@ const extendLiveness = (liveness: LivenessMap, usages: UsageMap, cfg: ControlFlo
   // should be able to cache the extended livetime
   
   const uses = usages.get(register);
-  compilerAssert(uses, `No uses found for register ${register}`);
+  if (!uses) return
+  // compilerAssert(uses, `No uses found for register ${register}`);
 
   for (const use of uses) {
     const block = cfg.blocks.find(b => b.label === use.instrId.blockId)!;
     const instr = block.instructions[use.instrId.instrId];
     if (instr instanceof AccessInstruction) {
-      mergeLivenessBlocks(liveness[register], liveness[instr.dest])
+      mergeLivenessBlocks(liveness[register], liveness[instr.dest], instr.dest)
     }
   }
 }
 
-const mergeLivenessBlocks = (liveness: Record<string, LivenessState>, other: Record<string, LivenessState>) => {
+// Merges the liveness information from an instruction and an access instruction (as other)
+const mergeLivenessBlocks = (liveness: Record<string, LivenessState>, other: Record<string, LivenessState>, register: string) => {
   for (const [blockId, state] of Object.entries(other)) {
     
     const livenessType = liveness[blockId].livenessType
@@ -148,16 +150,21 @@ const mergeLivenessBlocks = (liveness: Record<string, LivenessState>, other: Rec
     } else if (livenessType === LivenessType.LiveInAndOut || livenessTypeOther === LivenessType.LiveInAndOut) {
       liveness[blockId] = LivenessState.LiveInAndOut;
     } else if (livenessType === LivenessType.Closed && livenessTypeOther === LivenessType.Closed) {
+      liveness[blockId] = LivenessState.Closed(lastUse());
+    } else if (livenessType === LivenessType.LiveIn && livenessTypeOther === LivenessType.Closed) {
+      liveness[blockId] = LivenessState.LiveIn(lastUse());
+    } else {
+      compilerAssert(false, 'Not implemented yet', { blockId, register, liveness: liveness[blockId], other: other[blockId] })
+    }
+    
+    function lastUse() {
       const a = liveness[blockId].lastUse
       const b = other[blockId].lastUse
       compilerAssert(a && b, 'No last use found')
-      const lastUse = a.instrId > b.instrId ? a : b
-      liveness[blockId] = LivenessState.Closed(lastUse);
-    } else {
-      compilerAssert(false, 'Not implemented yet')
-      // liveness[blockId] = LivenessState.LiveIn(null);
+      return a.instrId > b.instrId ? a : b // Rely on the fact that instrId is increasing
     }
   }
+
 }
 
 export const insertCloseAccesses = (cfg: ControlFlowGraph, blocks: BasicBlock[], debugLog: boolean) => {
@@ -193,6 +200,7 @@ export const insertCloseAccesses = (cfg: ControlFlowGraph, blocks: BasicBlock[],
 const closeAccess = (cfg: ControlFlowGraph, liveness: LivenessMap, usage: UsageMap, sourceInstr: AccessInstruction, inserts: InsertMap) => {
   extendLiveness(liveness, usage, cfg, sourceInstr.dest)
   const boundaries = liveness[sourceInstr.dest]
+  if (!boundaries) return
 
   const alreadyClosed = (lastUse: InstructionId | null) => {
     if (!lastUse) return false

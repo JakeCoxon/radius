@@ -216,17 +216,18 @@ export class InitializationCheckingPass {
 
   executeCall(instr: CallInstruction): void {
     compilerAssert(instr.binding && instr.binding instanceof Binding, `Function binding not found`, { instr, b: instr.binding });
-    const fn = this.module.functionMap.get(instr.binding)
-    const fnName = instr.binding.name
-    compilerAssert(fn, `Function ${fnName} not found`);
-    compilerAssert(fn.argBindings.length === instr.args.length, `Function ${fnName} expects ${fn.argBindings.length} arguments, got ${instr.args.length}`);
-    for (let i = 0; i < fn.argBindings.length; i++) {
-      const capability = fn.parameters[i].capability
+    // const fn = this.module.functionMap.get(instr.binding)
+    // const fnName = instr.binding.name
+    // compilerAssert(fn, `Function ${fnName} not found`);
+    // compilerAssert(fn.argBindings.length === instr.args.length, `Function ${fnName} expects ${fn.argBindings.length} arguments, got ${instr.args.length}`);
+    for (let i = 0; i < instr.args.length; i++) {
+      const arg = instr.args[i];
+      const capability = instr.capabilities[i]
       if (capability === Capability.Let || capability === Capability.Inout || capability === Capability.Sink) {
-        this.ensureRegisterInitialized(instr.args[i]);
+        this.ensureRegisterInitialized(arg);
       } else if (capability === Capability.Set) {
-        this.ensureRegisterUninitialized(instr.args[i]);
-        this.updateMemoryForRegister(instr.args[i], TOP); // Initialized
+        this.ensureRegisterUninitialized(arg);
+        this.updateMemoryForRegister(arg, TOP); // Initialized
       } else compilerAssert(false, `Unknown capability ${capability}`);
     }
     if (instr.target) this.updateMemoryForRegister(instr.target, TOP);
@@ -234,7 +235,8 @@ export class InitializationCheckingPass {
 
   executeBinaryOperation(instr: BinaryOperationInstruction): void {
     this.ensureRegisterInitialized(instr.left);
-    this.ensureRegisterInitialized(instr.right);
+    // TODO: BinaryOperationInstruction should be called something else so it allows just 1 param
+    if (instr.right) this.ensureRegisterInitialized(instr.right);
     this.state.locals.set(instr.dest, new Set([]));
   }
 

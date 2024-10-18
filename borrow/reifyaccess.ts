@@ -32,7 +32,12 @@ export class ReifyAccessPass {
       const instrId = worklist.pop()!
       const instr = this.cfg.blocks.find(b => b.label === instrId.blockId)!.instructions[instrId.instrId] as AccessInstruction
       const usageList = usages.get(instr.dest) || []
-      compilerAssert(usageList.length > 0, 'No usage instrs found')
+      if (usageList.length === 0) {
+        // Unused
+        instr.capabilities = [Capability.Let]
+        continue
+      }
+      // compilerAssert(usageList.length > 0, 'No usage instrs found', { dest: instr.dest, instrId, instr })
 
       const { min, max } = usageList.reduce((acc, usage) => {
         const instr = this.cfg.blocks.find(b => b.label === usage.instrId.blockId)!.instructions[usage.instrId.instrId]
