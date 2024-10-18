@@ -1518,6 +1518,8 @@ export function compileClassTask(ctx: TaskContext, { classDef, typeArgs }: { cla
           })
         )
       }
+
+      generateTypeMethods(ctx.globalCompiler, type)
       
       defaultMetaFunction(subCompilerState, compiledClass, definitionScope, templateScope)
 

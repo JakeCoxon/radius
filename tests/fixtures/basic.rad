@@ -1,24 +1,11 @@
 
 fn main():
 
-  if 2 < 3:
-    print("OK")
-  elif 3 > 2:
-    print("wow")
-  elif 3 > 2:
-    print("wow")
-  elif 3 > 2:
-    print("wow")
-  else:
-    print(3)
-
   let zzz = 3
   let z : int = 2
   let x : int = ifx 2 == 2: z else: 2
 
   print(21) if !!!(2 == 2)
 
-  print("thanks")
-  
   if 3 and 2:
-    print("asd")
+    print(1)

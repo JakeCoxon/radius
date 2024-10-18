@@ -230,7 +230,15 @@ export function functionTemplateTypeCheckAndCompileTask(ctx: TaskContext, { func
         compilerAssert(false, "Invalid return type got $got expected $expected", { got: ast.type, expected: result.returnType })
       }
       
-      const parameters = argBindings.map(x => new FunctionParameter(x, x.type, Capability.Let))
+      const parameters = argBindings.map(argBinding => {
+
+        const capability = Capability.Let // default for now
+        // @ParameterPassing
+        const reference = !((capability === Capability.Let || capability === Capability.Sink)
+          && argBinding.type instanceof PrimitiveType);
+        const passingType = reference ? RawPointerType : argBinding.type;
+        return new FunctionParameter(argBinding, argBinding.type, reference, passingType, capability);
+      })
       const compiledFunction = new CompiledFunction(
           binding, func, returnType, result.concreteTypes, ast, argBindings, parameters, typeArgs, typeParamHash);
       ctx.globalCompiler.compiledFunctions.set(binding, compiledFunction);

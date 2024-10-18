@@ -1,15 +1,24 @@
 import { existsSync, unlinkSync, readFileSync, readdirSync } from 'node:fs'
-import { generateCompileCommands, programEntryTask } from '../src/compiler'
-import { BoolType, Closure, CompilerError, DoubleType, ExternalFunction, FloatType, GlobalCompilerState, IntType, Scope, StringType, SubCompilerState, TaskContext, VoidType, compilerAssert, createDefaultGlobalCompiler, createScope, expectMap, BuiltinTypes, ModuleLoader, SourceLocation, textColors, outputSourceLocation, TokenRoot, ParseImport, createAnonymousToken, Logger, Binding, FunctionType, GlobalExternalCompilerOptions, BuildObject } from "../src/defs"; // prettier-ignore
+import { generateCompileCommands, generateTypeMethods, programEntryTask } from '../src/compiler'
+import { BoolType, Closure, CompilerError, DoubleType, ExternalFunction, FloatType, GlobalCompilerState, IntType, Scope, StringType, SubCompilerState, TaskContext, VoidType, compilerAssert, createDefaultGlobalCompiler, createScope, expectMap, BuiltinTypes, ModuleLoader, SourceLocation, textColors, outputSourceLocation, TokenRoot, ParseImport, createAnonymousToken, Logger, Binding, FunctionType, GlobalExternalCompilerOptions, BuildObject, Type, Capability, CompiledFunction, FunctionParameter, Ast } from "../src/defs"; // prettier-ignore
 import { makeParser } from '../src/parser'
 import { Queue, TaskDef, stepQueue, withContext } from '../src//tasks'
 import { expect } from 'bun:test'
-import { VecTypeMetaClass, preloadModuleText, print } from '../src/compiler_sugar'
+import { VecTypeMetaClass, externalBuiltinBindings, preloadModuleText, print } from '../src/compiler_sugar'
 import { FileSink } from 'bun';
 import { writeLlvmBytecode } from '../src/codegen_llvm';
 import { basename, extname, normalize } from 'node:path';
 import { exec } from 'node:child_process';
 import { writeSyntax } from '../src/codegen_syntax';
+import { CodeGenerator } from '../borrow/codegen_ir';
+import { FunctionBlock, Module, printIR } from '../borrow/defs';
+import { generateConstructor, generateMoveFunction } from '../borrow/codegen_ast';
+import { writeLlvmBytecodeBorrow } from '../borrow/codegen_llvm';
+import { buildCFG, printCFG, printDominators } from '../borrow/controlflow';
+import { ReifyAccessPass } from '../borrow/reifyaccess';
+import { InitializationCheckingPass } from '../borrow/initialization';
+import { insertCloseAccesses } from '../borrow/liveness';
+import { ExclusivityCheckingPass } from '../borrow/exclusivity';
 
 const runTestInner = (
   testObject: TestObject,
@@ -75,6 +84,57 @@ export const createModuleLoader = (importPaths: string[]) => {
 
 const originalLog = console.log
 
+const runMandatoryPasses = (codeGenerator: CodeGenerator, mod: Module, fn: FunctionBlock, body: Ast) => {
+  const DebugLog = true
+
+  console.log(textColors.yellow(`\n// ${fn.name} ///////////////////////////////////////////////////////////\n`));
+  fn.params.forEach((p, i) => {
+    console.log(textColors.yellow(`// ${p.binding.name}: ${p.capability} ${p.type.shortName} - ref ${p.reference} - ${fn.parameterRegisters[i]}`));
+  })
+
+  // console.dir(body, { depth: 10 });
+
+
+  // Filter out blocks that are not reachable from the entry block
+  const cfgFirst = buildCFG(fn.blocks)
+  fn.blocks = cfgFirst.blocks.filter(b => cfgFirst.predecessors.get(b)!.length > 0 || b === cfgFirst.entry)
+  
+  printIR(fn.blocks);
+
+  const cfg = buildCFG(fn.blocks)
+  printCFG(cfg)
+  printDominators(cfg)
+
+  const reify = new ReifyAccessPass(cfg);
+  reify.debugLog = DebugLog;
+  reify.reifyAccesses();
+
+  console.log("Reified")
+  printIR(fn.blocks);
+
+  const interpreter = new InitializationCheckingPass(codeGenerator, mod, fn);
+  interpreter.debugLog = DebugLog;
+  interpreter.checkedInterpret();
+
+  console.log("Initialized")
+  printIR(fn.blocks);
+
+  console.log("")
+  insertCloseAccesses(cfg, fn.blocks, DebugLog)
+
+  console.log("Closed access")
+  printIR(fn.blocks);
+
+  const interpreter2 = new ExclusivityCheckingPass(fn)
+  interpreter2.debugLog = DebugLog;
+  interpreter2.checkedInterpret();
+  console.log("")
+
+  console.log(``);
+  printIR(fn.blocks);
+  console.log(`\n/// finished ${fn.name} ///\n`);
+}
+
 export const runCompilerTest = (
   input: string,
   {
@@ -107,6 +167,7 @@ export const runCompilerTest = (
   const queue = new Queue()
 
   const globalCompiler = createDefaultGlobalCompiler()
+  globalCompiler.initializerFunctionBinding = externalBuiltinBindings.initializer
   globalCompiler.logger = logger
   globalCompiler.moduleLoader = moduleLoader || createModuleLoader(testObject.globalOptions.importPaths)
   globalCompiler.rootScope = rootScope
@@ -141,6 +202,24 @@ export const runCompilerTest = (
       writer.write(Bun.inspect(func.body, { depth: 100, colors: true }))
       writer.write('\n\n')
     })
+
+    generateTypeMethods(globalCompiler, StringType)
+
+    const codeGenerator = new CodeGenerator();
+    const mod = new Module()
+    mod.functionMap = globalCompiler.compiledFunctions
+    codeGenerator.functions = globalCompiler.compiledFunctions
+
+    globalCompiler.compiledIr = new Map()
+    globalCompiler.compiledFunctions.forEach((func) => {
+      if (!func.body) return
+      const fn = codeGenerator.generateFunction(func.binding, func.parameters, func.returnType, func.body)
+      runMandatoryPasses(codeGenerator, mod, fn, func.body)
+
+      globalCompiler.compiledIr.set(func.binding, fn)
+    })
+
+    writeLlvmBytecodeBorrow(globalCompiler, writer)
 
     // writeBytecodeFile()
   } catch (ex) {
@@ -343,6 +422,10 @@ export const createTest = ({
   globalThis.console.log = (...args) => {
     originalLog(...args)
     logger.log(...args)
+  }
+  globalThis.console.dir = (arg, opts) => {
+    originalLog(Bun.inspect(arg, { depth: opts.depth, colors: true }))
+    logger.log(Bun.inspect(arg, { depth: opts.depth, colors: true }))
   }
   ;(globalThis as any).logger = logger
 
