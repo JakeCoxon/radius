@@ -24,7 +24,7 @@ const BOTTOM = { kind: 'Bottom' } as const;
 const TOP = { kind: 'Top' } as const;
 
 // Register -> Set of addresses
-// Empty set means unknown
+// Empty set is a special case meanining initialized without a known address
 type LocalMap = Map<string, Set<string>>;
 type MemoryMap = Map<string, InitializationState>; // Address -> Initialization state
 
@@ -245,13 +245,26 @@ export class InitializationCheckingPass {
 
   executeReturn(instr: ReturnInstruction): void {
     if (instr.value) this.ensureRegisterInitialized(instr.value);
+    const instrId = this.currentInstrId;
 
     let i = 0
     for (const param of this.function.params) {
       const argIndex = i++;
       if (param.capability === Capability.Sink) {
-        // this.ensureRegisterUninitialized(this.function.parameterRegisters[argIndex]);
-        // TODO: Ensure uninitialized by inserting deinit.
+        if (this.isDefinitelyInitialized(this.function.parameterRegisters[argIndex])) {
+          // this.ensureRegisterUninitialized(this.function.parameterRegisters[argIndex]);
+          if (this.function.params[argIndex].type instanceof PrimitiveType) {
+            // Do nothing for now
+          } else {
+            this.codegen.insertParamDeallocStackInstruction(this.currentBlock, instrId, argIndex, param.type);
+            this.instrIndex ++ // Skip the return instruction
+          }
+
+        } else if (this.isDefinitelyUninitialized(this.function.parameterRegisters[argIndex])) {
+          // Do nothing
+        } else { // initialized on some paths
+          compilerAssert(false, "Parameter is not definitely initialized or uninitialized", { param, reg: this.function.parameterRegisters[argIndex] })
+        }
       } else {
         this.ensureRegisterInitialized(this.function.parameterRegisters[argIndex]);
       }
@@ -304,6 +317,7 @@ export class InitializationCheckingPass {
       // Do nothing for now
     } else {
       if (this.isDefinitelyUninitialized(instr.target)) {
+        // Do nothing for now
       } else if (this.isDefinitelyInitialized(instr.target)) {
         this.codegen.replaceDeallocStackInstruction(this.currentBlock, instrId, instr);
         this.instrIndex -- // Revert the index to the start of the inserted instructions
@@ -317,7 +331,13 @@ export class InitializationCheckingPass {
   }
 
   executePhi(instr: PhiInstruction): void {
-    this.state.locals.set(instr.dest, new Set([]));
+    // TODO: We should actually copy the state from the block
+    // that we came from. Need a test case for this.
+    // Maybe foo||bar where bar should initialize something
+    const addrs = instr.sources.flatMap(source => {
+      return [...this.state.locals.get(source.value) || []]
+    }) // should be ame as meetLocals
+    this.state.locals.set(instr.dest, new Set(addrs));
   }
 
   replaceMove(instrId: InstructionId, instr: MoveInstruction, capability: Capability) {
@@ -338,17 +358,19 @@ export class InitializationCheckingPass {
   }
 
   isDefinitelyInitialized(register: string): boolean {
-    const locals = this.state.locals.get(register);
-    compilerAssert(locals, `Register ${register} is not found`);
-    return Array.from(locals).every(addr => {
+    const addrs = this.state.locals.get(register);
+    compilerAssert(addrs, `Register ${register} is not found`);
+    if (addrs.size === 0) return true;
+    return Array.from(addrs).every(addr => {
       return isStatePathInitialized(this.state.memory, addr);
     })
   }
 
   isDefinitelyUninitialized(register: string): boolean {
-    const locals = this.state.locals.get(register);
-    compilerAssert(locals, `Register ${register} is not found`);
-    return Array.from(locals).every(addr => {
+    const addrs = this.state.locals.get(register);
+    compilerAssert(addrs, `Register ${register} is not found`);
+    if (addrs.size === 0) return false;
+    return Array.from(addrs).every(addr => {
       return !isStatePathInitialized(this.state.memory, addr);
     })
   }

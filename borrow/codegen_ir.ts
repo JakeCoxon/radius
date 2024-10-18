@@ -64,7 +64,16 @@ export class CodeGenerator {
       // new AccessInstruction(accessReg, instrId.target, [Capability.Set]),
       // new DeallocStackInstruction(accessReg, type),
     );
+  }
 
+  insertParamDeallocStackInstruction(block: BasicBlock, instrId: InstructionId, argIndex: number, type: Type) {
+    // const reg = this.newRegister();
+    // const accessReg = this.newRegister();
+    block.instructions.splice(instrId.instrId, 0, 
+      new CommentInstruction(`TODO: Insert dealloc stack param ${argIndex} of type ${type.shortName}`),
+      // new AccessInstruction(accessReg, instr.value, [Capability.Set]),
+      // new DeallocStackInstruction(accessReg, instr.value),
+    );
   }
 }
 
@@ -106,6 +115,7 @@ class FunctionCodeGenerator {
     if (value instanceof Value) { return value; }
     const reg = this.newRegister();
     const accessReg = this.newRegister();
+    this.addInstruction(new CommentInstruction(`Convert to value ${value.address}`));
     this.addInstruction(new AccessInstruction(accessReg, value.address, [Capability.Let, Capability.Sink]));
     this.addInstruction(new LoadFromAddressInstruction(reg, type, accessReg));
     return new Value(reg);
@@ -114,6 +124,7 @@ class FunctionCodeGenerator {
   // Entry point
   generateFunction(binding: Binding, params: FunctionParameter[], returnType: Type, body: Ast) {
     compilerAssert(!this.currentFunction, 'Already generating in a function');
+    console.log("Begin generating function", binding.name);
 
     const entryLabel = this.newLabel();
     const entryBlock = new BasicBlock(entryLabel, []);
@@ -283,6 +294,7 @@ class FunctionCodeGenerator {
     compilerAssert(value, 'Let binding must have an initializer');
     const ptr = this.storeResult(type, value)
     // compilerAssert(value instanceof Pointer, 'Let binding must have an lvalue initializer');
+    this.addInstruction(new CommentInstruction(`Projection ${ast.binding.name}`))
     this.addInstruction(new AccessInstruction(reg, ptr.address, [Capability.Let]));
   }
 
@@ -294,12 +306,11 @@ class FunctionCodeGenerator {
     
     this.variableMap.set(ast.binding, new Variable(ast.binding.name, type, reg, capability));
     
-    if (value) {
-      if (value instanceof Value) {
-        this.generateMoveInstruction(reg, value, type)
-      } else {
-        this.generateMovePointerInstruction(reg, value, type)
-      }
+    if (!value) return
+    if (value instanceof Value) {
+      this.generateMoveInstruction(reg, value, type)
+    } else {
+      this.generateMovePointerInstruction(reg, value, type)
     }
   }
 
@@ -433,7 +444,7 @@ class FunctionCodeGenerator {
     const argReg = this.generateExpression(ast, { valueCategory: 'rvalue' });
     // if (ast.type instanceof PrimitiveType) {
       const value = this.toValue(ast.type, argReg)
-      this.addInstruction(new AccessInstruction(newReg, value.register, [Capability.Let]));
+      this.addInstruction(new AccessInstruction(newReg, value.register, [capability]));
     // } else {
       // compilerAssert(argReg instanceof Pointer, "Expected pointer")
       // this.addInstruction(new AccessInstruction(newReg, argReg.address, [Capability.Let]));
@@ -592,6 +603,7 @@ class FunctionCodeGenerator {
     const objReg = this.generateExpression(ast.left, { valueCategory: 'lvalue' });
     compilerAssert(objReg instanceof Pointer, 'Object must be an pointer');
     const destReg = this.newRegister();
+    this.addInstruction(new CommentInstruction(`Get field ${ast.field.name}`))
     this.addInstruction(new GetFieldPointerInstruction(destReg, objReg.address, ast.field));
     return new Pointer(destReg);
   }

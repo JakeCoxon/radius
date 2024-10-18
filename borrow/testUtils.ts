@@ -222,6 +222,8 @@ export class BasicCompiler {
       const func = this.getFunction(node.callee);
       compilerAssert(func, 'Function not found', { ast: node });
       const args = node.args.map(x => this.compile(x));
+      compilerAssert(func.parameters.length === args.length, 'Argument count mismatch', { func, args });
+      compilerAssert(func.parameters.every((param, i) => param.type === args[i].type), 'Argument type mismatch', { params: func.parameters.map(x => x.binding.type), args: args.map(x => x.type) });
       const binding = func.binding;
       compilerAssert(binding && binding instanceof Binding, 'Binding not found', { ast: node });
       return new CallAst(func.returnType, SourceLocation.anon, binding, args, []);
@@ -233,7 +235,7 @@ export class BasicCompiler {
         if (value.type === IntType) return new CallAst(VoidType, SourceLocation.anon, externalBuiltinBindings.printInt, [value], []);
         return new CallAst(VoidType, SourceLocation.anon, externalBuiltinBindings.print, [value], []);
       } else if (node.name === 'copy') {
-        return new CallAst(VoidType, SourceLocation.anon, externalBuiltinBindings.copy, [value], []);
+        return new CallAst(value.type, SourceLocation.anon, externalBuiltinBindings.copy, [value], []);
       } else compilerAssert(false, 'Builtin not found', { ast: node });
     }
 

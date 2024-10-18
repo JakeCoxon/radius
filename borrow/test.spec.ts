@@ -7,14 +7,20 @@ import { InitializationCheckingPass } from "./initialization";
 import { insertCloseAccesses } from "./liveness";
 import { ReifyAccessPass } from "./reifyaccess";
 import { BasicCompiler } from "./testUtils";
-import { Binding, Capability, CompiledFunction, FunctionParameter, GlobalCompilerState, IntType, VoidType } from "../src/defs";
+import { Ast, Binding, Capability, CompiledFunction, FunctionParameter, GlobalCompilerState, IntType, VoidType } from "../src/defs";
 import { writeLlvmBytecode } from "./codegen_llvm";
 import { externalBuiltinBindings } from "../src/compiler_sugar";
 
 const DebugLog = true
 
-const runMandatoryPasses = (codeGenerator: CodeGenerator, mod: Module, fn: FunctionBlock) => {
+const runMandatoryPasses = (codeGenerator: CodeGenerator, mod: Module, fn: FunctionBlock, body: Ast) => {
   console.log(textColors.yellow(`\n// ${fn.name} ///////////////////////////////////////////////////////////\n`));
+  fn.params.forEach((p, i) => {
+    console.log(textColors.yellow(`// ${p.binding.name}: ${p.capability} ${p.type.shortName} - ref ${p.reference} - ${fn.parameterRegisters[i]}`));
+  })
+
+  // console.dir(body, { depth: 10 });
+
 
   // Filter out blocks that are not reachable from the entry block
   const cfgFirst = buildCFG(fn.blocks)
@@ -53,6 +59,7 @@ const runMandatoryPasses = (codeGenerator: CodeGenerator, mod: Module, fn: Funct
 
   console.log(``);
   printIR(fn.blocks);
+  console.log(`\n/// finished ${fn.name} ///\n`);
 }
 const runTest = (name: string, node: ProgramNode) => {
   try {
@@ -87,7 +94,7 @@ const runTest = (name: string, node: ProgramNode) => {
     for (const fn of codeGenerator.functions.values()) {
       if (!fn.body) continue
       const ir = codeGenerator.generateFunction(fn.binding, fn.parameters, fn.returnType, fn.body)
-      runMandatoryPasses(codeGenerator, mod, ir)
+      runMandatoryPasses(codeGenerator, mod, ir, fn.body)
 
       globalCompilerState.compiledIr.set(fn.binding, ir)
     }
@@ -255,6 +262,47 @@ describe("integration", () => {
       )
     ]);
     runTest("testControlFlow", ast)
+  })
+
+  it('testControlFlowPartial', () => {
+    // AST representing:
+    // var x: int
+    // if (1) {
+    //   x = 1;
+    // }
+    // use(x + 3)
+    const ast = new ProgramNode([
+      new VariableDeclarationNode('x', true, 'int'),
+      new FunctionDeclarationNode(
+        'use',
+        [
+          new FunctionParameterNode('z', 'int', Capability.Let),
+        ],
+        'void',
+        new BlockStatementNode([])
+      ),
+      new IfStatementNode(
+        new LiteralNode(1),
+        new BlockStatementNode([
+          new ExpressionStatementNode(
+            new AssignmentNode(
+              new IdentifierNode('x'),
+              new LiteralNode(1)
+            )
+          )
+        ])
+      ),
+      new ExpressionStatementNode(
+        new CallExpressionNode('use', [
+          new BinaryExpressionNode(
+            '+',
+            new IdentifierNode('x'),
+            new LiteralNode(3)
+          )
+        ])
+      )
+    ]);
+    expect(() => runTest("testControlFlowPartial", ast)).toThrow("not definitely initialized")
   })
 
   it('testControlFlowImmutable', () => {
@@ -1632,5 +1680,63 @@ describe("integration", () => {
       )
     ]);
     runTest("testCopy", ast)
+  });
+
+  it('testSinkPrimitiveField', () => {
+    // AST representing:
+    // fn thing(p: sink int) {
+    // }
+    // var p1 = Point{2, 3}
+    // thing(p1.x)
+
+    const ast = new ProgramNode([
+      new FunctionDeclarationNode(
+        'thing',
+        [
+          new FunctionParameterNode('p', 'int', Capability.Sink),
+        ],
+        'void',
+        new BlockStatementNode([])
+      ),
+      new VariableDeclarationNode('p1', true, 'Point',
+        new CreateStructNode('Point', [new LiteralNode(2), new LiteralNode(3)])
+      ),
+      new ExpressionStatementNode(
+        new CallExpressionNode('thing', [
+          new MemberExpressionNode(new IdentifierNode('p1'), 'Point', 'x')
+        ])
+      ),
+    ]);
+    runTest("testSinkPrimitiveField", ast)
+  });
+
+  it('testCopySinkPrimitiveField', () => {
+    // AST representing:
+    // fn thing(p: sink int) {
+    // }
+    // var p1 = Point{2, 3}
+    // thing(p1.x.copy)
+
+    const ast = new ProgramNode([
+      new FunctionDeclarationNode(
+        'thing',
+        [
+          new FunctionParameterNode('p', 'int', Capability.Sink),
+        ],
+        'void',
+        new BlockStatementNode([])
+      ),
+      new VariableDeclarationNode('p1', true, 'Point',
+        new CreateStructNode('Point', [new LiteralNode(2), new LiteralNode(3)])
+      ),
+      new ExpressionStatementNode(
+        new CallExpressionNode('thing', [
+          new BuiltinNode('copy',
+            new MemberExpressionNode(new IdentifierNode('p1'), 'Point', 'x')
+          )
+        ])
+      ),
+    ]);
+    runTest("testCopySinkPrimitiveField", ast)
   });
 })

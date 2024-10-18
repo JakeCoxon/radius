@@ -1,6 +1,6 @@
 import { Capability, FunctionParameter, Type } from "../src/defs";
 import { ControlFlowGraph, buildCFG } from "./controlflow";
-import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, compilerAssert, EndAccessInstruction, PhiInstruction, textColors, InstructionId, CommentInstruction, getInstructionResult, DeallocStackInstruction } from "./defs";
+import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, compilerAssert, EndAccessInstruction, PhiInstruction, textColors, InstructionId, CommentInstruction, getInstructionResult, DeallocStackInstruction, CallExpressionNode, MarkInitializedInstruction } from "./defs";
 import { Worklist } from "./worklist";
 
 type BorrowedItem = {
@@ -141,13 +141,17 @@ export class ExclusivityCheckingPass {
     else if (instr instanceof LoadFromAddressInstruction) this.handleLoadFromAddressInstruction(instr);
     else if (instr instanceof GetFieldPointerInstruction) this.handleGetFieldPointerInstruction(instr);
     else if (instr instanceof BinaryOperationInstruction) this.handleBinaryOperationInstruction(instr);
+    else if (instr instanceof CallInstruction)            { }
+    else if (instr instanceof MarkInitializedInstruction) { }
+    else if (instr instanceof StoreToAddressInstruction)  { }
+    else if (instr instanceof ReturnInstruction)          { }
     else if (instr instanceof JumpInstruction)            { }
     else if (instr instanceof ConditionalJumpInstruction) { }
     else if (instr instanceof EndAccessInstruction)       this.endAccess(instrId, instr);
     else if (instr instanceof DeallocStackInstruction)    this.handleDeallocStackInstruction(instr);
     else if (instr instanceof PhiInstruction)             this.handlePhiInstruction(instr);
     else if (instr instanceof CommentInstruction)         { }
-    else console.error(`Unknown instruction in exclusivity pass: ${instr.irType}`)
+    else compilerAssert(false, `Unknown instruction in exclusivity pass: ${instr.irType}`)
   }
 
   handleAssignInstruction(instr: AssignInstruction): void {
@@ -255,7 +259,8 @@ export class ExclusivityCheckingPass {
         }
       }
       if (exclusiveBorrows.length > 0) {
-        compilerAssert(false, "Cannot access (already mutably borrowed)", { exclusiveBorrows })
+        const str = newBorrowIsLet ? "already mutably borrowed" : "already immutably borrowed"
+        compilerAssert(false, `Cannot access with ${capability} (${str})`, { exclusiveBorrows })
       }
       
       newBorrows.push(newBorrow)
