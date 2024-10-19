@@ -214,10 +214,11 @@ const instructionWriter = {
       format(writer, "  $ = xor $ 1, $ ; not\n", dest, instr.type, register(instr.left))
       return
     }
-    const operatorMap = instr.type === IntType || instr.type === u64Type ? operatorMapSignedInt : instr.type === FloatType || instr.type === DoubleType ? operatorMapFloat : operatorMapLogical
+    const paramType = instr.paramType
+    const operatorMap = paramType === IntType || paramType === u64Type ? operatorMapSignedInt : paramType === FloatType || paramType === DoubleType ? operatorMapFloat : operatorMapLogical
     const operator = operatorMap[instr.operator]
     compilerAssert(operator, "Operator not found", { instr })
-    format(writer, "  $ = $ $ $, $\n", dest, operator, instr.type, register(instr.left), register(instr.right))
+    format(writer, "  $ = $ $ $, $\n", dest, operator, paramType, register(instr.left), register(instr.right))
   },
 
   store_to_address: (writer: LlvmFunctionWriter, instr: StoreToAddressInstruction) => {

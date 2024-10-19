@@ -320,7 +320,7 @@ class FunctionCodeGenerator {
     const v = this.toValue(ast.type, value)
     const reg = this.newRegister();
     this.addInstruction(new CommentInstruction(`Cast ${ast.type.shortName}`))
-    this.addInstruction(new BinaryOperationInstruction(reg, ast.type, 'cast', v.register, ''));
+    this.addInstruction(new BinaryOperationInstruction(reg, ast.type, 'cast', v.register, '', ast.expr.type));
     return new Value(reg);
   }
 
@@ -631,7 +631,7 @@ class FunctionCodeGenerator {
     const lvalue = this.storeResult(type, newLocal)
 
     this.generateMovePointerInstruction(variable.register, lvalue, type)
-    compilerAssert(variable.capability === Capability.Inout, 'Cannot assign to a let variable');
+    compilerAssert(variable.capability === Capability.Inout || variable.capability === Capability.Set, 'Cannot assign to a let variable');
   }
 
   generateAssignmentField(ast: SetFieldAst) {
@@ -692,7 +692,7 @@ class FunctionCodeGenerator {
     const rightReg = this.toValue(ast.args[1].type, this.generateExpression(ast.args[1], context))
 
     const resultReg = this.newRegister();
-    this.addInstruction(new BinaryOperationInstruction(resultReg, ast.type, ast.operator, leftReg.register, rightReg.register));
+    this.addInstruction(new BinaryOperationInstruction(resultReg, ast.type, ast.operator, leftReg.register, rightReg.register, ast.args[0].type));
     if (context.valueCategory === 'lvalue') {
       return this.storeResult(ast.type, new Value(resultReg))
     }
@@ -703,7 +703,7 @@ class FunctionCodeGenerator {
     const value = this.generateExpression(ast.expr, context);
     compilerAssert(value instanceof Value, 'Not expression must be an RValue');
     const resultReg = this.newRegister();
-    this.addInstruction(new BinaryOperationInstruction(resultReg, ast.type, '!', value.register, ''));
+    this.addInstruction(new BinaryOperationInstruction(resultReg, ast.type, '!', value.register, '', ast.expr.type));
     return new Value(resultReg);
   }
 

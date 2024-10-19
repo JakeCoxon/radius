@@ -762,6 +762,7 @@ export const writeLlvmBytecode = (globalCompilerState: GlobalCompilerState, outp
 
   Array.from(globalCompilerState.compiledFunctions.values()).map(func => {
     generateName(bytecodeWriter, func.binding, true)
+    if (!func.body) return
     const funcWriter = writeLlvmBytecodeFunction(bytecodeWriter, func)
     return funcWriter
   })

@@ -120,7 +120,7 @@
 		"keywords": {
 			"patterns": [{
 				"name": "keyword.control.radius",
-				"match": "\\b(and|as\\!|as\\?|as|break|class|continue|comptime|const|def|defn|elif|else|fn|for|guard|if|ifx|in|is|lambda|let|match|meta|null|or|orelse|pass|return|try|while|with|type|interface|import|block|fold|ref|var)\\b"
+				"match": "\\b(and|as\\!|as\\?|as|break|class|continue|comptime|const|def|defn|elif|else|fn|for|guard|if|ifx|in|inout|is|lambda|let|match|meta|null|or|orelse|pass|return|set|sink|try|while|with|type|interface|import|block|fold|ref|var)\\b"
 			}]
 		},
 		"operators": {

@@ -204,7 +204,8 @@ export function functionTemplateTypeCheckAndCompileTask(ctx: TaskContext, { func
   
   func.params.forEach(({ name, type, storage }, i) => {
     const binding = new Binding(name.token.value, result.concreteTypes[i]);
-    binding.storage = storage
+    binding.storage = storage // TODO: Use Capability
+    compilerAssert(storage !== 'ref', "Not implemented yet. use capability")
     binding.definitionCompiler = subCompilerState
     templateScope[name.token.value] = binding
     argBindings.push(binding)
@@ -230,9 +231,9 @@ export function functionTemplateTypeCheckAndCompileTask(ctx: TaskContext, { func
         compilerAssert(false, "Invalid return type got $got expected $expected", { got: ast.type, expected: result.returnType })
       }
       
-      const parameters = argBindings.map(argBinding => {
+      const parameters = argBindings.map((argBinding, i) => {
 
-        const capability = Capability.Let // default for now
+        const capability = func.params[i].capability
         // @ParameterPassing
         const reference = !((capability === Capability.Let || capability === Capability.Sink)
           && argBinding.type instanceof PrimitiveType);

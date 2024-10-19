@@ -72,6 +72,7 @@ export type ParserFunctionParameter = {
   name: ParseIdentifier | ParseFreshIden,
   type: ParseNode | null,
   storage: 'ref' | null
+  capability: Capability
 }
 // These are reference types that id will be filled in later.
 export type ParserFunctionDecl = {

@@ -1,8 +1,8 @@
-import { ParseAnd, ParseNode, ParseBreak, ParseCall, ParseCast, ParseCompTime, ParseContinue, ParseDict, ParseExpand, ParseField, ParseFor, ParseForExpr, ParseIf, ParseLet, ParseLetConst, ParseList, ParseListComp, ParseMeta, ParseNot, ParseNumber, ParseOpEq, ParseOperator, ParseOr, ParseReturn, ParseSet, ParseStatements, ParseString, ParseIdentifier, ParseWhile, ParseWhileExpr, ParserFunctionDecl, Token, compilerAssert, ParsePostCall, ParseSymbol, ParseNote, ParseSlice, ParseSubscript, ParserClassDecl, ParseClass, ParseFunction, createToken, ParseBoolean, ParseElse, ParseMetaIf, ParseMetaFor, ParseBlock, ParseImport, ParsedModule, Source, ParseMetaWhile, ParseTuple, ParseImportName, ParseFold, ParserFunctionParameter, ParseNamedArg, ParseIs, ParseOrElse, ParseIterator, ParseQuestion, ParseExtract, ParseMatch, ParseMatchCase, ParseGuard, createAnonymousToken, ParseLetAs, ParseIfMulti } from "./defs";
+import { ParseAnd, ParseNode, ParseBreak, ParseCall, ParseCast, ParseCompTime, ParseContinue, ParseDict, ParseExpand, ParseField, ParseFor, ParseForExpr, ParseIf, ParseLet, ParseLetConst, ParseList, ParseListComp, ParseMeta, ParseNot, ParseNumber, ParseOpEq, ParseOperator, ParseOr, ParseReturn, ParseSet, ParseStatements, ParseString, ParseIdentifier, ParseWhile, ParseWhileExpr, ParserFunctionDecl, Token, compilerAssert, ParsePostCall, ParseSymbol, ParseNote, ParseSlice, ParseSubscript, ParserClassDecl, ParseClass, ParseFunction, createToken, ParseBoolean, ParseElse, ParseMetaIf, ParseMetaFor, ParseBlock, ParseImport, ParsedModule, Source, ParseMetaWhile, ParseTuple, ParseImportName, ParseFold, ParserFunctionParameter, ParseNamedArg, ParseIs, ParseOrElse, ParseIterator, ParseQuestion, ParseExtract, ParseMatch, ParseMatchCase, ParseGuard, createAnonymousToken, ParseLetAs, ParseIfMulti, Capability } from "./defs";
 
 const regexes = {
   KEYWORD:
-    /^(?:and|as\!|as\?|as|break|class|continue|comptime|const|def|defn|elif|else|fn|for|guard|if|ifx|in|is|iter|lambda|let|match|meta|null|or|orelse|pass|return|try|while|with|type|interface|import|block|fold|ref|var)(?=\W)/, // note (?=\W)
+    /^(?:and|as\!|as\?|as|break|class|continue|comptime|const|def|defn|elif|else|fn|for|guard|if|ifx|in|inout|is|iter|lambda|let|match|meta|null|or|orelse|pass|return|set|sink|try|while|with|type|interface|import|block|fold|ref|var)(?=\W)/, // note (?=\W)
   IDENTIFIER: /^[a-zA-Z_][a-zA-Z_0-9]*/,
   STRING: /^(?:"(?:[^"\\]|\\.)*")/,
   SPECIALNUMBER: /^0o[0-7]+|^0x[0-9a-fA-F_]+|^0b[01_]+/,
@@ -388,10 +388,11 @@ export const makeParser = (input: string, debugName: string) => {
   };
   const parseExpr = parseDots;
 
+  const expectCapability = () => match("let") ? Capability.Let : match("inout") ? Capability.Inout : match("sink") ? Capability.Sink : match("set") ? Capability.Set : Capability.Let
   const parseFunctionParam = (): ParserFunctionParameter => {
     const name = expectIdentifier()
-    if (match(":")) return { name, storage: match('ref') ? 'ref' : null, type: parseExpr() };
-    return { name, storage: null, type: null };
+    if (match(":")) return { name, storage: match('ref') ? 'ref' : null, capability: expectCapability(), type: parseExpr() };
+    return { name, storage: null, capability: Capability.Let, type: null };
   };
   const parseFunctionParamList = (final: string = ")") => {
     if (match(final)) return [];

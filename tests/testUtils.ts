@@ -193,6 +193,15 @@ export const runCompilerTest = (
 
   globalCompiler.externalCompilerOptions.globalOptions = testObject.globalOptions
 
+  {
+    const printInt = externalBuiltinBindings.printInt
+    const printArg = new Binding('printArg', VoidType)
+    globalCompiler.compiledFunctions.set(printInt,
+      new CompiledFunction(printInt, { debugName: "printInt" } as any, VoidType, [IntType], null!, [printArg], [
+        new FunctionParameter(printArg, IntType, false, IntType, Capability.Let)
+      ], [], 0))
+  }
+
   try {
     runTestInner(testObject, queue, input, `${testObject.moduleName}.rad`, globalCompiler)
 
@@ -219,7 +228,7 @@ export const runCompilerTest = (
       globalCompiler.compiledIr.set(func.binding, fn)
     })
 
-    writeLlvmBytecodeBorrow(globalCompiler, writer)
+    // writeLlvmBytecodeBorrow(globalCompiler, writer)
 
     // writeBytecodeFile()
   } catch (ex) {
@@ -309,7 +318,7 @@ export const writeLlvmBytecodeFile = async (testObject: TestObject) => {
   const file = Bun.file(path)
   const bytecodeWriter = file.writer()
   try {
-    writeLlvmBytecode(testObject.globalCompiler, bytecodeWriter)
+    writeLlvmBytecodeBorrow(testObject.globalCompiler, bytecodeWriter)
   } catch(ex) {
     // console.log(ex)
     logError(ex, testObject.logger)

@@ -2,6 +2,12 @@ type Foo:
   x: int
   y: float
 
+fn bar(x: inout int):
+  x += 1
+
+fn baz(foo: inout Foo):
+  foo.x += 1
+
 fn main():
 
   let zzz = 3
@@ -9,11 +15,22 @@ fn main():
   # let x: int = ifx 2 == 2: z else: 2
   let x = z + 232
 
-  let foo = Foo(1, 2.0)
+  var foo = Foo(1, 2.0)
+  foo.x += 1
+  print(foo.x)
+
+  bar(foo.x)
+  print(foo.x)
+  baz(foo)
+  print(foo.x)
+
+  while foo.x < 10:
+    foo.x += 1
+
   print(foo.x)
 
   if !!!(2 == 2):
     print(21) 
 
-  if 3 and 2:
+  if 3 == 1 and 2 > 1:
     print(1)
