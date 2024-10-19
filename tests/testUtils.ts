@@ -1,16 +1,16 @@
 import { existsSync, unlinkSync, readFileSync, readdirSync } from 'node:fs'
-import { generateCompileCommands, generateTypeMethods, programEntryTask } from '../src/compiler'
-import { BoolType, Closure, CompilerError, DoubleType, ExternalFunction, FloatType, GlobalCompilerState, IntType, Scope, StringType, SubCompilerState, TaskContext, VoidType, compilerAssert, createDefaultGlobalCompiler, createScope, expectMap, BuiltinTypes, ModuleLoader, SourceLocation, textColors, outputSourceLocation, TokenRoot, ParseImport, createAnonymousToken, Logger, Binding, FunctionType, GlobalExternalCompilerOptions, BuildObject, Type, Capability, CompiledFunction, FunctionParameter, Ast } from "../src/defs"; // prettier-ignore
+import { generateCompileCommands, programEntryTask } from '../src/compiler'
+import { BoolType, Closure, CompilerError, DoubleType, ExternalFunction, FloatType, GlobalCompilerState, IntType, Scope, StringType, SubCompilerState, TaskContext, VoidType, compilerAssert, createDefaultGlobalCompiler, createScope, expectMap, BuiltinTypes, ModuleLoader, SourceLocation, textColors, outputSourceLocation, TokenRoot, ParseImport, createAnonymousToken, Logger, Binding, FunctionType, GlobalExternalCompilerOptions, BuildObject, Type, Capability, CompiledFunction, FunctionParameter, Ast, RawPointerType } from "../src/defs"; // prettier-ignore
 import { makeParser } from '../src/parser'
 import { Queue, TaskDef, stepQueue, withContext } from '../src//tasks'
 import { expect } from 'bun:test'
-import { VecTypeMetaClass, externalBuiltinBindings, preloadModuleText, print } from '../src/compiler_sugar'
+import { VecTypeMetaClass, externalBuiltinBindings, generateTypeMethods, preloadModuleText, print } from '../src/compiler_sugar'
 import { FileSink } from 'bun';
 import { writeLlvmBytecode } from '../src/codegen_llvm';
 import { basename, extname, normalize } from 'node:path';
 import { exec } from 'node:child_process';
 import { writeSyntax } from '../src/codegen_syntax';
-import { CodeGenerator } from '../borrow/codegen_ir';
+import { CodeGenerator, FunctionCodeGenerator } from '../borrow/codegen_ir';
 import { FunctionBlock, Module, printIR } from '../borrow/defs';
 import { generateConstructor, generateMoveFunction } from '../borrow/codegen_ast';
 import { writeLlvmBytecodeBorrow } from '../borrow/codegen_llvm';
@@ -84,7 +84,7 @@ export const createModuleLoader = (importPaths: string[]) => {
 
 const originalLog = console.log
 
-const runMandatoryPasses = (codeGenerator: CodeGenerator, mod: Module, fn: FunctionBlock, body: Ast) => {
+const runMandatoryPasses = (fnGenerator: FunctionCodeGenerator, mod: Module, fn: FunctionBlock, body: Ast) => {
   const DebugLog = true
 
   console.log(textColors.yellow(`\n// ${fn.name} ///////////////////////////////////////////////////////////\n`));
@@ -112,7 +112,7 @@ const runMandatoryPasses = (codeGenerator: CodeGenerator, mod: Module, fn: Funct
   console.log("Reified")
   printIR(fn.blocks);
 
-  const interpreter = new InitializationCheckingPass(codeGenerator, mod, fn);
+  const interpreter = new InitializationCheckingPass(fnGenerator, mod, fn);
   interpreter.debugLog = DebugLog;
   interpreter.checkedInterpret();
 
@@ -201,6 +201,22 @@ export const runCompilerTest = (
         new FunctionParameter(printArg, IntType, false, IntType, Capability.Let)
       ], [], 0))
   }
+  {
+    const malloc = externalBuiltinBindings.malloc
+    const sizeArg = new Binding('sizeArg', VoidType)
+    globalCompiler.compiledFunctions.set(malloc,
+      new CompiledFunction(malloc, { debugName: "malloc" } as any, RawPointerType, [IntType], null!, [sizeArg], [
+        new FunctionParameter(sizeArg, IntType, false, IntType, Capability.Let)
+      ], [], 0))
+  }
+  {
+    const free = externalBuiltinBindings.free
+    const pointerArg = new Binding('pointerArg', VoidType)
+    globalCompiler.compiledFunctions.set(free,
+      new CompiledFunction(free, { debugName: "free" } as any, RawPointerType, [IntType], null!, [pointerArg], [
+        new FunctionParameter(pointerArg, RawPointerType, false, RawPointerType, Capability.Let)
+      ], [], 0))
+  }
 
   try {
     runTestInner(testObject, queue, input, `${testObject.moduleName}.rad`, globalCompiler)
@@ -222,8 +238,9 @@ export const runCompilerTest = (
     globalCompiler.compiledIr = new Map()
     globalCompiler.compiledFunctions.forEach((func) => {
       if (!func.body) return
-      const fn = codeGenerator.generateFunction(func.binding, func.parameters, func.returnType, func.body)
-      runMandatoryPasses(codeGenerator, mod, fn, func.body)
+      const fnGenerator = codeGenerator.functionGenerator(func)
+      const fn = fnGenerator.generateFunction(func.binding, func.parameters, func.returnType, func.body)
+      runMandatoryPasses(fnGenerator, mod, fn, func.body)
 
       globalCompiler.compiledIr.set(func.binding, fn)
     })

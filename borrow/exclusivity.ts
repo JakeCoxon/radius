@@ -1,6 +1,6 @@
 import { Capability, FunctionParameter, Type } from "../src/defs";
 import { ControlFlowGraph, buildCFG } from "./controlflow";
-import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, compilerAssert, EndAccessInstruction, PhiInstruction, textColors, InstructionId, CommentInstruction, getInstructionResult, DeallocStackInstruction, CallExpressionNode, MarkInitializedInstruction } from "./defs";
+import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, compilerAssert, EndAccessInstruction, PhiInstruction, textColors, InstructionId, CommentInstruction, getInstructionResult, DeallocStackInstruction, CallExpressionNode, MarkInitializedInstruction, PointerOffsetInstruction } from "./defs";
 import { Worklist } from "./worklist";
 
 type BorrowedItem = {
@@ -44,7 +44,8 @@ export class ExclusivityCheckingPass {
     } catch (e) {
       console.error(e)
       console.log("State:")
-      console.log(this.state)
+      printLocals(this.state.locals)
+      printMemory(this.state.memory)
       throw e
     }
   }
@@ -140,6 +141,7 @@ export class ExclusivityCheckingPass {
     else if (instr instanceof AccessInstruction)          this.access(instrId, instr);
     else if (instr instanceof LoadFromAddressInstruction) this.handleLoadFromAddressInstruction(instr);
     else if (instr instanceof GetFieldPointerInstruction) this.handleGetFieldPointerInstruction(instr);
+    else if (instr instanceof PointerOffsetInstruction)   this.handlePointerOffsetInstruction(instr);
     else if (instr instanceof BinaryOperationInstruction) this.handleBinaryOperationInstruction(instr);
     else if (instr instanceof CallInstruction)            { }
     else if (instr instanceof MarkInitializedInstruction) { }
@@ -178,6 +180,13 @@ export class ExclusivityCheckingPass {
     compilerAssert(this.state.locals.get(instr.dest) === undefined, `Register ${instr.dest} is already initialized`);
     const fields = [...addresses].map(addr => `${addr}.${instr.field.index}`);
     this.state.locals.set(instr.dest, new Set(fields));
+  }
+
+  handlePointerOffsetInstruction(instr: PointerOffsetInstruction): void {
+    const addresses = this.state.locals.get(instr.address);
+    compilerAssert(addresses, `Register ${instr.address} is not found`);
+    compilerAssert(this.state.locals.get(instr.dest) === undefined, `Register ${instr.dest} is already initialized`);
+    this.state.locals.set(instr.dest, new Set([]));
   }
 
   handleBinaryOperationInstruction(instr: BinaryOperationInstruction): void {
@@ -259,7 +268,7 @@ export class ExclusivityCheckingPass {
         }
       }
       if (exclusiveBorrows.length > 0) {
-        const str = newBorrowIsLet ? "already mutably borrowed" : "already immutably borrowed"
+        const str = newBorrowIsLet ? "already mutably borrowed" : "already borrowed"
         compilerAssert(false, `Cannot access with ${capability} (${str})`, { exclusiveBorrows })
       }
       

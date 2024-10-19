@@ -37,12 +37,13 @@ export class AssignInstruction extends IRInstruction {              irType = 'as
 export class LoadConstantInstruction extends IRInstruction {        irType = 'loadconst';             constructor(public dest: string, public type: Type, public value: number) { super(); } }
 export class AllocInstruction extends IRInstruction {               irType = 'alloc';                 constructor(public dest: string, public type: Type) { super(); } }
 export class GetFieldPointerInstruction extends IRInstruction {     irType = 'getfieldptr';           constructor(public dest: string, public address: string, public field: TypeField) { super(); } }
+export class PointerOffsetInstruction extends IRInstruction {       irType = 'pointer_offset';        constructor(public dest: string, public address: string, public fieldType: Type, public offsetReg: string) { super(); } }
 export class JumpInstruction extends IRInstruction {                irType = 'jump';                  constructor(public target: string) { super(); } }
 export class ConditionalJumpInstruction extends IRInstruction {     irType = 'cjump';                 constructor(public condition: string, public targetLabel: string, public elseLabel: string) { super(); } }
 export class BinaryOperationInstruction extends IRInstruction {     irType = 'binaryop';              constructor(public dest: string, public type: Type, public operator: string, public left: string, public right: string, public paramType: Type) { super(); } }
 export class CallInstruction extends IRInstruction {                irType = 'call';                  constructor(public target: string | null, public type: Type, public binding: Binding, public args: string[], public paramTypes: Type[], public capabilities: Capability[]) { super(); } }
 export class ReturnInstruction extends IRInstruction {              irType = 'return';                constructor(public value: string | null) { super(); } }
-export class AccessInstruction extends IRInstruction {              irType = 'access';                constructor(public dest: string, public source: string, public capabilities: Capability[]) { super(); } }
+export class AccessInstruction extends IRInstruction {              irType = 'access';                constructor(public dest: string, public source: string, public capabilities: Capability[], public type: Type) { super(); } }
 export class EndAccessInstruction extends IRInstruction {           irType = 'end_access';            constructor(public source: string, public capabilities: Capability[]) { super(); } }
 export class StoreToAddressInstruction extends IRInstruction {      irType = 'store_to_address';      constructor(public address: string, public type: Type, public source: string) { super(); } }
 export class LoadFromAddressInstruction extends IRInstruction {     irType = 'load_from_address';     constructor(public dest: string, public type: Type, public address: string) { super(); } }
@@ -187,6 +188,8 @@ export function formatInstruction(instr: IRInstruction): string {
     return `end_access [${instr.capabilities.join(', ')}] ${instr.source}`;
   } else if (instr instanceof GetFieldPointerInstruction) {
     return `${instr.dest} = offset address ${instr.address} .${instr.field.index}`;
+  } else if (instr instanceof PointerOffsetInstruction) {
+    return `${instr.dest} = offset address ${instr.address} by ${instr.offsetReg} ${instr.fieldType.shortName}`;
   } else if (instr instanceof MoveInstruction) {
     return `into ${instr.target} move from ${instr.source}`;
   } else if (instr instanceof MarkInitializedInstruction) {

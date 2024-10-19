@@ -1,7 +1,7 @@
 import { Binding, Capability, ConcreteClassType, PrimitiveType, Type } from "../src/defs";
-import { CodeGenerator } from "./codegen_ir";
+import { CodeGenerator, FunctionCodeGenerator } from "./codegen_ir";
 import { ControlFlowGraph, buildCFG } from "./controlflow";
-import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, compilerAssert, EndAccessInstruction, PhiInstruction, MoveInstruction, InstructionId, CommentInstruction, textColors, MarkInitializedInstruction, formatInstruction, Module, DeallocStackInstruction } from "./defs";
+import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, compilerAssert, EndAccessInstruction, PhiInstruction, MoveInstruction, InstructionId, CommentInstruction, textColors, MarkInitializedInstruction, formatInstruction, Module, DeallocStackInstruction, PointerOffsetInstruction } from "./defs";
 import { Worklist } from "./worklist";
 
 type InitializationState = Top | Bottom | Sequence;
@@ -46,11 +46,9 @@ export class InitializationCheckingPass {
   currentInstr: IRInstruction | null = null
   currentInstrId: InstructionId
   instrIndex = 0
-  codegen: CodeGenerator
 
-  constructor(codegen: CodeGenerator, public module: Module, fn: FunctionBlock) {
+  constructor(public fnGenerator: FunctionCodeGenerator, public module: Module, fn: FunctionBlock) {
     this.function = fn;
-    this.codegen = codegen;
     // Build the CFG
     this.cfg = buildCFG(fn.blocks);
   }
@@ -160,6 +158,7 @@ export class InitializationCheckingPass {
     else if (instr instanceof LoadFromAddressInstruction) this.executeLoadFromAddress(instr);
     else if (instr instanceof ReturnInstruction)          this.executeReturn(instr);
     else if (instr instanceof GetFieldPointerInstruction) this.executeGetFieldPointer(instr);
+    else if (instr instanceof PointerOffsetInstruction)   this.executePointerOffset(instr);
     else if (instr instanceof JumpInstruction)            { }
     else if (instr instanceof ConditionalJumpInstruction) this.executeConditionalJump(instr);
     else if (instr instanceof EndAccessInstruction)       { }
@@ -168,7 +167,7 @@ export class InitializationCheckingPass {
     else if (instr instanceof DeallocStackInstruction)    this.executeDeallocStackInstruction(instr);
     else if (instr instanceof PhiInstruction)             this.executePhi(instr);
     else if (instr instanceof CommentInstruction)         { }
-    else console.error(`Unknown instruction in initialization pass: ${instr.irType}`);
+    else compilerAssert(false, `Unknown instruction in initialization pass: ${instr.irType}`);
   }
 
   executeAssign(instr: AssignInstruction): void {
@@ -206,9 +205,12 @@ export class InitializationCheckingPass {
       this.ensureRegisterInitialized(instr.source);
     } else if (instr.capabilities[0] === Capability.Set) {
       if (!this.isDefinitelyUninitialized(instr.source)) {
-        this.currentBlock!.instructions.splice(this.instrIndex, 0, new CommentInstruction(`Inserted uninitialize for ${instr.source}`));
+        if (this.isDefinitelyInitialized(instr.source)) {
+          const instrs = this.fnGenerator.createDeallocStackInstructions(instr.source, instr.type);
+          this.fnGenerator.spliceInstructions(this.currentBlock, this.currentInstrId, 0, instrs);
+          this.instrIndex++; // Skip the inserted instruction
+        } else compilerAssert(false, `Source is not definitely initialized or uninitialized`, { instr });
         this.updateMemoryForRegister(instr.source, BOTTOM);
-        this.instrIndex++;
       }
     }
     this.state.locals.set(instr.dest, this.state.locals.get(instr.source)!);
@@ -258,7 +260,8 @@ export class InitializationCheckingPass {
           if (this.function.params[argIndex].type instanceof PrimitiveType) {
             // Do nothing for now
           } else {
-            this.codegen.insertParamDeallocStackInstruction(this.currentBlock, instrId, argIndex, param.type);
+            const instrs = this.fnGenerator.createParamDeallocStackInstructions(this.currentBlock, instrId, argIndex, param.type);
+            this.fnGenerator.spliceInstructions(this.currentBlock, instrId, 0, instrs);
             this.instrIndex ++ // Skip the return instruction
           }
 
@@ -284,6 +287,12 @@ export class InitializationCheckingPass {
       printLocals(this.state.locals);
       printMemory(this.state.memory);
     }
+  }
+
+  executePointerOffset(instr: PointerOffsetInstruction): void {
+    this.ensureRegisterInitialized(instr.address);
+    this.ensureRegisterInitialized(instr.offsetReg);
+    this.state.locals.set(instr.dest, new Set([]));
   }
 
   executeConditionalJump(instr: ConditionalJumpInstruction): void {
@@ -316,13 +325,15 @@ export class InitializationCheckingPass {
   executeDeallocStackInstruction(instr: DeallocStackInstruction): void {
     const instrId = this.currentInstrId;
     if (instr.type instanceof PrimitiveType) {
-      this.codegen.replaceInstruction(this.currentBlock, instrId, new MarkInitializedInstruction(instr.target, false));
+      this.fnGenerator.replaceInstruction(this.currentBlock, instrId, new MarkInitializedInstruction(instr.target, false));
     } else {
       if (this.isDefinitelyUninitialized(instr.target)) {
-        this.codegen.replaceInstruction(this.currentBlock, instrId, new MarkInitializedInstruction(instr.target, false));
+        this.fnGenerator.replaceInstruction(this.currentBlock, instrId, new MarkInitializedInstruction(instr.target, false));
       } else if (this.isDefinitelyInitialized(instr.target)) {
-        this.codegen.replaceDeallocStackInstruction(this.currentBlock, instrId, instr);
+        const instrs = this.fnGenerator.createDeallocStackInstructions(instr.target, instr.type);
+        this.fnGenerator.spliceInstructions(this.currentBlock, instrId, 1, instrs);
         this.instrIndex -- // Revert the index to the start of the inserted instructions
+        return // Dont update memory yet
       } else compilerAssert(false, `Target is not definitely initialized or uninitialized`);
     }
     const addrs = this.state.locals.get(instr.target)
@@ -344,7 +355,7 @@ export class InitializationCheckingPass {
 
   replaceMove(instrId: InstructionId, instr: MoveInstruction, capability: Capability) {
     const block = this.currentBlock!;
-    this.codegen.replaceMoveInstruction(block, instrId, instr, capability);
+    this.fnGenerator.replaceMoveInstruction(block, instrId, instr, capability);
     this.instrIndex -- // Revert the index to the start of the inserted instructions
   }
 

@@ -1,6 +1,16 @@
-type Foo:
+import compiler
+
+type Foo @struct:
   x: int
   y: float
+
+type Array!(T) @struct:
+  len: int
+  data: rawptr
+
+  const __destructor = denit_array
+  const __set_subscript = set_array
+  const __subscript = get_array
 
 fn bar(x: inout int):
   x += 1
@@ -8,7 +18,41 @@ fn bar(x: inout int):
 fn baz(foo: inout Foo):
   foo.x += 1
 
+fn init_array!(T)(arr: inout Array!T, len: int):
+  arr.len = len + 0
+  arr.data = malloc(len * (meta T.sizeof))
+
+fn set_array!(T)(arr: inout Array!T, index: int, value: sink T) @inline:
+  compiler.unsafe_set_subscript(arr.data, index, value)
+
+fn get_array!(T)(arr: Array!T, index: int) -> T @inline:
+  compiler.unsafe_subscript!T(arr.data, index)
+
+fn denit_array!(T)(arr: sink Array!T):
+  free(arr.data)
+
+fn test_array1():
+
+  var arr: Array!int = Array!int(3, rawptr(0))
+  init_array(arr, 10)
+
+  arr[0] = 10
+  arr[1] = 20
+  print(arr[0])
+
+fn test_array2():
+
+  var arr = Array!Foo(3, rawptr(0))
+  init_array(arr, 10)
+
+  arr[0] = Foo(3, 2.0)
+  arr[1] = Foo(4, 3.0)
+  print(arr[0].x)
+
 fn main():
+
+  test_array1()
+  test_array2()
 
   let zzz = 3
   let z: int = 2
@@ -28,6 +72,7 @@ fn main():
     foo.x += 1
 
   print(foo.x)
+
 
   if !!!(2 == 2):
     print(21) 

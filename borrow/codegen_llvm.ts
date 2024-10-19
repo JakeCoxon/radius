@@ -1,6 +1,6 @@
 import { externalBuiltinBindings } from "../src/compiler_sugar";
 import { Ast, AstType, AstWriterTable, Binding, BindingAst, BlockAst, BoolType, CallAst, Capability, CompiledFunction, ConcreteClassType, ConstructorAst, DefaultConsAst, DoubleType, FileWriter, FloatType, FunctionType, GlobalCompilerState, IntType, LetAst, ListTypeConstructor, LlvmFunctionWriter, LlvmWriter, NeverType, NumberAst, ParameterizedType, Pointer, PrimitiveType, RawPointerType, Register, SetAst, SourceLocation, StatementsAst, StringType, Type, TypeField, UserCallAst, ValueFieldAst, VoidType, compilerAssert, isAst, isType, textColors, u64Type, u8Type } from "../src/defs";
-import { AccessInstruction, AllocInstruction, BinaryOperationInstruction, CallInstruction, CommentInstruction, ConditionalJumpInstruction, EndAccessInstruction, formatInstruction, FunctionBlock, GetFieldPointerInstruction, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, MarkInitializedInstruction, PhiInstruction, ReturnInstruction, StoreToAddressInstruction } from "./defs";
+import { AccessInstruction, AllocInstruction, BinaryOperationInstruction, CallInstruction, CommentInstruction, ConditionalJumpInstruction, EndAccessInstruction, formatInstruction, FunctionBlock, GetFieldPointerInstruction, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, MarkInitializedInstruction, PhiInstruction, PointerOffsetInstruction, ReturnInstruction, StoreToAddressInstruction } from "./defs";
 
 // Some useful commands
 //
@@ -242,6 +242,17 @@ const instructionWriter = {
     format(writer, "  $ = getelementptr inbounds $, $ $, i32 0, i32 $\n", dest, sourceType, pointerType, source, field.index)
   },
 
+  pointer_offset: (writer: LlvmFunctionWriter, instr: PointerOffsetInstruction) => {
+    const source = writer.writer.registers.get(instr.address)
+    compilerAssert(source, "Register not found", { instr })
+    const dest = defineRegister(writer, instr.dest, RawPointerType)
+    const sourceType = getDataTypeName(writer.writer, instr.fieldType);
+    const pointerType = getPointerName(writer, instr.fieldType);
+    const offset = writer.writer.registers.get(instr.offsetReg)
+    compilerAssert(offset, "Register not found", { instr })
+    format(writer, "  $ = getelementptr inbounds $, $ $, i32 $\n", dest, sourceType, pointerType, source, offset)
+  },
+
   phi: (writer: LlvmFunctionWriter, instr: PhiInstruction) => {
     const dest = defineRegister(writer, instr.dest, instr.type)
     const sources = instr.sources.map(source => {
@@ -291,9 +302,9 @@ const writeInstructions = (writer: LlvmFunctionWriter, fnIr: FunctionBlock) => {
 
     block.instructions.forEach(instr => {
       
-      const f = (instructionWriter as any)[instr.irType]
-      if (f) f(writer, instr)
-      else format(writer, "  ; $ not implemented\n", instr.irType)
+      const func = (instructionWriter as any)[instr.irType]
+      compilerAssert(func, `Instruction not found ${instr.irType}`, { instr })
+      func(writer, instr)
     })
   })
 }
@@ -345,7 +356,7 @@ export const writeLlvmBytecodeBorrow = (globalCompilerState: GlobalCompilerState
 
   globalCompilerState.externalDefinitions.forEach(external => {
     // The global name is important to link
-    insertGlobal(external.binding, `@${external.name}`)
+    insertGlobal(external.binding, `@${cleanName(external.name)}`)
 
     const args = external.paramTypes.map((type, i) => getTypeName(bytecodeWriter, type) ).join(", ")
     format(bytecodeWriter, "declare $ $($)\n", external.returnType, external.binding, args)
@@ -413,11 +424,12 @@ const defaultValueLiteral = (writer: LlvmWriter, type: Type): string => {
   }
 }
 
+const cleanName = (name: string) => name.replace(/[^a-zA-Z0-9_\.]/g, ' ').trim().replace(/ +/g, '_')
 const generateName = (writer: LlvmWriter, binding: Binding, global = false) => {
   if (writer.globalNames.get(binding)) {
     return writer.globalNames.get(binding)!
   }
-  let name = binding.name.replace(/[^a-zA-Z0-9_\.]/g, ' ').trim().replace(/ +/g, '_')
+  let name = cleanName(binding.name)
   if (global) name = `@${name}`
   else name = `%${name}`
 

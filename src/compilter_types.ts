@@ -1,4 +1,4 @@
-import { Ast, BoolType, ClassDefinition, Closure, CompilerError, ConcreteClassType, DoubleType, EnumVariantAst, ExternalTypeConstructor, FloatLiteralType, FloatType, FunctionDefinition, GlobalCompilerState, IntLiteralType, IntType, NeverType, NumberAst, OperatorAst, ParameterizedType, PrimitiveType, SourceLocation, StatementsAst, Tuple, Type, TypeCheckConfig, TypeCheckVar, TypeConstructor, TypeField, TypeMatcher, TypeTable, TypeVariable, UnknownObject, VariantCastAst, compilerAssert, getUniqueId, isType, u64Type, u8Type } from "./defs"
+import { Ast, BoolType, ClassDefinition, Closure, CompilerError, ConcreteClassType, DoubleType, EnumVariantAst, ExternalTypeConstructor, FloatLiteralType, FloatType, FunctionDefinition, GlobalCompilerState, IntLiteralType, IntType, NeverType, NumberAst, OperatorAst, ParameterizedType, ParseCall, ParseIdentifier, ParseNode, PrimitiveType, Scope, ScopeParentSymbol, SourceLocation, StatementsAst, Tuple, Type, TypeCheckConfig, TypeCheckResult, TypeCheckVar, TypeConstructor, TypeField, TypeMatcher, TypeTable, TypeVariable, UnknownObject, VariantCastAst, VoidType, compilerAssert, getUniqueId, isType, u64Type, u8Type } from "./defs"
 import { Task } from "./tasks"
 
 export const isTypeInteger = (type: Type) => type === IntType || type === u64Type || type === u8Type
@@ -129,6 +129,60 @@ export const typeMatcherEquals = (matcher: TypeMatcher, expected: Type, substitu
     compilerAssert(false, "Not implemented", { matcher, expected })
   }
   return test(matcher, expected)
+}
+
+// Adds a special typeCheckResult field and sets checkFailed so we see what exactly failed
+export function typeCheckAssert(result: TypeCheckResult, condition: boolean, message: string, info: object = {}): asserts condition { 
+  if (!condition) result.checkFailed = true
+  compilerAssert(condition, message, {...info })
+}
+
+export const expandMatcher = (result: TypeCheckResult, matcher: Type | TypeMatcher | TypeVariable): Type => {
+  if (isType(matcher)) return matcher
+  if (matcher instanceof TypeVariable) {
+    let type = result.substitutions[matcher.name]
+    compilerAssert(type, "Type variable $name not found", { name: matcher.name, substitutions: result.substitutions })
+    compilerAssert(isType(type), "Expected type got $type", { type, substitutions: result.substitutions })
+    return type
+  }
+  compilerAssert(false, "Not implemented yet", { matcher })
+}
+
+export const isTypeOrMatcher = (type: unknown): type is Type | TypeMatcher | TypeVariable => {
+  return isType(type) || type instanceof TypeMatcher || type instanceof TypeVariable
+}
+
+export const typeCheckFunctionResult = (result: TypeCheckResult, compiledParamTypes: unknown[], returnType: unknown) => {
+
+  compiledParamTypes.forEach((paramType, i) => {
+    const givenArg = result.sortedArgs[i]
+    const fromType: TypeCheckVar = { type: givenArg.type }
+    if (isType(paramType)) normalizeNumberType(fromType, { type: paramType })
+    numberTypeToConcrete(fromType)
+
+    if (paramType === null) {
+    } else if (paramType instanceof TypeMatcher) {
+      const matches = typeMatcherEquals(paramType, fromType.type, result.substitutions)
+      typeCheckAssert(result, matches, "Type check failed. Expected $expected got $got", { expected: paramType, got: fromType.type })
+    } else if (paramType instanceof TypeVariable) {
+      if (result.substitutions[paramType.name]) {
+        compilerAssert(result.substitutions[paramType.name] === fromType.type, "Expected type $expected got $got", { expected: result.substitutions[paramType.name], got: fromType.type })
+      }
+      result.substitutions[paramType.name] = fromType.type
+    } else {
+      compilerAssert(isType(paramType), "Expected type got $paramType", { paramType });
+      const param = result.func.params[i]
+      typeCheckAssert(result, fromType.type === paramType, "Argument $name of type $value does not match $expected", { name: param.name.token, value: fromType.type, expected: paramType })
+    }
+
+    compilerAssert(fromType.type !== IntLiteralType && fromType.type !== FloatLiteralType, "Unexpected literal type", { type: result.concreteTypes.at(-1) })
+
+    result.concreteTypes.push(fromType.type)
+  })
+
+  compilerAssert(isTypeOrMatcher(returnType), "Expected type got $returnType", { returnType })
+  result.returnType = expandMatcher(result, returnType)
+
 }
 
 export const isParameterizedTypeOf = (a: Type, expected: TypeConstructor): a is ParameterizedType => {

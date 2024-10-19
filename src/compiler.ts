@@ -4,7 +4,6 @@ import { Event, Task, TaskDef, Unit, isTask, isTaskResult, withContext } from ".
 import { createCompilerModuleTask, createListConstructor, defaultMetaFunction, guardSugar, ifMultiSugar, isSugar, matchSugar, optionBlockSugar, optionCastSugar, orElseSugar, print, questionSugar } from "./compiler_sugar";
 import { expandDotsSugar, expandFuncAllSugar, expandFuncAnySugar, expandFuncConcatSugar, expandFuncFirstSugar, expandFuncLastSugar, expandFuncMaxSugar, expandFuncMinSugar, expandFuncSumSugar, expandIteratorSugar, foldSugar, forExprSugar, forLoopSugar, listComprehensionSugar, listConstructorSugar, sliceSugar, whileExprSugar } from "./compiler_iterator"
 import { OptionTypeConstructor, calculateSizeOfType, canAssignTypeTo, createParameterizedExternalType, getCommonType, hashValues, isParameterizedTypeOf, propagateLiteralType, propagatedLiteralAst, typeTableGetOrInsert, typecheckEquality, typecheckNumberComparison, typecheckNumberOperator } from "./compilter_types";
-import { generateConstructor, generateMoveFunction } from "../borrow/codegen_ast";
 
 export const pushBytecode = <T extends BytecodeInstr>(out: BytecodeWriter, token: Token, instr: T) => {
   out.bytecode.locations.push(token.location);
@@ -995,14 +994,13 @@ const instructions: InstructionMapping = {
         );
       }
 
-      compilerAssert(isType(expr), "Expected type got $expr", { expr })
-
       if (expr instanceof ClassDefinition) {
         return (toType(expr).chainFn((task, type) => {
           vm.stack.push(calculateSizeOfType(type)); return Task.success()
         }))
       }
 
+      compilerAssert(isType(expr), "Expected type got $expr", { expr })
       vm.stack.push(calculateSizeOfType(expr))
       return
     }
@@ -1513,46 +1511,23 @@ export function compileClassTask(ctx: TaskContext, { classDef, typeArgs }: { cla
               const fnctx: CompilerFunctionCallContext = { location: SourceLocation.anon, compilerState: ctx.subCompilerState, resultAst: undefined, typeCheckResult: undefined }
               func.func(fnctx, [compiledClass])
             } else compilerAssert(false, "Not implemented yet", { func })
-            defaultMetaFunction(subCompilerState, compiledClass, definitionScope, templateScope)
-            return Task.of(returnType)
+            
+            return (
+              defaultMetaFunction(subCompilerState, compiledClass, definitionScope, templateScope)
+              .chainFn(() => Task.of(returnType))
+            )
           })
         )
       }
 
-      generateTypeMethods(ctx.globalCompiler, type)
-      
-      defaultMetaFunction(subCompilerState, compiledClass, definitionScope, templateScope)
-
-      return Task.of(returnType)
+      return (
+        defaultMetaFunction(subCompilerState, compiledClass, definitionScope, templateScope)
+        .chainFn(() => Task.of(returnType))
+      )
 
     })
   )
   
-}
-
-export const generateTypeMethods = (globalCompiler: GlobalCompilerState, type: Type) => {
-
-  const name = type.shortName
-  const typeInfo = type.typeInfo
-
-  const constructor = generateConstructor(name, type);
-  typeInfo.metaobject.constructorBinding = constructor.binding;
-
-  const moveInit = generateMoveFunction(type, `moveInit${name}`, Capability.Set, Capability.Sink);
-  const moveAssign = generateMoveFunction(type, `moveAssign${name}`, Capability.Inout, Capability.Sink);
-  const copyConstructor = generateMoveFunction(type, `copy${name}`, Capability.Set, Capability.Let);
-
-  Object.assign(typeInfo.metaobject, { 
-    moveInitBinding: moveInit.binding,
-    moveAssignBinding: moveAssign.binding,
-    copyConstructorBinding: copyConstructor.binding,
-  })
-
-  globalCompiler.compiledFunctions.set(constructor.binding, constructor)
-  globalCompiler.compiledFunctions.set(moveInit.binding, moveInit)
-  globalCompiler.compiledFunctions.set(moveAssign.binding, moveAssign)
-  globalCompiler.compiledFunctions.set(copyConstructor.binding, copyConstructor)
-
 }
 
 

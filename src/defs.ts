@@ -337,6 +337,7 @@ export enum Capability {
 }
 
 export class CompiledFunction {
+  isDestructor: boolean = false
   constructor(
     public binding: Binding,
     public functionDefinition: FunctionDefinition,
@@ -659,6 +660,7 @@ export type TypeCheckVar = { type: Type }
 export type TypeCheckConfig = { a: TypeCheckVar, b: TypeCheckVar, inferType: Type | null }
 
 export type TypeCheckResult = {
+  func: FunctionDefinition
   concreteTypes: Type[]
   substitutions: UnknownObject
   returnType: Type
