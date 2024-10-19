@@ -405,9 +405,10 @@ const astWriter: LlvmAstWriterTable = {
   },
 
   block: (writer, ast) => {
-    // Funky stuff with impliti returns, break with expression etc
+    // Funky stuff with implicit returns, break with expression etc
     // This could probably be a prepass before codegen, along with other stuff like interleave tracking
-    if (ast.breakExprBinding) writeExpr(writer, new LetAst(VoidType, ast.location, ast.breakExprBinding, new DefaultConsAst(ast.type, ast.location)))
+    // TODO: Use IR pass for this
+    if (ast.breakExprBinding) writeExpr(writer, new LetAst(VoidType, ast.location, ast.breakExprBinding, new DefaultConsAst(ast.type, ast.location), true))
     writer.blocks.push({ binding: ast.binding, breakExprBinding: ast.breakExprBinding }) // not strictly necessary?
     let result = null
     const rewriteImplicitReturn = ast.breakExprBinding && ast.body.type !== VoidType && ast.body.type !== NeverType

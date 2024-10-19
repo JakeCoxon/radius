@@ -162,7 +162,7 @@ const arrayConstructorFinish = new ExternalFunction('arrayConstructorFinish', Vo
   compilerAssert(constructor.arrayConstructor, "Expected array constructor", { constructor })
   const binding = constructor.constructorBinding
   compilerAssert(binding, "Expected list binding", { constructor })
-  const let_ = new LetAst(VoidType, ctx.location, binding, constructor.arrayConstructor)
+  const let_ = new LetAst(VoidType, ctx.location, binding, constructor.arrayConstructor, true)
   const bindingAst = new BindingAst(binding.type, ctx.location, binding)
   return createStatements(ctx.location, [let_, ...constructor.calls, bindingAst])
 })
@@ -699,7 +699,7 @@ const createFreshLet = new ExternalFunction('createFreshLet', VoidType, (ctx, va
   let [value] = values
   compilerAssert(isAst(value), "Expected ast", { value })
   const binding = new Binding("defer", value.type)
-  return new LetAst(binding.type, ctx.location, binding, value)
+  return new LetAst(binding.type, ctx.location, binding, value, true)
 })
 
 const createDeferTypeCheckingIden = (expansion: ExpansionCompilerState, defaultNode: ParseNode) => {
@@ -1001,7 +1001,7 @@ const generatorInternal = (
       compilerAssert(entryParam instanceof Binding)
       return Task.of(
         new StatementsAst(VoidType, ctx.location, [
-          new LetAst(VoidType, ctx.location, entryParam, new DefaultConsAst(entryParam.type, ctx.location)),
+          new LetAst(VoidType, ctx.location, entryParam, new DefaultConsAst(entryParam.type, ctx.location), true),
           interleave.buildAst(ctx.location, a, b)
         ])
       )

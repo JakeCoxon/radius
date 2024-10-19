@@ -1,11 +1,19 @@
+type Foo:
+  x: int
+  y: float
 
 fn main():
 
   let zzz = 3
-  let z : int = 2
-  let x : int = ifx 2 == 2: z else: 2
+  let z: int = 2
+  # let x: int = ifx 2 == 2: z else: 2
+  let x = z + 232
 
-  print(21) if !!!(2 == 2)
+  let foo = Foo(1, 2.0)
+  print(foo.x)
+
+  if !!!(2 == 2):
+    print(21) 
 
   if 3 and 2:
     print(1)

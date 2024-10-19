@@ -254,7 +254,7 @@ export type BytecodeInstr =
   { type: 'orast', count: number } |
   { type: 'ifast', f: boolean, e: boolean } |
   { type: 'notast' } |
-  { type: 'letast', name: string, t: boolean, v: boolean } |
+  { type: 'letast', name: string, t: boolean, v: boolean, mutable: boolean } |
   { type: 'letmetaast', t: boolean, v: boolean } |
   { type: 'letmatchast', t: boolean, v: boolean } |
   { type: 'callast', name: string, count: number, tcount: number, method?: boolean } |
@@ -561,6 +561,13 @@ export class PrimitiveType extends TypeRoot {
   }
 }
 
+export class BasicType extends TypeRoot {
+  constructor(public name: string, public typeInfo: TypeInfo) { super() }
+  get shortName() { return this.name }
+  [Inspect.custom](depth: any, options: any, inspect: any) {
+    return options.stylize(`[BasicType ${this.name}]`, 'special');
+  }
+}
 export class ConcreteClassType extends TypeRoot {
   constructor(public compiledClass: CompiledClass, public typeInfo: TypeInfo) { super() }
   get shortName() { return this.compiledClass.debugName }
@@ -601,7 +608,7 @@ export class ExternalTypeConstructor {
   }
 }
 
-export type Type = PrimitiveType | ConcreteClassType | ParameterizedType
+export type Type = PrimitiveType | ConcreteClassType | ParameterizedType | BasicType
 export type TypeConstructor = ExternalTypeConstructor | ClassDefinition // Type constructor for already-compiled types
 export const isType = (type: unknown): type is Type => !!type && type instanceof TypeRoot
 
@@ -698,7 +705,7 @@ export const AstType =          new PrimitiveType("ast",           { sizeof: 0, 
 export const CompileTimeObjectType = new PrimitiveType("ctobj",    { sizeof: 0, fields: [], metaobject: Object.create(null), isReferenceType: false })
 
 export const StringType = (() => {
-  const type = new PrimitiveType("string", { sizeof: 0, fields: [], metaobject: Object.create(null), isReferenceType: false })
+  const type = new BasicType("string", { sizeof: 0, fields: [], metaobject: Object.create(null), isReferenceType: false })
   type.typeInfo.fields.push(new TypeField(SourceLocation.anon, "length", type, 0, IntType))
   type.typeInfo.fields.push(new TypeField(SourceLocation.anon, "data", type, 1, RawPointerType))
   return type;

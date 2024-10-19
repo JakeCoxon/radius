@@ -316,10 +316,10 @@ export class InitializationCheckingPass {
   executeDeallocStackInstruction(instr: DeallocStackInstruction): void {
     const instrId = this.currentInstrId;
     if (instr.type instanceof PrimitiveType) {
-      // Do nothing for now
+      this.codegen.replaceInstruction(this.currentBlock, instrId, new MarkInitializedInstruction(instr.target, false));
     } else {
       if (this.isDefinitelyUninitialized(instr.target)) {
-        // Do nothing for now
+        this.codegen.replaceInstruction(this.currentBlock, instrId, new MarkInitializedInstruction(instr.target, false));
       } else if (this.isDefinitelyInitialized(instr.target)) {
         this.codegen.replaceDeallocStackInstruction(this.currentBlock, instrId, instr);
         this.instrIndex -- // Revert the index to the start of the inserted instructions
@@ -459,12 +459,13 @@ const createStatePathState = (ids: string[], currentType: Type): { id: number, n
   if (ids.length === 0) return []
   const [firstAddr, ...restAddrs] = ids
   const index = parseInt(firstAddr, 10)
-  compilerAssert(currentType instanceof ConcreteClassType, `Current type is not a struct type`, { currentType })
+  const fields = currentType.typeInfo.fields
+  compilerAssert(fields.length, `Type does not have fields`, { currentType })
   compilerAssert(!isNaN(index), `Index is not a number`)
   compilerAssert(index >= 0, `Index is negative`)
-  compilerAssert(index < currentType.typeInfo.fields.length, `Index is out of bounds`)
-  const nextType = currentType.typeInfo.fields[index].fieldType
-  return [{ id: index, numFields: currentType.typeInfo.fields.length }, ...createStatePathState(restAddrs, nextType)]
+  compilerAssert(index < fields.length, `Index is out of bounds`)
+  const nextType = fields[index].fieldType
+  return [{ id: index, numFields: fields.length }, ...createStatePathState(restAddrs, nextType)]
 }
 
 function meetInitializationStatePath(a: InitializationState, statePath: { id: number, numFields: number }[], newState: InitializationState): InitializationState {

@@ -308,7 +308,7 @@ function functionInlineTask(ctx: TaskContext, { location, func, typeArgs, parent
     binding.definitionCompiler = inlineInto
     templateScope[nameValue] = binding
     propagateLiteralType(concreteTypes[i], arg)
-    statements.push(new LetAst(VoidType, location, binding, args[i]))
+    statements.push(new LetAst(VoidType, location, binding, args[i], false))
     argBindings.push(binding)
   });
   

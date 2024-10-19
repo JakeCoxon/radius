@@ -14,8 +14,8 @@ const insertMetaObjectPairwiseOperator = (compiledClass: CompiledClass, operator
     const bindingAstA = new BindingAst(a.type, ctx.location, new Binding("", a.type))
     const bindingAstB = new BindingAst(b.type, ctx.location, new Binding("", b.type))
     const stmts: Ast[] = [
-      new LetAst(VoidType, ctx.location, bindingAstA.binding, a),
-      new LetAst(VoidType, ctx.location, bindingAstB.binding, b)]
+      new LetAst(VoidType, ctx.location, bindingAstA.binding, a, false),
+      new LetAst(VoidType, ctx.location, bindingAstB.binding, b, false)]
 
     const length = compiledClass.fields.length // TODO: Static length
 
@@ -68,7 +68,7 @@ export const VecTypeMetaClass = new ExternalFunction('VecType', VoidType, (ctx, 
     const field = compiledClass.fields[index]
     const bindingAst = new BindingAst(value.type, ctx.location, new Binding("", value.type))
     return createStatements(ctx.location, [
-      new LetAst(VoidType, ctx.location, bindingAst.binding, value),
+      new LetAst(VoidType, ctx.location, bindingAst.binding, value, false),
       new ValueFieldAst(field.fieldType, ctx.location, bindingAst, [field]),
     ])
   })
@@ -134,7 +134,7 @@ export const createListConstructor = (vm: Vm, elementType: Type, values: Ast[]) 
     })
     .chainFn((task, _) => {
       const stmts = createStatements(vm.location, [
-        new LetAst(VoidType, vm.location, binding, array),
+        new LetAst(VoidType, vm.location, binding, array, true),
         ...callArray,
         new BindingAst(binding.type, vm.location, binding)
       ])
@@ -174,8 +174,8 @@ export const assert = new CompilerFunction('assert', (ctx, typeArgs: unknown[], 
   if (!existing) globalCompiler.externalDefinitions.push({ name: name, binding, paramHash, paramTypes: concreteTypes, returnType: NeverType })
 
   // Gotta be a nicer way to do this automatically
-  const left = new LetAst(VoidType, location, new Binding("", op.args[0].type), op.args[0])
-  const right = new LetAst(VoidType, location, new Binding("", op.args[1].type), op.args[1])
+  const left = new LetAst(VoidType, location, new Binding("", op.args[0].type), op.args[0], false)
+  const right = new LetAst(VoidType, location, new Binding("", op.args[1].type), op.args[1], false)
   const leftBinding = new BindingAst(left.binding.type, location, left.binding)
   const rightBinding = new BindingAst(right.binding.type, location, right.binding)
   const newOp = new OperatorAst(op.type, location, op.operator, [leftBinding, rightBinding])
@@ -222,7 +222,7 @@ export const print = new CompilerFunction('print', (ctx, typeArgs: unknown[], ar
       formatStr += arg.value
     } else if (arg.type === StringType) {
       const binding = new Binding("", StringType)
-      stmts.push(new LetAst(VoidType, location, binding, arg))
+      stmts.push(new LetAst(VoidType, location, binding, arg, false))
       const lengthGetter = fieldHelper(binding, 'length')
       const dataGetter = fieldHelper(binding, 'data')
       formatStr += '%.*s'
@@ -230,7 +230,7 @@ export const print = new CompilerFunction('print', (ctx, typeArgs: unknown[], ar
     } else if (arg.type === BoolType) {
       const binding = new Binding("", StringType)
       const str = new IfAst(StringType, location, arg, new StringAst(StringType, location, 'true'), new StringAst(StringType, location, 'false'))
-      stmts.push(new LetAst(VoidType, location, binding, str))
+      stmts.push(new LetAst(VoidType, location, binding, str, false))
       const lengthGetter = fieldHelper(binding, 'length')
       const dataGetter = fieldHelper(binding, 'data')
       formatStr += '%.*s'
@@ -240,7 +240,7 @@ export const print = new CompilerFunction('print', (ctx, typeArgs: unknown[], ar
       formatStr += formats.get(arg.type)
     } else if (arg.type instanceof ParameterizedType && arg.type.typeConstructor === TupleTypeConstructor) {
       const binding = new Binding("", arg.type)
-      stmts.push(new LetAst(VoidType, location, binding, arg))
+      stmts.push(new LetAst(VoidType, location, binding, arg, false))
       formatStr += `(`
       const fieldsToPrint = binding.type.typeInfo.fields.filter(x => formats.has(x.fieldType))
       fieldsToPrint.forEach((field, j) => {
@@ -252,7 +252,7 @@ export const print = new CompilerFunction('print', (ctx, typeArgs: unknown[], ar
       formatStr += ')'
     } else if (arg.type.typeInfo.fields.length && !arg.type.typeInfo.isReferenceType) {
       const binding = new Binding("", arg.type)
-      stmts.push(new LetAst(VoidType, location, binding, arg))
+      stmts.push(new LetAst(VoidType, location, binding, arg, false))
       formatStr += `${arg.type.shortName}(`
       const fieldsToPrint = binding.type.typeInfo.fields.filter(x => formats.has(x.fieldType))
       fieldsToPrint.forEach((field, j) => {
@@ -269,7 +269,7 @@ export const print = new CompilerFunction('print', (ctx, typeArgs: unknown[], ar
   })
   formatStr += '\n'
   const formatBinding = new Binding("", StringType)
-  stmts.unshift(new LetAst(VoidType, location, formatBinding, new StringAst(StringType, location, formatStr)))
+  stmts.unshift(new LetAst(VoidType, location, formatBinding, new StringAst(StringType, location, formatStr), false))
   printfArgs.unshift(fieldHelper(formatBinding, 'data'))
   stmts.push(new CallAst(VoidType, location, externalBuiltinBindings.printf, printfArgs, []))
   return Task.of(createStatements(location, stmts))

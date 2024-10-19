@@ -55,6 +55,14 @@ export class CodeGenerator {
     ];
     block.instructions.splice(instrId.instrId, 1, ...instrs);
   }
+
+  removeInstruction(block: BasicBlock, instrId: InstructionId) {
+    block.instructions.splice(instrId.instrId, 1);
+  }
+
+  replaceInstruction(block: BasicBlock, instrId: InstructionId, instr: IRInstruction) {
+    block.instructions.splice(instrId.instrId, 1, instr);
+  }
   
   replaceDeallocStackInstruction(block: BasicBlock, instrId: InstructionId, instr: DeallocStackInstruction) {
     // const reg = this.newRegister();
@@ -258,16 +266,23 @@ class FunctionCodeGenerator {
 
   generateBlockExpression(ast: BlockAst, context: ExpressionContext): IRValue {
     const label = this.newLabel()
+    const resultPtr = this.generateAlloc(ast.type)
     const scope = new Scope()
     scope.breakBlockLabel = label
     this.scopes.push(scope);
     this.blockScopeDepth.set(ast.binding, this.scopes.length - 1)
-    const result = this.generateExpression(ast.body, context)
+    const value = this.generateExpression(ast.body, context)
+    // TODO: Figure this out cleanly
+    if (value instanceof Value) {
+      this.generateMoveInstruction(resultPtr, value, ast.type)
+    } else {
+      this.generateMovePointerInstruction(resultPtr, value, ast.type)
+    }
     this.finalizeScope()
     this.addInstruction(new JumpInstruction(label))
     this.scopes.pop()
     this.newBlock(label)
-    return result
+    return new Pointer(resultPtr)
   }
 
   generateBreakStatement(ast: BreakAst) {

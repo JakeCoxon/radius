@@ -500,7 +500,7 @@ export const BytecodeSecondOrder: ParseTreeTable = {
       return
     }
     const name = node.left instanceof ParseFreshIden ? node.left.freshBindingToken.identifier : node.left.token.value
-    pushBytecode(out, node.token, { type: 'letast', name, t: !!node.type, v: !!node.value })
+    pushBytecode(out, node.token, { type: 'letast', name, t: !!node.type, v: !!node.value, mutable: node.mutable })
   },
 
   call: (out, node) => {
@@ -585,8 +585,8 @@ export const BytecodeSecondOrder: ParseTreeTable = {
     // if (node.isExpr) compilerAssert(node.falseBody, "If-expression needs false branch")
 
     // This is messing things up
-    if (node.falseBody) visitParseNode(out, node.falseBody)
-    visitParseNode(out, node.trueBody)
+    if (node.falseBody) visitParseNode(out, new ParseBlock(node.falseBody.token, null, null, node.falseBody as any))
+    visitParseNode(out, new ParseBlock(node.trueBody.token, null, null, node.trueBody as any))
     visitParseNode(out, node.condition)
     pushBytecode(out, node.token, { type: "ifast", f: !!node.falseBody, e: node.isExpr });
   },
@@ -722,7 +722,7 @@ createOperator("!=", "neq", typecheckEquality,         (a, b) => a != b)
 
 
 
-const letLocalAst = (vm: Vm, name: string, type: Type | null, value: Ast | null) => {
+const letLocalAst = (vm: Vm, name: string, type: Type | null, value: Ast | null, mutable: boolean) => {
   compilerAssert(type || value, "Expected type or initial value for let binding $name", { name });
   compilerAssert(!Object.hasOwn(vm.scope, name), `Already defined $name`, { name });
   let inferType = type || value!.type
@@ -736,7 +736,7 @@ const letLocalAst = (vm: Vm, name: string, type: Type | null, value: Ast | null)
   }
   binding.definitionCompiler = vm.context.subCompilerState
   value ||= new DefaultConsAst(inferType.typeInfo.isReferenceType ? RawPointerType : inferType, vm.location)
-  return new LetAst(VoidType, vm.location, binding, value);
+  return new LetAst(VoidType, vm.location, binding, value, mutable);
 }
 
 export function resolveScope(ctx: TaskContext, scope: Scope, name: string): Task<unknown, CompilerError> {
@@ -857,10 +857,10 @@ const instructions: InstructionMapping = {
     const value = r ? propagatedLiteralAst(expectAst(popStack(vm))) : null
     vm.stack.push(new ReturnAst(NeverType, vm.location, value))
   },
-  letast: (vm, { name, t, v }) => {
+  letast: (vm, { name, t, v, mutable }) => {
     const type = t ? expectType(popStack(vm)) : null
     let value = v ? expectAst(popStack(vm)) : null
-    vm.stack.push(letLocalAst(vm, name, type, value))
+    vm.stack.push(letLocalAst(vm, name, type, value, mutable))
     return Task.success()
   },
   letmetaast: (vm, { t, v }) => {
@@ -869,7 +869,7 @@ const instructions: InstructionMapping = {
     const type = t ? expectType(popStack(vm)) : null
     const value = v ? expectAst(popStack(vm)) : null
     compilerAssert(value, "Expected value for let")
-    vm.stack.push(letLocalAst(vm, name, type, value))
+    vm.stack.push(letLocalAst(vm, name, type, value, false))
     return Task.success()
   },
   letmatchast: (vm, { t, v }) =>  {
@@ -881,7 +881,7 @@ const instructions: InstructionMapping = {
     const stmts: Ast[] = []
     const recur = (tuple: Tuple, tupleType: Type, rightSide: Ast) => {
       const newName = new FreshBindingToken("tup")
-      const letAst = letLocalAst(vm, newName.identifier, null, rightSide)
+      const letAst = letLocalAst(vm, newName.identifier, null, rightSide, false)
       const rightSideBinding = new BindingAst(VoidType, vm.location, letAst.binding)
       stmts.push(letAst)
 
@@ -892,7 +892,7 @@ const instructions: InstructionMapping = {
         const fieldAst = new FieldAst(field.fieldType, vm.location, rightSideBinding, field)
         if (value instanceof Tuple) return recur(value, field.fieldType, fieldAst)
         compilerAssert(typeof value === 'string', "Expected string got $value", { value })
-        stmts.push(letLocalAst(vm, value, field.fieldType, fieldAst))
+        stmts.push(letLocalAst(vm, value, field.fieldType, fieldAst, false))
       })
     }
     recur(tuple, value.type, value)
@@ -1102,7 +1102,7 @@ const instructions: InstructionMapping = {
       const newBinding = new Binding("", left.type)
       const newBindingAst = new BindingAst(left.type, vm.location, newBinding)
       const stmts = createStatements(vm.location, [
-        new LetAst(VoidType, vm.location, newBinding, left),
+        new LetAst(VoidType, vm.location, newBinding, left, false),
         new SetValueFieldAst(VoidType, vm.location, newBindingAst, [field], value)
       ])
       vm.stack.push(stmts)

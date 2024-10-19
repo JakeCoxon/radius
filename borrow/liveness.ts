@@ -134,6 +134,8 @@ const extendLiveness = (liveness: LivenessMap, usages: UsageMap, cfg: ControlFlo
 
 // Merges the liveness information from an instruction and an access instruction (as other)
 const mergeLivenessBlocks = (liveness: Record<string, LivenessState>, other: Record<string, LivenessState>, register: string) => {
+  if (!other) return
+
   for (const [blockId, state] of Object.entries(other)) {
     
     const livenessType = liveness[blockId].livenessType
