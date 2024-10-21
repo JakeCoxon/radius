@@ -1,6 +1,6 @@
 import { BytecodeDefault, BytecodeSecondOrder, callFunctionFromValueTask, compileClassTask, compileFunctionPrototype, createBytecodeVmAndExecuteTask, pushBytecode, pushGeneratedBytecode, unknownToAst, visitParseNode, visitParseNodeAndError } from "./compiler";
 import { externalBuiltinBindings, getEnumOf } from "./compiler_sugar";
-import { getCommonType, hashValues, isTypeInteger, normalizeNumberType, numberTypeToConcrete, propagateLiteralType, propagatedLiteralAst, typeCheckAssert, typeMatcherEquals, typeCheckFunctionResult, tryMatchType } from "./compilter_types";
+import { getCommonType, hashValues, isTypeInteger, normalizeNumberType, numberTypeToConcrete, propagateLiteralType, propagatedLiteralAst, typeCheckAssert, typeMatcherEquals, typeCheckFunctionResult, tryMatchType, typeArgumentsToType } from "./compilter_types";
 import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, CallAst, IntType, Closure, UserCallAst, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition, ParseCall, TypeVariable, TypeMatcher, SourceLocation, ExternalTypeConstructor, ScopeParentSymbol, SubCompilerState, CompilerFunction, IntLiteralType, FloatLiteralType, FloatType, RawPointerType, AddressAst, BindingAst, UnknownObject, NeverType, CompilerFunctionCallContext, CompileTimeObjectType, CompTimeObjAst, ParseString, NamedArgAst, TypeCheckResult, u8Type, TypeCheckVar, ParseFreshIden, NumberAst, BoolAst, createStatements, ExternalFunction, BlockAst, LabelBlock, ConstructorAst, VariantCastAst, EnumVariantAst, FunctionParameter, Capability } from "./defs";
 import { Task, TaskDef, Unit } from "./tasks";
 
@@ -259,7 +259,7 @@ function functionInlineTask(ctx: TaskContext, { location, func, typeArgs, parent
 
   const args = result.sortedArgs
   
-  func.params.forEach(({ name, type, storage }, i) => {
+  func.params.forEach(({ name, type, storage, capability }, i) => {
     compilerAssert(concreteTypes[i], `Expected type`, { func, args, concreteTypes })
     compilerAssert(concreteTypes[i] !== IntLiteralType)
     const arg = args[i]
@@ -281,7 +281,11 @@ function functionInlineTask(ctx: TaskContext, { location, func, typeArgs, parent
     binding.definitionCompiler = inlineInto
     templateScope[nameValue] = binding
     propagateLiteralType(concreteTypes[i], arg)
-    statements.push(new LetAst(VoidType, location, binding, args[i], false))
+    // TODO: This breaks sink params stuff. think about having another capability to allow sinking
+    // TODO: Handle inout params differently so we don't sink by default
+    const mutable = capability === Capability.Sink || capability === Capability.Inout
+    // compilerAssert(capability !== Capability.Inout, "Not implemented inlining an inout parameter", { name, func: func.debugName, capability })
+    statements.push(new LetAst(VoidType, location, binding, args[i], mutable))
     argBindings.push(binding)
   });
   
@@ -372,17 +376,8 @@ export function createCallAstFromValue(ctx: CompilerFunctionCallContext, value: 
 
   // Resolve ClassDefinitions into concrete types before instantiating any classes or functions
   if (typeArgs.some(x => x instanceof ClassDefinition)) {
-    const compileTypeArgs = Task.concurrency(typeArgs.map(typeArg => {
-      if (typeArg instanceof ClassDefinition && !typeArg.concreteType) {
-        compilerAssert(typeArg.typeArgs.length === 0, "Cannot compile class $classDef to type without specifing type arguments", { classDef: typeArg })
-        return TaskDef(compileClassTask, { classDef: typeArg, typeArgs: [] })
-      }
-      if (typeArg instanceof ClassDefinition) { return Task.of(typeArg.concreteType) }
-      return Task.of(typeArg)
-    }))
-
     return (
-      compileTypeArgs.chainFn((task, compiledTypeArgs) => 
+      typeArgumentsToType(typeArgs).chainFn((task, compiledTypeArgs) => 
         createCallAstFromValue({...ctx}, value, compiledTypeArgs, args) // Call self
       )
     )
@@ -397,7 +392,6 @@ export function createCallAstFromValue(ctx: CompilerFunctionCallContext, value: 
       })
     )
   }
-
 
   if (value instanceof CompilerFunction) {
     return value.func(ctx, typeArgs, args)

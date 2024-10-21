@@ -3,7 +3,7 @@ import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, 
 import { Event, Task, TaskDef, Unit, isTask, isTaskResult, withContext } from "./tasks";
 import { createCompilerModuleTask, createListConstructor, defaultMetaFunction, guardSugar, ifMultiSugar, isSugar, matchSugar, optionBlockSugar, optionCastSugar, orElseSugar, print, questionSugar } from "./compiler_sugar";
 import { expandDotsSugar, expandFuncAllSugar, expandFuncAnySugar, expandFuncConcatSugar, expandFuncFirstSugar, expandFuncLastSugar, expandFuncMaxSugar, expandFuncMinSugar, expandFuncSumSugar, expandIteratorSugar, foldSugar, forExprSugar, forLoopSugar, listComprehensionSugar, listConstructorSugar, sliceSugar, whileExprSugar } from "./compiler_iterator"
-import { OptionTypeConstructor, calculateSizeOfType, canAssignTypeTo, createParameterizedExternalType, getCommonType, hashValues, isParameterizedTypeOf, propagateLiteralType, propagatedLiteralAst, typeTableGetOrInsert, typecheckEquality, typecheckNumberComparison, typecheckNumberOperator } from "./compilter_types";
+import { OptionTypeConstructor, calculateSizeOfType, canAssignTypeTo, classDefinitionToType, compileTypeConstructorTask, createParameterizedExternalType, getCommonType, hashValues, isParameterizedTypeOf, propagateLiteralType, propagatedLiteralAst, typeTableGetOrInsert, typecheckEquality, typecheckNumberComparison, typecheckNumberOperator } from "./compilter_types";
 
 export const pushBytecode = <T extends BytecodeInstr>(out: BytecodeWriter, token: Token, instr: T) => {
   out.bytecode.locations.push(token.location);
@@ -782,17 +782,13 @@ export function callFunctionFromValueTask(ctx: TaskContext, vm: Vm, func: unknow
   }
 
   if (func instanceof ClassDefinition) {
-    compilerAssert(func.isTypeConstructor, "Expected type constructor class got $func", { func });
-    compilerAssert(values.length === 0, "Not implemented", { values })
-    const typeVars = typeArgs.filter((x): x is TypeVariable => x instanceof TypeVariable)
-    if (typeVars.length) {
-      vm.stack.push(new TypeMatcher(func, typeArgs, typeVars))
-      return Task.success();
-    }
+    compilerAssert(values.length === 0, "Not implemented", { values }) // Values are for constructors, not type constructors (for now?)
+    
     return (
-      TaskDef(compileClassTask, { classDef: func, typeArgs })
+      TaskDef(compileTypeConstructorTask, func, typeArgs)
       .chainFn((task, type) => { vm.stack.push(type); return Task.success() })
     )
+    
   }
   if (func instanceof ExternalTypeConstructor) {
     compilerAssert(values.length === 0, "Expected no args", { values })
@@ -984,18 +980,8 @@ const instructions: InstructionMapping = {
     }
     if (name === 'sizeof') {
 
-      // There should be a nicer way of doing this across all functions that need it
-      const toType = (classDef: ClassDefinition): Task<ConcreteClassType, unknown> => {
-        if (classDef.concreteType) return Task.of(classDef.concreteType)
-        compilerAssert(classDef.typeArgs.length === 0, "Cannot compile class $classDef to type without specifing type arguments", { classDef })
-        return (
-          TaskDef(compileClassTask, { classDef, typeArgs: [] })
-          .chainFn((task, res) => { compilerAssert(res instanceof ConcreteClassType); return Task.of(res) })
-        );
-      }
-
       if (expr instanceof ClassDefinition) {
-        return (toType(expr).chainFn((task, type) => {
+        return (classDefinitionToType(expr).chainFn((task, type) => {
           vm.stack.push(calculateSizeOfType(type)); return Task.success()
         }))
       }
@@ -1247,11 +1233,7 @@ const instructions: InstructionMapping = {
       )
     }
     if (type instanceof ClassDefinition) {
-      if (type.concreteType) return vm.stack.push(type.concreteType)
-      return (
-        TaskDef(compileClassTask, { classDef: type, typeArgs: [] })
-        .chainFn((task, res) => { vm.stack.push(res); return Task.success() })
-      );
+      return (classDefinitionToType(type).chainFn((task, type) => { vm.stack.push(type); return Task.success() }))
     }
     compilerAssert(false, "Expected Type got $type", { type })
   },
@@ -1463,7 +1445,8 @@ export function compileClassTask(ctx: TaskContext, { classDef, typeArgs }: { cla
   const templateScope = Object.create(classDef.parentScope);
   const subCompilerState = pushSubCompilerState(ctx, { debugName: `${classDef.debugName} class template`, lexicalParent: ctx.subCompilerState, scope: templateScope })
   subCompilerState.functionCompiler = subCompilerState; // Consider class as the functionCompiler - could be renamed something else
-  
+
+  compilerAssert(!typeArgs.some(x => x instanceof ClassDefinition), "Programmer error. Type args must have already been compiled by this point", { typeArgs })
   classDef.typeArgs.forEach((typeArg, i) => {
     compilerAssert(typeArg instanceof ParseIdentifier, "Not implemented")
     templateScope[typeArg.token.value] = typeArgs[i];

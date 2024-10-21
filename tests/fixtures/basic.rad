@@ -23,18 +23,20 @@ fn init_array!(T)(arr: inout Array!T, len: int):
   arr.data = malloc(len * (meta T.sizeof))
 
 fn set_array!(T)(arr: inout Array!T, index: int, value: sink T) @inline:
+  if arr.data == rawptr(0):
+    init_array(arr, 10)
   compiler.unsafe_set_subscript(arr.data, index, value)
 
 fn get_array!(T)(arr: Array!T, index: int) -> T @inline:
   compiler.unsafe_subscript!T(arr.data, index)
 
 fn denit_array!(T)(arr: sink Array!T):
-  free(arr.data)
+  if arr.data != rawptr(0):
+    free(arr.data)
 
 fn test_array1():
 
   var arr: Array!int = Array!int(3, rawptr(0))
-  init_array(arr, 10)
 
   arr[0] = 10
   arr[1] = 20
@@ -47,12 +49,24 @@ fn test_array2():
 
   arr[0] = Foo(3, 2.0)
   arr[1] = Foo(4, 3.0)
+
+  arr[0].x += 1
+  
   print(arr[0].x)
+
+fn test_array3():
+
+  var arr = Array!(Array!Foo)(0, rawptr(0))
+  init_array(arr, 10)
+
+  arr[0][0] = Foo(42, 2.0)
+  print(arr[0][0].x)
 
 fn main():
 
   test_array1()
   test_array2()
+  test_array3()
 
   let zzz = 3
   let z: int = 2

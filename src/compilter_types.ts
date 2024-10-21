@@ -1,5 +1,6 @@
-import { Ast, BoolType, ClassDefinition, Closure, CompilerError, ConcreteClassType, DoubleType, EnumVariantAst, ExternalTypeConstructor, FloatLiteralType, FloatType, FunctionDefinition, GlobalCompilerState, IntLiteralType, IntType, NeverType, NumberAst, OperatorAst, ParameterizedType, ParseCall, ParseIdentifier, ParseNode, PrimitiveType, Scope, ScopeParentSymbol, SourceLocation, StatementsAst, Tuple, Type, TypeCheckConfig, TypeCheckResult, TypeCheckVar, TypeConstructor, TypeField, TypeMatcher, TypeTable, TypeVariable, UnknownObject, VariantCastAst, VoidType, compilerAssert, getUniqueId, isType, u64Type, u8Type } from "./defs"
-import { Task } from "./tasks"
+import { compileClassTask } from "./compiler"
+import { Ast, BoolType, ClassDefinition, Closure, CompilerError, ConcreteClassType, DoubleType, EnumVariantAst, ExternalTypeConstructor, FloatLiteralType, FloatType, FunctionDefinition, GlobalCompilerState, IntLiteralType, IntType, NeverType, NumberAst, OperatorAst, ParameterizedType, ParseCall, ParseIdentifier, ParseNode, PrimitiveType, RawPointerType, Scope, ScopeParentSymbol, SourceLocation, StatementsAst, TaskContext, Tuple, Type, TypeCheckConfig, TypeCheckResult, TypeCheckVar, TypeConstructor, TypeField, TypeMatcher, TypeTable, TypeVariable, UnknownObject, VariantCastAst, VoidType, compilerAssert, getUniqueId, isType, u64Type, u8Type } from "./defs"
+import { Task, TaskDef } from "./tasks"
 
 export const isTypeInteger = (type: Type) => type === IntType || type === u64Type || type === u8Type
 export const isTypeFloating = (type: Type) => type === FloatType || type === DoubleType
@@ -87,7 +88,7 @@ export const typesEqual = (t1: unknown, t2: any): boolean => {
   return false;
 }
 
-export const typeMatcherEquals = (matcher: TypeMatcher, expected: Type, substitutions: UnknownObject) => {
+export const typeMatcherEquals = (result: TypeCheckResult, matcher: TypeMatcher, expected: Type, substitutions: UnknownObject) => {
   const testTypeConstructor = (matcher: ExternalTypeConstructor | ClassDefinition, expected: TypeConstructor) => {
     if (matcher instanceof ExternalTypeConstructor) {
       if (matcher === expected) return true
@@ -119,6 +120,7 @@ export const typeMatcherEquals = (matcher: TypeMatcher, expected: Type, substitu
     }
     if (matcher instanceof TypeVariable) {
       if (substitutions[matcher.name]) return substitutions[matcher.name] === expected;
+      compilerAssert(!(expected instanceof ClassDefinition), "Programmer error. Types must have been already compiled by this point", { matcher, expected, func: result.func })
       substitutions[matcher.name] = expected;
       return true
     }
@@ -162,11 +164,11 @@ export const typeCheckFunctionResult = (result: TypeCheckResult, compiledParamTy
 
     if (paramType === null) {
     } else if (paramType instanceof TypeMatcher) {
-      const matches = typeMatcherEquals(paramType, fromType.type, result.substitutions)
+      const matches = typeMatcherEquals(result, paramType, fromType.type, result.substitutions)
       typeCheckAssert(result, matches, "Type check failed. Expected $expected got $got", { expected: paramType, got: fromType.type })
     } else if (paramType instanceof TypeVariable) {
       if (result.substitutions[paramType.name]) {
-        compilerAssert(result.substitutions[paramType.name] === fromType.type, "Expected type $expected got $got", { expected: result.substitutions[paramType.name], got: fromType.type })
+        compilerAssert(result.substitutions[paramType.name] === fromType.type, "Tried to substitute $name with $got but but it was already substituted with $existing", { name: paramType.name, existing: result.substitutions[paramType.name], got: fromType.type })
       }
       result.substitutions[paramType.name] = fromType.type
     } else {
@@ -189,6 +191,46 @@ export const isParameterizedTypeOf = (a: Type, expected: TypeConstructor): a is 
   return a instanceof ParameterizedType && a.typeConstructor === expected;
 }
 
+// This is a bit messy but we want Array!Foo to compile Foo into a concrete type
+// in various cases (class type arguments, function type arguments, etc)
+export const classDefinitionToType = (classDef: ClassDefinition): Task<ConcreteClassType, CompilerError> => {
+  if (classDef.concreteType) return Task.of(classDef.concreteType)
+  compilerAssert(classDef.typeArgs.length === 0, "Class $classDef expected $expected type arguments but got none", { classDef, expected: classDef.typeArgs.length })
+  return (
+    TaskDef(compileClassTask, { classDef, typeArgs: [] })
+    .chainFn((task, res) => { compilerAssert(res instanceof ConcreteClassType); return Task.of(res) })
+  );
+}
+
+export const typeArgumentsToType = (typeArgs: unknown[]) => {
+  return Task.concurrency(typeArgs.map(typeArg => {
+    if (typeArg instanceof ClassDefinition) 
+      return classDefinitionToType(typeArg)
+    return Task.of(typeArg)
+  }))
+}
+
+
+export const compileTypeConstructorTask = (ctx: TaskContext, classDef: ClassDefinition, typeArgs: unknown[]): Task<Type | TypeMatcher, CompilerError> => {
+  compilerAssert(classDef.isTypeConstructor, "Expected type constructor class got $func", { classDef });
+
+  // Resolve ClassDefinitions into concrete types before instantiating any classes or functions
+  // This is only 1 level deep because the assumption is that the deeper levels have already
+  // been resolved by the time we get here 
+  if (typeArgs.some(x => x instanceof ClassDefinition)) {
+    return (
+      typeArgumentsToType(typeArgs).chainFn((task, compiledTypeArgs) => 
+        TaskDef(compileTypeConstructorTask, classDef, compiledTypeArgs) // Call self
+      )
+    )
+  }
+  
+  const typeVars = typeArgs.filter((x): x is TypeVariable => x instanceof TypeVariable)
+  if (typeVars.length) {
+    return Task.of(new TypeMatcher(classDef, typeArgs, typeVars))
+  }
+  return TaskDef(compileClassTask, { classDef, typeArgs })
+}
 
 export const createParameterizedExternalType = (globalCompiler: GlobalCompilerState, typeConstructor: ExternalTypeConstructor, argTypes: unknown[]): Task<Type, CompilerError> => {
   const newArgTypes = argTypes.map(value => {
@@ -276,9 +318,9 @@ export const typecheckEquality = (config: TypeCheckConfig) => {
   normalizeNumberType(config.b, config.a)
   numberTypeToConcrete(config.a)
   numberTypeToConcrete(config.b)
-  const aok = config.a.type === BoolType || isTypeScalar(config.a.type)
-  const bok = config.b.type === BoolType || isTypeScalar(config.b.type)
-  compilerAssert(aok && bok, "Expected bool, int, float or double type got $a $b", { a: config.a.type, b: config.b.type })
+  const aok = config.a.type === BoolType || isTypeScalar(config.a.type) || config.a.type === RawPointerType
+  const bok = config.b.type === BoolType || isTypeScalar(config.b.type) || config.b.type === RawPointerType
+  compilerAssert(aok && bok, "Expected bool, int, float or double, rawptr type got $a $b", { a: config.a.type, b: config.b.type })
   config.inferType = BoolType
 }
 

@@ -135,7 +135,7 @@ const generateDestructor = (subCompilerState: SubCompilerState, structName: stri
     .chainFn((task, compiledFunction) => {
       compiledFunction.isDestructor = true
       compilerAssert(compiledFunction.parameters.length === 1, "Expected 1 parameter in destructor", { c: compiledFunction })
-      compilerAssert(compiledFunction.parameters[0].type === compiledClass.type, "Expected type of destructor to be $type got $otherType", { type: compiledClass.type, otherType: compiledFunction.parameters[0].type })
+      compilerAssert(compiledFunction.parameters[0].type === compiledClass.type, "Expected type of destructor's first argument to be $type got $otherType", { type: compiledClass.type, otherType: compiledFunction.parameters[0].type })
       compilerAssert(compiledFunction.parameters[0].capability === Capability.Sink, "Expected sink capability", { c: compiledFunction })
       compilerAssert(compiledFunction.returnType === VoidType, "Expected void return type", { c: compiledFunction })
       compiledClass.metaobject.destructorBinding = compiledFunction.binding
