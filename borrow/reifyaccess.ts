@@ -78,7 +78,10 @@ const capabilitiesOfInstr = (instr: IRInstruction, operandIndex: number) => {
       /* target */ [Capability.Inout] :  // Assume Inout vs Set for now, we don't know which until later
       /* source */ [Capability.Sink]
   } else if (instr instanceof LoadFromAddressInstruction) {
-    return []
+    // A load can be a let if it's a copy. We don't actually
+    // use this instruction to update memory, a MarkInitialized
+    // instruction is inserted afterwards. But we need to mark it here
+    return [Capability.Let, Capability.Sink] // Assume sink for now
   } else if (instr instanceof StoreToAddressInstruction) {
     return [Capability.Set]
   } else return []

@@ -4,47 +4,87 @@ type Foo @struct:
   x: int
   y: float
 
-type Array!(T) @struct:
-  len: int
+
+type Buffer @struct:
+  size: int
   data: rawptr
 
-  const __destructor = denit_array
+  const __destructor = deinit_buffer
+  const __move_init = move_init_buffer
+  const __move_assign = move_assign_buffer
+
+
+fn buffer_alloc(buf: inout Buffer, size: int):
+  buf.size = size + 0
+  buf.data = malloc(size)
+
+
+fn move_init_buffer(dst: set Buffer, src: sink Buffer):
+  dst.size = src.size
+  dst.data = src.data
+  src.data = rawptr(0)
+
+
+fn move_assign_buffer(dst: inout Buffer, src: sink Buffer):
+  if dst.data != rawptr(0):
+    free(dst.data)
+  dst.size = src.size
+  dst.data = src.data
+  src.data = rawptr(0)
+
+
+fn deinit_buffer(buf: sink Buffer):
+  if buf.data != rawptr(0):
+    free(buf.data)
+    buf.data = rawptr(0)
+
+
+type Array!(T) @struct:
+  len: int
+  data: Buffer
+
   const __set_subscript = set_array
   const __subscript = get_array
+
+
+fn init_array!(T)(arr: inout Array!T, len: int):
+  arr.len = len + 0
+  buffer_alloc(arr.data, len * (meta T.sizeof))
+
+
+fn set_array!(T)(arr: inout Array!T, index: int, value: sink T) @inline:
+  if arr.data.data == rawptr(0):
+    init_array(arr, 10)
+  compiler.unsafe_set_subscript(arr.data.data, index, value)
+
+
+fn get_array!(T)(arr: Array!T, index: int) -> T @inline:
+  compiler.unsafe_subscript!T(arr.data.data, index)
+
 
 fn bar(x: inout int):
   x += 1
 
+
 fn baz(foo: inout Foo):
   foo.x += 1
 
-fn init_array!(T)(arr: inout Array!T, len: int):
-  arr.len = len + 0
-  arr.data = malloc(len * (meta T.sizeof))
-
-fn set_array!(T)(arr: inout Array!T, index: int, value: sink T) @inline:
-  if arr.data == rawptr(0):
-    init_array(arr, 10)
-  compiler.unsafe_set_subscript(arr.data, index, value)
-
-fn get_array!(T)(arr: Array!T, index: int) -> T @inline:
-  compiler.unsafe_subscript!T(arr.data, index)
-
-fn denit_array!(T)(arr: sink Array!T):
-  if arr.data != rawptr(0):
-    free(arr.data)
 
 fn test_array1():
 
-  var arr: Array!int = Array!int(3, rawptr(0))
+  var buffer = Buffer(0, rawptr(0))
+  var arr = Array!int(0, buffer)
+  init_array(arr, 10)
 
   arr[0] = 10
   arr[1] = 20
   print(arr[0])
 
+
 fn test_array2():
 
-  var arr = Array!Foo(3, rawptr(0))
+  var buffer = Buffer(0, rawptr(0))
+  var arr = Array!Foo(0, buffer)
   init_array(arr, 10)
 
   arr[0] = Foo(3, 2.0)
@@ -54,13 +94,18 @@ fn test_array2():
   
   print(arr[0].x)
 
+  var arr2 = compiler.copy(arr)
+
+
 fn test_array3():
 
-  var arr = Array!(Array!Foo)(0, rawptr(0))
+  var buffer = Buffer(0, rawptr(0))
+  var arr = Array!(Array!Foo)(0, buffer)
   init_array(arr, 10)
 
   arr[0][0] = Foo(42, 2.0)
   print(arr[0][0].x)
+
 
 fn main():
 

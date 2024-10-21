@@ -33,7 +33,25 @@ export const generateConstructor = (structName: string, structType: Type) => {
 
   const compiledFunc = new CompiledFunction(constructorBinding, { debugName: constructorBinding.name } as any, VoidType, concreteTypes, constructorBody, argBindings, funcParams, [], 0);
   return compiledFunc
-  // this.allFunctions.set(constructorBinding, compiledFunc);
+}
+
+export const generateDestructor = (structName: string, structType: Type) => {
+  const funcParams: FunctionParameter[] = [];
+  const argBindings: Binding[] = [];
+  const concreteTypes: Type[] = [];
+
+  const setArgBinding = new Binding('param', structType);
+  argBindings.push(setArgBinding);
+  funcParams.push(new FunctionParameter(setArgBinding, structType, true, RawPointerType, Capability.Sink));
+  concreteTypes.push(structType);
+
+  // An empty function is enough because later passes will insert the
+  // necessary instructions sink instructions
+  const destructorBinding = new Binding(`destructor${structName}`, VoidType);
+  const destructorBody = new StatementsAst(VoidType, SourceLocation.anon, []);
+  const compiledFunc = new CompiledFunction(destructorBinding, { debugName: destructorBinding.name } as any, VoidType, concreteTypes, destructorBody, argBindings, funcParams, [], 0);
+  compiledFunc.isDestructor = true;
+  return compiledFunc
 }
 
 export const generateMoveFunction = (structType: Type, fnName: string, destCapability: Capability, sourceCapability: Capability) => {
@@ -59,9 +77,12 @@ export const generateMoveFunction = (structType: Type, fnName: string, destCapab
     const arg = new BindingAst(structType, SourceLocation.anon, srcArgBinding);
     const field = new FieldAst(f.fieldType, SourceLocation.anon, arg, f);
     if (sourceCapability === Capability.Sink) return field;
-    return new UserCallAst(f.fieldType, SourceLocation.anon, externalBuiltinBindings.copy, [field], []);
+    compilerAssert(sourceCapability === Capability.Let, `Invalid source capability ${sourceCapability}`);
+    // Let capability means copy each field
+    return new UserCallAst(f.fieldType, SourceLocation.anon, externalBuiltinBindings.copy, [field]);
   });
-  const call = new UserCallAst(structType, SourceLocation.anon, constructorBinding, [new BindingAst(setArgBinding.type, SourceLocation.anon, setArgBinding), ...passFieldAsts], []);
+  // TODO: assign each parameter instead of calling constructor
+  const call = new UserCallAst(structType, SourceLocation.anon, constructorBinding, [new BindingAst(setArgBinding.type, SourceLocation.anon, setArgBinding), ...passFieldAsts]);
   const body = new StatementsAst(VoidType, SourceLocation.anon, [call]);
 
   const compiledFunc = new CompiledFunction(binding, { debugName: fnName } as any, VoidType, concreteTypes, body, argBindings, funcParams, [], 0);

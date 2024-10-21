@@ -119,6 +119,9 @@ export class ExclusivityCheckingPass {
     let index = 0;
     while (index < block.instructions.length) {
       const instr = block.instructions[index];
+      if (!instr) {
+        compilerAssert(false, `No instruction found at index ${index} in block ${block.label}`, { block, index });
+      }
       const instrId = new InstructionId(block.label, index);
       this.execute(instrId, instr);
       index++;
@@ -269,7 +272,7 @@ export class ExclusivityCheckingPass {
       }
       if (exclusiveBorrows.length > 0) {
         const str = newBorrowIsLet ? "already mutably borrowed" : "already borrowed"
-        compilerAssert(false, `Cannot access with ${capability} (${str})`, { exclusiveBorrows })
+        compilerAssert(false, `Cannot access with ${capability} (${str})`, { newBorrow, exclusiveBorrows })
       }
       
       newBorrows.push(newBorrow)

@@ -1,9 +1,9 @@
-import { generateConstructor, generateMoveFunction } from "../borrow/codegen_ast"
+import { generateConstructor, generateDestructor, generateMoveFunction } from "../borrow/codegen_ast"
 import { BytecodeSecondOrder, callFunctionFromValueTask, compileFunctionPrototype, getOperatorTable, loadModule, pushBytecode, resolveScope, unknownToAst, visitParseNode } from "./compiler"
 import { compileAndExecuteFunctionHeaderTask, compileExportedFunctionTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, FunctionCallArg, functionTemplateTypeCheckAndCompileTask, insertFunctionDefinition } from "./compiler_functions"
 import { concat, generator } from "./compiler_iterator"
 import { NoneTypeConstructor, OptionTypeConstructor, SomeTypeConstructor, createParameterizedExternalType, hashValues, isTypeInteger, isTypeScalar, propagateLiteralType, propagatedLiteralAst } from "./compiler_types"
-import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, UserCallAst, NeverType, IfAst, BoolType, VoidAst, LoopObject, CompileTimeObjectType, u64Type, FunctionDefinition, ParserFunctionDecl, StatementsAst, IntLiteralType, FloatLiteralType, isAst, isType, isTypeCheckError, InterleaveAst, ContinueInterAst, CompTimeObjAst, ParseEvalFunc, SetAst, DefaultConsAst, WhileAst, BoolAst, isArray, ExpansionSelector, ParseNote, ExpansionCompilerState, ParseBoolean, ParseOr, ParseBreak, ParseIs, filterNotNull, ParseLetConst, ParseCast, VariantCastAst, ExternalTypeConstructor, GlobalCompilerState, ParseOrElse, ParseField, ParseQuestion, ParseBreakOpt, LabelBlock, BlockAst, ParseMatch, ParseExtract, ParseMatchCase, ParseTuple, ParseString, Tuple, ParseNot, EnumVariantAst, ParseIfMulti, ParseGuard, ParseBlockNoScope, Capability, TypeCheckResult } from "./defs"
+import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, UserCallAst, NeverType, IfAst, BoolType, VoidAst, LoopObject, CompileTimeObjectType, u64Type, FunctionDefinition, ParserFunctionDecl, StatementsAst, IntLiteralType, FloatLiteralType, isAst, isType, isTypeCheckError, InterleaveAst, ContinueInterAst, CompTimeObjAst, ParseEvalFunc, SetAst, DefaultConsAst, WhileAst, BoolAst, isArray, ExpansionSelector, ParseNote, ExpansionCompilerState, ParseBoolean, ParseOr, ParseBreak, ParseIs, filterNotNull, ParseLetConst, ParseCast, VariantCastAst, ExternalTypeConstructor, GlobalCompilerState, ParseOrElse, ParseField, ParseQuestion, ParseBreakOpt, LabelBlock, BlockAst, ParseMatch, ParseExtract, ParseMatchCase, ParseTuple, ParseString, Tuple, ParseNot, EnumVariantAst, ParseIfMulti, ParseGuard, ParseBlockNoScope, Capability, TypeCheckResult, CompiledFunction } from "./defs"
 import { Event, Task, TaskDef, isTask } from "./tasks"
 
 const insertMetaObjectPairwiseOperator = (compiledClass: CompiledClass, operatorName: string, operatorSymbol: string) => {
@@ -87,6 +87,12 @@ export const defaultMetaFunction = (subCompilerState: SubCompilerState, compiled
   compilerAssert(!set_subscript || set_subscript instanceof Closure)
   const destructor = templateScope['__destructor']
   compilerAssert(!destructor || destructor instanceof Closure)
+  const moveInit = templateScope['__move_init']
+  compilerAssert(!moveInit || moveInit instanceof Closure)
+  const moveAssign = templateScope['__move_assign']
+  compilerAssert(!moveAssign || moveAssign instanceof Closure)
+  const copy = templateScope['__copy']
+  compilerAssert(!copy || copy instanceof Closure)
 
   if (compiledClass.classDefinition.keywords.includes('struct'))
     compiledClass.type.typeInfo.isReferenceType = false
@@ -102,10 +108,18 @@ export const defaultMetaFunction = (subCompilerState: SubCompilerState, compiled
   const funcDef = insertFunctionDefinition(subCompilerState.globalCompiler, decl)
   const constructor = new Closure(funcDef, definitionScope, subCompilerState.lexicalParent!)
 
-  Object.assign(compiledClass.metaobject, { iterate, subscript, set_subscript, constructor, destructor })
+  Object.assign(compiledClass.metaobject, { iterate, subscript, set_subscript, constructor, destructor, moveInit, moveAssign, copy })
 
   return (
-    generateDestructor(subCompilerState, compiledClass.debugName, destructor as Closure | undefined, compiledClass)
+    compileCustomDestructor(subCompilerState, compiledClass.debugName, destructor as Closure | undefined, compiledClass)
+    .chainFn(() => compileCustomMove(subCompilerState, compiledClass.debugName, moveInit as Closure | undefined, Capability.Set, compiledClass).chainFn((task, compiledFn) => {
+      if (compiledFn) compiledClass.metaobject.moveInitBinding = compiledFn.binding
+      return Task.success()
+    }))
+    .chainFn(() => compileCustomMove(subCompilerState, compiledClass.debugName, moveAssign as Closure | undefined, Capability.Inout, compiledClass).chainFn((task, compiledFn) => {
+      if (compiledFn) compiledClass.metaobject.moveAssignBinding = compiledFn.binding
+      return Task.success()
+    }))
     .chainFn((task, constructor) => {
       // Order is important, so destructor is added to compiled functions first.
       generateTypeMethods(subCompilerState.globalCompiler, compiledClass.type)
@@ -115,7 +129,7 @@ export const defaultMetaFunction = (subCompilerState: SubCompilerState, compiled
   
 }
 
-const generateDestructor = (subCompilerState: SubCompilerState, structName: string, destructor: Closure | undefined, compiledClass: CompiledClass) => {
+const compileCustomDestructor = (subCompilerState: SubCompilerState, structName: string, destructor: Closure | undefined, compiledClass: CompiledClass) => {
   if (!destructor) return Task.success()
 
   // We have to compile the destructor here to get the binding, and set
@@ -144,6 +158,30 @@ const generateDestructor = (subCompilerState: SubCompilerState, structName: stri
   )
 }
 
+const compileCustomMove = (subCompilerState: SubCompilerState, structName: string, movefn: Closure | undefined, sourceCapability: Capability, compiledClass: CompiledClass): Task<CompiledFunction | undefined, CompilerError> => {
+  if (!movefn) return Task.of(undefined)
+
+  const ctx: CompilerFunctionCallContext = { location: SourceLocation.anon, compilerState: subCompilerState, resultAst: undefined, typeCheckResult: undefined }
+  const destValue = new BindingAst(compiledClass.type, ctx.location, new Binding("", compiledClass.type)) // Fake it
+  const sourceValue = new BindingAst(compiledClass.type, ctx.location, new Binding("", compiledClass.type)) // Fake it
+
+  const typeCheckResult: TypeCheckResult = { func: movefn.func, concreteTypes: [], substitutions: {}, returnType: undefined!, sortedArgs: [], checkFailed: false }
+  const call: FunctionCallArg = { location: SourceLocation.anon, func: movefn.func, typeArgs: [], args: [destValue, sourceValue], parentScope: movefn.scope, lexicalParent: movefn.lexicalParent, result: typeCheckResult }
+
+  return (
+    TaskDef(compileAndExecuteFunctionHeaderTask, call)
+    .chain(TaskDef(functionTemplateTypeCheckAndCompileTask, call))
+    .chainFn((task, compiledFunction) => {
+      compilerAssert(compiledFunction.parameters.length === 2, "Expected 2 parameters in move function", { c: compiledFunction })
+      compilerAssert(compiledFunction.parameters[0].type === compiledClass.type, "Expected type of move function's first argument to be $type got $otherType", { type: compiledClass.type, otherType: compiledFunction.parameters[0].type })
+      compilerAssert(compiledFunction.parameters[0].capability === sourceCapability, "Expected sink capability", { c: compiledFunction })
+      compilerAssert(compiledFunction.parameters[1].type === compiledClass.type, "Expected type of move function's second argument to be $type got $otherType", { type: compiledClass.type, otherType: compiledFunction.parameters[1].type })
+      compilerAssert(compiledFunction.parameters[1].capability === Capability.Sink, "Expected sink capability", { c: compiledFunction })
+      compilerAssert(compiledFunction.returnType === VoidType, "Expected void return type", { c: compiledFunction })
+      return Task.of(compiledFunction)
+    })
+  )
+}
 
 export const generateTypeMethods = (globalCompiler: GlobalCompilerState, type: Type) => {
 
@@ -157,7 +195,9 @@ export const generateTypeMethods = (globalCompiler: GlobalCompilerState, type: T
   }
 
   if (!typeInfo.metaobject.destructorBinding) {
-    // Default nothing
+    const destructor = generateDestructor(name, type);
+    typeInfo.metaobject.destructorBinding = destructor.binding;
+    globalCompiler.compiledFunctions.set(destructor.binding, destructor)
   }
 
   if (!typeInfo.metaobject.copyConstructorBinding) {
@@ -530,6 +570,12 @@ export const typeOf = new ExternalFunction('typeOf', VoidType, (ctx, values) => 
   let [value] = values
   compilerAssert(isAst(value), "Expected ast", { value })
   return value.type
+})
+
+export const copyFunction = new CompilerFunction('copy', (ctx, typeArgs: unknown[], args: Ast[]) => {
+  const [value] = args
+  compilerAssert(isAst(value), "Expected ast", { value })
+  return Task.of(new CallAst(value.type, ctx.location, externalBuiltinBindings.copy, [value], []))
 })
 
 const add_external_library = new ExternalFunction("add_external_library", VoidType, (ctx: CompilerFunctionCallContext, args) => {
@@ -1015,7 +1061,8 @@ export const createCompilerModuleTask = (ctx: TaskContext): Task<Module, Compile
     unsafe_subscript, unsafe_set_subscript, operator_bitshift_left, operator_bitshift_right,
     operator_bitwise_and, operator_bitwise_or, rawptr: RawPointerType, add_external_library, add_macos_framework, assert, never: NeverType,
     get_current_loop, ctobj: CompileTimeObjectType, operator_mod, overloaded, static_length, assert_compile_error, initializer_function, add_export,
-    concat, Option: OptionTypeConstructor, Some: SomeTypeConstructor, None: NoneTypeConstructor, unsafe_enum_cast: unsafeEnumCast, is_enum_variant: isEnumVariant, generator })
+    concat, Option: OptionTypeConstructor, Some: SomeTypeConstructor, None: NoneTypeConstructor, unsafe_enum_cast: unsafeEnumCast, is_enum_variant: isEnumVariant, generator,
+    copy: copyFunction })
   const subCompilerState = pushSubCompilerState(ctx, { debugName: `compiler module`, lexicalParent: undefined, scope: moduleScope })
   const module = new Module('compiler', subCompilerState, null!)
   return Task.of(module)

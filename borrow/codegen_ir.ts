@@ -1,5 +1,5 @@
 import { externalBuiltinBindings } from "../src/compiler_sugar";
-import { AndAst, Ast, Binding, BindingAst, BlockAst, BoolAst, BreakAst, CallAst, Capability, CastAst, CompiledFunction, ConstructorAst, DefaultConsAst, FieldAst, FunctionParameter, IfAst, IntType, LetAst, NotAst, NumberAst, OperatorAst, OrAst, PrimitiveType, RawPointerType, ReturnAst, SetAst, SetFieldAst, SetSubscriptAst, SetValueFieldAst, SourceLocation, StatementsAst, StringAst, SubscriptAst, Type, UserCallAst, ValueFieldAst, VoidAst, VoidType, WhileAst } from "../src/defs";
+import { AndAst, Ast, Binding, BindingAst, BlockAst, BoolAst, BreakAst, CallAst, Capability, CastAst, CompiledFunction, ConstructorAst, DefaultConsAst, FieldAst, FunctionParameter, IfAst, IntType, LetAst, NotAst, NumberAst, OperatorAst, OrAst, ParameterizedType, PrimitiveType, RawPointerType, ReturnAst, SetAst, SetFieldAst, SetSubscriptAst, SetValueFieldAst, SourceLocation, StatementsAst, StringAst, SubscriptAst, Type, UserCallAst, ValueFieldAst, VoidAst, VoidType, WhileAst } from "../src/defs";
 import { ASTNode, AllocInstruction, AssignInstruction, AssignmentNode, BasicBlock, BinaryExpressionNode, BinaryOperationInstruction, BlockStatementNode, CallExpressionNode, CallInstruction, AccessInstruction, ConditionalJumpInstruction, CreateStructNode, ExpressionNode, ExpressionStatementNode, FunctionBlock, FunctionDeclarationNode, IRInstruction, IRValue, IdentifierNode, IfStatementNode, JumpInstruction, LetConstNode, LiteralNode, LoadConstantInstruction, LoadFromAddressInstruction, MemberExpressionNode, ProgramNode, Pointer, Value, ReturnInstruction, ReturnNode, StoreToAddressInstruction, Variable, VariableDeclarationNode, WhileStatementNode, compilerAssert, GetFieldPointerInstruction, AndNode, OrNode, PhiInstruction, CommentInstruction, MoveInstruction, EndAccessInstruction, printIR, MarkInitializedInstruction, InstructionId, PhiSource, DeallocStackInstruction, PointerOffsetInstruction } from "./defs";
 
 type ExpressionContext = {
@@ -69,12 +69,14 @@ export class FunctionCodeGenerator {
 
   toValue(type: Type, value: IRValue): Value {
     if (value instanceof Value) { return value; }
+    compilerAssert(type instanceof PrimitiveType, 'Only allowed on primitive types', { type });
     const reg = this.newRegister();
     const accessReg = this.newRegister();
     compilerAssert(value.address, 'Value must have an address', { type, value });
     this.addInstruction(new CommentInstruction(`Convert to value ${value.address}`));
-    this.addInstruction(new AccessInstruction(accessReg, value.address, [Capability.Let, Capability.Sink], type));
+    this.addInstruction(new AccessInstruction(accessReg, value.address, [Capability.Let], type));
     this.addInstruction(new LoadFromAddressInstruction(reg, type, accessReg));
+    // this.addInstruction(new MarkInitializedInstruction(value.address, type, false));
     return new Value(reg);
   }
 
@@ -495,11 +497,23 @@ export class FunctionCodeGenerator {
   }
 
   generateCopy(ast: Ast, context: ExpressionContext): IRValue {
-
     const binding = new Binding('copy', ast.type)
     if (ast.type instanceof PrimitiveType) {
-      this.generate(new LetAst(VoidType, SourceLocation.anon, binding, ast, false))
-      return this.generateBinding(new BindingAst(binding.type, SourceLocation.anon, binding), context)
+      const targetAccessReg = this.newRegister();
+      const type = ast.type
+      const source = this.generateExpression(ast, { valueCategory: 'rvalue' })
+      let valueReg = source instanceof Value ? source.register : this.newRegister()
+      if (source instanceof Pointer) {
+        const sourceAccessReg = this.newRegister();
+        // Load from pointer, using a let capability because it is a primitive type and a copy is safe
+        this.addInstruction(new AccessInstruction(sourceAccessReg, source.address, [Capability.Let], type));
+        this.addInstruction(new LoadFromAddressInstruction(valueReg, type, sourceAccessReg));
+      }
+      const targetPointer = this.generateAlloc(type);
+      this.addInstruction(new AccessInstruction(targetAccessReg, targetPointer, [Capability.Set], type));
+      this.addInstruction(new StoreToAddressInstruction(targetAccessReg, type, valueReg));
+      this.addInstruction(new EndAccessInstruction(targetAccessReg, [Capability.Set]));
+      return new Pointer(targetPointer)
     }
     
     this.generate(new LetAst(VoidType, SourceLocation.anon, binding, null, true))
@@ -544,9 +558,9 @@ export class FunctionCodeGenerator {
 
     // Generate code for arguments
     const fn = this.codegen.functions.get(ast.binding)
-    compilerAssert(fn, `Function ${ast.binding.name} not found`,{
+    compilerAssert(fn, `Function ${ast.binding.name} not found`, {
       c: this.codegen.functions
-  });
+    });
     this.addInstruction(new CommentInstruction(`Call ${ast.binding.name}`))
 
     compilerAssert(ast.args.length === fn.argBindings.length, 'Argument count mismatch', { binding: ast.binding, got: ast.args.length, expected: fn.argBindings.length });
@@ -601,6 +615,7 @@ export class FunctionCodeGenerator {
     }
     compilerAssert(false, 'Not implemented mutable check', { ast })
   }
+
   generateAssignmentField(ast: SetFieldAst) {
     compilerAssert(this.ensureMutable(ast.left), 'Cannot assign to a member of an immutable struct');
     const objReg = this.generateExpression(ast.left, { valueCategory: 'lvalue' });
@@ -654,6 +669,7 @@ export class FunctionCodeGenerator {
       const valueReg = this.newRegister();
       this.addInstruction(new AccessInstruction(sourceAccessReg, sourcePointer.address, [Capability.Sink], type));
       this.addInstruction(new LoadFromAddressInstruction(valueReg, type, sourceAccessReg));
+      this.addInstruction(new MarkInitializedInstruction(sourcePointer.address, type, false));
       this.addInstruction(new AccessInstruction(targetAccessReg, targetPointer, [Capability.Set], type));
       this.addInstruction(new StoreToAddressInstruction(targetAccessReg, type, valueReg));
       this.addInstruction(new EndAccessInstruction(targetAccessReg, [Capability.Set]));
@@ -765,16 +781,18 @@ export class FunctionCodeGenerator {
     const sourceAccessReg = this.newRegister();
     const targetAccessReg = this.newRegister();
     compilerAssert(capability === Capability.Set || capability === Capability.Inout, 'Invalid capability');
-    const moveFnName = capability === Capability.Set ? `moveInit${instr.type.shortName}` : `moveAssign${instr.type.shortName}`;
-    const moveFn = Array.from(this.codegen.functions.values()).find(fn => fn.binding.name === moveFnName); // hacks
-    compilerAssert(moveFn, `Function not found: ${moveFnName}`);
+    const metaobject = instr.type.typeInfo.metaobject;
+    const moveFnBinding = capability === Capability.Set ? metaobject.moveInitBinding : metaobject.moveAssignBinding;
+    compilerAssert(moveFnBinding && moveFnBinding instanceof Binding, `Move function not found for ${instr.type.shortName}`);
+    const moveFn = this.codegen.functions.get(moveFnBinding);
+    compilerAssert(moveFn, `Function not found: ${moveFnBinding.name}`);
     const instrs = [
       new CommentInstruction(`Replaced move with ${capability} to ${instr.target} from ${instr.source}`),
       new AccessInstruction(sourceAccessReg, instr.source, [Capability.Sink], instr.type),
       new AccessInstruction(targetAccessReg, instr.target, [capability], instr.type),
       new CallInstruction(null, VoidType, moveFn.binding, [targetAccessReg, sourceAccessReg], moveFn.parameters.map(p => p.type), moveFn.parameters.map(p => p.capability)),
-      new MarkInitializedInstruction(targetAccessReg, true),
-      new MarkInitializedInstruction(sourceAccessReg, false),
+      new MarkInitializedInstruction(targetAccessReg, instr.type, true),
+      new MarkInitializedInstruction(sourceAccessReg, instr.type, false),
       new EndAccessInstruction(sourceAccessReg, [Capability.Sink]),
       new EndAccessInstruction(targetAccessReg, [capability]),
     ];
@@ -798,6 +816,7 @@ export class FunctionCodeGenerator {
     if (!destructor) {
       return [
         new CommentInstruction(`TODO: No destructor for dealloc stack ${source} of type ${type.shortName}`),
+        new MarkInitializedInstruction(source, type, false),
       ]
     }
     compilerAssert(destructor && destructor instanceof Binding, `Destructor not found for ${type.shortName}`);
@@ -811,21 +830,28 @@ export class FunctionCodeGenerator {
   }
 
   createParamDeallocStackInstructions(block: BasicBlock, instrId: InstructionId, argIndex: number, type: Type) {
+    const target = this.currentFunction.parameterRegisters[argIndex];
+
     if (this.compiledFunction.isDestructor) {
-      return [
-        new CommentInstruction(`TODO: Insert dealloc inside deinit function ${argIndex} of type ${type.shortName}`),
-      ]
+      const fields = type.typeInfo.fields;
+      const instrs = fields.flatMap((field, i) => {
+        const fieldReg = this.newRegister();
+        const getFieldPtr = new GetFieldPointerInstruction(fieldReg, target, field)
+        const dealloc = this.createDeallocStackInstructions(fieldReg, field.fieldType)
+        return [getFieldPtr, ...dealloc]
+      })
+      return instrs
     }
 
     const destructor = type.typeInfo.metaobject.destructorBinding;
     if (!destructor) {
       return [
         new CommentInstruction(`TODO: No destructor for dealloc stack param ${argIndex} of type ${type.shortName}`),
+        new MarkInitializedInstruction(target, type, false),
       ]
     }
 
     compilerAssert(destructor && destructor instanceof Binding, `Destructor not found for ${type.shortName}`);
-    const target = this.currentFunction.parameterRegisters[argIndex];
     
     return [
       // new CommentInstruction(`TODO: Insert dealloc stack param ${argIndex} of type ${type.shortName}`),
