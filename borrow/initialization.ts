@@ -23,9 +23,20 @@ type Sequence = {
 const BOTTOM = { kind: 'Bottom' } as const;
 const TOP = { kind: 'Top' } as const;
 
+class AddressSet {
+  addresses: Set<string>;
+  constructor(arr: string[]) {
+    this.addresses = new Set(arr);
+  }
+}
+class InitializationStateObject {
+  constructor(public state: InitializationState) {}
+}
+type LocalMapValue = AddressSet | InitializationStateObject;
+
 // Register -> Set of addresses
 // Empty set is a special case meanining initialized without a known address
-type LocalMap = Map<string, Set<string>>;
+type LocalMap = Map<string, LocalMapValue>;
 type MemoryMap = Map<string, InitializationState>; // Address -> Initialization state
 
 type InterpreterState = {
@@ -82,7 +93,11 @@ export class InitializationCheckingPass {
     this.executeBlock(block, entryState);
     worklist.visited.add(block);
 
+    let runs = 0
     worklist.fixedPoint((block) => {
+      if (runs++ > 1000) {
+        compilerAssert(false, "Infinite loop");
+      }
       const predecessors = this.cfg.predecessors.get(block) || [];
       const state = this.blockStates.get(block.label)!;
       const inputStates = predecessors.map(pred => this.blockStates.get(pred.label)!).filter(x => x);
@@ -186,7 +201,7 @@ export class InitializationCheckingPass {
   }
 
   executeLoadConstant(instr: LoadConstantInstruction): void {
-    this.state.locals.set(instr.dest, new Set([]));
+    this.state.locals.set(instr.dest, new InitializationStateObject(TOP));
   }
 
   executeStoreToAddress(instr: StoreToAddressInstruction): void {
@@ -201,7 +216,7 @@ export class InitializationCheckingPass {
 
   executeAlloc(instr: AllocInstruction): void {
     const addr = this.newAddress(instr.type);
-    this.state.locals.set(instr.dest, new Set([addr]));
+    this.state.locals.set(instr.dest, new AddressSet([addr]));
     this.state.memory.set(addr, BOTTOM);
   }
 
@@ -230,10 +245,6 @@ export class InitializationCheckingPass {
 
   executeCall(instr: CallInstruction): void {
     compilerAssert(instr.binding && instr.binding instanceof Binding, `Function binding not found`, { instr, b: instr.binding });
-    // const fn = this.module.functionMap.get(instr.binding)
-    // const fnName = instr.binding.name
-    // compilerAssert(fn, `Function ${fnName} not found`);
-    // compilerAssert(fn.argBindings.length === instr.args.length, `Function ${fnName} expects ${fn.argBindings.length} arguments, got ${instr.args.length}`);
     for (let i = 0; i < instr.args.length; i++) {
       const arg = instr.args[i];
       const capability = instr.capabilities[i]
@@ -255,7 +266,7 @@ export class InitializationCheckingPass {
     this.ensureRegisterInitialized(instr.left);
     // TODO: BinaryOperationInstruction should be called something else so it allows just 1 param
     if (instr.right) this.ensureRegisterInitialized(instr.right);
-    this.state.locals.set(instr.dest, new Set([]));
+    this.state.locals.set(instr.dest, new InitializationStateObject(TOP));
   }
 
   executeLoadFromAddress(instr: LoadFromAddressInstruction): void {
@@ -263,7 +274,7 @@ export class InitializationCheckingPass {
     // memory here. A MarkInitialize instruction may have been inserted
     // after this.
     this.ensureRegisterInitialized(instr.address);
-    this.state.locals.set(instr.dest, new Set([]));
+    this.state.locals.set(instr.dest, new InitializationStateObject(TOP));
   }
 
   executeReturn(instr: ReturnInstruction): void {
@@ -297,10 +308,13 @@ export class InitializationCheckingPass {
 
   executeGetFieldPointer(instr: GetFieldPointerInstruction): void {
     const addresses = this.state.locals.get(instr.address);
+    if (addresses instanceof InitializationStateObject) {
+      compilerAssert(false, "Not implemented");
+    }
     compilerAssert(addresses, `Register ${instr.address} is not found`);
     compilerAssert(this.state.locals.get(instr.dest) === undefined, `Register ${instr.dest} is already initialized`);
-    const fields = [...addresses].map(addr => `${addr}.${instr.field.index}`);
-    this.state.locals.set(instr.dest, new Set(fields));
+    const fields = [...addresses.addresses].map(addr => `${addr}.${instr.field.index}`);
+    this.state.locals.set(instr.dest, new AddressSet(fields));
     if (this.debugLog) {
       console.log("After GetFieldPointerInstruction", instr.address, instr.dest, fields);
       printLocals(this.state.locals);
@@ -311,7 +325,7 @@ export class InitializationCheckingPass {
   executePointerOffset(instr: PointerOffsetInstruction): void {
     this.ensureRegisterInitialized(instr.address);
     this.ensureRegisterInitialized(instr.offsetReg);
-    this.state.locals.set(instr.dest, new Set([]));
+    this.state.locals.set(instr.dest, new InitializationStateObject(TOP));
   }
 
   executeConditionalJump(instr: ConditionalJumpInstruction): void {
@@ -357,19 +371,25 @@ export class InitializationCheckingPass {
     }
     const addrs = this.state.locals.get(instr.target)
     compilerAssert(addrs, `Register ${instr.target} is not found`);
-    compilerAssert(addrs.size === 1, `DeallocStackInstruction expects a single address`);
-    const addr = Array.from(addrs)[0];
+    compilerAssert(addrs instanceof AddressSet, `DeallocStackInstruction expects an address set`);
+    compilerAssert(addrs.addresses.size === 1, `DeallocStackInstruction expects a single address`);
+    const addr = Array.from(addrs.addresses)[0];
     this.state.memory.delete(addr);
   }
 
   executePhi(instr: PhiInstruction): void {
-    // TODO: We should actually copy the state from the block
-    // that we came from. Need a test case for this.
-    // Maybe foo||bar where bar should initialize something
-    const addrs = instr.sources.flatMap(source => {
-      return [...this.state.locals.get(source.value) || []]
-    }) // should be ame as meetLocals
-    this.state.locals.set(instr.dest, new Set(addrs));
+    // Filter sources that we haven't visited yet. Need a more
+    // thorough test case for this. Maybe foo||bar where bar should
+    // initialize something
+    const newLocal = instr.sources.flatMap(source => {
+      const local = this.state.locals.get(source.value)
+      if (!local) return []
+      return local
+    }).reduce((acc, val) => {
+      return meetLocals(acc, val);
+    })
+      
+    this.state.locals.set(instr.dest, newLocal)
   }
 
   replaceMove(instrId: InstructionId, instr: MoveInstruction, capability: Capability) {
@@ -379,16 +399,14 @@ export class InitializationCheckingPass {
   }
 
   updateMemoryForRegister(register: string, type: Type, newState: InitializationState): void {
-    const addresses = this.state.locals.get(register);
-    compilerAssert(addresses, `Register ${register} is not found`);
-    if (newState === BOTTOM && addresses.size === 0) { // No addresses implies initialized without a known address
-      const addr = this.newAddress(type);
-      this.state.locals.set(register, new Set([addr]));
-      this.state.memory.set(addr, newState);
+    const local = this.state.locals.get(register);
+    compilerAssert(local, `Register ${register} is not found`);
+    if (local instanceof InitializationStateObject) {
+      this.state.locals.set(register, new InitializationStateObject(newState));
       return
     }
 
-    for (const addr of addresses) {
+    for (const addr of local.addresses) {
       const ids = addr.split('.');
       const rootType = this.addressTypes.get(ids[0]);
       compilerAssert(rootType, `Root type not found for address ${addr}`);
@@ -399,8 +417,10 @@ export class InitializationCheckingPass {
   isDefinitelyInitialized(register: string): boolean {
     const addrs = this.state.locals.get(register);
     compilerAssert(addrs, `Register ${register} is not found`);
-    if (addrs.size === 0) return true;
-    return Array.from(addrs).every(addr => {
+    if (addrs instanceof InitializationStateObject) {
+      return addrs.state.kind === 'Top';
+    }
+    return Array.from(addrs.addresses).every(addr => {
       return isStatePathInitialized(this.state.memory, addr);
     })
   }
@@ -408,8 +428,10 @@ export class InitializationCheckingPass {
   isDefinitelyUninitialized(register: string): boolean {
     const addrs = this.state.locals.get(register);
     compilerAssert(addrs, `Register ${register} is not found`);
-    if (addrs.size === 0) return false;
-    return Array.from(addrs).every(addr => {
+    if (addrs instanceof InitializationStateObject) {
+      return addrs.state.kind === 'Bottom';
+    }
+    return Array.from(addrs.addresses).every(addr => {
       return !isStatePathInitialized(this.state.memory, addr);
     })
   }
@@ -442,7 +464,7 @@ export class InitializationCheckingPass {
 
   initializeFunctionParam(state: InterpreterState, binding: Binding, reg: string, type: Type, capability: Capability) {
     const addr = this.newAddress(type);
-    state.locals.set(reg, new Set([addr]));
+    state.locals.set(reg, new AddressSet([addr]));
     state.memory.set(addr, capability === Capability.Set ? BOTTOM : TOP); // Initialized
   }
 
@@ -472,8 +494,10 @@ function isStatePathInitialized(memory: MemoryMap, addr: string): boolean {
 
 function printLocals(locals: LocalMap) {
   console.log("  Locals:", Array.from(locals.entries()).flatMap(([key, val]) => {
-    if (val.size === 0) return `${key} -> ⊤`
-    return `${key} -> ${Array.from(val).join(', ')}`
+    if (val instanceof InitializationStateObject) {
+      return `${key} -> ${initializationStateToString(val.state)}`
+    }
+    return `${key} -> ${Array.from(val.addresses).join(', ')}`
   }).join(' | '))
 }
 
@@ -551,18 +575,21 @@ function meetInitializationState(a: InitializationState, b: InitializationState)
   compilerAssert(false, `Incompatible types in meetSD: ${a.kind} and ${b.kind}`);
 }
 
-function meetLocals(a: Set<string>, b: Set<string>): Set<string> {
-  const set = new Set<string>();
-  a.forEach(v => set.add(v));
-  b.forEach(v => set.add(v));
-  return set
+function meetLocals(a: LocalMapValue, b: LocalMapValue): LocalMapValue {
+  if (a instanceof AddressSet && b instanceof AddressSet) {
+    return new AddressSet([...a.addresses, ...b.addresses]);
+  }
+  if (a instanceof InitializationStateObject && b instanceof InitializationStateObject) {
+    return new InitializationStateObject(meetInitializationState(a.state, b.state));
+  }
+  compilerAssert(false, `Incompatible types in meetLocals: ${a} and ${b}`);
 }
 
 function mergeLocalMaps(
   map1: LocalMap,
   map2: LocalMap
 ): LocalMap {
-  const result = new Map<string, Set<string>>();
+  const result = new Map<string, LocalMapValue>();
   const allKeys = new Set([...map1.keys(), ...map2.keys()]);
   for (const key of allKeys) {
     const val1 = map1.get(key)
@@ -628,16 +655,26 @@ function statesEqual(state1: InterpreterState, state2: InterpreterState): boolea
   );
 }
 
-function localsEqual(locals1: Set<string>, locals2: Set<string>): boolean {
-  if (locals1.size !== locals2.size) {
+function setsEqual<T>(set1: Set<T>, set2: Set<T>): boolean {
+  if (set1.size !== set2.size) {
     return false;
   }
-  for (const local of locals1) {
-    if (!locals2.has(local)) {
+  for (const elem of set1) {
+    if (!set2.has(elem)) {
       return false;
     }
   }
   return true;
+}
+
+function localsEqual(locals1: LocalMapValue, locals2: LocalMapValue): boolean {
+  if (locals1 instanceof AddressSet && locals2 instanceof AddressSet) {
+    return setsEqual(locals1.addresses, locals2.addresses);
+  }
+  if (locals1 instanceof InitializationStateObject && locals2 instanceof InitializationStateObject) {
+    return initializationStateEqual(locals1.state, locals2.state);
+  }
+  return false;
 }
 
 function initializationStateEqual(sd1: InitializationState, sd2: InitializationState): boolean {

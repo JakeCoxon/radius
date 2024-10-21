@@ -76,19 +76,17 @@ export const generateMoveFunction = (structType: Type, fnName: string, destCapab
   const passFieldAsts = structType.typeInfo.fields.map((f, i) => {
     const arg = new BindingAst(structType, SourceLocation.anon, srcArgBinding);
     const field = new FieldAst(f.fieldType, SourceLocation.anon, arg, f);
-    if (sourceCapability === Capability.Sink) return field;
-    compilerAssert(sourceCapability === Capability.Let, `Invalid source capability ${sourceCapability}`);
-    // Let capability means copy each field
-    return new UserCallAst(f.fieldType, SourceLocation.anon, externalBuiltinBindings.copy, [field]);
+    const value = (() => {
+      if (sourceCapability === Capability.Sink) return field;
+      compilerAssert(sourceCapability === Capability.Let, `Invalid source capability ${sourceCapability}`);
+      // Let capability means copy each field
+      return new UserCallAst(f.fieldType, SourceLocation.anon, externalBuiltinBindings.copy, [field]);
+    })()
+    return new SetFieldAst(VoidType, SourceLocation.anon, new BindingAst(structType, SourceLocation.anon, setArgBinding), f, value);
   });
-  // TODO: assign each parameter instead of calling constructor
-  const call = new UserCallAst(structType, SourceLocation.anon, constructorBinding, [new BindingAst(setArgBinding.type, SourceLocation.anon, setArgBinding), ...passFieldAsts]);
-  const body = new StatementsAst(VoidType, SourceLocation.anon, [call]);
 
-  const compiledFunc = new CompiledFunction(binding, { debugName: fnName } as any, VoidType, concreteTypes, body, argBindings, funcParams, [], 0);
-  return compiledFunc
-  // this.allFunctions.set(binding, compiledFunc);
-  // return binding;
+  const body = new StatementsAst(VoidType, SourceLocation.anon, passFieldAsts);
+  return new CompiledFunction(binding, { debugName: fnName } as any, VoidType, concreteTypes, body, argBindings, funcParams, [], 0);
 }
 
 export const createParameter = (binding: Binding, capability: Capability) => {

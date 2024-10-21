@@ -12,11 +12,17 @@ type Buffer @struct:
   const __destructor = deinit_buffer
   const __move_init = move_init_buffer
   const __move_assign = move_assign_buffer
+  const __copy = copy_buffer
 
 
 fn buffer_alloc(buf: inout Buffer, size: int):
   buf.size = size + 0
   buf.data = malloc(size)
+
+
+fn copy_buffer(dst: set Buffer, buf: Buffer):
+  dst.size = buf.size + 0
+  dst.data = malloc(buf.size)
 
 
 fn move_init_buffer(dst: set Buffer, src: sink Buffer):
@@ -26,8 +32,7 @@ fn move_init_buffer(dst: set Buffer, src: sink Buffer):
 
 
 fn move_assign_buffer(dst: inout Buffer, src: sink Buffer):
-  if dst.data != rawptr(0):
-    free(dst.data)
+  deinit_buffer(dst)
   dst.size = src.size
   dst.data = src.data
   src.data = rawptr(0)
@@ -45,6 +50,7 @@ type Array!(T) @struct:
 
   const __set_subscript = set_array
   const __subscript = get_array
+  const __copy = copy_array
 
 
 fn init_array!(T)(arr: inout Array!T, len: int):
@@ -60,6 +66,17 @@ fn set_array!(T)(arr: inout Array!T, index: int, value: sink T) @inline:
 
 fn get_array!(T)(arr: Array!T, index: int) -> T @inline:
   compiler.unsafe_subscript!T(arr.data.data, index)
+
+
+fn copy_array!(T)(dst: set Array!T, src: Array!T):
+  dst.len = src.len + 0
+  dst.data = compiler.copy(src.data)
+  var i = 0
+  while i < src.len:
+    dst[i] = compiler.copy(src[i])
+    i += 1
+
+  # TODO: This is calling destructorFoo which doesn't seem right
 
 
 fn bar(x: inout int):

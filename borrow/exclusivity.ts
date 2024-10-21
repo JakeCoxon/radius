@@ -117,6 +117,7 @@ export class ExclusivityCheckingPass {
     }
 
     let index = 0;
+    let i = 0
     while (index < block.instructions.length) {
       const instr = block.instructions[index];
       if (!instr) {
@@ -125,6 +126,9 @@ export class ExclusivityCheckingPass {
       const instrId = new InstructionId(block.label, index);
       this.execute(instrId, instr);
       index++;
+      if (i++ > 10000) {
+        compilerAssert(false, "Infinite loop")
+      }
     }
 
     if (this.debugLog) {

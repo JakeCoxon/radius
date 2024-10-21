@@ -120,6 +120,10 @@ export const defaultMetaFunction = (subCompilerState: SubCompilerState, compiled
       if (compiledFn) compiledClass.metaobject.moveAssignBinding = compiledFn.binding
       return Task.success()
     }))
+    .chainFn(() => compileCustomCopy(subCompilerState, compiledClass.debugName, copy as Closure | undefined, compiledClass).chainFn((task, compiledFn) => {
+      if (compiledFn) compiledClass.metaobject.copyConstructorBinding = compiledFn.binding
+      return Task.success()
+    }))
     .chainFn((task, constructor) => {
       // Order is important, so destructor is added to compiled functions first.
       generateTypeMethods(subCompilerState.globalCompiler, compiledClass.type)
@@ -174,10 +178,35 @@ const compileCustomMove = (subCompilerState: SubCompilerState, structName: strin
     .chainFn((task, compiledFunction) => {
       compilerAssert(compiledFunction.parameters.length === 2, "Expected 2 parameters in move function", { c: compiledFunction })
       compilerAssert(compiledFunction.parameters[0].type === compiledClass.type, "Expected type of move function's first argument to be $type got $otherType", { type: compiledClass.type, otherType: compiledFunction.parameters[0].type })
-      compilerAssert(compiledFunction.parameters[0].capability === sourceCapability, "Expected sink capability", { c: compiledFunction })
+      compilerAssert(compiledFunction.parameters[0].capability === sourceCapability, `Expected ${sourceCapability} capability`, { c: compiledFunction })
       compilerAssert(compiledFunction.parameters[1].type === compiledClass.type, "Expected type of move function's second argument to be $type got $otherType", { type: compiledClass.type, otherType: compiledFunction.parameters[1].type })
       compilerAssert(compiledFunction.parameters[1].capability === Capability.Sink, "Expected sink capability", { c: compiledFunction })
       compilerAssert(compiledFunction.returnType === VoidType, "Expected void return type", { c: compiledFunction })
+      return Task.of(compiledFunction)
+    })
+  )
+}
+
+const compileCustomCopy = (subCompilerState: SubCompilerState, structName: string, copyfn: Closure | undefined, compiledClass: CompiledClass): Task<CompiledFunction | undefined, CompilerError> => {
+  if (!copyfn) return Task.of(undefined)
+
+  const ctx: CompilerFunctionCallContext = { location: SourceLocation.anon, compilerState: subCompilerState, resultAst: undefined, typeCheckResult: undefined }
+  const destValue = new BindingAst(compiledClass.type, ctx.location, new Binding("", compiledClass.type)) // Fake it
+  const sourceValue = new BindingAst(compiledClass.type, ctx.location, new Binding("", compiledClass.type)) // Fake it
+
+  const typeCheckResult: TypeCheckResult = { func: copyfn.func, concreteTypes: [], substitutions: {}, returnType: undefined!, sortedArgs: [], checkFailed: false }
+  const call: FunctionCallArg = { location: SourceLocation.anon, func: copyfn.func, typeArgs: [], args: [destValue, sourceValue], parentScope: copyfn.scope, lexicalParent: copyfn.lexicalParent, result: typeCheckResult }
+
+  return (
+    TaskDef(compileAndExecuteFunctionHeaderTask, call)
+    .chain(TaskDef(functionTemplateTypeCheckAndCompileTask, call))
+    .chainFn((task, compiledFunction) => {
+      compilerAssert(compiledFunction.parameters.length === 2, "Expected 2 parameters in copy function", { c: compiledFunction })
+      compilerAssert(compiledFunction.parameters[0].type === compiledClass.type, "Expected type of copy function's first argument to be $type got $otherType", { type: compiledClass.type, otherType: compiledFunction.parameters[0].type })
+      compilerAssert(compiledFunction.parameters[0].capability === Capability.Set, "Expected sink capability", { c: compiledFunction })
+      compilerAssert(compiledFunction.parameters[1].type === compiledClass.type, "Expected type of copy function's first argument to be $type got $otherType", { type: compiledClass.type, otherType: compiledFunction.parameters[0].type })
+      compilerAssert(compiledFunction.parameters[1].capability === Capability.Let, "Expected let capability", { c: compiledFunction })
+      compilerAssert(compiledFunction.returnType === VoidType, "Expected return type", { c: compiledFunction })
       return Task.of(compiledFunction)
     })
   )

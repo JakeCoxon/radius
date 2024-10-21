@@ -67,9 +67,11 @@ export class FunctionCodeGenerator {
     this.currentBlock.instructions.push(instr);
   }
 
+  // TODO: Clean this up because it's not clear exactly why it's needed
+  // Is it only primitive types? If it's copying a value, make it explicit
   toValue(type: Type, value: IRValue): Value {
     if (value instanceof Value) { return value; }
-    compilerAssert(type instanceof PrimitiveType, 'Only allowed on primitive types', { type });
+    // compilerAssert(type instanceof PrimitiveType, 'Only allowed on primitive types', { type });
     const reg = this.newRegister();
     const accessReg = this.newRegister();
     compilerAssert(value.address, 'Value must have an address', { type, value });
@@ -264,6 +266,10 @@ export class FunctionCodeGenerator {
         this.finalizeScope()
         this.addInstruction(new ReturnInstruction(value.register));
       } else {
+        // Not implemented yet. try it out with tests
+        // const value = this.toValue(ast.type, returnReg)
+        // this.finalizeScope()
+        // this.addInstruction(new ReturnInstruction(value.register));
         compilerAssert(false, 'Not implemented return statement', { ast })
       }
     }
