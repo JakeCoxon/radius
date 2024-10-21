@@ -3,7 +3,7 @@ import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, 
 import { Event, Task, TaskDef, Unit, isTask, isTaskResult, withContext } from "./tasks";
 import { createCompilerModuleTask, createListConstructor, defaultMetaFunction, guardSugar, ifMultiSugar, isSugar, matchSugar, optionBlockSugar, optionCastSugar, orElseSugar, print, questionSugar } from "./compiler_sugar";
 import { expandDotsSugar, expandFuncAllSugar, expandFuncAnySugar, expandFuncConcatSugar, expandFuncFirstSugar, expandFuncLastSugar, expandFuncMaxSugar, expandFuncMinSugar, expandFuncSumSugar, expandIteratorSugar, foldSugar, forExprSugar, forLoopSugar, listComprehensionSugar, listConstructorSugar, sliceSugar, whileExprSugar } from "./compiler_iterator"
-import { OptionTypeConstructor, calculateSizeOfType, canAssignTypeTo, classDefinitionToType, compileTypeConstructorTask, createParameterizedExternalType, getCommonType, hashValues, isParameterizedTypeOf, propagateLiteralType, propagatedLiteralAst, typeTableGetOrInsert, typecheckEquality, typecheckNumberComparison, typecheckNumberOperator } from "./compilter_types";
+import { OptionTypeConstructor, calculateSizeOfType, canAssignTypeTo, classDefinitionToType, compileTypeConstructorTask, createParameterizedExternalType, getCommonType, hashValues, isParameterizedTypeOf, propagateLiteralType, propagatedLiteralAst, typeTableGetOrInsert, typecheckEquality, typecheckNumberComparison, typecheckNumberOperator } from "./compiler_types";
 
 export const pushBytecode = <T extends BytecodeInstr>(out: BytecodeWriter, token: Token, instr: T) => {
   out.bytecode.locations.push(token.location);
