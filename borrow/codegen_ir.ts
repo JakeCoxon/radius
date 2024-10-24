@@ -177,7 +177,7 @@ export class FunctionCodeGenerator {
     if (ast instanceof NotAst)         { return this.generateNotExpression(ast, context) }
     if (ast instanceof BlockAst)       { return this.generateBlockExpression(ast, context) }
     if (ast instanceof CastAst)        { return this.generateCastExpression(ast, context) }
-    if (ast instanceof MutSigilAst)    { return this.generateExpression(ast.expr, context) }
+    // if (ast instanceof MutSigilAst)    { return this.generateExpression(ast.expr, context) }
     if (ast instanceof StatementsAst) {
       for (const stmt of ast.statements.slice(0, -1)) {
         this.generate(stmt);
@@ -301,7 +301,10 @@ export class FunctionCodeGenerator {
   generateVariableDeclaration(ast: LetAst) {
     const mutable = ast.mutable
     this.addInstruction(new CommentInstruction(`${mutable ? 'var' : 'let'} ${ast.binding.name}`))
-    const value = ast.value ? this.generateExpression(ast.value, { valueCategory: 'rvalue' }) : null
+    const value = ast.value ? (() => {
+      const astWithoutMutSigil = ast.value instanceof MutSigilAst ? ast.value.expr : ast.value
+      return this.generateExpression(astWithoutMutSigil, { valueCategory: 'rvalue' }) 
+    })() : null
 
     if (mutable) {
       this.generateMutableVariableDeclaration(ast, value);
@@ -492,13 +495,19 @@ export class FunctionCodeGenerator {
   }
 
   generateFunctionArgument(ast: Ast, reference: boolean, passingType: Type, capability: Capability): string {
+    let hasMutSigil = false
+    if (ast instanceof MutSigilAst) {
+      hasMutSigil = true
+      ast = ast.expr
+    }
 
     // @ParameterPassing
     const newReg = this.newRegister();
     if (reference) {
       if (capability === Capability.Sink || capability === Capability.Set || capability === Capability.Inout) {
-        compilerAssert(ast instanceof MutSigilAst, 'Expected mutation sigil on mutable argument', { ast, stmt: this.currentStatement, location: ast.location.source ? ast.location : this.currentLocation });
-        ast = ast.expr
+        const [expectedCapability, owned] = this.getCapabilityAndOwnership(ast)
+        compilerAssert(expectedCapability !== Capability.Let, 'Cannot mutate or sink an immutable variable', { ast, stmt: this.currentStatement, location: ast.location.source ? ast.location : this.currentLocation });
+        compilerAssert(hasMutSigil, 'Expected mutation sigil on mutable argument', { ast, stmt: this.currentStatement, location: ast.location.source ? ast.location : this.currentLocation });
       }
 
       const argReg = this.generateExpression(ast, { valueCategory: 'lvalue' });
@@ -509,13 +518,6 @@ export class FunctionCodeGenerator {
 
     // Primitive types are allow to be passed without a
     // mutation sigil and they will be copied instead.
-
-    let hasMutSigil = false
-    if (ast instanceof MutSigilAst) {
-      hasMutSigil = true
-      ast = ast.expr
-    }
-
     if (!hasMutSigil) capability = Capability.Let
 
     const argReg = this.generateExpression(ast, { valueCategory: 'rvalue' });
@@ -523,13 +525,13 @@ export class FunctionCodeGenerator {
     // if (ast.type instanceof PrimitiveType) {
       const value = this.toValue(ast.type, argReg)
       this.addInstruction(new AccessInstruction(newReg, value.register, [capability], passingType));
-
     // } else {
       // compilerAssert(argReg instanceof Pointer, "Expected pointer")
       // this.addInstruction(new AccessInstruction(newReg, argReg.address, [Capability.Let]));
     // }
-    
+
     if (hasMutSigil) {
+      compilerAssert(capability !== Capability.Let, 'Unexpected mutation sigil', { ast, stmt: this.currentStatement, location: ast.location.source ? ast.location : this.currentLocation });
       compilerAssert(argReg instanceof Pointer, 'Function argument must be an pointer', { ast, capability, passingType });
       this.addInstruction(new MarkInitializedInstruction(argReg.address, ast.type, false));
     }
@@ -639,10 +641,12 @@ export class FunctionCodeGenerator {
     compilerAssert(variable, `Undefined variable: ${ast.binding.name}`);
     const type = variable.type
 
-    const newLocal = this.generateExpression(ast.value, { valueCategory: 'rvalue' });
+    const astWithoutMutSigil = ast.value instanceof MutSigilAst ? ast.value.expr : ast.value
+    const newLocal = this.generateExpression(astWithoutMutSigil, { valueCategory: 'rvalue' });
     const lvalue = this.storeResult(type, newLocal)
 
     compilerAssert(variable.capability === Capability.Inout || variable.capability === Capability.Set, 'Cannot assign to a let variable');
+
     this.generateMovePointerInstructionWithCapabilityCheck(variable.register, lvalue, ast.value)
   }
 
@@ -669,7 +673,8 @@ export class FunctionCodeGenerator {
     const fieldType = ast.field.fieldType
     const reg = this.newRegister();
 
-    const newValue = this.generateExpression(ast.value, { valueCategory: 'rvalue' });
+    const astWithoutMutSigil = ast.value instanceof MutSigilAst ? ast.value.expr : ast.value
+    const newValue = this.generateExpression(astWithoutMutSigil, { valueCategory: 'rvalue' });
     const rightReg = this.storeResult(fieldType, newValue)
     this.addInstruction(new GetFieldPointerInstruction(reg, objReg.address, ast.field));
     this.generateMovePointerInstructionWithCapabilityCheck(reg, rightReg, ast.value)
@@ -686,7 +691,8 @@ export class FunctionCodeGenerator {
       destReg = this.newRegister();
       this.addInstruction(new GetFieldPointerInstruction(destReg, source, field));
     })
-    const newValue = this.generateExpression(ast.value, { valueCategory: 'rvalue' });
+    const astWithoutMutSigil = ast.value instanceof MutSigilAst ? ast.value.expr : ast.value
+    const newValue = this.generateExpression(astWithoutMutSigil, { valueCategory: 'rvalue' });
     const rightReg = this.storeResult(ast.value.type, newValue)
     this.generateMovePointerInstructionWithCapabilityCheck(destReg, rightReg, ast.value)
   }
@@ -756,12 +762,12 @@ export class FunctionCodeGenerator {
     const reg = this.newRegister();
 
     const offset = this.toValue(ast.right.type, this.generateExpression(ast.right, { valueCategory: 'rvalue' }))
-    const newValue = this.generateExpression(ast.value, { valueCategory: 'rvalue' });
+    const astWithoutMutSigil = ast.value instanceof MutSigilAst ? ast.value.expr : ast.value
+    const newValue = this.generateExpression(astWithoutMutSigil, { valueCategory: 'rvalue' });
     const valueReg = this.storeResult(elementType, newValue)
     this.addInstruction(new PointerOffsetInstruction(reg, objReg.register, elementType, offset.register));
 
     this.generateMovePointerInstructionWithCapabilityCheck(reg, valueReg, ast.value)
-    
   }
 
   generateMovePointerInstruction(targetPointer: string, sourcePointer: Pointer, type: Type) {

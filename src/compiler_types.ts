@@ -1,5 +1,5 @@
 import { compileClassTask } from "./compiler"
-import { Ast, BoolType, ClassDefinition, Closure, CompilerError, ConcreteClassType, DoubleType, EnumVariantAst, ExternalTypeConstructor, FloatLiteralType, FloatType, FunctionDefinition, GlobalCompilerState, IntLiteralType, IntType, NeverType, NumberAst, OperatorAst, ParameterizedType, ParseCall, ParseIdentifier, ParseNode, PrimitiveType, RawPointerType, Scope, ScopeParentSymbol, SourceLocation, StatementsAst, TaskContext, Tuple, Type, TypeCheckConfig, TypeCheckResult, TypeCheckVar, TypeConstructor, TypeField, TypeMatcher, TypeTable, TypeVariable, UnknownObject, VariantCastAst, VoidType, compilerAssert, getUniqueId, isType, u64Type, u8Type } from "./defs"
+import { Ast, BoolType, ClassDefinition, Closure, CompilerError, ConcreteClassType, DoubleType, EnumVariantAst, ExternalTypeConstructor, FloatLiteralType, FloatType, FunctionDefinition, GlobalCompilerState, IntLiteralType, IntType, MutSigilAst, NeverType, NumberAst, OperatorAst, ParameterizedType, ParseCall, ParseIdentifier, ParseNode, PrimitiveType, RawPointerType, Scope, ScopeParentSymbol, SourceLocation, StatementsAst, TaskContext, Tuple, Type, TypeCheckConfig, TypeCheckResult, TypeCheckVar, TypeConstructor, TypeField, TypeMatcher, TypeTable, TypeVariable, UnknownObject, VariantCastAst, VoidType, compilerAssert, getUniqueId, isType, u64Type, u8Type } from "./defs"
 import { Task, TaskDef } from "./tasks"
 
 export const isTypeInteger = (type: Type) => type === IntType || type === u64Type || type === u8Type
@@ -346,6 +346,9 @@ export const propagateLiteralType = (inferType: Type, ast: Ast | null): Type => 
       compilerAssert(ast.variantType, "Expected variant type", { ast, variantType })
     } else if (ast instanceof NumberAst) {
       ast.type = inferType
+    } else if (ast instanceof MutSigilAst) {
+      ast.type = inferType
+      recur(ast.expr)
     } else if (ast instanceof OperatorAst) {
       ast.type = inferType;
       recur(ast.args[0]); recur(ast.args[1])

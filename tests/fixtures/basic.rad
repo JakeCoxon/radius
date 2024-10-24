@@ -62,19 +62,19 @@ fn init_array!(T)(arr: inout Array!T, len: int):
 fn set_array!(T)(arr: inout Array!T, index: int, value: sink T) @inline:
   if arr.data.data == rawptr(0):
     arr&.init_array(10)
-  compiler.unsafe_set_subscript(arr.data.data&, index, value&)
+  compiler.unsafe_set_subscript(arr.data.data, index, value&)
 
 
 fn get_array!(T)(arr: Array!T, index: int) -> T @inline:
-  compiler.unsafe_subscript!T(arr.data.data&, index)
+  compiler.unsafe_subscript!T(arr.data.data, index)
 
 
 fn copy_array!(T)(dst: set Array!T, src: Array!T):
   dst.len = src.len
-  dst.data = compiler.copy(src.data)
+  dst.data = src.data.copy
   var i = 0
   while i < src.len:
-    dst[i] = compiler.copy(src[i])
+    dst[i] = src[i].copy
     i += 1
 
   # TODO: Too many moves ends up calling destructorFoo a lot
@@ -118,7 +118,7 @@ fn test_array2():
   # print(arr[0].x)
   print(arr2[0].x)
 
-  var arr3 = compiler.copy(arr2)
+  var arr3 = arr2.copy
   print(arr3[0].x)
 
 

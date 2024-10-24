@@ -515,6 +515,12 @@ export const createMethodCall = (vm: Vm, receiver: Ast, name: string, typeArgs: 
   const t = type instanceof ConcreteClassType ? type.compiledClass.classDefinition : type;
   compilerAssert(t instanceof ClassDefinition || t instanceof ExternalTypeConstructor || t instanceof PrimitiveType, "Expected class, type or type constructor got $t", { t })
 
+  if (name === 'copy') {
+    const copyMethod = externalBuiltinBindings.copy
+    vm.stack.push(new UserCallAst(receiver.type, receiver.location, copyMethod, [receiver]))
+    return Task.success()
+  }
+
   // TODO: Must wait for event if not found
   const findClosure = (initialScope: Scope) => {
     let checkScope: Scope | undefined = initialScope;
