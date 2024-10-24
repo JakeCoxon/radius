@@ -509,23 +509,30 @@ export class FunctionCodeGenerator {
 
     // Primitive types are allow to be passed without a
     // mutation sigil and they will be copied instead.
-    
-    let hasSigil = false
+
+    let hasMutSigil = false
     if (ast instanceof MutSigilAst) {
-      hasSigil = true
+      hasMutSigil = true
       ast = ast.expr
     }
 
-    if (!hasSigil) capability = Capability.Let
+    if (!hasMutSigil) capability = Capability.Let
 
     const argReg = this.generateExpression(ast, { valueCategory: 'rvalue' });
+    
     // if (ast.type instanceof PrimitiveType) {
       const value = this.toValue(ast.type, argReg)
       this.addInstruction(new AccessInstruction(newReg, value.register, [capability], passingType));
+
     // } else {
       // compilerAssert(argReg instanceof Pointer, "Expected pointer")
       // this.addInstruction(new AccessInstruction(newReg, argReg.address, [Capability.Let]));
     // }
+    
+    if (hasMutSigil) {
+      compilerAssert(argReg instanceof Pointer, 'Function argument must be an pointer', { ast, capability, passingType });
+      this.addInstruction(new MarkInitializedInstruction(argReg.address, ast.type, false));
+    }
 
     return newReg
 

@@ -131,14 +131,15 @@ fn test_array3():
   arr[0][0] = Foo(42, 2.0)
   print(arr[0][0].x)
 
+
 fn test_foo_move():
   var x = 1
   var y = 2.0
   var foo = Foo(x&, y&)
   
-  # TODO: This should be an error
-  # because x is moved from
-  print(x, foo.x)
+  # This will be an error because x is moved from
+  # print(x)
+  print(foo.x)
 
 
 fn main():
@@ -146,6 +147,7 @@ fn main():
   test_array1()
   test_array2()
   test_array3()
+
   test_foo_move()
 
   let zzz = 3
