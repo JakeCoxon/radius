@@ -1,5 +1,6 @@
 import compiler
 
+
 type Foo @struct:
   x: int
   y: float
@@ -16,25 +17,25 @@ type Buffer @struct:
 
 
 fn buffer_alloc(buf: inout Buffer, size: int):
-  buf.size = size + 0
+  buf.size = size
   buf.data = malloc(size)
 
 
 fn copy_buffer(dst: set Buffer, buf: Buffer):
-  dst.size = buf.size + 0
+  dst.size = buf.size
   dst.data = malloc(buf.size)
 
 
 fn move_init_buffer(dst: set Buffer, src: sink Buffer):
-  dst.size = src.size
-  dst.data = src.data
+  dst.size = src.size&
+  dst.data = src.data&
   src.data = rawptr(0)
 
 
 fn move_assign_buffer(dst: inout Buffer, src: sink Buffer):
-  deinit_buffer(dst)
-  dst.size = src.size
-  dst.data = src.data
+  deinit_buffer(dst&)
+  dst.size = src.size&
+  dst.data = src.data&
   src.data = rawptr(0)
 
 
@@ -52,31 +53,32 @@ type Array!(T) @struct:
   const __subscript = get_array
   const __copy = copy_array
 
-
 fn init_array!(T)(arr: inout Array!T, len: int):
-  arr.len = len + 0
-  buffer_alloc(arr.data, len * (meta T.sizeof))
+  arr.len = len
+  let size_bytes = len * (meta T.sizeof)
+  arr.data&.buffer_alloc(size_bytes)
 
 
 fn set_array!(T)(arr: inout Array!T, index: int, value: sink T) @inline:
   if arr.data.data == rawptr(0):
-    init_array(arr, 10)
-  compiler.unsafe_set_subscript(arr.data.data, index, value)
+    arr&.init_array(10)
+  compiler.unsafe_set_subscript(arr.data.data&, index, value&)
 
 
 fn get_array!(T)(arr: Array!T, index: int) -> T @inline:
-  compiler.unsafe_subscript!T(arr.data.data, index)
+  compiler.unsafe_subscript!T(arr.data.data&, index)
 
 
 fn copy_array!(T)(dst: set Array!T, src: Array!T):
-  dst.len = src.len + 0
+  dst.len = src.len
   dst.data = compiler.copy(src.data)
   var i = 0
   while i < src.len:
     dst[i] = compiler.copy(src[i])
     i += 1
 
-  # TODO: This is calling destructorFoo which doesn't seem right
+  # TODO: Too many moves ends up calling destructorFoo a lot
+  # TODO: The copy is moving the value out of src[i] (need projection)
 
 
 fn bar(x: inout int):
@@ -90,38 +92,53 @@ fn baz(foo: inout Foo):
 fn test_array1():
 
   var buffer = Buffer(0, rawptr(0))
-  var arr = Array!int(0, buffer)
-  init_array(arr, 10)
+  var arr = Array!int(0, buffer&)
+  arr&.init_array(10)
 
   arr[0] = 10
   arr[1] = 20
   print(arr[0])
 
-
 fn test_array2():
 
   var buffer = Buffer(0, rawptr(0))
-  var arr = Array!Foo(0, buffer)
-  init_array(arr, 10)
+  var arr = Array!Foo(0, buffer&)
+  arr&.init_array(10)
 
   arr[0] = Foo(3, 2.0)
   arr[1] = Foo(4, 3.0)
 
   arr[0].x += 1
-  
   print(arr[0].x)
 
-  var arr2 = compiler.copy(arr)
+  var arr2 = arr&
+  let el = arr2[0]
+
+  print(el.x)
+  # print(arr[0].x)
+  print(arr2[0].x)
+
+  var arr3 = compiler.copy(arr2)
+  print(arr3[0].x)
 
 
 fn test_array3():
 
   var buffer = Buffer(0, rawptr(0))
-  var arr = Array!(Array!Foo)(0, buffer)
-  init_array(arr, 10)
+  var arr = Array!(Array!Foo)(0, buffer&)
+  arr&.init_array(10)
 
   arr[0][0] = Foo(42, 2.0)
   print(arr[0][0].x)
+
+fn test_foo_move():
+  var x = 1
+  var y = 2.0
+  var foo = Foo(x&, y&)
+  
+  # TODO: This should be an error
+  # because x is moved from
+  print(x, foo.x)
 
 
 fn main():
@@ -129,6 +146,7 @@ fn main():
   test_array1()
   test_array2()
   test_array3()
+  test_foo_move()
 
   let zzz = 3
   let z: int = 2
@@ -139,9 +157,9 @@ fn main():
   foo.x += 1
   print(foo.x)
 
-  bar(foo.x)
+  bar(foo.x&)
   print(foo.x)
-  baz(foo)
+  baz(foo&)
   print(foo.x)
 
   while foo.x < 10:

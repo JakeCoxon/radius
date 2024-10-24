@@ -1,13 +1,13 @@
 import { Capability } from "../src/defs";
 import { ControlFlowGraph } from "./controlflow";
-import { AccessInstruction, FunctionBlock, IRInstruction, InstructionId, LoadFromAddressInstruction, MoveInstruction, StoreToAddressInstruction, compilerAssert, createUsageMap } from "./defs";
+import { AccessInstruction, FunctionBlock, IRInstruction, InstructionId, LoadFromAddressInstruction, MoveInstruction, ParameterInstruction, StoreToAddressInstruction, compilerAssert, createUsageMap, getInstructionResult } from "./defs";
 
 const CapabilityRanking = [Capability.Let, Capability.Set, Capability.Inout, Capability.Sink]
 
 export class ReifyAccessPass {
   debugLog = false
 
-  constructor(public cfg: ControlFlowGraph) {
+  constructor(public cfg: ControlFlowGraph, public fn: FunctionBlock) {
   }
 
   reifyAccesses() {
@@ -29,7 +29,7 @@ export class ReifyAccessPass {
     }
 
     while (worklist.length > 0) {
-      const instrId = worklist.pop()!
+      const instrId = worklist.shift()!
       const instr = this.cfg.blocks.find(b => b.label === instrId.blockId)!.instructions[instrId.instrId] as AccessInstruction
       const usageList = usages.get(instr.dest) || []
       if (usageList.length === 0) {
@@ -37,11 +37,10 @@ export class ReifyAccessPass {
         instr.capabilities = [Capability.Let]
         continue
       }
-      // compilerAssert(usageList.length > 0, 'No usage instrs found', { dest: instr.dest, instrId, instr })
 
       const { min, max } = usageList.reduce((acc, usage) => {
-        const instr = this.cfg.blocks.find(b => b.label === usage.instrId.blockId)!.instructions[usage.instrId.instrId]
-        const reqs = capabilitiesOfInstr(instr, usage.operandIndex)
+        const usageInstr = this.cfg.blocks.find(b => b.label === usage.instrId.blockId)!.instructions[usage.instrId.instrId]
+        const reqs = capabilitiesOfInstr(usageInstr, usage.operandIndex)
         if (reqs.length === 0) return acc
         let x = Math.min(...reqs.map(x => CapabilityRanking.indexOf(x)))
         return { min: Math.max(acc.min, x), max: Math.max(acc.max, x) }
@@ -81,7 +80,7 @@ const capabilitiesOfInstr = (instr: IRInstruction, operandIndex: number) => {
     // A load can be a let if it's a copy. We don't actually
     // use this instruction to update memory, a MarkInitialized
     // instruction is inserted afterwards. But we need to mark it here
-    return [Capability.Let, Capability.Sink] // Assume sink for now
+    return [Capability.Let, Capability.Sink]
   } else if (instr instanceof StoreToAddressInstruction) {
     return [Capability.Set]
   } else return []

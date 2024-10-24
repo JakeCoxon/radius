@@ -105,7 +105,7 @@ const runMandatoryPasses = (fnGenerator: FunctionCodeGenerator, mod: Module, fn:
   printCFG(cfg)
   printDominators(cfg)
 
-  const reify = new ReifyAccessPass(cfg);
+  const reify = new ReifyAccessPass(cfg, fn);
   reify.debugLog = DebugLog;
   reify.reifyAccesses();
 

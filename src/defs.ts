@@ -183,6 +183,7 @@ export class ParseValue extends ParseNodeType {        key = 'value' as const;  
 export class ParseQuestion extends ParseNodeType {     key = 'question' as const;     constructor(public token: Token, public expr: ParseNode) { super();} }
 export class ParseQuote extends ParseNodeType {        key = 'quote' as const;        constructor(public token: Token, public expr: ParseNode) { super();} }
 export class ParseFold extends ParseNodeType {         key = 'fold' as const;         constructor(public token: Token, public expr: ParseNode) { super();} }
+export class ParseMutSigil extends ParseNodeType {     key = 'mut' as const;          constructor(public token: Token, public expr: ParseNode) { super();} }
 export class ParseNamedArg extends ParseNodeType {     key = 'namedarg' as const;     constructor(public token: Token, public name: ParseIdentifier, public expr: ParseNode) { super();} }
 export class ParseBytecode extends ParseNodeType {     key = 'bytecode' as const;     constructor(public token: Token, public bytecode: { code: BytecodeInstr[]; locations: SourceLocation[]; }) { super();} }
 export class ParseFreshIden extends ParseNodeType {    key = 'freshiden' as const;    constructor(public token: Token, public freshBindingToken: FreshBindingToken) { super();} }
@@ -198,7 +199,7 @@ export type ParseNode = ParseStatements | ParseLet | ParseSet | ParseOperator | 
   ParseDict | ParsePostCall | ParseSymbol | ParseNote | ParseSlice | ParseSubscript | ParseTuple | ParseClass |
   ParseNil | ParseBoolean | ParseElse | ParseMetaIf | ParseMetaFor | ParseMetaWhile | ParseBlock | ParseImport | 
   ParseCompilerIden | ParseValue | ParseConstructor | ParseQuote | ParseBytecode | ParseFreshIden | ParseFold | 
-  ParseNamedArg | ParseEvalFunc | ParseConcurrency | ParseVoid | ParseIs | ParseOrElse | ParseQuestion | 
+  ParseNamedArg | ParseEvalFunc | ParseConcurrency | ParseVoid | ParseIs | ParseOrElse | ParseQuestion | ParseMutSigil |
   ParseIterator | ParseExtract | ParseMatch | ParseBreakOpt | ParseGuard | ParseLetAs | ParseIfMulti | ParseBlockNoScope
 
 // Void types mean that in secondOrder compilation, the AST doesn't return an AST
@@ -243,6 +244,7 @@ export type BytecodeInstr =
   { type: 'staticsubscriptast' } |
   { type: 'setsubscriptast' } |
   { type: 'subscript' } |
+  { type: 'mutast' } |
   { type: 'setmetaast' } |
   { type: 'operatorast', name: string, count: number } |
   { type: 'constructorast', count: number } |
@@ -503,12 +505,13 @@ export class SetDerefAst extends AstRoot {      key = 'setderef' as const;      
 export class CompTimeObjAst extends AstRoot {   key = 'comptimeobj' as const;    constructor(public type: Type, public location: SourceLocation, public value: unknown) { super() } }
 export class InterleaveAst extends AstRoot {    key = 'interleave' as const;     constructor(public type: Type, public location: SourceLocation, public binding: Binding, public entryLabels: Binding[], public elseLabels: Binding[], public entryBlock: Ast, public elseBlock: Ast) { super() } }
 export class ContinueInterAst extends AstRoot { key = 'continueinter' as const;  constructor(public type: Type, public location: SourceLocation, public interleaveBinding: Binding, public labelBinding: Binding) { super() } }
+export class MutSigilAst extends AstRoot {      key = 'mut' as const;            constructor(public type: Type, public location: SourceLocation, public expr: Ast) { super() } }
 
 export type Ast = NumberAst | LetAst | SetAst | OperatorAst | IfAst | ListAst | CallAst | AndAst | UserCallAst |
   OrAst | StatementsAst | WhileAst | ReturnAst | SetFieldAst | VoidAst | CastAst | SubscriptAst | ConstructorAst |
   BindingAst | StringAst | NotAst | FieldAst | BlockAst | BreakAst | BoolAst | CastAst | DefaultConsAst | ValueFieldAst |
   SetValueFieldAst | SetSubscriptAst | AddressAst | DerefAst | SetDerefAst | CompTimeObjAst | NamedArgAst | InterleaveAst | 
-  ContinueInterAst | VariantCastAst | EnumVariantAst
+  ContinueInterAst | VariantCastAst | EnumVariantAst | MutSigilAst
 export const isAst = (value: unknown): value is Ast => value instanceof AstRoot;
 
 export class Tuple {

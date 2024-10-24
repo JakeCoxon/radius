@@ -33,7 +33,7 @@ export class PhiSource {
   constructor(public value: string, public block: string) {}
 }
 
-export class AssignInstruction extends IRInstruction {              irType = 'assign';                constructor(public dest: string, public source: string) { super(); } }
+/* unused? */ export class AssignInstruction extends IRInstruction {              irType = 'assign';                constructor(public dest: string, public source: string) { super(); } }
 export class LoadConstantInstruction extends IRInstruction {        irType = 'loadconst';             constructor(public dest: string, public type: Type, public value: number) { super(); } }
 export class AllocInstruction extends IRInstruction {               irType = 'alloc';                 constructor(public dest: string, public type: Type) { super(); } }
 export class GetFieldPointerInstruction extends IRInstruction {     irType = 'getfieldptr';           constructor(public dest: string, public address: string, public field: TypeField) { super(); } }

@@ -1,7 +1,7 @@
 import { BytecodeDefault, BytecodeSecondOrder, callFunctionFromValueTask, compileClassTask, compileFunctionPrototype, createBytecodeVmAndExecuteTask, pushBytecode, pushGeneratedBytecode, unknownToAst, visitParseNode, visitParseNodeAndError } from "./compiler";
 import { externalBuiltinBindings, getEnumOf } from "./compiler_sugar";
 import { getCommonType, hashValues, isTypeInteger, normalizeNumberType, numberTypeToConcrete, propagateLiteralType, propagatedLiteralAst, typeCheckAssert, typeMatcherEquals, typeCheckFunctionResult, tryMatchType, typeArgumentsToType } from "./compiler_types";
-import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, CallAst, IntType, Closure, UserCallAst, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition, ParseCall, TypeVariable, TypeMatcher, SourceLocation, ExternalTypeConstructor, ScopeParentSymbol, SubCompilerState, CompilerFunction, IntLiteralType, FloatLiteralType, FloatType, RawPointerType, AddressAst, BindingAst, UnknownObject, NeverType, CompilerFunctionCallContext, CompileTimeObjectType, CompTimeObjAst, ParseString, NamedArgAst, TypeCheckResult, u8Type, TypeCheckVar, ParseFreshIden, NumberAst, BoolAst, createStatements, ExternalFunction, BlockAst, LabelBlock, ConstructorAst, VariantCastAst, EnumVariantAst, FunctionParameter, Capability } from "./defs";
+import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, CallAst, IntType, Closure, UserCallAst, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition, ParseCall, TypeVariable, TypeMatcher, SourceLocation, ExternalTypeConstructor, ScopeParentSymbol, SubCompilerState, CompilerFunction, IntLiteralType, FloatLiteralType, FloatType, RawPointerType, AddressAst, BindingAst, UnknownObject, NeverType, CompilerFunctionCallContext, CompileTimeObjectType, CompTimeObjAst, ParseString, NamedArgAst, TypeCheckResult, u8Type, TypeCheckVar, ParseFreshIden, NumberAst, BoolAst, createStatements, ExternalFunction, BlockAst, LabelBlock, ConstructorAst, VariantCastAst, EnumVariantAst, FunctionParameter, Capability, MutSigilAst } from "./defs";
 import { Task, TaskDef, Unit } from "./tasks";
 
 
@@ -258,19 +258,26 @@ function functionInlineTask(ctx: TaskContext, { location, func, typeArgs, parent
   const { concreteTypes } = result
 
   const args = result.sortedArgs
+
+  // TODO: This is ugly
+  const isSimpleObj = (arg: Ast) => {
+    if (arg instanceof BindingAst || arg instanceof AddressAst || arg instanceof NumberAst || arg instanceof BoolAst) return true
+    if (arg instanceof MutSigilAst) return isSimpleObj(arg.expr)
+    return false
+  }
   
   func.params.forEach(({ name, type, storage, capability }, i) => {
     compilerAssert(concreteTypes[i], `Expected type`, { func, args, concreteTypes })
     compilerAssert(concreteTypes[i] !== IntLiteralType)
-    const arg = args[i]
+    let arg = args[i]
     const nameValue = name instanceof ParseFreshIden ? name.freshBindingToken.identifier : name.token.value
     
     if (arg instanceof CompTimeObjAst) { // Special case compile time objects
       templateScope[nameValue] = arg.value
       return
     }
-    let isSimpleObj = arg instanceof BindingAst || arg instanceof AddressAst || arg instanceof NumberAst || arg instanceof BoolAst
-    if (isSimpleObj) {
+    let simple = isSimpleObj(arg)
+    if (simple) {
       propagateLiteralType(concreteTypes[i], arg)
       templateScope[nameValue] = arg
       return
@@ -283,9 +290,12 @@ function functionInlineTask(ctx: TaskContext, { location, func, typeArgs, parent
     propagateLiteralType(concreteTypes[i], arg)
     // TODO: This breaks sink params stuff. think about having another capability to allow sinking
     // TODO: Handle inout params differently so we don't sink by default
+    // Find a better way to forward arguments without using let statements
+    // Maybe a custom AST, special capability, or custom IR
     const mutable = capability === Capability.Sink || capability === Capability.Inout
     // compilerAssert(capability !== Capability.Inout, "Not implemented inlining an inout parameter", { name, func: func.debugName, capability })
-    statements.push(new LetAst(VoidType, location, binding, args[i], mutable))
+    if (mutable) arg = new MutSigilAst(arg.type, arg.location, arg)
+    statements.push(new LetAst(VoidType, location, binding, arg, mutable))
     argBindings.push(binding)
   });
   
@@ -301,7 +311,7 @@ function functionInlineTask(ctx: TaskContext, { location, func, typeArgs, parent
     TaskDef(createBytecodeVmAndExecuteTask, subCompilerState, func.templatePrototype.bytecode!, templateScope)
     .chainFn((task, ast) => {
       compilerAssert(isAst(ast), "Expected ast got $ast", { ast });
-
+      
       // ctx.globalCompiler.logger.log(textColors.cyan(`Compiled inline ${func.debugName}`))
       // TODO: This is basically what endblockast instruction does. can we just emit block instructions?
       let type = propagatedLiteralAst(ast).type

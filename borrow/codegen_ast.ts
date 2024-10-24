@@ -1,5 +1,5 @@
 import { externalBuiltinBindings } from "../src/compiler_sugar";
-import { Binding, BindingAst, CallAst, Capability, CompiledClass, CompiledFunction, ConcreteClassType, FieldAst, FunctionParameter, PrimitiveType, RawPointerType, SetFieldAst, SourceLocation, StatementsAst, Type, TypeField, TypeInfo, UserCallAst, VoidType } from "../src/defs";
+import { Binding, BindingAst, CallAst, Capability, CompiledClass, CompiledFunction, ConcreteClassType, FieldAst, FunctionParameter, MutSigilAst, PrimitiveType, RawPointerType, SetFieldAst, SourceLocation, StatementsAst, Type, TypeField, TypeInfo, UserCallAst, VoidType } from "../src/defs";
 import { compilerAssert } from "./defs";
 
 export const generateConstructor = (structName: string, structType: Type) => {
@@ -27,7 +27,8 @@ export const generateConstructor = (structName: string, structType: Type) => {
   const fieldAsts = fields.map((field, i) => {
     const valueBinding = new BindingAst(field.fieldType, SourceLocation.anon, fieldBindings[i]);
     const struct = new BindingAst(structType, SourceLocation.anon, param);
-    return new SetFieldAst(VoidType, SourceLocation.anon, struct, field, valueBinding);
+    const valueMut = new MutSigilAst(field.fieldType, SourceLocation.anon, valueBinding);
+    return new SetFieldAst(VoidType, SourceLocation.anon, struct, field, valueMut);
   });
   const constructorBody = new StatementsAst(VoidType, SourceLocation.anon, fieldAsts);
 
@@ -77,7 +78,9 @@ export const generateMoveFunction = (structType: Type, fnName: string, destCapab
     const arg = new BindingAst(structType, SourceLocation.anon, srcArgBinding);
     const field = new FieldAst(f.fieldType, SourceLocation.anon, arg, f);
     const value = (() => {
-      if (sourceCapability === Capability.Sink) return field;
+      if (sourceCapability === Capability.Sink) {
+        return new MutSigilAst(f.fieldType, SourceLocation.anon, field)
+      }
       compilerAssert(sourceCapability === Capability.Let, `Invalid source capability ${sourceCapability}`);
       // Let capability means copy each field
       return new UserCallAst(f.fieldType, SourceLocation.anon, externalBuiltinBindings.copy, [field]);
