@@ -297,15 +297,20 @@ export const makeParser = (input: string, debugName: string) => {
     return new ParseSlice(sliceToken, left, l[0], l[1], l[2] ?? null, isStatic)
   };
   const parseFunctionTypeArguments = (callToken: Token, left: ParseNode): ParseNode => {
-
-    const parseTypeArgs = () => {
+    const parseParenthesisedTypeArgs = () => {
       const typeArgs = [parseExpr()];
       while (match(",")) typeArgs.push(parseExpr());
       expect(")", `Expected ')' after type list`);
       return typeArgs;
     }
-
-    const typeArgs = match("(") ? parseTypeArgs() : matchType("NUMBER") ? [parseNumberLiteral()] : [expectIdentifier()];
+    const parseTypeArgs = (): ParseNode[] => {
+      if (match("(")) return parseParenthesisedTypeArgs()
+      if (matchType("NUMBER")) return [parseNumberLiteral()]
+      const iden = expectIdentifier()
+      if (match("!")) return [new ParseCall(previous, iden, [], parseTypeArgs())]
+      return [iden]
+    }
+    const typeArgs = parseTypeArgs()
     const args = match("(") ? parseArgs() : []
     return new ParseCall(callToken, left, args, typeArgs)
   };

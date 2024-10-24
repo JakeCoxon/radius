@@ -125,7 +125,7 @@ fn test_array2():
 fn test_array3():
 
   var buffer = Buffer(0, rawptr(0))
-  var arr = Array!(Array!Foo)(0, buffer&)
+  var arr = Array!Array!Foo(0, buffer&)
   arr&.init_array(10)
 
   arr[0][0] = Foo(42, 2.0)
