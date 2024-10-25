@@ -219,6 +219,10 @@ export const runCompilerTest = (
   }
 
   try {
+
+    // TODO: Put this somewhere else
+    generateTypeMethods(globalCompiler, StringType)
+
     runTestInner(testObject, queue, input, `${testObject.moduleName}.rad`, globalCompiler)
 
     globalCompiler.compiledFunctions.forEach((func) => {
@@ -227,8 +231,6 @@ export const runCompilerTest = (
       writer.write(Bun.inspect(func.body, { depth: 100, colors: true }))
       writer.write('\n\n')
     })
-
-    generateTypeMethods(globalCompiler, StringType)
 
     const codeGenerator = new CodeGenerator();
     const mod = new Module()

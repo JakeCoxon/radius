@@ -98,7 +98,7 @@ test('option_expansion', async () => {
   }
 })
 
-test('basic', async () => {
+test('basicasdf', async () => {
   const testObject = createTest({ 
     moduleName: 'basic',
     globalOptions,

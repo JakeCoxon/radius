@@ -1,5 +1,10 @@
 import compiler
 
+fn malloc_or_exit(size: int) -> rawptr:
+  var ptr = malloc(size)
+  if ptr == rawptr(0):
+    exit(1)
+  ptr
 
 type Foo @struct:
   x: int
@@ -18,12 +23,16 @@ type Buffer @struct:
 
 fn buffer_alloc(buf: inout Buffer, size: int):
   buf.size = size
-  buf.data = malloc(size)
+  buf.data = malloc_or_exit(size)
+  var i = 0
+  while i < size:
+    compiler.unsafe_set_subscript!u8(buf.data, i, 0)
+    i += 1
 
 
 fn copy_buffer(dst: set Buffer, buf: Buffer):
   dst.size = buf.size
-  dst.data = malloc(buf.size)
+  dst.data = malloc_or_exit(buf.size)
 
 
 fn move_init_buffer(dst: set Buffer, src: sink Buffer):
@@ -37,6 +46,7 @@ fn move_assign_buffer(dst: inout Buffer, src: sink Buffer):
   dst.size = src.size&
   dst.data = src.data&
   src.data = rawptr(0)
+  src.size = 0
 
 
 fn deinit_buffer(buf: sink Buffer):
@@ -60,8 +70,8 @@ fn init_array!(T)(arr: inout Array!T, len: int):
 
 
 fn set_array!(T)(arr: inout Array!T, index: int, value: sink T) @inline:
-  if arr.data.data == rawptr(0):
-    arr&.init_array(10)
+  # if arr.data.data == rawptr(0):
+  #   arr&.init_array(10)
   compiler.unsafe_set_subscript(arr.data.data, index, value&)
 
 
@@ -71,7 +81,9 @@ fn get_array!(T)(arr: Array!T, index: int) -> T @inline:
 
 fn copy_array!(T)(dst: set Array!T, src: Array!T):
   dst.len = src.len
-  dst.data = src.data.copy
+  dst.data = Buffer(0, rawptr(0))
+  dst.data&.buffer_alloc(src.len * (meta T.sizeof))
+  
   var i = 0
   while i < src.len:
     dst[i] = src[i].copy
@@ -106,20 +118,20 @@ fn test_array2():
   arr&.init_array(10)
 
   arr[0] = Foo(3, 2.0)
-  arr[1] = Foo(4, 3.0)
+  # arr[1] = Foo(4, 3.0)
 
-  arr[0].x += 1
-  print(arr[0].x)
-
-  var arr2 = arr&
-  let el = arr2[0]
-
-  print(el.x)
+  # arr[0].x += 1
   # print(arr[0].x)
-  print(arr2[0].x)
 
-  var arr3 = arr2.copy
-  print(arr3[0].x)
+  # var arr2 = arr&
+  # let el = arr2[0]
+
+  # print(el.x)
+  # # print(arr[0].x)
+  # print(arr2[0].x)
+
+  # var arr3 = arr2.copy
+  # print(arr3[0].x)
 
 
 fn test_array3():
@@ -144,34 +156,43 @@ fn test_foo_move():
 
 fn main():
 
-  test_array1()
-  test_array2()
-  test_array3()
+  # test_array1()
+  # test_array2()
+  # test_array3()
 
-  test_foo_move()
+  # test_foo_move()
 
-  let zzz = 3
-  let z: int = 2
-  # let x: int = ifx 2 == 2: z else: 2
-  let x = z + 232
+  compiler.printToPrintf("Hello")
+  compiler.printToPrintf(23)
+  compiler.printToPrintf(23.0)
+  let i = 3
+  print(12, 41.0, "Hello", i == 3)
 
-  var foo = Foo(1, 2.0)
-  foo.x += 1
-  print(foo.x)
+  let foo = Foo(2, 3)
+  print(foo)
 
-  bar(foo.x&)
-  print(foo.x)
-  baz(foo&)
-  print(foo.x)
+  # let zzz = 3
+  # let z: int = 2
+  # # let x: int = ifx 2 == 2: z else: 2
+  # let x = z + 232
 
-  while foo.x < 10:
-    foo.x += 1
+  # var foo = Foo(1, 2.0)
+  # foo.x += 1
+  # print(foo.x)
 
-  print(foo.x)
+  # bar(foo.x&)
+  # print(foo.x)
+  # baz(foo&)
+  # print(foo.x)
+
+  # while foo.x < 10:
+  #   foo.x += 1
+
+  # print(foo.x)
 
 
-  if !!!(2 == 2):
-    print(21) 
+  # if !!!(2 == 2):
+  #   print(21) 
 
-  if 3 == 1 and 2 > 1:
-    print(1)
+  # if 3 == 1 and 2 > 1:
+  #   print(1)

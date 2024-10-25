@@ -589,6 +589,13 @@ export class FunctionCodeGenerator {
     return new Pointer('')
   }
 
+  generateExit(args: Ast[], context: ExpressionContext): IRValue {
+    const arg = this.generateExpression(args[0], { valueCategory: 'rvalue' });
+    const argReg = this.toValue(args[0].type, arg)
+    this.addInstruction(new CallInstruction(null, VoidType, externalBuiltinBindings.exit, [argReg.register], [args[0].type], [Capability.Let]));
+    return new Pointer('')
+  }
+
   generateCallExpression(ast: CallAst, context: ExpressionContext): IRValue {
     if (ast.binding === externalBuiltinBindings.copy) {
       return this.generateCopy(ast.args[0], context)
@@ -596,6 +603,8 @@ export class FunctionCodeGenerator {
       return this.generatePrint(ast.args[0], context)
     } else if (ast.binding === externalBuiltinBindings.printf) {
       return this.generatePrintf(ast.args, context)
+    } else if (ast.binding === externalBuiltinBindings.exit) {
+      return this.generateExit(ast.args, context)
     } else if (ast.binding === externalBuiltinBindings.initializer) {
       return new Pointer('')
     }
@@ -838,9 +847,16 @@ export class FunctionCodeGenerator {
   }
 
   generateStringLiteral(ast: StringAst, context: ExpressionContext): IRValue {
+    compilerAssert(context.valueCategory === 'rvalue', 'Literal must be an RValue');
+    if (ast.type === RawPointerType) {
+      const resultPtr = this.newRegister();
+      this.addInstruction(new LoadConstantInstruction(resultPtr, ast.type, ast.value));
+      return new Value(resultPtr)
+    }
+    
     const args = [
       new NumberAst(IntType, SourceLocation.anon, ast.value.length),
-      new NumberAst(IntType, SourceLocation.anon, 0),
+      new StringAst(RawPointerType, SourceLocation.anon, ast.value),
     ]
     return this.generateCreateStructExpression(new ConstructorAst(ast.type, SourceLocation.anon, args), context)
     // compilerAssert(context.valueCategory === 'rvalue', 'Literal must be an RValue');

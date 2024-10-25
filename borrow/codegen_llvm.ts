@@ -153,7 +153,19 @@ const instructionWriter = {
   loadconst: (writer: LlvmFunctionWriter, instr: LoadConstantInstruction) => {
     const dest = defineRegister(writer, instr.dest, instr.type)
     if (instr.type === RawPointerType) {
-      compilerAssert(instr.value === 0, "Only null pointer allowed")
+      if (typeof instr.value === 'string') {
+        const str = instr.value as string
+        const constantName = generateName(writer.writer, new Binding("constant", VoidType), true)
+        const escaped = str.replace(/["\\]|[\x00-\x1F\x80-\xFF]/g, (str) => {
+          return `\\${str.charCodeAt(0).toString(16).padStart(2, '0')}`
+        })
+        const length = str.length + 1 // add null terminator
+        writer.writer.outputHeaders.push(`${constantName} = private unnamed_addr constant [${length} x i8] c"${escaped}\\00"\n`)
+        // format(writer, `  $ = ${constantName}\n`, dest)
+        format(writer, `  $ = getelementptr inbounds [${length} x i8], [${length} x i8]* $, i32 0, i32 0 ; string\n`, dest, constantName)
+        return
+      }
+      compilerAssert(instr.value === 0, "Only null pointer allowed", { instr })
       format(writer, `  $ = bitcast ptr null to ptr; literal null\n`, dest)
       return
     }
@@ -174,17 +186,11 @@ const instructionWriter = {
 
   call: (writer: LlvmFunctionWriter, instr: CallInstruction) => {
 
-    if (instr.binding === externalBuiltinBindings.printf) {
-      format(writer, "  ; TODO printf \n")
-      return
-    }
     const funcName = generateName(writer.writer, instr.binding)
     const args = instr.args
-    const fn = writer.writer.globalCompilerState.compiledFunctions.get(instr.binding)
-    compilerAssert(fn, "No function found", { instr })
-    const returnType = fn.returnType
+    const returnType = instr.type
     const result = instr.type !== VoidType && defineRegister(writer, "", returnType)
-    const paramTypes = fn.parameters.map(x => x.type)
+    const paramTypes = instr.paramTypes
     
     const argStr = paramTypes.map((type, i) => {
       const reg = writer.writer.registers.get(args[i])
@@ -195,6 +201,12 @@ const instructionWriter = {
 
     if (result) { format(writer, `  $ = `, result) }
     else { format(writer, `  `) }
+
+    // Special case for now
+    if (instr.binding === externalBuiltinBindings.printf) {
+      format(writer, "call i32 (i8*, ...) @printf($)\n", argStr)
+      return
+    }
 
     format(writer, "call $ $($)\n", returnType, funcName, argStr)
     if (result) format(writer, "  store $ $, $ $\n", returnType, result, 'ptr', register(instr.target!))
@@ -543,40 +555,25 @@ const writeLlvmBytecodeFunction = (bytecodeWriter: LlvmWriter, func: CompiledFun
   return funcWriter
 };
 
-
-const numberToDoubleBitString = (f: number) => {
-  const buffer = new ArrayBuffer(8)
-  const floatView = new Float64Array(buffer)
-  floatView[0] = f
-  const intView = new DataView(buffer)
-  const intBitsLow = intView.getUint32(0, true) // true for little-endian, lower part
-  const intBitsHigh = intView.getUint32(4, true) // true for little-endian, higher part
-  return (intBitsHigh.toString(2).padStart(32, '0') + intBitsLow.toString(2).padStart(32, '0'))
+// https://llvm.org/docs/LangRef.html#id1977
+// Floats must be rounded to what fits in 32 bits
+const roundToFloat32 = (x: number) => {
+  const f32 = new Float32Array(1);
+  f32[0] = x;
+  return f32[0];
 }
 
-const bitStringToFloat = (bitString: string) => {
-  // https://llvm.org/docs/LangRef.html#id1977
-  // TODO: What was I thinking here? Do it properly
-  
-  // LLVM has some weird behaviour where a float constant is 
-  // written in 64 bit but the exponent is rounded to 23 bits
-  // otherwise it won't compile. Easiest way is string manipulations
+const toHex64 = (value: number) => {
+  const buffer64 = new ArrayBuffer(8);
+  const view64 = new DataView(buffer64);
+  view64.setFloat64(0, value, false); // Big-endian
 
-  // So it looks like
-  //  1 bit sign | 11 bit mantissa | 23 bit exponent | 29 bit zeros
-  
-  // Testcases
-  // 0.001 => 0x3F50624DE0000000
-  // 3.14159 => 0x400921FA00000000
-
-  const cap = 1 + 11 + 23
-  if (bitString[cap] === '1') {
-    const rounded = parseInt(bitString.substring(0, cap), 2) + 1
-    return rounded.toString(2).padStart(cap, '0').padEnd(64, '0')
+  let hex64 = '';
+  for (let i = 0; i < 8; i++) {
+    hex64 += view64.getUint8(i).toString(16).padStart(2, '0');
   }
-  return bitString.substring(0, cap).padEnd(64, '0')
+  return `0x${hex64}`;
 }
 
-const bitsToHex = (bits: string) => `0x${parseInt(bits, 2).toString(16).padStart(16, '0').toUpperCase()}`
-const doubleToLlvmHex = (f: number) => bitsToHex(numberToDoubleBitString(f))
-const floatToLlvmHex = (f: number) => bitsToHex(bitStringToFloat(numberToDoubleBitString(f)))
+const doubleToLlvmHex = (f: number) => toHex64(f)
+const floatToLlvmHex = (f: number) => toHex64(roundToFloat32(f))

@@ -214,8 +214,10 @@ const compileCustomCopy = (subCompilerState: SubCompilerState, structName: strin
 
 export const generateTypeMethods = (globalCompiler: GlobalCompilerState, type: Type) => {
 
+
   const name = type.shortName
   const typeInfo = type.typeInfo
+
 
   if (!typeInfo.metaobject.constructorBinding) {
     const constructor = generateConstructor(name, type);
@@ -246,7 +248,6 @@ export const generateTypeMethods = (globalCompiler: GlobalCompilerState, type: T
     typeInfo.metaobject.moveAssignBinding = moveAssign.binding;
     globalCompiler.compiledFunctions.set(moveAssign.binding, moveAssign)
   }
-
 }
 
 export const createListConstructor = (vm: Vm, elementType: Type, values: Ast[]) => {
@@ -346,10 +347,7 @@ export const assert = new CompilerFunction('assert', (ctx, typeArgs: unknown[], 
 
 export const print = new CompilerFunction('print', (ctx, typeArgs: unknown[], args: Ast[]) => {
   const location = ctx.location
-  // compilerAssert(args.length === 1 && args[0].type !== VoidType , "Expected non void argument", { args })
   const stmts: Ast[] = []
-  let formatStr = ''
-  const printfArgs: Ast[] = []
 
   const fieldHelper = (binding: Binding, name: string) => {
     const field = binding.type.typeInfo.fields.find(x => x.name === name)!
@@ -362,73 +360,73 @@ export const print = new CompilerFunction('print', (ctx, typeArgs: unknown[], ar
   formats.set(FloatType, '%f')
   formats.set(DoubleType, '%f')
 
+  const rawstr = (str: string) => new StringAst(RawPointerType, location, str)
+  const printf = (...args: any) => new UserCallAst(VoidType, location, externalBuiltinBindings.printf, args)
+
   args.forEach((arg, i) => {
     propagatedLiteralAst(arg)
-    if (i !== 0) formatStr += ' '
-    if (arg.type === StringType && arg instanceof StringAst) {
-      // Constant strings
-      // formatStr += arg.value
-    } else if (arg.type === StringType) {
-      // const binding = new Binding("", StringType)
-      // stmts.push(new LetAst(VoidType, location, binding, arg, false))
-      // const lengthGetter = fieldHelper(binding, 'length')
-      // const dataGetter = fieldHelper(binding, 'data')
-      // formatStr += '%.*s'
-      // printfArgs.push(lengthGetter, dataGetter)
-    } else if (arg.type === BoolType) {
-      const num = new IfAst(IntType, location, arg, new NumberAst(IntType, location, 1), new NumberAst(IntType, location, 0))
-      stmts.push(new UserCallAst(VoidType, location, externalBuiltinBindings.printInt, [num]))
-      // const binding = new Binding("", StringType)
-      // const str = new IfAst(StringType, location, arg, new StringAst(StringType, location, 'true'), new StringAst(StringType, location, 'false'))
-      // stmts.push(new LetAst(VoidType, location, binding, str, false))
-      // const lengthGetter = fieldHelper(binding, 'length')
-      // const dataGetter = fieldHelper(binding, 'data')
-      // formatStr += '%.*s'
-      // printfArgs.push(lengthGetter, dataGetter)
-      return
-    } else if (arg.type === IntType) {
-      stmts.push(new UserCallAst(VoidType, location, externalBuiltinBindings.printInt, [arg]))
-      return
-    } else if (arg.type === FloatType) {
-      stmts.push(new UserCallAst(VoidType, location, externalBuiltinBindings.printFloat, [arg]))
-      return
-    } else if (formats.has(arg.type)) {
-      // printfArgs.push(arg)
-      // formatStr += formats.get(arg.type)
-    } else if (arg.type instanceof ParameterizedType && arg.type.typeConstructor === TupleTypeConstructor) {
-      // const binding = new Binding("", arg.type)
-      // stmts.push(new LetAst(VoidType, location, binding, arg, false))
-      // formatStr += `(`
-      // const fieldsToPrint = binding.type.typeInfo.fields.filter(x => formats.has(x.fieldType))
-      // fieldsToPrint.forEach((field, j) => {
-      //   if (j !== 0) formatStr += ', '
-      //   const getter = fieldHelper(binding, field.name)
-      //   formatStr += formats.get(field.fieldType)
-      //   printfArgs.push(getter)
-      // })
-      // formatStr += ')'
-    } else if (arg.type.typeInfo.fields.length && !arg.type.typeInfo.isReferenceType) {
-      // const binding = new Binding("", arg.type)
-      // stmts.push(new LetAst(VoidType, location, binding, arg, false))
-      // formatStr += `${arg.type.shortName}(`
-      // const fieldsToPrint = binding.type.typeInfo.fields.filter(x => formats.has(x.fieldType))
-      // fieldsToPrint.forEach((field, j) => {
-      //   if (j !== 0) formatStr += ', '
-      //   const getter = fieldHelper(binding, field.name)
-      //   formatStr += `${field.name}=`
-      //   formatStr += formats.get(field.fieldType)
-      //   printfArgs.push(getter)
-      // })
-      // formatStr += ')'
-    } else {
+    if (i !== 0) {
+      stmts.push(printf(rawstr(" ")))
     }
-    compilerAssert(false, "Cannot print value of type $type. not implemented", { type: arg.type })
+    const ast = (() => {
+      if (arg.type === StringType) {
+        const binding = new Binding("", StringType)
+        const let_ = new LetAst(VoidType, location, binding, arg, false)
+        const lengthGetter = fieldHelper(binding, 'length')
+        const dataGetter = fieldHelper(binding, 'data')
+        const call_ = printf(rawstr("%.*s"), lengthGetter, dataGetter)
+        return createStatements(location, [let_, call_])
+      } else if (arg.type === BoolType) {
+        const num = new IfAst(IntType, location, arg, new NumberAst(IntType, location, 1), new NumberAst(IntType, location, 0))
+        return printf(rawstr("%i"), num)
+      } else if (arg.type === IntType) {
+        return printf(rawstr("%i"), arg)
+        // return new UserCallAst(VoidType, location, externalBuiltinBindings.printInt, [arg])
+      } else if (arg.type === FloatType) {
+        return printf(rawstr("%f"), arg)
+        // return new UserCallAst(VoidType, location, externalBuiltinBindings.printFloat, [arg])
+      } else if (formats.has(arg.type)) {
+        // printfArgs.push(arg)
+        // formatStr += formats.get(arg.type)
+      } else if (arg.type instanceof ParameterizedType && arg.type.typeConstructor === TupleTypeConstructor) {
+        // const binding = new Binding("", arg.type)
+        // stmts.push(new LetAst(VoidType, location, binding, arg, false))
+        // formatStr += `(`
+        // const fieldsToPrint = binding.type.typeInfo.fields.filter(x => formats.has(x.fieldType))
+        // fieldsToPrint.forEach((field, j) => {
+        //   if (j !== 0) formatStr += ', '
+        //   const getter = fieldHelper(binding, field.name)
+        //   formatStr += formats.get(field.fieldType)
+        //   printfArgs.push(getter)
+        // })
+        // formatStr += ')'
+      } else if (arg.type.typeInfo.fields.length && !arg.type.typeInfo.isReferenceType) {
+        const localStmts = []
+        const binding = new Binding("", arg.type)
+        const let_ = new LetAst(VoidType, location, binding, arg, false)
+        localStmts.push(let_)
+        localStmts.push(printf(rawstr(`${arg.type.shortName}(`)))
+        const fieldsToPrint = binding.type.typeInfo.fields.filter(x => formats.has(x.fieldType))
+        fieldsToPrint.forEach((field, j) => {
+          
+          if (j !== 0) localStmts.push(printf(rawstr(", ")))
+          localStmts.push(printf(rawstr(`${field.name}=`)))
+
+          const fmt = formats.get(field.fieldType)
+          const getter = fieldHelper(binding, field.name)
+          localStmts.push(printf(rawstr(fmt), getter))
+        })
+        localStmts.push(printf(rawstr(")")))
+        return createStatements(location, localStmts)
+      } else {
+      }
+      compilerAssert(false, "Cannot print value of type $type. not implemented", { type: arg.type })
+    })()
+
+
+    stmts.push(ast)
   })
-  // formatStr += '\n'
-  // const formatBinding = new Binding("", StringType)
-  // stmts.unshift(new LetAst(VoidType, location, formatBinding, new StringAst(StringType, location, formatStr), false))
-  // printfArgs.unshift(fieldHelper(formatBinding, 'data'))
-  // stmts.push(new CallAst(VoidType, location, externalBuiltinBindings.printf, printfArgs, []))
+  stmts.push(printf(rawstr("\n")))
   return Task.of(createStatements(location, stmts))
 })
 
@@ -1091,7 +1089,7 @@ export const createCompilerModuleTask = (ctx: TaskContext): Task<Module, Compile
     operator_bitwise_and, operator_bitwise_or, rawptr: RawPointerType, add_external_library, add_macos_framework, assert, never: NeverType,
     get_current_loop, ctobj: CompileTimeObjectType, operator_mod, overloaded, static_length, assert_compile_error, initializer_function, add_export,
     concat, Option: OptionTypeConstructor, Some: SomeTypeConstructor, None: NoneTypeConstructor, unsafe_enum_cast: unsafeEnumCast, is_enum_variant: isEnumVariant, generator,
-    copy: copyFunction })
+    copy: copyFunction, printToPrintf })
   const subCompilerState = pushSubCompilerState(ctx, { debugName: `compiler module`, lexicalParent: undefined, scope: moduleScope })
   const module = new Module('compiler', subCompilerState, null!)
   return Task.of(module)

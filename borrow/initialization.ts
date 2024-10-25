@@ -1,7 +1,7 @@
-import { Binding, Capability, ConcreteClassType, PrimitiveType, Type, VoidType } from "../src/defs";
+import { Binding, Capability, compilerAssert, ConcreteClassType, PrimitiveType, Type, VoidType } from "../src/defs";
 import { CodeGenerator, FunctionCodeGenerator } from "./codegen_ir";
 import { ControlFlowGraph, buildCFG } from "./controlflow";
-import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, compilerAssert, EndAccessInstruction, PhiInstruction, MoveInstruction, InstructionId, CommentInstruction, textColors, MarkInitializedInstruction, formatInstruction, Module, DeallocStackInstruction, PointerOffsetInstruction, printIR } from "./defs";
+import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, EndAccessInstruction, PhiInstruction, MoveInstruction, InstructionId, CommentInstruction, textColors, MarkInitializedInstruction, formatInstruction, Module, DeallocStackInstruction, PointerOffsetInstruction, printIR } from "./defs";
 import { Worklist } from "./worklist";
 
 type InitializationState = Top | Bottom | Sequence;
@@ -378,16 +378,19 @@ export class InitializationCheckingPass {
   }
 
   executePhi(instr: PhiInstruction): void {
+    const locals = instr.sources.flatMap(source => {
+      const local = this.state.locals.get(source.value);
+      if (!local) return [];
+      return local;
+    });
     // Filter sources that we haven't visited yet. Need a more
     // thorough test case for this. Maybe foo||bar where bar should
     // initialize something
-    const newLocal = instr.sources.flatMap(source => {
-      const local = this.state.locals.get(source.value)
-      if (!local) return []
-      return local
-    }).reduce((acc, val) => {
-      return meetLocals(acc, val);
-    })
+    const newLocal = locals.length === 0 ? 
+      new InitializationStateObject(TOP)
+      : locals.reduce((acc, val) => {
+        return meetLocals(acc, val);
+      })
       
     this.state.locals.set(instr.dest, newLocal)
   }

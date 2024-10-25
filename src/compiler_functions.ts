@@ -320,6 +320,7 @@ function functionInlineTask(ctx: TaskContext, { location, func, typeArgs, parent
       }
       const stmts = createStatements(location, [...statements, ast])
       const breakExprBinding = breakBlock.breakWithExpr ? new Binding('breakExpr', type) : null
+      if (!breakBlock.didBreak) return Task.of(stmts)
       return Task.of(new BlockAst(type, location, breakBlock.binding!, breakExprBinding, stmts))
     })
   )
