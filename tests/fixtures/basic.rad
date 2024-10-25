@@ -22,11 +22,12 @@ type Buffer @struct:
 
 
 fn buffer_alloc(buf: inout Buffer, size: int):
+  print("Alloc size", size)
   buf.size = size
   buf.data = malloc_or_exit(size)
   var i = 0
   while i < size:
-    compiler.unsafe_set_subscript!u8(buf.data, i, 0)
+    compiler.unsafe_set_subscript(buf.data, i, u8(0))
     i += 1
 
 
@@ -70,8 +71,13 @@ fn init_array!(T)(arr: inout Array!T, len: int):
 
 
 fn set_array!(T)(arr: inout Array!T, index: int, value: sink T) @inline:
-  # if arr.data.data == rawptr(0):
-  #   arr&.init_array(10)
+  if arr.data.data == rawptr(0):
+    print("Not allocated")
+    exit(0)
+  if index < 0 or index > arr.len:
+    print("Bounds check failed")
+    exit(0)
+    # arr&.init_array(10)
   compiler.unsafe_set_subscript(arr.data.data, index, value&)
 
 
@@ -80,13 +86,20 @@ fn get_array!(T)(arr: Array!T, index: int) -> T @inline:
 
 
 fn copy_array!(T)(dst: set Array!T, src: Array!T):
+  print("T.sizeof", (meta T.sizeof))
+  print("src.len", src.len)
+  print("alloc_size", src.len * (meta T.sizeof))
+  
   dst.len = src.len
   dst.data = Buffer(0, rawptr(0))
+  # print("Copy", src.len)
   dst.data&.buffer_alloc(src.len * (meta T.sizeof))
-  
+
+  print("data", dst.data.data)
+
   var i = 0
   while i < src.len:
-    dst[i] = src[i].copy
+    dst[i] = src[i]
     i += 1
 
   # TODO: Too many moves ends up calling destructorFoo a lot
@@ -105,11 +118,17 @@ fn test_array1():
 
   var buffer = Buffer(0, rawptr(0))
   var arr = Array!int(0, buffer&)
-  arr&.init_array(10)
+  arr&.init_array(5)
 
   arr[0] = 10
   arr[1] = 20
+  arr[2] = 20
+  arr[3] = 20
+  arr[4] = 20
   print(arr[0])
+
+  var arr2 = arr.copy
+  print(arr2[0])
 
 fn test_array2():
 
@@ -118,20 +137,22 @@ fn test_array2():
   arr&.init_array(10)
 
   arr[0] = Foo(3, 2.0)
-  # arr[1] = Foo(4, 3.0)
+  arr[1] = Foo(4, 3.0)
 
-  # arr[0].x += 1
-  # print(arr[0].x)
+  arr[0].x += 1
+  print(arr[0].x)
 
-  # var arr2 = arr&
-  # let el = arr2[0]
+  var arr2 = arr&
+  let el = arr2[0]
 
-  # print(el.x)
+  print(el.x)
+  arr2[0].x += 1
+  print(arr2[0].x)
   # # print(arr[0].x)
   # print(arr2[0].x)
 
-  # var arr3 = arr2.copy
-  # print(arr3[0].x)
+  var arr3 = arr2.copy
+  print(arr3[0].x)
 
 
 fn test_array3():
@@ -140,6 +161,7 @@ fn test_array3():
   var arr = Array!Array!Foo(0, buffer&)
   arr&.init_array(10)
 
+  arr[0]&.init_array(10)
   arr[0][0] = Foo(42, 2.0)
   print(arr[0][0].x)
 
@@ -153,14 +175,20 @@ fn test_foo_move():
   # print(x)
   print(foo.x)
 
+fn test_basic_array():
 
-fn main():
+  var buffer = Buffer(0, rawptr(0))
+  var arr = Array!int(0, buffer&)
+  arr&.init_array(10)
+  arr[0] = 1
+  arr[1] = 2
 
-  # test_array1()
-  # test_array2()
-  # test_array3()
+  print(arr[0])
+  print(arr[1])
 
-  # test_foo_move()
+  print(arr)
+
+fn test_print():
 
   compiler.printToPrintf("Hello")
   compiler.printToPrintf(23)
@@ -170,6 +198,18 @@ fn main():
 
   let foo = Foo(2, 3)
   print(foo)
+
+fn main():
+
+  # test_array1()
+  # test_array2()
+  test_array3()
+
+  # test_foo_move()
+  # test_print()
+
+
+  # test_basic_array()
 
   # let zzz = 3
   # let z: int = 2

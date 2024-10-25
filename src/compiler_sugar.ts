@@ -379,13 +379,8 @@ export const print = new CompilerFunction('print', (ctx, typeArgs: unknown[], ar
       } else if (arg.type === BoolType) {
         const num = new IfAst(IntType, location, arg, new NumberAst(IntType, location, 1), new NumberAst(IntType, location, 0))
         return printf(rawstr("%i"), num)
-      } else if (arg.type === IntType) {
-        return printf(rawstr("%i"), arg)
-        // return new UserCallAst(VoidType, location, externalBuiltinBindings.printInt, [arg])
-      } else if (arg.type === FloatType) {
-        return printf(rawstr("%f"), arg)
-        // return new UserCallAst(VoidType, location, externalBuiltinBindings.printFloat, [arg])
       } else if (formats.has(arg.type)) {
+        return printf(rawstr(formats.get(arg.type)), arg)
         // printfArgs.push(arg)
         // formatStr += formats.get(arg.type)
       } else if (arg.type instanceof ParameterizedType && arg.type.typeConstructor === TupleTypeConstructor) {
@@ -519,6 +514,7 @@ export const unsafe_subscript = new CompilerFunction('unsafe_subscript', (ctx, t
 })
 export const unsafe_set_subscript = new CompilerFunction('unsafe_set_subscript', (ctx, typeArgs: unknown[], args: Ast[]) => {
   const [left, right, value] = args
+  compilerAssert(typeArgs.length === 0, "Not implemented. cast value instead for now", { typeArgs })
   propagatedLiteralAst(right)
   compilerAssert(right && right.type === IntType, "Expected int type", { right })
   compilerAssert(left && left.type === RawPointerType, "Expected rawptr", { left })

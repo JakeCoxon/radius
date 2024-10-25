@@ -309,7 +309,10 @@ export class InitializationCheckingPass {
   executeGetFieldPointer(instr: GetFieldPointerInstruction): void {
     const addresses = this.state.locals.get(instr.address);
     if (addresses instanceof InitializationStateObject) {
-      compilerAssert(false, "Not implemented");
+      // Probaly make this better at some point.
+      // Make sure not to mustate
+      this.state.locals.set(instr.dest, addresses)
+      return
     }
     compilerAssert(addresses, `Register ${instr.address} is not found`);
     compilerAssert(this.state.locals.get(instr.dest) === undefined, `Register ${instr.dest} is already initialized`);
