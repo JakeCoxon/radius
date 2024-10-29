@@ -1,4 +1,4 @@
-import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, ParseMeta, createAnonymousParserFunctionDecl, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol, ScopeParentSymbol, isPlainObject, ParseLet, ParseList, ParseExpand, ParseBlock, findLabelByBinding, ParseSubscript, ParseNumber, ParseQuote, ParseWhile, ParseOperator, ParseBytecode, ParseOpEq, ParseSet, ParseFreshIden, UnknownObject, ParseNote, DefaultConsAst, RawPointerType, ValueFieldAst, SetValueFieldAst, FloatLiteralType, IntLiteralType, CompilerFunction, DerefAst, SetDerefAst, ParseSlice, CompilerFunctionCallContext, NeverType, LoopObject, CompTimeObjAst, CompileTimeObjectType, NamedArgAst, TypeCheckVar, TypeCheckConfig, u8Type, u64Type, FreshBindingToken, isCompilerCallable, ParseIs, VariantCastAst, EnumVariantAst, Capability, MutSigilAst } from "./defs";
+import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, ParseMeta, createAnonymousParserFunctionDecl, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol, ScopeParentSymbol, isPlainObject, ParseLet, ParseList, ParseExpand, ParseBlock, findLabelByBinding, ParseSubscript, ParseNumber, ParseQuote, ParseWhile, ParseOperator, ParseBytecode, ParseOpEq, ParseSet, ParseFreshIden, UnknownObject, ParseNote, DefaultConsAst, RawPointerType, ValueFieldAst, SetValueFieldAst, FloatLiteralType, IntLiteralType, CompilerFunction, DerefAst, SetDerefAst, ParseSlice, CompilerFunctionCallContext, NeverType, LoopObject, CompTimeObjAst, CompileTimeObjectType, NamedArgAst, TypeCheckVar, TypeCheckConfig, u8Type, u64Type, FreshBindingToken, isCompilerCallable, ParseIs, VariantCastAst, EnumVariantAst, Capability, MutSigilAst, insertTypeInfoFields, TypeFieldDef } from "./defs";
 import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, functionCompileTimeCompileTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, compileExportedFunctionTask } from "./compiler_functions";
 import { Event, Task, TaskDef, Unit, isTask, isTaskResult, withContext } from "./tasks";
 import { createCompilerModuleTask, createListConstructor, defaultMetaFunction, guardSugar, ifMultiSugar, isSugar, matchSugar, optionBlockSugar, optionCastSugar, orElseSugar, print, questionSugar } from "./compiler_sugar";
@@ -279,7 +279,6 @@ export const BytecodeDefault: ParseTreeTable = {
 
 export const BytecodeSecondOrder: ParseTreeTable = {
   letas:     (out, node) => compilerAssert(false, "Not implemented 'letas'"),
-  cast:      (out, node) => compilerAssert(false, "Not implemented 'cast'"),
   symbol:    (out, node) => compilerAssert(false, "Not implemented 'symbol'"),
   class:     (out, node) => compilerAssert(false, "Not implemented 'class'"),
   nil:       (out, node) => compilerAssert(false, "Not implemented 'nil'"),
@@ -304,6 +303,7 @@ export const BytecodeSecondOrder: ParseTreeTable = {
   letconst: (out, node) => (writeMeta(out, node.value), pushBytecode(out, node.token, { type: 'letlocal', name: node.name instanceof ParseFreshIden ? node.name.freshBindingToken.identifier : node.name.token.value, t: false, v: true })),
   tuple:    (out, node) => (visitAll(out, node.exprs), pushBytecode(out, node.token, { type: 'tupleast', count: node.exprs.length })),
   not:      (out, node) => (visitParseNode(out, node.expr), pushBytecode(out, node.token, { type: 'notast' })),
+  cast:     (out, node) => (visitParseNode(out, node.expr), writeMeta(out, node.asType), pushBytecode(out, node.token, { type: 'castast' })),
 
   orelse:   (out, node) => orElseSugar(out, node),
   for:      (out, node) => forLoopSugar(out, node),
@@ -988,12 +988,14 @@ const instructions: InstructionMapping = {
 
       if (expr instanceof ClassDefinition) {
         return (classDefinitionToType(expr).chainFn((task, type) => {
-          vm.stack.push(calculateSizeOfType(type)); return Task.success()
+          compilerAssert(type.typeInfo.sizeof !== undefined && type.typeInfo.sizeof >= 0, "Expected positive sizeof", { type })
+          vm.stack.push(type.typeInfo.sizeof); return Task.success()
         }))
       }
 
       compilerAssert(isType(expr), "Expected type got $expr", { expr })
-      vm.stack.push(calculateSizeOfType(expr))
+      compilerAssert(expr.typeInfo.sizeof !== undefined && expr.typeInfo.sizeof >= 0, "Expected positive sizeof", { expr })
+      vm.stack.push(expr.typeInfo.sizeof)
       return
     }
     compilerAssert(false, "Not implemented", { expr, name })
@@ -1352,6 +1354,13 @@ const instructions: InstructionMapping = {
       })
     )
   },
+  castast: (vm, { }) => {
+    const type = expectType(popStack(vm))
+    const value = expectAst(popStack(vm))
+    if (type === value.type) return vm.stack.push(value)
+    vm.stack.push(new CastAst(type, vm.location, value))
+  },
+
   pushqs: (vm) => vm.context.subCompilerState.quoteStack.push([]),
   popqs: (vm) => {
     compilerAssert(vm.context.subCompilerState.quoteStack.length)
@@ -1469,7 +1478,7 @@ export function compileClassTask(ctx: TaskContext, { classDef, typeArgs }: { cla
           classDef.location, debugName,
           binding, classDef, null!, body, [], typeArgs, typeParamHash)
 
-      const typeInfo: TypeInfo = { sizeof: 0, fields: compiledClass.fields, metaobject: compiledClass.metaobject, isReferenceType: true }
+      const typeInfo: TypeInfo = { sizeof: 0, alignment: 0, fields: compiledClass.fields, metaobject: compiledClass.metaobject, isReferenceType: true }
       let type: Type
       if (classDef.typeArgs.length === 0) { 
         type = new ConcreteClassType(compiledClass, typeInfo)
@@ -1481,11 +1490,12 @@ export function compileClassTask(ctx: TaskContext, { classDef, typeArgs }: { cla
       compiledClass.type = type;
       binding.type = type;
 
-      let index = 0
+      const fieldDefs: TypeFieldDef[] = []
       for (const name of Object.getOwnPropertyNames(templateScope)) {
         if (templateScope[name] instanceof Binding)
-          compiledClass.fields.push(new TypeField(SourceLocation.anon, name, type, index++, templateScope[name].type))
+          fieldDefs.push({ sourceLocation: SourceLocation.anon, name, fieldType: templateScope[name].type })
       }
+      insertTypeInfoFields(type, fieldDefs)
 
       classDef.compiledClasses.push(compiledClass)
 

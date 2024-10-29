@@ -34,7 +34,7 @@ export class PhiSource {
 }
 
 /* unused? */ export class AssignInstruction extends IRInstruction {              irType = 'assign';                constructor(public dest: string, public source: string) { super(); } }
-export class LoadConstantInstruction extends IRInstruction {        irType = 'loadconst';             constructor(public dest: string, public type: Type, public value: number) { super(); } }
+export class LoadConstantInstruction extends IRInstruction {        irType = 'loadconst';             constructor(public dest: string, public type: Type, public value: number | string) { super(); } }
 export class AllocInstruction extends IRInstruction {               irType = 'alloc';                 constructor(public dest: string, public type: Type) { super(); } }
 export class GetFieldPointerInstruction extends IRInstruction {     irType = 'getfieldptr';           constructor(public dest: string, public address: string, public field: TypeField) { super(); } }
 export class PointerOffsetInstruction extends IRInstruction {       irType = 'pointer_offset';        constructor(public dest: string, public address: string, public fieldType: Type, public offsetReg: string) { super(); } }
@@ -165,6 +165,7 @@ export function formatInstruction(instr: IRInstruction): string {
   if (instr instanceof AssignInstruction) {
     return `${instr.dest} = ${instr.source}`;
   } else if (instr instanceof LoadConstantInstruction) {
+    if (typeof instr.value === 'string') return `${instr.dest} = constant "${instr.value}"`;
     return `${instr.dest} = constant ${instr.value}`;
   } else if (instr instanceof BinaryOperationInstruction) {
     return `${instr.dest} = ${instr.left} ${instr.operator} ${instr.right}`;

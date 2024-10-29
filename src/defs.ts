@@ -261,6 +261,7 @@ export type BytecodeInstr =
   { type: 'letmetaast', t: boolean, v: boolean } |
   { type: 'letmatchast', t: boolean, v: boolean } |
   { type: 'callast', name: string, count: number, tcount: number, method?: boolean } |
+  { type: 'castast' } |
   { type: 'pushqs' } |
   { type: 'popqs' } |
   { type: 'appendq' } |
@@ -401,6 +402,7 @@ export class TypeField {
     public sourceType: Type,
     public index: number,
     public fieldType: Type,
+    public offset: number, // bytes
     ) {}
   [Inspect.custom](depth: any, options: any, inspect: any) {
     return options.stylize(`[TypeField ${this.index} ${this.sourceType.shortName} ${this.name} : ${this.fieldType.shortName}]`, 'special');
@@ -553,7 +555,8 @@ export interface TypeInfo {
   fields: TypeField[]
   metaobject: UnknownObject
   isReferenceType: boolean,
-  sizeof: number
+  sizeof: number // bytes
+  alignment: number // bytes
   variantPadding?: number
   isInvalidSize?: boolean
 }
@@ -695,45 +698,71 @@ export const isCompilerCallable = (value: unknown): value is CompilerCallable =>
   return value instanceof ExternalFunction || value instanceof CompilerFunction || value instanceof Closure
 }
 
-export const NeverType =        new PrimitiveType("never",         { sizeof: 0, fields: [], metaobject: Object.create(null), isReferenceType: false })
-export const VoidType =         new PrimitiveType("void",          { sizeof: 0, fields: [], metaobject: Object.create(null), isReferenceType: false })
-export const IntType =          new PrimitiveType("int",           { sizeof: 4, fields: [], metaobject: Object.assign(Object.create(null), { init: 0, min: -Math.pow(2, 31), max: Math.pow(2, 31) - 1 }), isReferenceType: false })
-export const u64Type =          new PrimitiveType("u64",           { sizeof: 4, fields: [], metaobject: Object.assign(Object.create(null), { init: 0, min: -Math.pow(2, 63), max: Math.pow(2, 63) - 1 }), isReferenceType: false })
-export const u8Type =           new PrimitiveType("u8",            { sizeof: 1, fields: [], metaobject: Object.assign(Object.create(null), { init: 0, min: 0, max: 255 }), isReferenceType: false })
-export const IntLiteralType =   new PrimitiveType("int_literal",   { sizeof: 4, fields: [], metaobject: Object.create(null), isReferenceType: false })
-export const FloatLiteralType = new PrimitiveType("float_literal", { sizeof: 4, fields: [], metaobject: Object.create(null), isReferenceType: false })
-export const BoolType =         new PrimitiveType("bool",          { sizeof: 1, fields: [], metaobject: Object.assign(Object.create(null), { init: false, min: 0, max: 1 }), isReferenceType: false })
-export const FloatType =        new PrimitiveType("float",         { sizeof: 4, fields: [], metaobject: Object.assign(Object.create(null), { init: 0.0, min: -Math.pow(2, 31), max: Math.pow(2, 31) - 1 }), isReferenceType: false })
-export const DoubleType =       new PrimitiveType("double",        { sizeof: 8, fields: [], metaobject: Object.assign(Object.create(null), { init: 0.0, min: -Math.pow(2, 63), max: Math.pow(2, 63) - 1 }), isReferenceType: false })
-export const FunctionType =     new PrimitiveType("function",      { sizeof: 0, fields: [], metaobject: Object.create(null), isReferenceType: false })
-export const RawPointerType =   new PrimitiveType("rawptr",        { sizeof: 8, fields: [], metaobject: Object.create(null), isReferenceType: false })
-export const AstType =          new PrimitiveType("ast",           { sizeof: 0, fields: [], metaobject: Object.create(null), isReferenceType: false })
-export const CompileTimeObjectType = new PrimitiveType("ctobj",    { sizeof: 0, fields: [], metaobject: Object.create(null), isReferenceType: false })
+export const NeverType =        new PrimitiveType("never",         { sizeof: 0, alignment: 0, fields: [], metaobject: Object.create(null), isReferenceType: false })
+export const VoidType =         new PrimitiveType("void",          { sizeof: 0, alignment: 0, fields: [], metaobject: Object.create(null), isReferenceType: false })
+export const IntType =          new PrimitiveType("int",           { sizeof: 4, alignment: 4, fields: [], metaobject: Object.assign(Object.create(null), { init: 0, min: -Math.pow(2, 31), max: Math.pow(2, 31) - 1 }), isReferenceType: false })
+export const u64Type =          new PrimitiveType("u64",           { sizeof: 4, alignment: 4, fields: [], metaobject: Object.assign(Object.create(null), { init: 0, min: -Math.pow(2, 63), max: Math.pow(2, 63) - 1 }), isReferenceType: false })
+export const u8Type =           new PrimitiveType("u8",            { sizeof: 1, alignment: 1, fields: [], metaobject: Object.assign(Object.create(null), { init: 0, min: 0, max: 255 }), isReferenceType: false })
+export const IntLiteralType =   new PrimitiveType("int_literal",   { sizeof: 4, alignment: 4, fields: [], metaobject: Object.create(null), isReferenceType: false })
+export const FloatLiteralType = new PrimitiveType("float_literal", { sizeof: 4, alignment: 4, fields: [], metaobject: Object.create(null), isReferenceType: false })
+export const BoolType =         new PrimitiveType("bool",          { sizeof: 1, alignment: 1, fields: [], metaobject: Object.assign(Object.create(null), { init: false, min: 0, max: 1 }), isReferenceType: false })
+export const FloatType =        new PrimitiveType("float",         { sizeof: 4, alignment: 4, fields: [], metaobject: Object.assign(Object.create(null), { init: 0.0, min: -Math.pow(2, 31), max: Math.pow(2, 31) - 1 }), isReferenceType: false })
+export const DoubleType =       new PrimitiveType("double",        { sizeof: 8, alignment: 8, fields: [], metaobject: Object.assign(Object.create(null), { init: 0.0, min: -Math.pow(2, 63), max: Math.pow(2, 63) - 1 }), isReferenceType: false })
+export const FunctionType =     new PrimitiveType("function",      { sizeof: 0, alignment: 0, fields: [], metaobject: Object.create(null), isReferenceType: false })
+export const RawPointerType =   new PrimitiveType("rawptr",        { sizeof: 8, alignment: 8, fields: [], metaobject: Object.create(null), isReferenceType: false })
+export const AstType =          new PrimitiveType("ast",           { sizeof: 0, alignment: 0, fields: [], metaobject: Object.create(null), isReferenceType: false })
+export const CompileTimeObjectType = new PrimitiveType("ctobj",    { sizeof: 0, alignment: 0, fields: [], metaobject: Object.create(null), isReferenceType: false })
+
+export type TypeFieldDef = {
+  sourceLocation: SourceLocation,
+  name: string,
+  fieldType: Type
+}
+export const insertTypeInfoFields = (type: Type, fields: TypeFieldDef[]) => {
+  const typeInfo = type.typeInfo
+  compilerAssert(typeInfo.sizeof === 0, "Type size already calculated")
+  compilerAssert(typeInfo.alignment === 0, "Type alignment already calculated")
+  let offset = 0
+  let maxAlignment = 1
+  fields.forEach(field => {
+    const fieldAlignment = field.fieldType.typeInfo.alignment
+    maxAlignment = Math.max(maxAlignment, fieldAlignment)
+    // Adjust offset to the alignment of the current field
+    offset = Math.ceil(offset / fieldAlignment) * fieldAlignment;
+    typeInfo.fields.push(new TypeField(field.sourceLocation, field.name, type, typeInfo.fields.length, field.fieldType, offset))
+    offset += field.fieldType.typeInfo.sizeof
+  })
+  // Adjust final size to be a multiple of the structure's alignment
+  typeInfo.sizeof = Math.ceil(offset / maxAlignment) * maxAlignment
+  typeInfo.alignment = maxAlignment
+}
+
 
 export const StringType = (() => {
-  const type = new BasicType("string", { sizeof: 0, fields: [], metaobject: Object.create(null), isReferenceType: false })
-  type.typeInfo.fields.push(new TypeField(SourceLocation.anon, "length", type, 0, IntType))
-  type.typeInfo.fields.push(new TypeField(SourceLocation.anon, "data", type, 1, RawPointerType))
-  return type;
+  const type = new BasicType("string", { sizeof: 0, alignment: 0, fields: [], metaobject: Object.create(null), isReferenceType: false })
+  insertTypeInfoFields(type, [
+    { sourceLocation: SourceLocation.anon, name: "length", fieldType: IntType },
+    { sourceLocation: SourceLocation.anon, name: "data", fieldType: RawPointerType }
+  ])
+  return type
 })()
 
 export const ListTypeConstructor: ExternalTypeConstructor = new ExternalTypeConstructor("List", (compiler, argTypes) => {
   compilerAssert(argTypes.length === 1, "Expected one type arg", { argTypes })
-  const type = new ParameterizedType(ListTypeConstructor, argTypes, { sizeof: 0, fields: [], metaobject: Object.create(null), isReferenceType: false });
-  type.typeInfo.fields.push(new TypeField(SourceLocation.anon, "length", type, 0, IntType))
-  type.typeInfo.fields.push(new TypeField(SourceLocation.anon, "capacity", type, 1, IntType))
-  type.typeInfo.fields.push(new TypeField(SourceLocation.anon, "data", type, 2, RawPointerType))
+  const type = new ParameterizedType(ListTypeConstructor, argTypes, { sizeof: 0, alignment: 0, fields: [], metaobject: Object.create(null), isReferenceType: false });
+  insertTypeInfoFields(type, [
+    { sourceLocation: SourceLocation.anon, name: "length", fieldType: IntType },
+    { sourceLocation: SourceLocation.anon, name: "capacity", fieldType: IntType },
+    { sourceLocation: SourceLocation.anon, name: "data", fieldType: RawPointerType }
+  ])
   return Task.of(type);
 })
 
 
 export const TupleTypeConstructor: ExternalTypeConstructor = new ExternalTypeConstructor("Tuple", (compiler, argTypes) => {
-  const type = new ParameterizedType(TupleTypeConstructor, argTypes, { sizeof: 0, fields: [], metaobject: Object.create(null), isReferenceType: false });
+  const type = new ParameterizedType(TupleTypeConstructor, argTypes, { sizeof: 0, alignment: 0, fields: [], metaobject: Object.create(null), isReferenceType: false });
   // TODO: Add getter for length
-  // type.typeInfo.fields.push(new TypeField(SourceLocation.anon, "length", type, 0, IntType))
-  argTypes.forEach((argType, i) => {
-    type.typeInfo.fields.push(new TypeField(SourceLocation.anon, `_${i+1}`, type, i, argType))
-  })
+  insertTypeInfoFields(type, argTypes.map((argType, i) => ({ sourceLocation: SourceLocation.anon, name: `_${i+1}`, fieldType: argType })))
   return Task.of(type)
 })
 

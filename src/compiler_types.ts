@@ -1,5 +1,5 @@
 import { compileClassTask } from "./compiler"
-import { Ast, BoolType, ClassDefinition, Closure, CompilerError, ConcreteClassType, DoubleType, EnumVariantAst, ExternalTypeConstructor, FloatLiteralType, FloatType, FunctionDefinition, GlobalCompilerState, IntLiteralType, IntType, MutSigilAst, NeverType, NumberAst, OperatorAst, ParameterizedType, ParseCall, ParseIdentifier, ParseNode, PrimitiveType, RawPointerType, Scope, ScopeParentSymbol, SourceLocation, StatementsAst, TaskContext, Tuple, Type, TypeCheckConfig, TypeCheckResult, TypeCheckVar, TypeConstructor, TypeField, TypeMatcher, TypeTable, TypeVariable, UnknownObject, VariantCastAst, VoidType, compilerAssert, getUniqueId, isType, u64Type, u8Type } from "./defs"
+import { Ast, BoolType, ClassDefinition, Closure, CompilerError, ConcreteClassType, DoubleType, EnumVariantAst, ExternalTypeConstructor, FloatLiteralType, FloatType, FunctionDefinition, GlobalCompilerState, IntLiteralType, IntType, MutSigilAst, NeverType, NumberAst, OperatorAst, ParameterizedType, ParseCall, ParseIdentifier, ParseNode, PrimitiveType, RawPointerType, Scope, ScopeParentSymbol, SourceLocation, StatementsAst, TaskContext, Tuple, Type, TypeCheckConfig, TypeCheckResult, TypeCheckVar, TypeConstructor, TypeField, TypeMatcher, TypeTable, TypeVariable, UnknownObject, VariantCastAst, VoidType, compilerAssert, getUniqueId, insertTypeInfoFields, isType, u64Type, u8Type } from "./defs"
 import { Task, TaskDef } from "./tasks"
 
 export const isTypeInteger = (type: Type) => type === IntType || type === u64Type || type === u8Type
@@ -362,46 +362,31 @@ export const propagateLiteralType = (inferType: Type, ast: Ast | null): Type => 
 }
 export const propagatedLiteralAst = (ast: Ast) => { propagateLiteralType(ast.type, ast); return ast }
 
-export const calculateSizeOfType =  (expr: Type): number => {
-  // TODO: Padding
-
-  if (expr instanceof ConcreteClassType) {
-    compilerAssert(expr, "Expected concrete type") // TODO: Compile it?
-    return expr.typeInfo.fields.reduce((acc, x) => acc + calculateSizeOfType(x.fieldType), 0)
-  }
-  if (expr instanceof PrimitiveType) { return expr.typeInfo.sizeof }
-  if (expr instanceof ParameterizedType) { 
-    return expr.typeInfo.fields.reduce((acc, x) => acc + calculateSizeOfType(x.fieldType), 0)
-  }
-  compilerAssert(false, "Not implemented", { expr })
-}
-
-
 export const NoneTypeConstructor: ExternalTypeConstructor = new ExternalTypeConstructor("None", (compiler, argTypes) => {
   const argType = argTypes[0] || NeverType
   compilerAssert(isType(argType), "Expected one type arg", { argType })
-  const sizeof = argType.typeInfo.sizeof + IntType.typeInfo.sizeof
-  const variantPadding = argType.typeInfo.sizeof
-  const type = new ParameterizedType(NoneTypeConstructor, [argType], { sizeof, variantPadding, fields: [], metaobject: Object.create(null), isReferenceType: false });
+  const variantPadding = argType.typeInfo.sizeof // TODO: should use actual padding
+  const type = new ParameterizedType(NoneTypeConstructor, [argType], { sizeof: 0, alignment: 0, variantPadding, fields: [], metaobject: Object.create(null), isReferenceType: false });
   type.typeInfo.isInvalidSize = argType === NeverType
   type.typeInfo.metaobject.isEnumVariant = true
   type.typeInfo.metaobject.enumConstructorVariantOf = OptionTypeConstructor
   type.typeInfo.metaobject.enumVariantIndex = 0
-  type.typeInfo.fields.push(new TypeField(SourceLocation.anon, "tag", type, 0, IntType))
+  insertTypeInfoFields(type, [{ sourceLocation: SourceLocation.anon, name: "tag", fieldType: IntType }])
   return Task.of(type)
 })
 
 export const SomeTypeConstructor: ExternalTypeConstructor = new ExternalTypeConstructor("Some", (compiler, argTypes) => {
   compilerAssert(argTypes.length === 1, "Expected one type arg", { argTypes })
   const argType = argTypes[0]
-  const sizeof = argType.typeInfo.sizeof + IntType.typeInfo.sizeof
-  const type = new ParameterizedType(SomeTypeConstructor, [argType], { sizeof, fields: [], metaobject: Object.create(null), isReferenceType: false });
+  const type = new ParameterizedType(SomeTypeConstructor, [argType], { sizeof: 0, alignment: 0, fields: [], metaobject: Object.create(null), isReferenceType: false });
   type.typeInfo.metaobject.isEnumVariant = true
   type.typeInfo.metaobject.enumConstructorVariantOf = OptionTypeConstructor
   type.typeInfo.metaobject.enumVariantIndex = 1
   type.typeInfo.isInvalidSize = argType === NeverType
-  type.typeInfo.fields.push(new TypeField(SourceLocation.anon, "tag", type, 0, IntType))
-  type.typeInfo.fields.push(new TypeField(SourceLocation.anon, "value", type, 1, argType))
+  insertTypeInfoFields(type, [
+    { sourceLocation: SourceLocation.anon, name: "tag", fieldType: IntType },
+    { sourceLocation: SourceLocation.anon, name: "value", fieldType: argType }
+  ])
   return Task.of(type)
 })
 
@@ -409,13 +394,12 @@ export const OptionTypeConstructor: ExternalTypeConstructor = new ExternalTypeCo
   const argType = argTypes[0] || NeverType
   compilerAssert(isType(argType), "Expected one type arg", { argType })
 
-  const sizeof = argType.typeInfo.sizeof + IntType.typeInfo.sizeof
-  const variantPadding = argType.typeInfo.sizeof
-  const opttype = new ParameterizedType(OptionTypeConstructor, [argType], { sizeof, variantPadding, fields: [], metaobject: Object.create(null), isReferenceType: false });
+  const variantPadding = argType.typeInfo.sizeof // TODO: should use actual padding
+  const opttype = new ParameterizedType(OptionTypeConstructor, [argType], { sizeof: 0, alignment: 0, variantPadding, fields: [], metaobject: Object.create(null), isReferenceType: false });
 
   opttype.typeInfo.isInvalidSize = argType === NeverType
   opttype.typeInfo.metaobject.isEnum = true
-  opttype.typeInfo.fields.push(new TypeField(SourceLocation.anon, "tag", opttype, 0, IntType))
+  insertTypeInfoFields(opttype, [{ sourceLocation: SourceLocation.anon, name: "tag", fieldType: IntType }])
 
   return (
     createParameterizedExternalType(compiler, SomeTypeConstructor, [argType])

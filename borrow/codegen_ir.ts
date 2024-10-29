@@ -291,9 +291,20 @@ export class FunctionCodeGenerator {
 
   generateCastExpression(ast: CastAst, context: ExpressionContext): IRValue {
     const value = this.generateExpression(ast.expr, { valueCategory: 'rvalue' });
-    const v = this.toValue(ast.type, value)
     const reg = this.newRegister();
     this.addInstruction(new CommentInstruction(`Cast ${ast.type.shortName}`))
+    if (ast.type === RawPointerType) {
+      // Ugly weird stuff. Come back to this later
+      if (!(ast.expr instanceof BindingAst)) {
+        const v = this.toValue(ast.expr.type, value)
+        return new Value(v.register)
+      } 
+      compilerAssert(value instanceof Pointer, 'Expected pointer')
+      // TODO: Temporary hack
+      this.addInstruction(new MarkInitializedInstruction(value.address, ast.type, true));
+      return new Value(value.address)
+    }
+    const v = this.toValue(ast.type, value)
     this.addInstruction(new BinaryOperationInstruction(reg, ast.type, 'cast', v.register, '', ast.expr.type));
     return new Value(reg);
   }
@@ -670,6 +681,8 @@ export class FunctionCodeGenerator {
       return this.ensureMutable(ast.left)
     } else if (ast instanceof MutSigilAst) {
       return this.ensureMutable(ast.expr)
+    } else if (ast instanceof SubscriptAst) {
+      return this.ensureMutable(ast.left)
     }
     compilerAssert(false, 'Not implemented mutable check', { ast })
   }
@@ -724,6 +737,7 @@ export class FunctionCodeGenerator {
     if (value instanceof ConstructorAst) return [Capability.Sink, true]
     if (value instanceof SubscriptAst)   return [Capability.Sink, false]
     if (value instanceof BlockAst)       return this.getCapabilityAndOwnership(value.body)
+    if (value instanceof StatementsAst)  return this.getCapabilityAndOwnership(value.statements[value.statements.length - 1])
     compilerAssert(false, 'Not implemented', { value })
   }
 
