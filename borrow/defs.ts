@@ -1,4 +1,4 @@
-import { Binding, Capability, CompiledFunction, FunctionParameter, Type, TypeField } from "../src/defs";
+import { Binding, Capability, CompiledFunction, FunctionParameter, LetType, Type, TypeField } from "../src/defs";
 
 export function compilerAssert(expected: unknown, message: string="", info: object={}): asserts expected {
   if (expected) return;

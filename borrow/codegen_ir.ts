@@ -1,6 +1,6 @@
 import { externalBuiltinBindings } from "../src/compiler_sugar";
-import { AndAst, Ast, Binding, BindingAst, BlockAst, BoolAst, BreakAst, CallAst, Capability, CastAst, CompiledFunction, compilerAssert, ConstructorAst, DefaultConsAst, FieldAst, FunctionParameter, IfAst, IntType, LetAst, MutSigilAst, NotAst, NumberAst, OperatorAst, OrAst, ParameterizedType, PrimitiveType, RawPointerType, ReturnAst, SetAst, SetFieldAst, SetSubscriptAst, SetValueFieldAst, SourceLocation, StatementsAst, StringAst, SubscriptAst, Type, UserCallAst, ValueFieldAst, VoidAst, VoidType, WhileAst } from "../src/defs";
-import { ASTNode, AllocInstruction, AssignInstruction, AssignmentNode, BasicBlock, BinaryExpressionNode, BinaryOperationInstruction, BlockStatementNode, CallExpressionNode, CallInstruction, AccessInstruction, ConditionalJumpInstruction, CreateStructNode, ExpressionNode, ExpressionStatementNode, FunctionBlock, FunctionDeclarationNode, IRInstruction, IRValue, IdentifierNode, IfStatementNode, JumpInstruction, LetConstNode, LiteralNode, LoadConstantInstruction, LoadFromAddressInstruction, MemberExpressionNode, ProgramNode, Pointer, Value, ReturnInstruction, ReturnNode, StoreToAddressInstruction, Variable, VariableDeclarationNode, WhileStatementNode, GetFieldPointerInstruction, AndNode, OrNode, PhiInstruction, CommentInstruction, MoveInstruction, EndAccessInstruction, printIR, MarkInitializedInstruction, InstructionId, PhiSource, DeallocStackInstruction, PointerOffsetInstruction, ParameterInstruction } from "./defs";
+import { AndAst, Ast, Binding, BindingAst, BlockAst, BoolAst, BreakAst, CallAst, Capability, CastAst, CompiledFunction, compilerAssert, ConstructorAst, DefaultConsAst, FieldAst, FunctionParameter, IfAst, IntType, LetAst, LetType, MutSigilAst, NotAst, NumberAst, OperatorAst, OrAst, ParameterizedType, PrimitiveType, RawPointerType, ReturnAst, SetAst, SetFieldAst, SetSubscriptAst, SetValueFieldAst, SourceLocation, StatementsAst, StringAst, SubscriptAst, Type, UserCallAst, ValueFieldAst, VoidAst, VoidType, WhileAst } from "../src/defs";
+import { ASTNode, AllocInstruction, AssignInstruction, AssignmentNode, BasicBlock, BinaryExpressionNode, BinaryOperationInstruction, BlockStatementNode, CallExpressionNode, CallInstruction, AccessInstruction, ConditionalJumpInstruction, CreateStructNode, ExpressionNode, ExpressionStatementNode, FunctionBlock, FunctionDeclarationNode, IRInstruction, IRValue, IdentifierNode, IfStatementNode, JumpInstruction, LetConstNode, LiteralNode, LoadConstantInstruction, LoadFromAddressInstruction, MemberExpressionNode, ProgramNode, Pointer, Value, ReturnInstruction, ReturnNode, StoreToAddressInstruction, Variable, VariableDeclarationNode, WhileStatementNode, GetFieldPointerInstruction, AndNode, OrNode, PhiInstruction, CommentInstruction, MoveInstruction, EndAccessInstruction, printIR, MarkInitializedInstruction, InstructionId, PhiSource, DeallocStackInstruction, PointerOffsetInstruction } from "./defs";
 
 type ExpressionContext = {
   valueCategory: 'rvalue' | 'lvalue';
@@ -310,39 +310,38 @@ export class FunctionCodeGenerator {
   }
 
   generateVariableDeclaration(ast: LetAst) {
-    const mutable = ast.mutable
-    this.addInstruction(new CommentInstruction(`${mutable ? 'var' : 'let'} ${ast.binding.name}`))
+    this.addInstruction(new CommentInstruction(`let ${ast.letType} ${ast.binding.name}`))
     const value = ast.value ? (() => {
       const astWithoutMutSigil = ast.value instanceof MutSigilAst ? ast.value.expr : ast.value
       return this.generateExpression(astWithoutMutSigil, { valueCategory: 'rvalue' }) 
     })() : null
 
-    if (mutable) {
-      this.generateMutableVariableDeclaration(ast, value);
-    } else {
-      this.generateProjection(ast, value);
+    if (ast.letType === LetType.VarRef || ast.letType === LetType.Let) {
+      return this.generateProjection(ast, value);
     }
+
+    this.generateMutableVariableDeclaration(ast, value);
   }
 
   generateProjection(ast: LetAst, value: IRValue | null) {
     const type = ast.binding.type
     const reg = this.newRegister();
-    const capability = Capability.Let
+    const letType = ast.letType
+    compilerAssert(letType, 'Let type not found');
+    const capability = letType === LetType.VarRef ? Capability.Inout : Capability.Let
     this.variableMap.set(ast.binding, new Variable(ast.binding.name, type, reg, capability));
     compilerAssert(value, 'Let binding must have an initializer');
     const ptr = this.storeResult(type, value)
     // compilerAssert(value instanceof Pointer, 'Let binding must have an lvalue initializer');
     this.addInstruction(new CommentInstruction(`Projection ${ast.binding.name}`))
-    this.addInstruction(new AccessInstruction(reg, ptr.address, [Capability.Let], type));
+    this.addInstruction(new AccessInstruction(reg, ptr.address, [capability], type));
   }
 
   generateMutableVariableDeclaration(ast: LetAst, value: IRValue | null) {
     const type = ast.binding.type
-    const mutable = ast.mutable
-    const capability = mutable ? Capability.Inout : Capability.Let
     const reg = this.generateAlloc(type);
     
-    this.variableMap.set(ast.binding, new Variable(ast.binding.name, type, reg, capability));
+    this.variableMap.set(ast.binding, new Variable(ast.binding.name, type, reg, Capability.Sink));
     
     if (!value) return
     if (value instanceof Value) {
@@ -571,7 +570,7 @@ export class FunctionCodeGenerator {
       return new Pointer(targetPointer)
     }
     
-    this.generate(new LetAst(VoidType, SourceLocation.anon, binding, null, true))
+    this.generate(new LetAst(VoidType, SourceLocation.anon, binding, null, LetType.Var))
     const bindingAst = new BindingAst(binding.type, SourceLocation.anon, binding)
     const copyConstructor = ast.type.typeInfo.metaobject.copyConstructorBinding
     compilerAssert(copyConstructor && copyConstructor instanceof Binding, `Copy constructor not found for ${ast.type.shortName}`);
@@ -665,8 +664,7 @@ export class FunctionCodeGenerator {
     const newLocal = this.generateExpression(astWithoutMutSigil, { valueCategory: 'rvalue' });
     const lvalue = this.storeResult(type, newLocal)
 
-    compilerAssert(variable.capability === Capability.Inout || variable.capability === Capability.Set, 'Cannot assign to a let variable');
-
+    compilerAssert(variable.capability === Capability.Inout || variable.capability === Capability.Set || variable.capability === Capability.Sink, 'Cannot assign to a let variable', { location: ast.location, variable, ast })
     this.generateMovePointerInstructionWithCapabilityCheck(variable.register, lvalue, ast.value)
   }
 
@@ -674,7 +672,7 @@ export class FunctionCodeGenerator {
     if (ast instanceof BindingAst) {
       const variable = this.variableMap.get(ast.binding);
       compilerAssert(variable, `Undefined variable: ${ast.binding.name}`);
-      return variable.capability === Capability.Inout || variable.capability === Capability.Set
+      return variable.capability === Capability.Inout || variable.capability === Capability.Set || variable.capability === Capability.Sink
     } else if (ast instanceof FieldAst) {
       return this.ensureMutable(ast.left)
     } else if (ast instanceof ValueFieldAst) {
@@ -688,7 +686,7 @@ export class FunctionCodeGenerator {
   }
 
   generateAssignmentField(ast: SetFieldAst) {
-    compilerAssert(this.ensureMutable(ast.left), 'Cannot assign to a member of an immutable struct');
+    compilerAssert(this.ensureMutable(ast.left), 'Cannot assign to a member of an immutable struct', { location: ast.left.location });
     const objReg = this.generateExpression(ast.left, { valueCategory: 'lvalue' });
     compilerAssert(objReg instanceof Pointer, 'Object must be an pointer');
     
@@ -703,6 +701,7 @@ export class FunctionCodeGenerator {
   }
 
   generateAssignmentValueField(ast: SetValueFieldAst) {
+    compilerAssert(this.ensureMutable(ast.left), 'Cannot assign to a member of an immutable struct', { location: ast.left.location, ast })
     this.addInstruction(new CommentInstruction(`Set value field ${ast.fieldPath.map(x => x.name).join(", ")}`))
     const objReg = this.generateExpression(ast.left, { valueCategory: 'lvalue' });
     compilerAssert(objReg instanceof Pointer, 'Object must be an pointer');
@@ -738,7 +737,7 @@ export class FunctionCodeGenerator {
     if (value instanceof SubscriptAst)   return [Capability.Sink, false]
     if (value instanceof BlockAst)       return this.getCapabilityAndOwnership(value.body)
     if (value instanceof StatementsAst)  return this.getCapabilityAndOwnership(value.statements[value.statements.length - 1])
-    compilerAssert(false, 'Not implemented', { value })
+    compilerAssert(false, 'Not implemented', { value, currentStatement: this.currentStatement })
   }
 
   generateMovePointerInstructionWithCapabilityCheck(targetPointer: string, sourcePointer: Pointer, valueAst: Ast) {

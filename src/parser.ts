@@ -1,4 +1,4 @@
-import { ParseAnd, ParseNode, ParseBreak, ParseCall, ParseCast, ParseCompTime, ParseContinue, ParseDict, ParseExpand, ParseField, ParseFor, ParseForExpr, ParseIf, ParseLet, ParseLetConst, ParseList, ParseListComp, ParseMeta, ParseNot, ParseNumber, ParseOpEq, ParseOperator, ParseOr, ParseReturn, ParseSet, ParseStatements, ParseString, ParseIdentifier, ParseWhile, ParseWhileExpr, ParserFunctionDecl, Token, compilerAssert, ParsePostCall, ParseSymbol, ParseNote, ParseSlice, ParseSubscript, ParserClassDecl, ParseClass, ParseFunction, createToken, ParseBoolean, ParseElse, ParseMetaIf, ParseMetaFor, ParseBlock, ParseImport, ParsedModule, Source, ParseMetaWhile, ParseTuple, ParseImportName, ParseFold, ParserFunctionParameter, ParseNamedArg, ParseIs, ParseOrElse, ParseIterator, ParseQuestion, ParseExtract, ParseMatch, ParseMatchCase, ParseGuard, createAnonymousToken, ParseLetAs, ParseIfMulti, Capability, ParseMutSigil } from "./defs";
+import { ParseAnd, ParseNode, ParseBreak, ParseCall, ParseCast, ParseCompTime, ParseContinue, ParseDict, ParseExpand, ParseField, ParseFor, ParseForExpr, ParseIf, ParseLet, ParseLetConst, ParseList, ParseListComp, ParseMeta, ParseNot, ParseNumber, ParseOpEq, ParseOperator, ParseOr, ParseReturn, ParseSet, ParseStatements, ParseString, ParseIdentifier, ParseWhile, ParseWhileExpr, ParserFunctionDecl, Token, compilerAssert, ParsePostCall, ParseSymbol, ParseNote, ParseSlice, ParseSubscript, ParserClassDecl, ParseClass, ParseFunction, createToken, ParseBoolean, ParseElse, ParseMetaIf, ParseMetaFor, ParseBlock, ParseImport, ParsedModule, Source, ParseMetaWhile, ParseTuple, ParseImportName, ParseFold, ParserFunctionParameter, ParseNamedArg, ParseIs, ParseOrElse, ParseIterator, ParseQuestion, ParseExtract, ParseMatch, ParseMatchCase, ParseGuard, createAnonymousToken, ParseLetAs, ParseIfMulti, Capability, ParseMutSigil, LetType } from "./defs";
 
 const regexes = {
   KEYWORD:
@@ -491,8 +491,8 @@ export const makeParser = (input: string, debugName: string) => {
   }
 
   const parseLetOrExpr = () => 
-    match("var") ? parseLetExpr(true) : 
-    match("let") ? parseLetExpr(false) : parseExpr();
+    match("var") ? parseLetExpr(LetType.Var) : 
+    match("let") ? parseLetExpr(LetType.Let) : parseExpr();
 
   const parseIf = (ifToken: Token, isExpr: boolean, message: string = "if condition"): ParseIf | ParseIfMulti => {
     const list = [parseLetOrExpr()];
@@ -528,9 +528,10 @@ export const makeParser = (input: string, debugName: string) => {
     else if (match("*=")) return new ParseOpEq(previous, expr, parseAssignExpr());
     else if (match("/=")) return new ParseOpEq(previous, expr, parseAssignExpr());
     else if (match(":")) {
+      // TODO: Only used for struct defs
       const type = parseExpr();
       const value = match("=") ? parseAssignExpr() : null
-      return new ParseLet(previous, true, assertLeftSide(expr), type, value)
+      return new ParseLet(previous, LetType.Var, assertLeftSide(expr), type, value)
     }
     return expr;
   };
@@ -543,15 +544,15 @@ export const makeParser = (input: string, debugName: string) => {
     return trailingStatement(expr);
   };
 
-  const parseLetExpr = (mutable: boolean) => {
+  const parseLetExpr = (letType: LetType) => {
     const left = parseLeftSideMatch();
     const type = match(":") ? parseExpr() : null;
     const value = match("=") ? parseAssignExpr() : null;
-    let let_ = new ParseLet(previous, mutable, left, type, value)
+    let let_ = new ParseLet(previous, letType, left, type, value)
     if (match("as?")) return new ParseLetAs(previous, let_, parseExpr())
     return let_
   }
-  const parseLetStatement = (mutable: boolean) => trailingStatement(parseLetExpr(mutable))
+  const parseLetStatement = (letType: LetType) => trailingStatement(parseLetExpr(letType))
   const parseLetConstStatement = () => {
     const left = parseLeftSideMatch();
     expect("=", "Expected '=' after const identifier");
@@ -647,8 +648,8 @@ export const makeParser = (input: string, debugName: string) => {
     if (match("fn"))            return parseFunctionDef();
     else if (match("@@"))       return parseAnnotation()
     else if (match("type"))     return parseClassDef();
-    else if (match("let"))      return parseLetStatement(false);
-    else if (match("var"))      return parseLetStatement(true);
+    else if (match("let"))      return parseLetStatement(LetType.Let);
+    else if (match("var"))      return match("ref") ? parseLetStatement(LetType.VarRef) : parseLetStatement(LetType.Var);
     else if (match("const"))    return parseLetConstStatement();
     else if (match("if"))       return parseIf(previous, false);
     else if (match("guard"))    return parseGuard(previous);

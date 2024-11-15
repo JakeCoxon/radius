@@ -1,9 +1,9 @@
-import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, ParseMeta, createAnonymousParserFunctionDecl, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol, ScopeParentSymbol, isPlainObject, ParseLet, ParseList, ParseExpand, ParseBlock, findLabelByBinding, ParseSubscript, ParseNumber, ParseQuote, ParseWhile, ParseOperator, ParseBytecode, ParseOpEq, ParseSet, ParseFreshIden, UnknownObject, ParseNote, DefaultConsAst, RawPointerType, ValueFieldAst, SetValueFieldAst, FloatLiteralType, IntLiteralType, CompilerFunction, DerefAst, SetDerefAst, ParseSlice, CompilerFunctionCallContext, NeverType, LoopObject, CompTimeObjAst, CompileTimeObjectType, NamedArgAst, TypeCheckVar, TypeCheckConfig, u8Type, u64Type, FreshBindingToken, isCompilerCallable, ParseIs, VariantCastAst, EnumVariantAst, Capability, MutSigilAst, insertTypeInfoFields, TypeFieldDef } from "./defs";
+import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, ParseMeta, createAnonymousParserFunctionDecl, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol, ScopeParentSymbol, isPlainObject, ParseLet, ParseList, ParseExpand, ParseBlock, findLabelByBinding, ParseSubscript, ParseNumber, ParseQuote, ParseWhile, ParseOperator, ParseBytecode, ParseOpEq, ParseSet, ParseFreshIden, UnknownObject, ParseNote, DefaultConsAst, RawPointerType, ValueFieldAst, SetValueFieldAst, FloatLiteralType, IntLiteralType, CompilerFunction, DerefAst, SetDerefAst, ParseSlice, CompilerFunctionCallContext, NeverType, LoopObject, CompTimeObjAst, CompileTimeObjectType, NamedArgAst, TypeCheckVar, TypeCheckConfig, u8Type, u64Type, FreshBindingToken, isCompilerCallable, ParseIs, VariantCastAst, EnumVariantAst, Capability, MutSigilAst, insertTypeInfoFields, TypeFieldDef, LetType } from "./defs";
 import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, functionCompileTimeCompileTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, compileExportedFunctionTask } from "./compiler_functions";
 import { Event, Task, TaskDef, Unit, isTask, isTaskResult, withContext } from "./tasks";
 import { createCompilerModuleTask, createListConstructor, defaultMetaFunction, guardSugar, ifMultiSugar, isSugar, matchSugar, optionBlockSugar, optionCastSugar, orElseSugar, print, questionSugar } from "./compiler_sugar";
 import { expandDotsSugar, expandFuncAllSugar, expandFuncAnySugar, expandFuncConcatSugar, expandFuncFirstSugar, expandFuncLastSugar, expandFuncMaxSugar, expandFuncMinSugar, expandFuncSumSugar, expandIteratorSugar, foldSugar, forExprSugar, forLoopSugar, listComprehensionSugar, listConstructorSugar, sliceSugar, whileExprSugar } from "./compiler_iterator"
-import { OptionTypeConstructor, calculateSizeOfType, canAssignTypeTo, classDefinitionToType, compileTypeConstructorTask, createParameterizedExternalType, getCommonType, hashValues, isParameterizedTypeOf, propagateLiteralType, propagatedLiteralAst, typeTableGetOrInsert, typecheckEquality, typecheckNumberComparison, typecheckNumberOperator } from "./compiler_types";
+import { OptionTypeConstructor, canAssignTypeTo, classDefinitionToType, compileTypeConstructorTask, createParameterizedExternalType, getCommonType, hashValues, isParameterizedTypeOf, propagateLiteralType, propagatedLiteralAst, typeTableGetOrInsert, typecheckEquality, typecheckNumberComparison, typecheckNumberOperator } from "./compiler_types";
 
 export const pushBytecode = <T extends BytecodeInstr>(out: BytecodeWriter, token: Token, instr: T) => {
   out.bytecode.locations.push(token.location);
@@ -501,7 +501,7 @@ export const BytecodeSecondOrder: ParseTreeTable = {
       return
     }
     const name = node.left instanceof ParseFreshIden ? node.left.freshBindingToken.identifier : node.left.token.value
-    pushBytecode(out, node.token, { type: 'letast', name, t: !!node.type, v: !!node.value, mutable: node.mutable })
+    pushBytecode(out, node.token, { type: 'letast', name, t: !!node.type, v: !!node.value, letType: node.letType })
   },
 
   call: (out, node) => {
@@ -723,7 +723,7 @@ createOperator("!=", "neq", typecheckEquality,         (a, b) => a != b)
 
 
 
-const letLocalAst = (vm: Vm, name: string, type: Type | null, value: Ast | null, mutable: boolean) => {
+const letLocalAst = (vm: Vm, name: string, type: Type | null, value: Ast | null, letType: LetType) => {
   compilerAssert(type || value, "Expected type or initial value for let binding $name", { name });
   compilerAssert(!Object.hasOwn(vm.scope, name), `Already defined $name`, { name });
   let inferType = type || value!.type
@@ -737,7 +737,7 @@ const letLocalAst = (vm: Vm, name: string, type: Type | null, value: Ast | null,
   }
   binding.definitionCompiler = vm.context.subCompilerState
   value ||= new DefaultConsAst(inferType.typeInfo.isReferenceType ? RawPointerType : inferType, vm.location)
-  return new LetAst(VoidType, vm.location, binding, value, mutable);
+  return new LetAst(VoidType, vm.location, binding, value, letType);
 }
 
 export function resolveScope(ctx: TaskContext, scope: Scope, name: string): Task<unknown, CompilerError> {
@@ -858,10 +858,10 @@ const instructions: InstructionMapping = {
     const value = r ? propagatedLiteralAst(expectAst(popStack(vm))) : null
     vm.stack.push(new ReturnAst(NeverType, vm.location, value))
   },
-  letast: (vm, { name, t, v, mutable }) => {
+  letast: (vm, { name, t, v, letType }) => {
     const type = t ? expectType(popStack(vm)) : null
     let value = v ? expectAst(popStack(vm)) : null
-    vm.stack.push(letLocalAst(vm, name, type, value, mutable))
+    vm.stack.push(letLocalAst(vm, name, type, value, letType))
     return Task.success()
   },
   letmetaast: (vm, { t, v }) => {
@@ -870,7 +870,7 @@ const instructions: InstructionMapping = {
     const type = t ? expectType(popStack(vm)) : null
     const value = v ? expectAst(popStack(vm)) : null
     compilerAssert(value, "Expected value for let")
-    vm.stack.push(letLocalAst(vm, name, type, value, false))
+    vm.stack.push(letLocalAst(vm, name, type, value, LetType.Let))
     return Task.success()
   },
   letmatchast: (vm, { t, v }) =>  {
@@ -882,7 +882,7 @@ const instructions: InstructionMapping = {
     const stmts: Ast[] = []
     const recur = (tuple: Tuple, tupleType: Type, rightSide: Ast) => {
       const newName = new FreshBindingToken("tup")
-      const letAst = letLocalAst(vm, newName.identifier, null, rightSide, false)
+      const letAst = letLocalAst(vm, newName.identifier, null, rightSide, LetType.Let)
       const rightSideBinding = new BindingAst(VoidType, vm.location, letAst.binding)
       stmts.push(letAst)
 
@@ -893,7 +893,7 @@ const instructions: InstructionMapping = {
         const fieldAst = new FieldAst(field.fieldType, vm.location, rightSideBinding, field)
         if (value instanceof Tuple) return recur(value, field.fieldType, fieldAst)
         compilerAssert(typeof value === 'string', "Expected string got $value", { value })
-        stmts.push(letLocalAst(vm, value, field.fieldType, fieldAst, false))
+        stmts.push(letLocalAst(vm, value, field.fieldType, fieldAst, LetType.Let))
       })
     }
     recur(tuple, value.type, value)
@@ -1047,6 +1047,7 @@ const instructions: InstructionMapping = {
   },
   setlocalast: (vm, { name }) => {
     return TaskDef(resolveScope, vm.scope, name).chainFn((task, binding) => {
+      if (binding instanceof BindingAst) binding = binding.binding // weird
       compilerAssert(binding instanceof Binding, "Expected binding got $binding", { binding })
       const ast = expectAst(popStack(vm))
       propagateLiteralType(binding.type, ast)
@@ -1094,7 +1095,7 @@ const instructions: InstructionMapping = {
       const newBinding = new Binding("", left.type)
       const newBindingAst = new BindingAst(left.type, vm.location, newBinding)
       const stmts = createStatements(vm.location, [
-        new LetAst(VoidType, vm.location, newBinding, left, false),
+        new LetAst(VoidType, vm.location, newBinding, left, LetType.VarRef),
         new SetValueFieldAst(VoidType, vm.location, newBindingAst, [field], value)
       ])
       vm.stack.push(stmts)

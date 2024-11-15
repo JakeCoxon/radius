@@ -3,7 +3,7 @@ import { BytecodeSecondOrder, callFunctionFromValueTask, compileFunctionPrototyp
 import { compileAndExecuteFunctionHeaderTask, compileExportedFunctionTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, FunctionCallArg, functionTemplateTypeCheckAndCompileTask, insertFunctionDefinition } from "./compiler_functions"
 import { concat, generator } from "./compiler_iterator"
 import { NoneTypeConstructor, OptionTypeConstructor, SomeTypeConstructor, createParameterizedExternalType, hashValues, isTypeInteger, isTypeScalar, propagateLiteralType, propagatedLiteralAst } from "./compiler_types"
-import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, UserCallAst, NeverType, IfAst, BoolType, VoidAst, LoopObject, CompileTimeObjectType, u64Type, FunctionDefinition, ParserFunctionDecl, StatementsAst, IntLiteralType, FloatLiteralType, isAst, isType, isTypeCheckError, InterleaveAst, ContinueInterAst, CompTimeObjAst, ParseEvalFunc, SetAst, DefaultConsAst, WhileAst, BoolAst, isArray, ExpansionSelector, ParseNote, ExpansionCompilerState, ParseBoolean, ParseOr, ParseBreak, ParseIs, filterNotNull, ParseLetConst, ParseCast, VariantCastAst, ExternalTypeConstructor, GlobalCompilerState, ParseOrElse, ParseField, ParseQuestion, ParseBreakOpt, LabelBlock, BlockAst, ParseMatch, ParseExtract, ParseMatchCase, ParseTuple, ParseString, Tuple, ParseNot, EnumVariantAst, ParseIfMulti, ParseGuard, ParseBlockNoScope, Capability, TypeCheckResult, CompiledFunction } from "./defs"
+import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, UserCallAst, NeverType, IfAst, BoolType, VoidAst, LoopObject, CompileTimeObjectType, u64Type, FunctionDefinition, ParserFunctionDecl, StatementsAst, IntLiteralType, FloatLiteralType, isAst, isType, isTypeCheckError, InterleaveAst, ContinueInterAst, CompTimeObjAst, ParseEvalFunc, SetAst, DefaultConsAst, WhileAst, BoolAst, isArray, ExpansionSelector, ParseNote, ExpansionCompilerState, ParseBoolean, ParseOr, ParseBreak, ParseIs, filterNotNull, ParseLetConst, ParseCast, VariantCastAst, ExternalTypeConstructor, GlobalCompilerState, ParseOrElse, ParseField, ParseQuestion, ParseBreakOpt, LabelBlock, BlockAst, ParseMatch, ParseExtract, ParseMatchCase, ParseTuple, ParseString, Tuple, ParseNot, EnumVariantAst, ParseIfMulti, ParseGuard, ParseBlockNoScope, Capability, TypeCheckResult, CompiledFunction, LetType } from "./defs"
 import { Event, Task, TaskDef, isTask } from "./tasks"
 
 const insertMetaObjectPairwiseOperator = (compiledClass: CompiledClass, operatorName: string, operatorSymbol: string) => {
@@ -15,8 +15,8 @@ const insertMetaObjectPairwiseOperator = (compiledClass: CompiledClass, operator
     const bindingAstA = new BindingAst(a.type, ctx.location, new Binding("", a.type))
     const bindingAstB = new BindingAst(b.type, ctx.location, new Binding("", b.type))
     const stmts: Ast[] = [
-      new LetAst(VoidType, ctx.location, bindingAstA.binding, a, false),
-      new LetAst(VoidType, ctx.location, bindingAstB.binding, b, false)]
+      new LetAst(VoidType, ctx.location, bindingAstA.binding, a, LetType.Let),
+      new LetAst(VoidType, ctx.location, bindingAstB.binding, b, LetType.Let)]
 
     const length = compiledClass.fields.length // TODO: Static length
 
@@ -69,7 +69,7 @@ export const VecTypeMetaClass = new ExternalFunction('VecType', VoidType, (ctx, 
     const field = compiledClass.fields[index]
     const bindingAst = new BindingAst(value.type, ctx.location, new Binding("", value.type))
     return createStatements(ctx.location, [
-      new LetAst(VoidType, ctx.location, bindingAst.binding, value, false),
+      new LetAst(VoidType, ctx.location, bindingAst.binding, value, LetType.Let),
       new ValueFieldAst(field.fieldType, ctx.location, bindingAst, [field]),
     ])
   })
@@ -282,7 +282,7 @@ export const createListConstructor = (vm: Vm, elementType: Type, values: Ast[]) 
     })
     .chainFn((task, _) => {
       const stmts = createStatements(vm.location, [
-        new LetAst(VoidType, vm.location, binding, array, true),
+        new LetAst(VoidType, vm.location, binding, array, LetType.VarRef),
         ...callArray,
         new BindingAst(binding.type, vm.location, binding)
       ])
@@ -323,8 +323,8 @@ export const assert = new CompilerFunction('assert', (ctx, typeArgs: unknown[], 
   if (!existing) globalCompiler.externalDefinitions.push({ name: name, binding, paramHash, paramTypes: concreteTypes, returnType: NeverType })
 
   // Gotta be a nicer way to do this automatically
-  const left = new LetAst(VoidType, location, new Binding("", op.args[0].type), op.args[0], false)
-  const right = new LetAst(VoidType, location, new Binding("", op.args[1].type), op.args[1], false)
+  const left = new LetAst(VoidType, location, new Binding("", op.args[0].type), op.args[0], LetType.VarRef)
+  const right = new LetAst(VoidType, location, new Binding("", op.args[1].type), op.args[1], LetType.VarRef)
   const leftBinding = new BindingAst(left.binding.type, location, left.binding)
   const rightBinding = new BindingAst(right.binding.type, location, right.binding)
   const newOp = new OperatorAst(op.type, location, op.operator, [leftBinding, rightBinding])
@@ -371,7 +371,7 @@ export const print = new CompilerFunction('print', (ctx, typeArgs: unknown[], ar
     const ast = (() => {
       if (arg.type === StringType) {
         const binding = new Binding("", StringType)
-        const let_ = new LetAst(VoidType, location, binding, arg, false)
+        const let_ = new LetAst(VoidType, location, binding, arg, LetType.Let)
         const lengthGetter = fieldHelper(binding, 'length')
         const dataGetter = fieldHelper(binding, 'data')
         const call_ = printf(rawstr("%.*s"), lengthGetter, dataGetter)
@@ -398,7 +398,7 @@ export const print = new CompilerFunction('print', (ctx, typeArgs: unknown[], ar
       } else if (arg.type.typeInfo.fields.length && !arg.type.typeInfo.isReferenceType) {
         const localStmts = []
         const binding = new Binding("", arg.type)
-        const let_ = new LetAst(VoidType, location, binding, arg, false)
+        const let_ = new LetAst(VoidType, location, binding, arg, LetType.Let)
         localStmts.push(let_)
         localStmts.push(printf(rawstr(`${arg.type.shortName}(`)))
         const fieldsToPrint = binding.type.typeInfo.fields.filter(x => formats.has(x.fieldType))
@@ -451,7 +451,7 @@ export const printToPrintf = new CompilerFunction('printToPrintf', (ctx, typeArg
       formatStr += arg.value
     } else if (arg.type === StringType) {
       const binding = new Binding("", StringType)
-      stmts.push(new LetAst(VoidType, location, binding, arg, false))
+      stmts.push(new LetAst(VoidType, location, binding, arg, LetType.Let))
       const lengthGetter = fieldHelper(binding, 'length')
       const dataGetter = fieldHelper(binding, 'data')
       formatStr += '%.*s'
@@ -459,7 +459,7 @@ export const printToPrintf = new CompilerFunction('printToPrintf', (ctx, typeArg
     } else if (arg.type === BoolType) {
       const binding = new Binding("", StringType)
       const str = new IfAst(StringType, location, arg, new StringAst(StringType, location, 'true'), new StringAst(StringType, location, 'false'))
-      stmts.push(new LetAst(VoidType, location, binding, str, false))
+      stmts.push(new LetAst(VoidType, location, binding, str, LetType.Let))
       const lengthGetter = fieldHelper(binding, 'length')
       const dataGetter = fieldHelper(binding, 'data')
       formatStr += '%.*s'
@@ -469,7 +469,7 @@ export const printToPrintf = new CompilerFunction('printToPrintf', (ctx, typeArg
       formatStr += formats.get(arg.type)
     } else if (arg.type instanceof ParameterizedType && arg.type.typeConstructor === TupleTypeConstructor) {
       const binding = new Binding("", arg.type)
-      stmts.push(new LetAst(VoidType, location, binding, arg, false))
+      stmts.push(new LetAst(VoidType, location, binding, arg, LetType.Let))
       formatStr += `(`
       const fieldsToPrint = binding.type.typeInfo.fields.filter(x => formats.has(x.fieldType))
       fieldsToPrint.forEach((field, j) => {
@@ -481,7 +481,7 @@ export const printToPrintf = new CompilerFunction('printToPrintf', (ctx, typeArg
       formatStr += ')'
     } else if (arg.type.typeInfo.fields.length && !arg.type.typeInfo.isReferenceType) {
       const binding = new Binding("", arg.type)
-      stmts.push(new LetAst(VoidType, location, binding, arg, false))
+      stmts.push(new LetAst(VoidType, location, binding, arg, LetType.Let))
       formatStr += `${arg.type.shortName}(`
       const fieldsToPrint = binding.type.typeInfo.fields.filter(x => formats.has(x.fieldType))
       fieldsToPrint.forEach((field, j) => {
@@ -498,7 +498,7 @@ export const printToPrintf = new CompilerFunction('printToPrintf', (ctx, typeArg
   })
   formatStr += '\n'
   const formatBinding = new Binding("", StringType)
-  stmts.unshift(new LetAst(VoidType, location, formatBinding, new StringAst(StringType, location, formatStr), false))
+  stmts.unshift(new LetAst(VoidType, location, formatBinding, new StringAst(StringType, location, formatStr), LetType.Let))
   printfArgs.unshift(fieldHelper(formatBinding, 'data'))
   stmts.push(new CallAst(VoidType, location, externalBuiltinBindings.printf, printfArgs, []))
   return Task.of(createStatements(location, stmts))
@@ -803,7 +803,7 @@ export const ifMultiSugar = (out: BytecodeWriter, node: ParseIfMulti) => {
     if (cond instanceof ParseLet) return new ParseGuard(token, [cond], breakInner)
     return new ParseIf(token, false, new ParseNot(token, cond), breakInner, null)
   })
-  const let_ = new ParseLet(token, false, resultIden, null, node.trueBody)
+  const let_ = new ParseLet(token, LetType.Let, resultIden, null, node.trueBody)
   const breakOuter = new ParseBreak(token, outerIden, resultIden)
   const stmts = new ParseStatements(token, [...conds, let_, breakOuter])
   const innerBlock = new ParseBlock(token, null, innerIden, stmts)
@@ -917,7 +917,7 @@ const guardAsExprSugar = (subject: ParseNode, asType: ParseNode, numFields: numb
     vm.stack.push(value.values[1])
   }, [], [asTupleIden])
 
-  const letExtract = new ParseLet(token, false, iden, null, extractValue)
+  const letExtract = new ParseLet(token, LetType.Let, iden, null, extractValue)
   const if_ = new ParseIf(token, true, new ParseNot(token, cond), elseExpr, null)
   return new ParseStatements(token, [letAsTuple, if_, letExtract])
 }
@@ -928,8 +928,8 @@ const extractToOption = (node: ParseNode, subject: ParseNode, elseBlock: ParseNo
   // const none = new ParseCall(token, new ParseValue(token, NoneTypeConstructor), [], [])
   // const break_ = new ParseBreak(token, blockIden, none)
 
-  if (node instanceof ParseFreshIden) return new ParseLet(token, false, node, null, subject)
-  if (node instanceof ParseIdentifier) return new ParseLet(token, false, node, null, subject)
+  if (node instanceof ParseFreshIden) return new ParseLet(token, LetType.Let, node, null, subject)
+  if (node instanceof ParseIdentifier) return new ParseLet(token, LetType.Let, node, null, subject)
   if (node instanceof ParseNumber || node instanceof ParseString || node instanceof ParseBoolean) {
     return new ParseIf(token, false, new ParseOperator(createAnonymousToken('!='), [subject, node]), elseBlock, null)
   }
@@ -967,7 +967,7 @@ const caseToOption = (node: ParseMatchCase, blockIden: ParseFreshIden | ParseIde
   if (node.condition) smts.push(new ParseIf(token, false, new ParseNot(token, node.condition), break_, null))
 
   const resIden = new ParseFreshIden(token, new FreshBindingToken('res'))
-  const letRes = new ParseLet(token, false, resIden, null, node.body)
+  const letRes = new ParseLet(token, LetType.Let, resIden, null, node.body)
   const some = new ParseCall(subject.token, new ParseValue(subject.token, SomeTypeConstructor), [resIden], [])
 
   return new ParseStatements(token, [...smts, letRes, some])
@@ -976,7 +976,7 @@ const caseToOption = (node: ParseMatchCase, blockIden: ParseFreshIden | ParseIde
 export const matchSugar = (out: BytecodeWriter, node: ParseMatch) => {
   const token = node.token
   const subjectIden = new ParseFreshIden(token, new FreshBindingToken('subject'))
-  const letSubject = new ParseLet(token, false, subjectIden, null, node.subject)
+  const letSubject = new ParseLet(token, LetType.Let, subjectIden, null, node.subject)
   const blockIden = node.name ?? new ParseFreshIden(token, new FreshBindingToken('case'))
   const options = node.cases.map(case_ => {
     const caseBlock = caseToOption(case_, blockIden, subjectIden)
@@ -999,11 +999,11 @@ export const isSugar = (out: BytecodeWriter, node: ParseIs) => {
 export const orElseSugar = (out: BytecodeWriter, node: ParseOrElse) => {
   const token = node.token
   const letIden = new ParseFreshIden(token, new FreshBindingToken('orelse'))
-  const letNode = new ParseLet(token, false, letIden, null, node.expr)
+  const letNode = new ParseLet(token, LetType.Let, letIden, null, node.expr)
   const valueIden = new ParseFreshIden(token, new FreshBindingToken('value'))
 
   const extract = new ParseExtract(token, new ParseIdentifier(createAnonymousToken("Some")), [valueIden])
-  const ifLet = new ParseLet(token, false, extract, null, letIden)
+  const ifLet = new ParseLet(token, LetType.Let, extract, null, letIden)
   const ifNode = new ParseIfMulti(token, true, [ifLet], valueIden, new ParseElse(token, node.orElse))
   const stmts = new ParseStatements(token, [letNode, ifNode])
   visitParseNode(out, stmts)

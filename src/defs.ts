@@ -121,6 +121,12 @@ class ParseNodeType {
   }
 }
 
+export enum LetType {
+  Var = 'Var',
+  Let = 'Let',
+  VarRef = 'VarRef'
+} 
+
 export class ParseVoid extends ParseNodeType {         key = 'void' as const;         constructor(public token: Token) { super();} }
 export class ParseIdentifier extends ParseNodeType {   key = 'identifier' as const;   constructor(public token: Token) { super();} }
 export class ParseSymbol extends ParseNodeType {       key = 'symbol' as const;       constructor(public token: Token) { super();} }
@@ -129,7 +135,7 @@ export class ParseNumber extends ParseNodeType {       key = 'number' as const; 
 export class ParseString extends ParseNodeType {       key = 'string' as const;       constructor(public token: Token, public string: string) { super();} }
 export class ParseBoolean extends ParseNodeType {      key = 'boolean' as const;      constructor(public token: Token) { super();} }
 export class ParseStatements extends ParseNodeType {   key = 'statements' as const;   constructor(public token: Token, public exprs: ParseNode[]) { super();} }
-export class ParseLet extends ParseNodeType {          key = 'let' as const;          constructor(public token: Token, public mutable: boolean, public left: ParseNode, public type: ParseNode | null, public value: ParseNode | null) { super();} }
+export class ParseLet extends ParseNodeType {          key = 'let' as const;          constructor(public token: Token, public letType: LetType, public left: ParseNode, public type: ParseNode | null, public value: ParseNode | null) { super();} }
 export class ParseLetAs extends ParseNodeType {        key = 'letas' as const;        constructor(public token: Token, public left: ParseLet, public asType: ParseNode) { super();} }
 export class ParseSet extends ParseNodeType {          key = 'set' as const;          constructor(public token: Token, public left: ParseNode, public value: ParseNode) { super();} }
 export class ParseOperator extends ParseNodeType {     key = 'operator' as const;     constructor(public token: Token, public exprs: ParseNode[]) { super();} }
@@ -257,7 +263,7 @@ export type BytecodeInstr =
   { type: 'orast', count: number } |
   { type: 'ifast', f: boolean, e: boolean } |
   { type: 'notast' } |
-  { type: 'letast', name: string, t: boolean, v: boolean, mutable: boolean } |
+  { type: 'letast', name: string, t: boolean, v: boolean, letType: LetType } |
   { type: 'letmetaast', t: boolean, v: boolean } |
   { type: 'letmatchast', t: boolean, v: boolean } |
   { type: 'callast', name: string, count: number, tcount: number, method?: boolean } |
@@ -473,7 +479,7 @@ export class NumberAst extends AstRoot {        key = 'number' as const;        
 export class StringAst extends AstRoot {        key = 'string' as const;         constructor(public type: Type, public location: SourceLocation, public value: string) { super() } }
 export class BindingAst extends AstRoot {       key = 'binding' as const;        constructor(public type: Type, public location: SourceLocation, public binding: Binding) { super() } }
 export class BoolAst extends AstRoot {          key = 'bool' as const;           constructor(public type: Type, public location: SourceLocation, public value: boolean) { super() } }
-export class LetAst extends AstRoot {           key = 'let' as const;            constructor(public type: Type, public location: SourceLocation, public binding: Binding, public value: Ast | null, public mutable: boolean) { super() } }
+export class LetAst extends AstRoot {           key = 'let' as const;            constructor(public type: Type, public location: SourceLocation, public binding: Binding, public value: Ast | null, public letType: LetType) { super() } }
 export class SetAst extends AstRoot {           key = 'set' as const;            constructor(public type: Type, public location: SourceLocation, public binding: Binding, public value: Ast) { super() } }
 export class OperatorAst extends AstRoot {      key = 'operator' as const;       constructor(public type: Type, public location: SourceLocation, public operator: string, public args: Ast[]) { super() } }
 export class IfAst extends AstRoot {            key = 'if' as const;             constructor(public type: Type, public location: SourceLocation, public expr: Ast, public trueBody: Ast, public falseBody: Ast | null) { super() } }
