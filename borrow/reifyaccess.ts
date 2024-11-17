@@ -1,8 +1,6 @@
-import { Capability } from "../src/defs";
+import { Capability, CapabilityRanking, compilerAssert } from "../src/defs";
 import { ControlFlowGraph } from "./controlflow";
-import { AccessInstruction, FunctionBlock, IRInstruction, InstructionId, LoadFromAddressInstruction, MoveInstruction, ParameterInstruction, StoreToAddressInstruction, compilerAssert, createUsageMap, getInstructionResult } from "./defs";
-
-const CapabilityRanking = [Capability.Let, Capability.Set, Capability.Inout, Capability.Sink]
+import { AccessInstruction, FunctionBlock, IRInstruction, InstructionId, LoadFromAddressInstruction, MoveInstruction, ProjectBundleInstruction, StoreToAddressInstruction, createUsageMap, getInstructionResult } from "./defs";
 
 export class ReifyAccessPass {
   debugLog = false
@@ -24,14 +22,16 @@ export class ReifyAccessPass {
           // if (instr.capabilities.length === 1) continue
 
           worklist.push(new InstructionId(block.label, i))
+        } else if (instr instanceof ProjectBundleInstruction) {
+          worklist.push(new InstructionId(block.label, i))
         }
       }
     }
 
     while (worklist.length > 0) {
       const instrId = worklist.shift()!
-      const instr = this.cfg.blocks.find(b => b.label === instrId.blockId)!.instructions[instrId.instrId] as AccessInstruction
-      const usageList = usages.get(instr.dest) || []
+      const instr = this.cfg.blocks.find(b => b.label === instrId.blockId)!.instructions[instrId.instrId] as AccessInstruction | ProjectBundleInstruction
+      const usageList = usages.get(getInstructionResult(instr)!) || []
       if (usageList.length === 0) {
         // Unused
         instr.capabilities = [Capability.Let]

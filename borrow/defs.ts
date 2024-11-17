@@ -1,10 +1,4 @@
-import { Binding, Capability, CompiledFunction, FunctionParameter, LetType, Type, TypeField } from "../src/defs";
-
-export function compilerAssert(expected: unknown, message: string="", info: object={}): asserts expected {
-  if (expected) return;
-  console.dir(info, { depth: 4 })
-  throw new Error(message, info)
-}
+import { Binding, Capability, CompiledFunction, compilerAssert, escapeString, FunctionParameter, LetType, Type, TypeField } from "../src/defs";
 
 export class Pointer {
   constructor(public address: string) {}
@@ -45,6 +39,7 @@ export class CallInstruction extends IRInstruction {                irType = 'ca
 export class ReturnInstruction extends IRInstruction {              irType = 'return';                constructor(public value: string | null) { super(); } }
 export class AccessInstruction extends IRInstruction {              irType = 'access';                constructor(public dest: string, public source: string, public capabilities: Capability[], public type: Type) { super(); } }
 export class EndAccessInstruction extends IRInstruction {           irType = 'end_access';            constructor(public source: string, public capabilities: Capability[]) { super(); } }
+export class ProjectBundleInstruction extends IRInstruction {       irType = 'project_bundle';        constructor(public target: string, public capabilities: Capability[], public source: string, public operands: string[]) { super(); } }
 export class StoreToAddressInstruction extends IRInstruction {      irType = 'store_to_address';      constructor(public address: string, public type: Type, public source: string) { super(); } }
 export class LoadFromAddressInstruction extends IRInstruction {     irType = 'load_from_address';     constructor(public dest: string, public type: Type, public address: string) { super(); } }
 export class MoveInstruction extends IRInstruction {                irType = 'move';                  constructor(public target: string, public source: string, public type: Type) { super(); } }
@@ -61,12 +56,22 @@ export const getInstructionOperands = (instr: IRInstruction): string[] => {
   else if (instr instanceof CallInstruction)            { return instr.target ? [instr.target, ...instr.args] : [...instr.args]; } 
   else if (instr instanceof AccessInstruction)          { return [instr.source]; } 
   else if (instr instanceof GetFieldPointerInstruction) { return [instr.address]; } 
+  else if (instr instanceof PointerOffsetInstruction)   { return [instr.address, instr.offsetReg]; }
   else if (instr instanceof ReturnInstruction)          { return instr.value ? [instr.value] : []; } 
   else if (instr instanceof MoveInstruction)            { return [instr.target, instr.source]; }
   else if (instr instanceof PhiInstruction)             { return instr.sources.map(s => s.value); }
   else if (instr instanceof EndAccessInstruction)       { return [instr.source]; }
+  else if (instr instanceof ProjectBundleInstruction)   { return [instr.source, ...instr.operands]; }
   else if (instr instanceof MarkInitializedInstruction) { return [instr.target]; }
-  else { return []; }
+  else if (instr instanceof DeallocStackInstruction)    { return [instr.target]; }
+  else if (instr instanceof CommentInstruction)         { return []; }
+  else if (instr instanceof MarkInitializedInstruction) { return [instr.target]; }
+  else if (instr instanceof EndAccessInstruction)       { return [instr.source]; }
+  else if (instr instanceof AllocInstruction)           { return []; }
+  else if (instr instanceof LoadConstantInstruction)    { return []; }
+  else if (instr instanceof ConditionalJumpInstruction) { return [instr.condition]; }
+  else if (instr instanceof JumpInstruction)            { return []; }
+  else { compilerAssert(false, 'Unknown instruction type', { instr }) }
 }
 
 export const getInstructionResult = (instr: IRInstruction): string | null => {
@@ -75,6 +80,7 @@ export const getInstructionResult = (instr: IRInstruction): string | null => {
   else if (instr instanceof CallInstruction)            { return null; } 
   else if (instr instanceof GetFieldPointerInstruction) { return instr.dest; } 
   else if (instr instanceof LoadFromAddressInstruction) { return instr.dest } 
+  else if (instr instanceof PointerOffsetInstruction)   { return instr.dest; }
   else if (instr instanceof ReturnInstruction)          { return null; } 
   else if (instr instanceof BinaryOperationInstruction) { return instr.dest; } 
   else if (instr instanceof StoreToAddressInstruction)  { return instr.address; } 
@@ -82,7 +88,16 @@ export const getInstructionResult = (instr: IRInstruction): string | null => {
   else if (instr instanceof LoadConstantInstruction)    { return instr.dest; } 
   else if (instr instanceof MoveInstruction)            { return null; }
   else if (instr instanceof PhiInstruction)             { return instr.dest; }
-  else { return null; }
+  else if (instr instanceof DeallocStackInstruction)    { return null; }
+  else if (instr instanceof CommentInstruction)         { return null; }
+  else if (instr instanceof MarkInitializedInstruction) { return null; }
+  else if (instr instanceof EndAccessInstruction)       { return null; }
+  else if (instr instanceof ProjectBundleInstruction)   { return instr.target; }
+  else if (instr instanceof AllocInstruction)           { return instr.dest; }
+  else if (instr instanceof LoadConstantInstruction)    { return instr.dest; }
+  else if (instr instanceof ConditionalJumpInstruction) { return null; }
+  else if (instr instanceof JumpInstruction)            { return null; }
+  else { compilerAssert(false, 'Unknown instruction type', { instr }) }
 }
 
 // Basic Block
@@ -165,7 +180,7 @@ export function formatInstruction(instr: IRInstruction): string {
   if (instr instanceof AssignInstruction) {
     return `${instr.dest} = ${instr.source}`;
   } else if (instr instanceof LoadConstantInstruction) {
-    if (typeof instr.value === 'string') return `${instr.dest} = constant "${instr.value}"`;
+    if (typeof instr.value === 'string') return `${instr.dest} = constant "${escapeString(instr.value)}"`;
     return `${instr.dest} = constant ${instr.value}`;
   } else if (instr instanceof BinaryOperationInstruction) {
     return `${instr.dest} = ${instr.left} ${instr.operator} ${instr.right}`;
@@ -195,6 +210,8 @@ export function formatInstruction(instr: IRInstruction): string {
     return `into ${instr.target} move from ${instr.source}`;
   } else if (instr instanceof MarkInitializedInstruction) {
     return `mark ${instr.target} as ${instr.initialized ? 'initialized' : 'uninitialized'}`;
+  } else if (instr instanceof ProjectBundleInstruction) {
+    return `${instr.target} = project_bundle [${instr.capabilities.join(', ')}] ${instr.source} index (${instr.operands.join(', ')})`;
   } else if (instr instanceof DeallocStackInstruction) {
     return `dealloc_stack ${instr.target}: ${instr.type.shortName}`;
   } else if (instr instanceof PhiInstruction) {

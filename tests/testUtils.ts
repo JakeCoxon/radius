@@ -242,7 +242,14 @@ export const runCompilerTest = (
       if (!func.body) return
       const fnGenerator = codeGenerator.functionGenerator(func)
       const fn = fnGenerator.generateFunction(func.binding, func.parameters, func.returnType, func.body)
-      runMandatoryPasses(fnGenerator, mod, fn, func.body)
+      try {
+        runMandatoryPasses(fnGenerator, mod, fn, func.body)
+      } catch (ex) {
+        if (ex instanceof CompilerError) {
+          Object.assign(ex.info, { functionName: func.binding.name })
+        }
+        throw ex
+      }
 
       globalCompiler.compiledIr.set(func.binding, fn)
     })

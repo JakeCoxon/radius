@@ -1,6 +1,6 @@
 import { externalBuiltinBindings } from "../src/compiler_sugar";
 import { AndAst, Ast, Binding, BindingAst, BlockAst, BoolAst, BreakAst, CallAst, Capability, CastAst, CompiledFunction, compilerAssert, ConstructorAst, DefaultConsAst, FieldAst, FunctionParameter, IfAst, IntType, LetAst, LetType, MutSigilAst, NotAst, NumberAst, OperatorAst, OrAst, ParameterizedType, PrimitiveType, RawPointerType, ReturnAst, SetAst, SetFieldAst, SetSubscriptAst, SetValueFieldAst, SourceLocation, StatementsAst, StringAst, SubscriptAst, Type, UserCallAst, ValueFieldAst, VoidAst, VoidType, WhileAst } from "../src/defs";
-import { ASTNode, AllocInstruction, AssignInstruction, AssignmentNode, BasicBlock, BinaryExpressionNode, BinaryOperationInstruction, BlockStatementNode, CallExpressionNode, CallInstruction, AccessInstruction, ConditionalJumpInstruction, CreateStructNode, ExpressionNode, ExpressionStatementNode, FunctionBlock, FunctionDeclarationNode, IRInstruction, IRValue, IdentifierNode, IfStatementNode, JumpInstruction, LetConstNode, LiteralNode, LoadConstantInstruction, LoadFromAddressInstruction, MemberExpressionNode, ProgramNode, Pointer, Value, ReturnInstruction, ReturnNode, StoreToAddressInstruction, Variable, VariableDeclarationNode, WhileStatementNode, GetFieldPointerInstruction, AndNode, OrNode, PhiInstruction, CommentInstruction, MoveInstruction, EndAccessInstruction, printIR, MarkInitializedInstruction, InstructionId, PhiSource, DeallocStackInstruction, PointerOffsetInstruction } from "./defs";
+import { ASTNode, AllocInstruction, AssignInstruction, AssignmentNode, BasicBlock, BinaryExpressionNode, BinaryOperationInstruction, BlockStatementNode, CallExpressionNode, CallInstruction, AccessInstruction, ConditionalJumpInstruction, CreateStructNode, ExpressionNode, ExpressionStatementNode, FunctionBlock, FunctionDeclarationNode, IRInstruction, IRValue, IdentifierNode, IfStatementNode, JumpInstruction, LetConstNode, LiteralNode, LoadConstantInstruction, LoadFromAddressInstruction, MemberExpressionNode, ProgramNode, Pointer, Value, ReturnInstruction, ReturnNode, StoreToAddressInstruction, Variable, VariableDeclarationNode, WhileStatementNode, GetFieldPointerInstruction, AndNode, OrNode, PhiInstruction, CommentInstruction, MoveInstruction, EndAccessInstruction, printIR, MarkInitializedInstruction, InstructionId, PhiSource, DeallocStackInstruction, PointerOffsetInstruction, ProjectBundleInstruction } from "./defs";
 
 type ExpressionContext = {
   valueCategory: 'rvalue' | 'lvalue';
@@ -71,13 +71,13 @@ export class FunctionCodeGenerator {
 
   // TODO: Clean this up because it's not clear exactly why it's needed
   // Is it only primitive types? If it's copying a value, make it explicit
-  toValue(type: Type, value: IRValue): Value {
+  toValue(type: Type, value: IRValue, msg: string = ''): Value {
     if (value instanceof Value) { return value; }
     // compilerAssert(type instanceof PrimitiveType, 'Only allowed on primitive types', { type });
     const reg = this.newRegister();
     const accessReg = this.newRegister();
     compilerAssert(value.address, 'Value must have an address', { type, value });
-    this.addInstruction(new CommentInstruction(`Convert to value ${value.address}`));
+    this.addInstruction(new CommentInstruction(`Convert to value ${value.address} ${msg}`));
     this.addInstruction(new AccessInstruction(accessReg, value.address, [Capability.Let], type));
     this.addInstruction(new LoadFromAddressInstruction(reg, type, accessReg));
     // this.addInstruction(new MarkInitializedInstruction(value.address, type, false));
@@ -235,6 +235,8 @@ export class FunctionCodeGenerator {
   }
 
   generateBlockExpression(ast: BlockAst, context: ExpressionContext): IRValue {
+    // Don't generate scope for now
+    // return this.generateExpression(ast.body, context)
     const label = this.newLabel()
     const resultPtr = this.generateAlloc(ast.type)
     const scope = new Scope()
@@ -275,7 +277,7 @@ export class FunctionCodeGenerator {
       compilerAssert(ast.type !== VoidType, 'Return type must not be void', { ast })
       const returnReg = this.generateExpression(ast.expr, { valueCategory: 'rvalue' });
       if (ast.expr.type instanceof PrimitiveType) {
-        const value = this.toValue(ast.type, returnReg)
+        const value = this.toValue(ast.type, returnReg, 'return')
         this.finalizeScope()
         this.addInstruction(new ReturnInstruction(value.register));
       } else {
@@ -296,7 +298,7 @@ export class FunctionCodeGenerator {
     if (ast.type === RawPointerType) {
       // Ugly weird stuff. Come back to this later
       if (!(ast.expr instanceof BindingAst)) {
-        const v = this.toValue(ast.expr.type, value)
+        const v = this.toValue(ast.expr.type, value, 'cast')
         return new Value(v.register)
       } 
       compilerAssert(value instanceof Pointer, 'Expected pointer')
@@ -304,7 +306,7 @@ export class FunctionCodeGenerator {
       this.addInstruction(new MarkInitializedInstruction(value.address, ast.type, true));
       return new Value(value.address)
     }
-    const v = this.toValue(ast.type, value)
+    const v = this.toValue(ast.type, value, 'cast')
     this.addInstruction(new BinaryOperationInstruction(reg, ast.type, 'cast', v.register, '', ast.expr.type));
     return new Value(reg);
   }
@@ -344,6 +346,7 @@ export class FunctionCodeGenerator {
     this.variableMap.set(ast.binding, new Variable(ast.binding.name, type, reg, Capability.Sink));
     
     if (!value) return
+
     if (value instanceof Value) {
       this.generateMoveInstruction(reg, value, type)
     } else {
@@ -373,7 +376,7 @@ export class FunctionCodeGenerator {
 
   generateIfExpression(ast: IfAst, context: ExpressionContext): IRValue {
     const conditionValue = this.generateExpression(ast.expr, { valueCategory: 'rvalue' });
-    const conditionReg = this.toValue(ast.type, conditionValue)
+    const conditionReg = this.toValue(ast.type, conditionValue, 'if cond')
     const outReg = this.newRegister();
     const thenLabel = this.newLabel();
     const elseLabel = this.newLabel();
@@ -384,13 +387,13 @@ export class FunctionCodeGenerator {
 
     this.newBlock(thenLabel);
     const expr1 = this.generateExpression(ast.trueBody, context);
-    const value1 = this.toValue(ast.type, expr1)
+    const value1 = this.toValue(ast.type, expr1, 'if expr')
     const phiSource1 = new PhiSource(value1.register, this.currentBlock.label)
     this.addInstruction(new JumpInstruction(afterLabel));
 
     this.newBlock(elseLabel);
     const expr2 = this.generateExpression(ast.falseBody, context);
-    const value2 = this.toValue(ast.type, expr2)
+    const value2 = this.toValue(ast.type, expr2, 'else expr')
     const phiSource2 = new PhiSource(value2.register, this.currentBlock.label)
     this.addInstruction(new JumpInstruction(afterLabel));
     this.newBlock(afterLabel);
@@ -533,7 +536,7 @@ export class FunctionCodeGenerator {
     const argReg = this.generateExpression(ast, { valueCategory: 'rvalue' });
     
     // if (ast.type instanceof PrimitiveType) {
-      const value = this.toValue(ast.type, argReg)
+      const value = this.toValue(ast.type, argReg, 'function arg')
       this.addInstruction(new AccessInstruction(newReg, value.register, [capability], passingType));
     // } else {
       // compilerAssert(argReg instanceof Pointer, "Expected pointer")
@@ -581,18 +584,18 @@ export class FunctionCodeGenerator {
 
   generatePrint(ast: Ast, context: ExpressionContext): IRValue {
     const value = this.generateExpression(ast, { valueCategory: 'rvalue' });
-    const valueReg = this.toValue(ast.type, value)
+    const valueReg = this.toValue(ast.type, value, 'print')
     this.addInstruction(new CallInstruction(null, VoidType, externalBuiltinBindings.print, [valueReg.register], [ast.type], [Capability.Let]));
     return new Pointer('')
   }
 
   generatePrintf(args: Ast[], context: ExpressionContext): IRValue {
     const format = this.generateExpression(args[0], { valueCategory: 'rvalue' });
-    const formatReg = this.toValue(args[0].type, format)
+    const formatReg = this.toValue(args[0].type, format, 'printf')
     const argRegs: string[] = [];
     for (let i = 1; i < args.length; i++) {
       const arg = this.generateExpression(args[i], { valueCategory: 'rvalue' });
-      const argReg = this.toValue(args[i].type, arg)
+      const argReg = this.toValue(args[i].type, arg, 'printf')
       argRegs.push(argReg.register)
     }
     this.addInstruction(new CallInstruction(null, VoidType, externalBuiltinBindings.printf, [formatReg.register, ...argRegs], args.map(a => a.type), args.map(a => Capability.Let)));
@@ -601,7 +604,7 @@ export class FunctionCodeGenerator {
 
   generateExit(args: Ast[], context: ExpressionContext): IRValue {
     const arg = this.generateExpression(args[0], { valueCategory: 'rvalue' });
-    const argReg = this.toValue(args[0].type, arg)
+    const argReg = this.toValue(args[0].type, arg, 'exit')
     this.addInstruction(new CallInstruction(null, VoidType, externalBuiltinBindings.exit, [argReg.register], [args[0].type], [Capability.Let]));
     return new Pointer('')
   }
@@ -754,6 +757,8 @@ export class FunctionCodeGenerator {
       compilerAssert(hasMutSigil, 'Cannot move a mutable value without a mutation sigil', { sourceCapability, location: valueAst.location.source ? valueAst.location : this.currentLocation, stmt: this.currentStatement, valueAst })
     }
 
+    console.log("generateMovePointerInstructionWithCapabilityCheck", { sourceCapability, owned, hasMutSigil, type, targetPointer, sourcePointer })
+
     if (type instanceof PrimitiveType) {
       const targetAccessReg = this.newRegister();
       const sourceAccessReg = this.newRegister();
@@ -778,12 +783,13 @@ export class FunctionCodeGenerator {
   generateAssignmentSubscript(ast: SetSubscriptAst) {
     compilerAssert(this.ensureMutable(ast.left), 'Cannot assign to a member of an immutable struct');
     const objReg = this.toValue(ast.left.type,
-      this.generateExpression(ast.left, { valueCategory: 'lvalue' }))
+      this.generateExpression(ast.left, { valueCategory: 'lvalue' }),
+      'subscript object')
     
     const elementType = ast.value.type
     const reg = this.newRegister();
 
-    const offset = this.toValue(ast.right.type, this.generateExpression(ast.right, { valueCategory: 'rvalue' }))
+    const offset = this.toValue(ast.right.type, this.generateExpression(ast.right, { valueCategory: 'rvalue' }), 'subscript offset')
     const astWithoutMutSigil = ast.value instanceof MutSigilAst ? ast.value.expr : ast.value
     const newValue = this.generateExpression(astWithoutMutSigil, { valueCategory: 'rvalue' });
     const valueReg = this.storeResult(elementType, newValue)
@@ -903,13 +909,40 @@ export class FunctionCodeGenerator {
   }
 
   generateSubscriptExpression(ast: SubscriptAst, context: ExpressionContext): IRValue {
-    const objReg = this.toValue(ast.left.type,
-      this.generateExpression(ast.left, { valueCategory: 'lvalue' }))
+
     const destReg = this.newRegister();
+    
+    const objReg = this.generateExpression(ast.left, { valueCategory: 'lvalue' })
+    compilerAssert(objReg instanceof Pointer, 'Object must be an pointer');
+
     const offset = this.toValue(ast.right.type,
       this.generateExpression(ast.right, { valueCategory: 'rvalue' }))
-    this.addInstruction(new PointerOffsetInstruction(destReg, objReg.register, ast.type, offset.register));
+  
+    this.addInstruction(new ProjectBundleInstruction(destReg, [Capability.Let, Capability.Inout, Capability.Set, Capability.Sink], objReg.address, [offset.register]))
     return new Pointer(destReg);
+    
+    // const offset = this.toValue(ast.right.type,
+    //   this.generateExpression(ast.right, { valueCategory: 'rvalue' }))
+    // this.addInstruction(new PointerOffsetInstruction(destReg, objReg.register, ast.type, offset.register));
+    // return new Pointer(destReg);
+  }
+
+  // Hacks for now
+  generateProjectionExpression(ast: ProjectAst, context: ExpressionContext): IRValue {
+    const proj = this.toValue(ast.type, this.generateExpression(ast.project, context), 'projection')
+    const reg = ast.reg
+    this.addInstruction(new CommentInstruction(`Projection Ast`))
+    this.addInstruction(new AccessInstruction(reg, proj.register, [Capability.Let, Capability.Inout, Capability.Set, Capability.Sink], ast.type));
+    // const res = this.generateExpression(ast.expr, { valueCategory: 'lvalue' })
+    // this.addInstruction(new EndAccessInstruction(reg, []));
+    return new Pointer(reg)
+  }
+  generateEndProjectionExpression(ast: EndProjectAst, context: ExpressionContext): IRValue {
+    const reg = ast.reg
+    const res = this.generateExpression(ast.expr, { valueCategory: 'rvalue' })
+    this.addInstruction(new CommentInstruction(`End Projection Ast`))
+    this.addInstruction(new EndAccessInstruction(reg, []));
+    return res
   }
 
   ///////////////////////////
@@ -938,14 +971,17 @@ export class FunctionCodeGenerator {
   }
 
   removeInstruction(block: BasicBlock, instrId: InstructionId) {
+    console.log("Remove instruction", block.instructions[instrId.instrId])
     block.instructions.splice(instrId.instrId, 1);
   }
 
   replaceInstruction(block: BasicBlock, instrId: InstructionId, instr: IRInstruction) {
+    console.log("Replacing instruction", block.instructions[instrId.instrId])
     block.instructions.splice(instrId.instrId, 1, instr);
   }
 
   spliceInstructions(block: BasicBlock, instrId: InstructionId, deleteCount: number, instrs: IRInstruction[]) {
+    console.log("Splicing instruction", block.instructions.slice(instrId.instrId, instrId.instrId + deleteCount))
     block.instructions.splice(instrId.instrId, deleteCount, ...instrs);
   }
   

@@ -1,7 +1,7 @@
 import { Binding, Capability, compilerAssert, ConcreteClassType, PrimitiveType, Type, VoidType } from "../src/defs";
 import { CodeGenerator, FunctionCodeGenerator } from "./codegen_ir";
 import { ControlFlowGraph, buildCFG } from "./controlflow";
-import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, EndAccessInstruction, PhiInstruction, MoveInstruction, InstructionId, CommentInstruction, textColors, MarkInitializedInstruction, formatInstruction, Module, DeallocStackInstruction, PointerOffsetInstruction, printIR } from "./defs";
+import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, EndAccessInstruction, PhiInstruction, MoveInstruction, InstructionId, CommentInstruction, textColors, MarkInitializedInstruction, formatInstruction, Module, DeallocStackInstruction, PointerOffsetInstruction, printIR, ProjectBundleInstruction } from "./defs";
 import { Worklist } from "./worklist";
 
 type InitializationState = Top | Bottom | Sequence;
@@ -186,6 +186,7 @@ export class InitializationCheckingPass {
     else if (instr instanceof PointerOffsetInstruction)   this.executePointerOffset(instr);
     else if (instr instanceof JumpInstruction)            { }
     else if (instr instanceof ConditionalJumpInstruction) this.executeConditionalJump(instr);
+    else if (instr instanceof ProjectBundleInstruction)   this.executeProjectBundle(instr);
     else if (instr instanceof EndAccessInstruction)       { }
     else if (instr instanceof MoveInstruction)            this.executeMove(instr);
     else if (instr instanceof MarkInitializedInstruction) this.executeMarkInitialized(instr);
@@ -333,6 +334,11 @@ export class InitializationCheckingPass {
 
   executeConditionalJump(instr: ConditionalJumpInstruction): void {
     this.ensureRegisterInitialized(instr.condition);
+  }
+
+  executeProjectBundle(instr: ProjectBundleInstruction): void {
+    this.ensureRegisterInitialized(instr.source);
+    this.state.locals.set(instr.target, new InitializationStateObject(TOP));
   }
 
   executeMove(instr: MoveInstruction): void {

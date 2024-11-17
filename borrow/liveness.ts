@@ -1,5 +1,6 @@
+import { compilerAssert } from "../src/defs";
 import { ControlFlowGraph } from "./controlflow";
-import { AccessInstruction, BasicBlock, EndAccessInstruction, FunctionBlock, IRInstruction, InstructionId, LivenessMap, LivenessState, LivenessType, Usage, UsageMap, compilerAssert, createUsageMap, getInstructionOperands, getInstructionResult, printLivenessMap } from "./defs";
+import { AccessInstruction, BasicBlock, EndAccessInstruction, FunctionBlock, GetFieldPointerInstruction, IRInstruction, InstructionId, LivenessMap, LivenessState, LivenessType, LoadFromAddressInstruction, PointerOffsetInstruction, ProjectBundleInstruction, Usage, UsageMap, createUsageMap, formatInstruction, getInstructionOperands, getInstructionResult, printLivenessMap } from "./defs";
 
 type InsertMap = {[key: string]: { at: InstructionId, newInstr: IRInstruction }[]}
 
@@ -127,8 +128,25 @@ const extendLiveness = (liveness: LivenessMap, usages: UsageMap, cfg: ControlFlo
     const block = cfg.blocks.find(b => b.label === use.instrId.blockId)!;
     const instr = block.instructions[use.instrId.instrId];
     if (instr instanceof AccessInstruction) {
+      extendLiveness(liveness, usages, cfg, instr.dest)
+      compilerAssert(liveness[instr.dest], `No liveness found for ${instr.dest}`)
       mergeLivenessBlocks(liveness[register], liveness[instr.dest], instr.dest)
+    } else if (instr instanceof LoadFromAddressInstruction) {
+      // extendLiveness(liveness, usages, cfg, instr.dest)
+      // compilerAssert(liveness[instr.dest], `No liveness found for ${instr.dest}`)
+      // console.log("Extending liveness for LoadFromAddressInstruction", instr.dest, "from", register)
+      // mergeLivenessBlocks(liveness[register], liveness[instr.dest], instr.dest)
+    } else if (instr instanceof PointerOffsetInstruction) {
+      // extendLiveness(liveness, usages, cfg, instr.dest)
+      // compilerAssert(liveness[instr.dest], `No liveness found for ${instr.dest}`)
+      // console.log("Extending liveness for PointerOffsetInstruction", instr.dest, "from", register)
+      // mergeLivenessBlocks(liveness[register], liveness[instr.dest], instr.dest)
+    } else if (instr instanceof GetFieldPointerInstruction) {
+      // extendLiveness(liveness, usages, cfg, instr.dest)
+      // compilerAssert(liveness[instr.dest], `No liveness found for ${instr.dest}`)
+      // mergeLivenessBlocks(liveness[register], liveness[instr.dest], instr.dest)
     }
+
   }
 }
 
@@ -138,9 +156,13 @@ const mergeLivenessBlocks = (liveness: Record<string, LivenessState>, other: Rec
 
   for (const [blockId, state] of Object.entries(other)) {
     
-    const livenessType = liveness[blockId].livenessType
+    const livenessType = liveness[blockId]?.livenessType
     const livenessTypeOther = other[blockId].livenessType
-    compilerAssert(livenessType, `No liveness found for block ${blockId}`)
+
+    if (!livenessType) { // Just copy the state
+      liveness[blockId] = state
+      continue
+    }
 
     if (livenessType === LivenessType.LiveIn && livenessTypeOther === LivenessType.LiveOut
       || livenessType === LivenessType.LiveOut && livenessTypeOther === LivenessType.LiveIn
@@ -171,9 +193,7 @@ const mergeLivenessBlocks = (liveness: Record<string, LivenessState>, other: Rec
 
 export const insertCloseAccesses = (cfg: ControlFlowGraph, blocks: BasicBlock[], debugLog: boolean) => {
 
-  const usage = createUsageMap(blocks)
-  const liveness = getLiveness(usage, cfg)
-  if (debugLog) printLivenessMap(liveness)
+  // if (debugLog) printLivenessMap(liveness)
 
   const insertsMap: InsertMap = {}
 
@@ -181,6 +201,15 @@ export const insertCloseAccesses = (cfg: ControlFlowGraph, blocks: BasicBlock[],
     for (let i = 0; i < block.instructions.length; i++) {
       const instr = block.instructions[i]
       if (instr instanceof AccessInstruction) {
+        // closeAccess will invalidate the usage and liveness maps so we need to recompute them
+        const usage = createUsageMap(blocks)
+        const liveness = getLiveness(usage, cfg)
+        closeAccess(cfg, liveness, usage, instr, insertsMap)
+      } else if (instr instanceof ProjectBundleInstruction) {
+        // closeAccess will invalidate the usage and liveness maps so we need to recompute them
+        const usage = createUsageMap(blocks)
+        // console.dir({usage}, { depth: null })
+        const liveness = getLiveness(usage, cfg)
         closeAccess(cfg, liveness, usage, instr, insertsMap)
       }
     }
@@ -199,9 +228,10 @@ export const insertCloseAccesses = (cfg: ControlFlowGraph, blocks: BasicBlock[],
 
 }
 
-const closeAccess = (cfg: ControlFlowGraph, liveness: LivenessMap, usage: UsageMap, sourceInstr: AccessInstruction, inserts: InsertMap) => {
-  extendLiveness(liveness, usage, cfg, sourceInstr.dest)
-  const boundaries = liveness[sourceInstr.dest]
+const closeAccess = (cfg: ControlFlowGraph, liveness: LivenessMap, usage: UsageMap, sourceInstr: AccessInstruction | ProjectBundleInstruction, inserts: InsertMap) => {
+  const dest = getInstructionResult(sourceInstr)!
+  extendLiveness(liveness, usage, cfg, dest)
+  const boundaries = liveness[dest]
   if (!boundaries) return
 
   const alreadyClosed = (lastUse: InstructionId | null) => {
@@ -209,7 +239,7 @@ const closeAccess = (cfg: ControlFlowGraph, liveness: LivenessMap, usage: UsageM
     const block = cfg.blocks.find(b => b.label === lastUse.blockId)!
     const instr = block.instructions[lastUse.instrId]
     if (instr instanceof EndAccessInstruction) {
-      return instr.source === sourceInstr.dest
+      return instr.source === dest
     }
     return false
   }
@@ -217,7 +247,7 @@ const closeAccess = (cfg: ControlFlowGraph, liveness: LivenessMap, usage: UsageM
   for (const [blockId, liveness] of Object.entries(boundaries)) {
     if (liveness.livenessType === LivenessType.Closed || liveness.livenessType === LivenessType.LiveIn) {
       if (alreadyClosed(liveness.lastUse)) continue
-      const newInstr = new EndAccessInstruction(sourceInstr.dest, sourceInstr.capabilities)
+      const newInstr = new EndAccessInstruction(dest, sourceInstr.capabilities)
       inserts[blockId] = inserts[blockId] || []
       const at = liveness.lastUse ? 
         new InstructionId(blockId, liveness.lastUse.instrId + 1)

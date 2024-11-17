@@ -1,5 +1,5 @@
 import { externalBuiltinBindings } from "../src/compiler_sugar";
-import { Ast, AstType, AstWriterTable, Binding, BindingAst, BlockAst, BoolType, CallAst, Capability, CompiledFunction, ConcreteClassType, ConstructorAst, DefaultConsAst, DoubleType, FileWriter, FloatType, FunctionType, GlobalCompilerState, IntType, LetAst, ListTypeConstructor, LlvmFunctionWriter, LlvmWriter, NeverType, NumberAst, ParameterizedType, Pointer, PrimitiveType, RawPointerType, Register, SetAst, SourceLocation, StatementsAst, StringType, Type, TypeField, UserCallAst, ValueFieldAst, VoidType, compilerAssert, isAst, isType, textColors, u64Type, u8Type } from "../src/defs";
+import { Ast, AstType, AstWriterTable, Binding, BindingAst, BlockAst, BoolType, CallAst, Capability, CompiledFunction, ConcreteClassType, ConstructorAst, DefaultConsAst, DoubleType, FileWriter, FloatType, FunctionType, GlobalCompilerState, IntType, LetAst, ListTypeConstructor, LlvmFunctionWriter, LlvmWriter, NeverType, NumberAst, ParameterizedType, Pointer, PrimitiveType, RawPointerType, Register, SetAst, SourceLocation, StatementsAst, StringType, Type, TypeField, UserCallAst, ValueFieldAst, VoidType, compilerAssert, escapeString, isAst, isType, textColors, u64Type, u8Type } from "../src/defs";
 import { AccessInstruction, AllocInstruction, BinaryOperationInstruction, CallInstruction, CommentInstruction, ConditionalJumpInstruction, EndAccessInstruction, formatInstruction, FunctionBlock, GetFieldPointerInstruction, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, MarkInitializedInstruction, PhiInstruction, PointerOffsetInstruction, ReturnInstruction, StoreToAddressInstruction } from "./defs";
 
 // Some useful commands
@@ -154,11 +154,9 @@ const instructionWriter = {
     const dest = defineRegister(writer, instr.dest, instr.type)
     if (instr.type === RawPointerType) {
       if (typeof instr.value === 'string') {
-        const str = instr.value as string
+        const str = instr.value
         const constantName = generateName(writer.writer, new Binding("constant", VoidType), true)
-        const escaped = str.replace(/["\\]|[\x00-\x1F\x80-\xFF]/g, (str) => {
-          return `\\${str.charCodeAt(0).toString(16).padStart(2, '0')}`
-        })
+        const escaped = escapeString(str)
         const length = str.length + 1 // add null terminator
         writer.writer.outputHeaders.push(`${constantName} = private unnamed_addr constant [${length} x i8] c"${escaped}\\00"\n`)
         // format(writer, `  $ = ${constantName}\n`, dest)

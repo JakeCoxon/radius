@@ -73,6 +73,7 @@ type Array!(T) @struct:
   # const __move_assign = move_assign_array
   const __destructor = deinit_array
 
+
 fn init_array!(T)(arr: inout Array!T, len: int):
   arr.len = len
   print("meta T.sizeof", (meta T.sizeof))
@@ -80,19 +81,35 @@ fn init_array!(T)(arr: inout Array!T, len: int):
   arr.data&.buffer_alloc(size_bytes)
 
 
+fn reserve_array!(T)(arr: inout Array!T, len: int):
+  print("Reserve array", len, arr.len)
+  if len > arr.len:
+    arr.len = len
+    let size_bytes = len * (meta T.sizeof)
+    arr.data&.buffer_alloc(size_bytes)
+
+
 fn set_array!(T)(arr: inout Array!T, index: int, value: sink T) @inline:
-  if arr.data.data == rawptr(0):
-    print("Not allocated")
-    exit(0)
-  if index < 0 or index > arr.len:
-    print("Bounds check failed")
-    exit(0)
+  arr&.reserve_array(index + 1)
+  # if arr.data.data == rawptr(0):
+  #   print("Not allocated")
+  #   exit(0)
+  # if index < 0 or index >= arr.len:
+  #   print("Bounds check failed")
+  #   exit(0)
     # arr&.init_array(10)
   compiler.unsafe_set_subscript(arr.data.data, index, value&)
 
 
-fn get_array!(T)(arr: Array!T, index: int) -> T @inline:
-  compiler.unsafe_subscript!T(arr.data.data, index)
+fn get_array!(T)(arr: Array!T, index: int) -> int @subscript:
+  # if arr.data.data == rawptr(0):
+  #   print("Not allocated")
+  #   exit(0)
+  # if index < 0 or index >= arr.len:
+  #   print("Bounds check failed")
+  #   exit(0)
+  # compiler.unsafe_subscript!T(arr.data.data, index)
+  3
 
 
 fn copy_array!(T)(dst: set Array!T, src: Array!T):
@@ -102,15 +119,15 @@ fn copy_array!(T)(dst: set Array!T, src: Array!T):
   
   dst.len = src.len
   dst.data = Buffer(0, rawptr(0))
-  # print("Copy", src.len)
-  dst.data&.buffer_alloc(src.len * (meta T.sizeof))
+  # # print("Copy", src.len)
+  # dst.data&.buffer_alloc(src.len * (meta T.sizeof))
 
-  print("data", dst.data.data)
+  # print("data", dst.data.data)
 
-  var i = 0
-  while i < src.len:
-    dst[i] = src[i]
-    i += 1
+  # var i = 0
+  # while i < src.len:
+  #   dst[i] = src[i]
+  #   i += 1
 
   # TODO: Too many moves ends up calling destructorFoo a lot
   # TODO: The copy is moving the value out of src[i] (need projection)
@@ -132,11 +149,11 @@ fn copy_array!(T)(dst: set Array!T, src: Array!T):
 
 fn deinit_array!(T)(arr: sink Array!T):
   print("Deinit array")
-  var i = 0
-  while i < arr.len:
-    var v = arr[i]&
-    i += 1
-  arr.data&.deinit_buffer()
+  # var i = 0
+  # while i < arr.len:
+  #   var input = compiler.unsafe_subscript!T(arr.data.data, i)&
+  #   i += 1
+  # arr.data&.deinit_buffer()
 
 fn bar(x: inout int):
   x += 1
@@ -146,51 +163,51 @@ fn baz(foo: inout Foo):
   foo.x += 1
 
 
-fn test_array1():
+# fn test_array1():
 
-  var buffer = Buffer(0, rawptr(0))
-  var arr = Array!int(0, buffer&)
-  arr&.init_array(5)
+#   var buffer = Buffer(0, rawptr(0))
+#   var arr = Array!int(0, buffer&)
+#   arr&.init_array(5)
 
-  arr[0] = 10
-  arr[1] = 20
-  arr[2] = 20
-  arr[3] = 20
-  arr[4] = 20
-  print(arr[0])
+#   arr[0] = 10
+#   arr[1] = 20
+#   arr[2] = 20
+#   arr[3] = 20
+#   arr[4] = 20
+#   print(arr[0])
 
-  var arr2 = arr.copy
-  print(arr2[0])
+#   var arr2 = arr.copy
+#   print(arr2[0])
 
-fn test_array2():
+# fn test_array2():
 
-  var buffer = Buffer(0, rawptr(0))
-  var arr = Array!Foo(0, buffer&)
-  arr&.init_array(10)
+#   var buffer = Buffer(0, rawptr(0))
+#   var arr = Array!Foo(0, buffer&)
+#   arr&.init_array(10)
 
-  arr[0] = Foo(3, 2.0)
-  arr[1] = Foo(4, 3.0)
+#   arr[0] = Foo(3, 2.0)
+#   arr[1] = Foo(4, 3.0)
 
-  arr[0].x += 1
-  print(arr[0].x)
+#   arr[0].x += 1
+#   print(arr[0].x)
 
-  var arr2 = arr&
-  let el = arr2[0]
+#   var arr2 = arr&
+#   let el = arr2[0]
 
-  print(el.x)
-  arr2[0].x += 1
-  print(arr2[0].x)
-  # # print(arr[0].x)
-  # print(arr2[0].x)
+#   print(el.x)
+#   arr2[0].x += 1
+#   print(arr2[0].x)
+#   # # print(arr[0].x)
+#   # print(arr2[0].x)
 
-  var arr3 = arr2.copy
-  print(arr3[0].x)
+#   var arr3 = arr2.copy
+#   print(arr3[0].x)
 
-  subscript_1(arr3, 0, {|foo|
-    foo.x = 42
-  })
+#   subscript_1(arr3, 0, {|foo|
+#     foo.x = 42
+#   })
 
-  print(arr3[0].x)
+#   print(arr3[0].x)
 
 
 fn subscript_1!(T)(arr: inout Array!T, idx: int, f) @inline:
@@ -198,82 +215,115 @@ fn subscript_1!(T)(arr: inout Array!T, idx: int, f) @inline:
   f(input)
   # compiler.unsafe_set_subscript(arr.data.data, idx, v&)
 
-fn test_array3():
+fn subscript_let!(T)(arr: Array!T, idx: int, f) @inline:
+  let input = compiler.unsafe_subscript!T(arr.data.data, idx)
+  f(input)
+
+fn subscript_sink!(T)(arr: inout Array!T, idx: int, f) @inline:
+  var input = compiler.unsafe_subscript!T(arr.data.data, idx)&
+  f(input)
+
+# fn test_array3():
+
+#   var buffer = Buffer(0, rawptr(0))
+#   var arr = Array!Array!Foo(0, buffer&)
+#   arr&.init_array(10)
+
+#   arr[0]&.init_array(10)
+#   print("arr[0].len", arr[0].len)
+#   print("arr[0].data", arr[0].data)
+
+#   # var asd = arr[0]&
+#   # asd[0] = Foo(42, 2.0)
+
+#   print("Foo")
+#   arr[0][0] = Foo(42, 2.0)
+#   # subscript_1(arr, 0, {|x|
+#   #   subscript_1(x, 0, {|y|
+#   #     y = Foo(13, 2.0)
+#   #   })
+#   # })
+
+#   # compiler.unsafe_set_subscript(arr[0].data.data, 0, Foo(43, 2.0))
+#   print("arr.len", arr.len)
+#   print("arr.data.data", arr.data.data as rawptr)
+#   print("arr[0].len", arr[0].len)
+#   print("arr[0].data", arr[0].data)
+
+#   print("BAR")
+#   var ref foo = arr[0][0]
+#   var asd = arr&
+
+#   foo.x += 1
+
+#   print(asd)
+#   # let z = arr[0]
+#   # print("arr[0][0]", arr[0][0])
+#   # print(arr[0][0].x)
+
+#   # print(foo) # TODO: This should be an error because foo is mutable
+
+fn test_project():
 
   var buffer = Buffer(0, rawptr(0))
-  var arr = Array!Array!Foo(0, buffer&)
-  arr&.init_array(10)
+  var arr = Array!Foo(0, buffer&)
+  # arr&.init_array(10)
 
-  arr[0]&.init_array(10)
-  print("arr[0].len", arr[0].len)
-  print("arr[0].data", arr[0].data)
+  arr[0] = Foo(3, 2.0)
 
-  # var asd = arr[0]&
-  # asd[0] = Foo(42, 2.0)
-
-  print("Foo")
-  arr[0][0] = Foo(42, 2.0)
-  # subscript_1(arr, 0, {|x|
-  #   subscript_1(x, 0, {|y|
-  #     y = Foo(13, 2.0)
-  #   })
+  # subscript_let(arr, 0, {|first|
+  #   print(first)
   # })
 
-  # compiler.unsafe_set_subscript(arr[0].data.data, 0, Foo(43, 2.0))
-  print("arr.len", arr.len)
-  print("arr.data.data", arr.data.data as rawptr)
-  print("arr[0].len", arr[0].len)
-  print("arr[0].data", arr[0].data)
+  let first = arr[0]
+  # var moved = arr[0]&
 
-  print("BAR")
-  var ref foo = arr[0][0]
-  foo.x += 1
+  print(first)
+  foo(arr[0]&)
+  # print(moved)
 
-  # let z = arr[0]
-  print("arr[0][0]", arr[0][0])
-  print(arr[0][0].x)
+fn foo(foo: inout int):
+  foo += 1
 
-  print(foo) # TODO: This should be an error because foo is mutable
-
-
-fn test_foo_move():
-  var x = 1
-  var y = 2.0
-  var foo = Foo(x&, y&)
+# fn test_foo_move():
+#   var x = 1
+#   var y = 2.0
+#   var foo = Foo(x&, y&)
   
-  # This will be an error because x is moved from
-  # print(x)
-  print(foo.x)
+#   # This will be an error because x is moved from
+#   # print(x)
+#   print(foo.x)
 
-fn test_basic_array():
+# fn test_basic_array():
 
-  var buffer = Buffer(0, rawptr(0))
-  var arr = Array!int(0, buffer&)
-  arr&.init_array(10)
-  arr[0] = 1
-  arr[1] = 2
+#   var buffer = Buffer(0, rawptr(0))
+#   var arr = Array!int(0, buffer&)
+#   arr&.init_array(10)
+#   arr[0] = 1
+#   arr[1] = 2
 
-  print(arr[0])
-  print(arr[1])
+#   print(arr[0])
+#   print(arr[1])
 
-  print(arr)
+#   print(arr)
 
-fn test_print():
+# fn test_print():
 
-  compiler.printToPrintf("Hello")
-  compiler.printToPrintf(23)
-  compiler.printToPrintf(23.0)
-  let i = 3
-  print(12, 41.0, "Hello", i == 3)
+#   compiler.printToPrintf("Hello")
+#   compiler.printToPrintf(23)
+#   compiler.printToPrintf(23.0)
+#   let i = 3
+#   print(12, 41.0, "Hello", i == 3)
 
-  let foo = Foo(2, 3)
-  print(foo)
+#   let foo = Foo(2, 3)
+#   print(foo)
 
 fn main():
 
   # test_array1()
-  test_array2()
-  test_array3()
+  # test_array2()
+  # test_array3()
+  test_project()
 
   # test_foo_move()
   # test_print()

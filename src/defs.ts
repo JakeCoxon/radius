@@ -345,6 +345,8 @@ export enum Capability {
   Sink = "Sink",
 }
 
+export const CapabilityRanking = [Capability.Let, Capability.Set, Capability.Inout, Capability.Sink]
+
 export class CompiledFunction {
   isDestructor: boolean = false
   constructor(
@@ -1165,4 +1167,10 @@ export class BuildObject {
     public debugOutputPath: string,
     public gotError = false
   ) {}
+}
+
+export const escapeString = (str: string) => {
+  return str.replace(/["\\]|[\x00-\x1F\x80-\xFF]/g, (str) => {
+    return `\\${str.charCodeAt(0).toString(16).padStart(2, '0')}`
+  })
 }

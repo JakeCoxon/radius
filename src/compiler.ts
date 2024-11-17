@@ -1114,7 +1114,14 @@ const instructions: InstructionMapping = {
     }
     const subscript = left.type.typeInfo.metaobject['subscript']
     compilerAssert(subscript, "No 'subscript' operator found for $type", { type: left.type })
-    return createCallAstFromValueAndPushValue(vm, subscript, [], [left, right])
+    const ctx: CompilerFunctionCallContext = { location: vm.location, compilerState: vm.context.subCompilerState, resultAst: undefined, typeCheckResult: undefined }
+    return (
+      createCallAstFromValue(ctx, subscript, [], [left, right])
+      .chainFn((task, res) => { 
+        vm.stack.push(new SubscriptAst(res.type, vm.location, left, right))
+        return Task.success()
+      })
+    )
   },
   staticsubscriptast: (vm, {}) => {
     const right = popStack(vm)

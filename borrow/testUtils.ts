@@ -1,8 +1,8 @@
 import { externalBuiltinBindings } from "../src/compiler_sugar";
-import { CompiledFunction, IntType, BoolType, VoidType, RawPointerType, TypeField, TypeInfo, CompiledClass, SourceLocation, ConcreteClassType, FunctionParameter, SetFieldAst, PrimitiveType, VoidAst, LetAst, OperatorAst, ConstructorAst, FunctionDefinition, ReturnAst, IfAst, AndAst, WhileAst, isType, Binding, Type, BindingAst, StatementsAst, FieldAst, CallAst, Ast, NumberAst, SetAst, Capability, BreakAst, NeverType, BlockAst } from "../src/defs";
+import { CompiledFunction, IntType, BoolType, VoidType, RawPointerType, TypeField, TypeInfo, CompiledClass, SourceLocation, ConcreteClassType, FunctionParameter, SetFieldAst, PrimitiveType, VoidAst, LetAst, OperatorAst, ConstructorAst, FunctionDefinition, ReturnAst, IfAst, AndAst, WhileAst, isType, Binding, Type, BindingAst, StatementsAst, FieldAst, CallAst, Ast, NumberAst, SetAst, Capability, BreakAst, NeverType, BlockAst, compilerAssert } from "../src/defs";
 import { createParameter, generateConstructor, generateMoveFunction } from "./codegen_ast";
 import { CodeGenerator } from "./codegen_ir";
-import { ASTNode, ProgramNode, BlockStatementNode, FunctionDeclarationNode, LetConstNode, VariableDeclarationNode, LiteralNode, compilerAssert, ExpressionStatementNode, BinaryExpressionNode, AssignmentNode, IdentifierNode, CreateStructNode, MemberExpressionNode, ReturnNode, CallExpressionNode, BuiltinNode, IfStatementNode, AndNode, WhileStatementNode, BreakStatementNode, ContinueStatementNode } from "./defs";
+import { ASTNode, ProgramNode, BlockStatementNode, FunctionDeclarationNode, LetConstNode, VariableDeclarationNode, LiteralNode, ExpressionStatementNode, BinaryExpressionNode, AssignmentNode, IdentifierNode, CreateStructNode, MemberExpressionNode, ReturnNode, CallExpressionNode, BuiltinNode, IfStatementNode, AndNode, WhileStatementNode, BreakStatementNode, ContinueStatementNode } from "./defs";
 
 class Scope {
   constants: Record<string, any> = {};

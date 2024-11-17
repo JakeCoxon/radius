@@ -1,4 +1,5 @@
-import { BasicBlock, ConditionalJumpInstruction, JumpInstruction, compilerAssert } from "./defs";
+import { compilerAssert } from "../src/defs";
+import { BasicBlock, ConditionalJumpInstruction, JumpInstruction } from "./defs";
 
 export class ControlFlowGraph {
   blocks: BasicBlock[] = [];
