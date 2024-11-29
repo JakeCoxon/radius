@@ -85,6 +85,10 @@ export const defaultMetaFunction = (subCompilerState: SubCompilerState, compiled
   compilerAssert(!subscript || subscript instanceof Closure)
   const subscript_inout = templateScope['__subscript_inout']
   compilerAssert(!subscript_inout || subscript_inout instanceof Closure)
+  const subscript_sink = templateScope['__subscript_sink']
+  compilerAssert(!subscript_sink || subscript_sink instanceof Closure)
+  const subscript_set = templateScope['__subscript_set']
+  compilerAssert(!subscript_set || subscript_set instanceof Closure)
   const set_subscript = templateScope['__set_subscript']
   compilerAssert(!set_subscript || set_subscript instanceof Closure)
   const destructor = templateScope['__destructor']
@@ -110,7 +114,7 @@ export const defaultMetaFunction = (subCompilerState: SubCompilerState, compiled
   const funcDef = insertFunctionDefinition(subCompilerState.globalCompiler, decl)
   const constructor = new Closure(funcDef, definitionScope, subCompilerState.lexicalParent!)
 
-  Object.assign(compiledClass.metaobject, { iterate, subscript, subscript_inout, set_subscript, constructor, destructor, moveInit, moveAssign, copy })
+  Object.assign(compiledClass.metaobject, { iterate, subscript, subscript_inout, subscript_sink, subscript_set, set_subscript, constructor, destructor, moveInit, moveAssign, copy })
 
   return (
     compileCustomDestructor(subCompilerState, compiledClass.debugName, destructor as Closure | undefined, compiledClass)
@@ -1082,20 +1086,30 @@ export const metaLetIn = (token: Token, node: ParseNode, f: (iden: ParseFreshIde
 
 export const subscriptCompiler = (ctx: CompilerFunctionCallContext, subject: Ast, args: Ast[]): Task<Ast, CompilerError> => {
   compilerAssert(args.length === 1, "Expected one argument", { args })
-  const compiled = subject.type.typeInfo.metaobject['subscriptCompiled']
+
+  const alreadyCompiling = subject.type.typeInfo.metaobject['subscriptCompiled'] === 'compiling'
+  compilerAssert(!alreadyCompiling, "Already compiling subscript. This could mean an infinite loop", { subject })
+  
+  const compiled = subject.type.typeInfo.metaobject['subscriptCompiled'] as any
   if (compiled) {
     return Task.of(new SubscriptAst(compiled.type, ctx.location, subject, args[0], compiled.capabilities))
   }
-  const subscript = subject.type.typeInfo.metaobject['subscript']
-  compilerAssert(subscript, "No 'subscript' operator found for $type", { type: subject.type })
-  compilerAssert(subscript instanceof Closure, "Expected closure", { subscript })
+
+  subject.type.typeInfo.metaobject['subscriptCompiled'] = 'compiling'
 
   const subscriptInout = subject.type.typeInfo.metaobject['subscript_inout']
   compilerAssert(subscriptInout, "No 'subscript_inout' operator found for $type", { type: subject.type })
   compilerAssert(subscriptInout instanceof Closure, "Expected closure", { subscriptInout })
 
   type SubscriptResult = { type: Type, binding: Binding }
-  const compileSubscript = (name: string, closure: Closure): Task<SubscriptResult, CompilerError> => {
+  const compileSubscript = (name: string): Task<SubscriptResult | null, CompilerError> => {
+
+    const closure = subject.type.typeInfo.metaobject[name]
+    if (!closure) return Task.of(null)
+
+    compilerAssert(closure, "No '$name' operator found for $type", { name, type: subject.type })
+    compilerAssert(closure instanceof Closure, "Expected closure", { closure })
+    
     let type: Type
     const lambda2 = new CompilerFunction(name, (ctx, typeArgs, args) => {
       const ast = propagatedLiteralAst(args[0])
@@ -1116,17 +1130,25 @@ export const subscriptCompiler = (ctx: CompilerFunctionCallContext, subject: Ast
     )
   }
 
-  return compileSubscript("subscript", subscript).chainFn((task, letResult) => {
-    return compileSubscript("subscript_inout", subscriptInout).chainFn((task, inoutResult) => {
-      compilerAssert(inoutResult.type === letResult.type, "Expected types to match", { inoutResult, letResult })
-      const type = inoutResult.type
+  return compileSubscript("subscript").chainFn((task, letResult) => {
+    return compileSubscript("subscript_inout").chainFn((task, inoutResult) => {
+      return compileSubscript("subscript_sink").chainFn((task, sinkResult) => {
+        return compileSubscript("subscript_set").chainFn((task, setResult) => {
+          const results = [letResult, inoutResult, sinkResult, setResult].filter(x => x) as SubscriptResult[]
+          if (results.length === 0) compilerAssert(false, "No subscript operator found", { letResult, inoutResult, sinkResult, setResult })
+          const type = results[0].type
+          compilerAssert(results.every(x => x.type === type), "Expected types to match", { inoutResult, letResult })
 
-      const compiled = { type: type, capabilities: {
-        [Capability.Let]: letResult.binding,
-        [Capability.Inout]: inoutResult.binding
-      }}
-      subject.type.typeInfo.metaobject['subscriptCompiled'] = compiled
-      return Task.of(new SubscriptAst(type, ctx.location, subject, args[0], compiled.capabilities))
+          const compiled = { type: type, capabilities: {
+            [Capability.Let]: letResult?.binding,
+            [Capability.Inout]: inoutResult?.binding,
+            [Capability.Set]: setResult?.binding,
+            [Capability.Sink]: sinkResult?.binding
+          }}
+          subject.type.typeInfo.metaobject['subscriptCompiled'] = compiled
+          return Task.of(new SubscriptAst(type, ctx.location, subject, args[0], compiled.capabilities))
+        })
+      })
     })
   })
 }

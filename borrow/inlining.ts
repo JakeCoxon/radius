@@ -2,6 +2,34 @@ import { Capability, GlobalCompilerState, RawPointerType, VoidType, compilerAsse
 import { CodeGenerator } from '../borrow/codegen_ir';
 import { AccessInstruction, AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, CommentInstruction, ConditionalJumpInstruction, EndAccessInstruction, FunctionBlock, GetFieldPointerInstruction, InstructionId, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, MarkInitializedInstruction, Module, PhiInstruction, PhiSource, PointerOffsetInstruction, printIR, ProjectBundleInstruction, ReturnInstruction, StoreToAddressInstruction, YieldInstruction } from '../borrow/defs';
 
+const findInstructionId = (fn: FunctionBlock, pred: (instr: IRInstruction) => boolean) => {
+  for (const block of fn.blocks) {
+    for (let i = 0; i < block.instructions.length; i++) {
+      const instr = block.instructions[i]
+      if (pred(instr)) {
+        return new InstructionId(block.label, i)
+      }
+    }
+  }
+  return null
+}
+const filterInstructions = (fn: FunctionBlock, pred: (instr: IRInstruction) => boolean) => {
+  const result: InstructionId[] = []
+  for (const block of fn.blocks) {
+    for (let i = 0; i < block.instructions.length; i++) {
+      const instr = block.instructions[i]
+      if (pred(instr)) {
+        result.push(new InstructionId(block.label, i))
+      }
+    }
+  }
+  return result
+}
+
+const getInstructionById = (fn: FunctionBlock, instrId: InstructionId) => {
+  const block = fn.blocks.find(b => b.label === instrId.blockId)!
+  return block.instructions[instrId.instrId]
+}
 
 export const inlineProjectBundlesPass = (globalCompiler: GlobalCompilerState, codegen: CodeGenerator) => {
   globalCompiler.compiledFunctions.forEach((func) => {
@@ -10,23 +38,16 @@ export const inlineProjectBundlesPass = (globalCompiler: GlobalCompilerState, co
     const fn = globalCompiler.compiledIr.get(func.binding)!
     if (func.functionDefinition.keywords?.includes("subscript")) return
 
-    retry: while (true) {
-      for (const block of fn.blocks) {
-        for (let i = 0; i < block.instructions.length; i++) {
-          const instr = block.instructions[i]
-          if (instr instanceof ProjectBundleInstruction) {
-            const cap = instr.capabilities[0]
-            const binding = instr.funcs[cap]
-            compilerAssert(binding, "Capability not available", { instr, name: func.functionDefinition.debugName })
-            const subscriptIr = globalCompiler.compiledIr.get(binding)!
-            const instrId = new InstructionId(block.label, i)
-            const returningTarget = instr.target
-            inlineIr(globalCompiler, codegen, fn, instrId, subscriptIr, returningTarget)
-            continue retry
-          }
-        }
-      }
-      break
+    while (true) {
+      const projectInstrId = findInstructionId(fn, instr => instr instanceof ProjectBundleInstruction)
+      if (!projectInstrId) break
+      const projectInstr = getInstructionById(fn, projectInstrId) as ProjectBundleInstruction
+      const cap = projectInstr.capabilities[0]
+      const binding = projectInstr.funcs[cap]
+      compilerAssert(binding, "Capability not available", { projectInstr, name: func.functionDefinition.debugName })
+      const subscriptIr = globalCompiler.compiledIr.get(binding)!
+      const returningTarget = projectInstr.target
+      inlineIr(globalCompiler, codegen, fn, projectInstrId, subscriptIr, returningTarget)
     }
   })
 }
@@ -37,61 +58,59 @@ export const inlineIr = (globalCompiler: GlobalCompilerState, codegen: CodeGener
   printIR(newIr.blocks)
   console.log("\n\n//////////// Previous")
   printIR(fn.blocks)
+  // There are some assumptions about the CFG that we make during this function.
+  // For example we assume that the replaced blocks cannot be entered from any other block.
+  // This is because we don't update the predecessors of the replaced blocks.
 
   const projectInstr = fn.blocks.find(b => b.label === instrId.blockId)!.instructions[instrId.instrId] as ProjectBundleInstruction
 
-
-  const [prev, next1] = splitBlockAtInstr(codegen, fn, instrId)
-  
-  const endInstrId = (() => {
-    for (let i = 0; i < fn.blocks.length; i++) {
-      const block = fn.blocks[i]
-      for (let j = 0; j < block.instructions.length; j++) {
-        const instr = block.instructions[j]
-        if (instr instanceof EndAccessInstruction) {
-          if (instr.source === projectInstr.target) {
-            return new InstructionId(block.label, j)
-          }
-        }
-      }
-    }
-    return null
-  })()
-
-  compilerAssert(endInstrId, "End instruction not found", { instrId, fn })
-  compilerAssert(endInstrId.blockId === next1.label, "End instruction not in the same block", { instrId, endInstrId, fn })
-  const [middle, next] = splitBlockAtInstr(codegen, fn, endInstrId)
-
-  prev.instructions.pop() // Remove the jump instruction, we'll add another later
-  middle.instructions = middle.instructions.slice(1) // Remove the project instruction
-  next.instructions = next.instructions.slice(1) // Remove the end instruction
-
-  const returningBlockLabel = next.label
   const mapping: RegisterMapping = {}
-  newIr.parameterRegisters.forEach((reg, i) => {
-    mapping[reg] = codegen.newRegister()
-    const passingType = newIr.params[i].passingType
-    const source = i === 0 ? projectInstr.source : projectInstr.operands[i - 1]
 
-    // @ParameterPassing
-    if (passingType === RawPointerType) {
-      prev.instructions.push(new AssignInstruction(mapping[reg], passingType, source))
-      return
-    }
-    prev.instructions.push(new AllocInstruction(mapping[reg], passingType))
-    prev.instructions.push(new StoreToAddressInstruction(mapping[reg], passingType, source))
-  })
-  const state: CopyBlockState = { mapping, returningBlockLabel, returningTarget, yieldBlockLabel: middle.label, yieldTarget: projectInstr.target }
+  const [prev, next] = splitBlockAtInstr(codegen, fn, instrId)
+  prev.instructions.pop() // Remove the jump instruction, we'll replace it
+  prev.instructions.push(new CommentInstruction(`Project bundle inlining parameters`))
+  prev.instructions.push(...createParameterInstructions(newIr, projectInstr, codegen, mapping))
+  next.instructions.shift() // Remove the project instruction
+  
+  const endInstrs = filterInstructions(fn, instr => instr instanceof EndAccessInstruction && instr.source === projectInstr.target)
+  compilerAssert(endInstrs.length > 0, "End instruction not found", { instrId })
+  compilerAssert(endInstrs.length === 1, "Multiple end instructions not supported yet", { instrId })
+  
+  const endInstrId = findInstructionId(fn, instr => instr instanceof EndAccessInstruction && instr.source === projectInstr.target)
+  compilerAssert(endInstrId, "End instruction not found", { instrId, fn })
+
+  const [endPrev, endNext] = splitBlockAtInstr(codegen, fn, endInstrId)
+  endNext.instructions.shift() // Remove the end_access instruction
+
+  const returningBlockLabel = endNext.label
+  const yieldBlockLabel = endPrev.label
+  const state: CopyBlockState = { mapping, returningBlockLabel, returningTarget, yieldBlockLabel, yieldTarget: projectInstr.target }
   insertCopiedBlocks(codegen, mapping, fn, instrId, newIr, state)
 
-
   const newEntry = mapping[newIr.blocks[0].label]
+  compilerAssert(newEntry, "Entry not found", { newIr, mapping })
   prev.instructions.push(new JumpInstruction(newEntry))
-
 
   console.log("\n\n//////////// Split")
   printIR(fn.blocks)
 
+}
+const createParameterInstructions = (newIr: FunctionBlock, projectInstr: ProjectBundleInstruction, codegen: CodeGenerator, mapping: RegisterMapping) => {
+  const insertedInstructions: IRInstruction[] = [];
+  newIr.parameterRegisters.forEach((reg, i) => {
+    mapping[reg] = codegen.newRegister();
+    const passingType = newIr.params[i].passingType;
+    const source = i === 0 ? projectInstr.source : projectInstr.operands[i - 1];
+
+    // @ParameterPassing
+    if (passingType === RawPointerType) {
+      insertedInstructions.push(new AssignInstruction(mapping[reg], passingType, source));
+      return;
+    }
+    insertedInstructions.push(new AllocInstruction(mapping[reg], passingType));
+    insertedInstructions.push(new StoreToAddressInstruction(mapping[reg], passingType, source));
+  });
+  return insertedInstructions;
 }
 
 type RegisterMapping = {

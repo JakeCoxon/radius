@@ -83,6 +83,7 @@ type Array!(T) @struct:
   const __set_subscript = set_array
   const __subscript = get_array
   const __subscript_inout = subscript_inout
+  const __subscript_sink = subscript_sink
   const __copy = copy_array
   # const __move_init = move_init_array
   # const __move_assign = move_assign_array
@@ -235,12 +236,12 @@ fn subscript_inout!(T)(arr: inout Array!T, idx: int, f) @subscript:
   f(input)
   compiler.unsafe_set_subscript(arr.data.data, idx, input&)
 
-fn subscript_let!(T)(arr: Array!T, idx: int, f) @subscript:
-  let input = compiler.unsafe_subscript!T(arr.data.data, idx)
+fn subscript_sink!(T)(arr: sink Array!T, idx: int, f) @subscript:
+  var input = compiler.unsafe_subscript!T(arr.data.data, idx)&
   f(input)
 
-fn subscript_sink!(T)(arr: inout Array!T, idx: int, f) @subscript:
-  var input = compiler.unsafe_subscript!T(arr.data.data, idx)&
+fn subscript_let!(T)(arr: Array!T, idx: int, f) @subscript:
+  let input = compiler.unsafe_subscript!T(arr.data.data, idx)
   f(input)
 
 # fn test_array3():
@@ -289,30 +290,28 @@ fn test_project():
   var arr = Array!Foo(0, buffer&)
   arr&.init_array(10)
 
-  arr[0] = Foo(3, 2.0)
+  # arr[0] = Foo(3, 2.0)
 
   # subscript_let(arr, 0, {|first|
   #   print(first)
   # })
 
-  let first = arr[0]
+  # let first = arr[0]
 
-  print(first)
 
   var ref foo = arr[0]&
   print("rawptr", rawptr(foo))
-  foo.x = 23
 
-  # if true:
-  # else:
-  #   print("OK")
-  # var moved = arr[0]&
+  if true:
+    foo.x = 23
+  else:
+    foo.x = 23
 
-  # print(first)
-  # foo(arr[0].x&)
+  print(foo)
+  
+  var moved = arr[0]&
+  print(moved)
 
-  print(arr[0])
-  # print(moved)
 
 fn test_basic_project():
   var f = Foo(1, 2.0)
@@ -363,7 +362,7 @@ fn main():
   # test_array2()
   # test_array3()
   test_project()
-  test_basic_project()
+  # test_basic_project()
 
   # test_foo_move()
   # test_print()

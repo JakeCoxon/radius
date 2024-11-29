@@ -168,51 +168,51 @@ fn baz(foo: inout Foo):
   foo.x += 1
 
 
-# fn test_array1():
+fn test_array1():
 
-#   var buffer = Buffer(0, rawptr(0))
-#   var arr = Array!int(0, buffer&)
-#   arr&.init_array(5)
+  var buffer = Buffer(0, rawptr(0))
+  var arr = Array!int(0, buffer&)
+  arr&.init_array(5)
 
-#   arr[0] = 10
-#   arr[1] = 20
-#   arr[2] = 20
-#   arr[3] = 20
-#   arr[4] = 20
-#   print(arr[0])
+  arr[0] = 10
+  arr[1] = 20
+  arr[2] = 20
+  arr[3] = 20
+  arr[4] = 20
+  print(arr[0])
 
-#   var arr2 = arr.copy
-#   print(arr2[0])
+  var arr2 = arr.copy
+  print(arr2[0])
 
-# fn test_array2():
+fn test_array2():
 
-#   var buffer = Buffer(0, rawptr(0))
-#   var arr = Array!Foo(0, buffer&)
-#   arr&.init_array(10)
+  var buffer = Buffer(0, rawptr(0))
+  var arr = Array!Foo(0, buffer&)
+  arr&.init_array(10)
 
-#   arr[0] = Foo(3, 2.0)
-#   arr[1] = Foo(4, 3.0)
+  arr[0] = Foo(3, 2.0)
+  arr[1] = Foo(4, 3.0)
 
-#   arr[0].x += 1
-#   print(arr[0].x)
+  arr[0].x += 1
+  print(arr[0].x)
 
-#   var arr2 = arr&
-#   let el = arr2[0]
+  var arr2 = arr&
+  let el = arr2[0]
 
-#   print(el.x)
-#   arr2[0].x += 1
-#   print(arr2[0].x)
-#   # # print(arr[0].x)
-#   # print(arr2[0].x)
+  print(el.x)
+  arr2[0].x += 1
+  print(arr2[0].x)
+  # # print(arr[0].x)
+  # print(arr2[0].x)
 
-#   var arr3 = arr2.copy
-#   print(arr3[0].x)
+  var arr3 = arr2.copy
+  print(arr3[0].x)
 
-#   subscript_1(arr3, 0, {|foo|
-#     foo.x = 42
-#   })
+  # subscript_1(arr3, 0, {|foo|
+  #   foo.x = 42
+  # })
 
-#   print(arr3[0].x)
+  print(arr3[0].x)
 
 
 fn subscript_inout!(T)(arr: inout Array!T, idx: int, f) @subscript:
@@ -340,7 +340,7 @@ fn foo(foo: inout int):
 
 fn main():
 
-  # test_array1()
+  test_array1()
   # test_array2()
   # test_array3()
-  test_project()
+  # test_project()
