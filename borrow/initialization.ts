@@ -1,7 +1,7 @@
 import { Binding, Capability, compilerAssert, ConcreteClassType, PrimitiveType, Type, VoidType } from "../src/defs";
 import { CodeGenerator, FunctionCodeGenerator } from "./codegen_ir";
 import { ControlFlowGraph, buildCFG } from "./controlflow";
-import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, EndAccessInstruction, PhiInstruction, MoveInstruction, InstructionId, CommentInstruction, textColors, MarkInitializedInstruction, formatInstruction, Module, DeallocStackInstruction, PointerOffsetInstruction, printIR, ProjectBundleInstruction } from "./defs";
+import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, EndAccessInstruction, PhiInstruction, MoveInstruction, InstructionId, CommentInstruction, textColors, MarkInitializedInstruction, formatInstruction, Module, DeallocStackInstruction, PointerOffsetInstruction, printIR, ProjectBundleInstruction, YieldInstruction } from "./defs";
 import { Worklist } from "./worklist";
 
 type InitializationState = Top | Bottom | Sequence;
@@ -191,6 +191,7 @@ export class InitializationCheckingPass {
     else if (instr instanceof MoveInstruction)            this.executeMove(instr);
     else if (instr instanceof MarkInitializedInstruction) this.executeMarkInitialized(instr);
     else if (instr instanceof DeallocStackInstruction)    this.executeDeallocStackInstruction(instr);
+    else if (instr instanceof YieldInstruction)           this.executeYield(instr);
     else if (instr instanceof PhiInstruction)             this.executePhi(instr);
     else if (instr instanceof CommentInstruction)         { }
     else compilerAssert(false, `Unknown instruction in initialization pass: ${instr.irType}`);
@@ -338,7 +339,9 @@ export class InitializationCheckingPass {
 
   executeProjectBundle(instr: ProjectBundleInstruction): void {
     this.ensureRegisterInitialized(instr.source);
-    this.state.locals.set(instr.target, new InitializationStateObject(TOP));
+    const addr = this.newAddress(instr.type);
+    this.state.locals.set(instr.target, new AddressSet([addr]));
+    this.state.memory.set(addr, TOP); // The yield must have been initialized elsewhere
   }
 
   executeMove(instr: MoveInstruction): void {
@@ -362,6 +365,13 @@ export class InitializationCheckingPass {
       printLocals(this.state.locals);
       printMemory(this.state.memory);
     }
+  }
+
+  executeYield(instr: YieldInstruction): void {
+    if (instr.value) this.ensureRegisterInitialized(instr.value);
+    const addr = this.newAddress(instr.type);
+    this.state.locals.set(instr.dest, new AddressSet([addr]));
+    this.state.memory.set(addr, TOP)
   }
 
   executeDeallocStackInstruction(instr: DeallocStackInstruction): void {

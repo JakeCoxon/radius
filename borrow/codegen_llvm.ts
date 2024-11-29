@@ -1,6 +1,6 @@
 import { externalBuiltinBindings } from "../src/compiler_sugar";
 import { Ast, AstType, AstWriterTable, Binding, BindingAst, BlockAst, BoolType, CallAst, Capability, CompiledFunction, ConcreteClassType, ConstructorAst, DefaultConsAst, DoubleType, FileWriter, FloatType, FunctionType, GlobalCompilerState, IntType, LetAst, ListTypeConstructor, LlvmFunctionWriter, LlvmWriter, NeverType, NumberAst, ParameterizedType, Pointer, PrimitiveType, RawPointerType, Register, SetAst, SourceLocation, StatementsAst, StringType, Type, TypeField, UserCallAst, ValueFieldAst, VoidType, compilerAssert, escapeString, isAst, isType, textColors, u64Type, u8Type } from "../src/defs";
-import { AccessInstruction, AllocInstruction, BinaryOperationInstruction, CallInstruction, CommentInstruction, ConditionalJumpInstruction, EndAccessInstruction, formatInstruction, FunctionBlock, GetFieldPointerInstruction, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, MarkInitializedInstruction, PhiInstruction, PointerOffsetInstruction, ReturnInstruction, StoreToAddressInstruction } from "./defs";
+import { AccessInstruction, AllocInstruction, AssignInstruction, BinaryOperationInstruction, CallInstruction, CommentInstruction, ConditionalJumpInstruction, EndAccessInstruction, formatInstruction, FunctionBlock, GetFieldPointerInstruction, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, MarkInitializedInstruction, PhiInstruction, PointerOffsetInstruction, ReturnInstruction, StoreToAddressInstruction } from "./defs";
 
 // Some useful commands
 //
@@ -168,15 +168,15 @@ const instructionWriter = {
       return
     }
     if (instr.type === BoolType) {
-      format(writer, `  $ = icmp eq $ 0, 0 ; literal false\n`, dest, instr.type)
+      format(writer, `  $ = icmp eq $ 1, $ ; literal $\n`, dest, instr.type, instr.value ? '1' : '0', instr.value ? 'true' : 'false')
       return
     }
     compilerAssert(instr.type === IntType || instr.type === u8Type || instr.type === u64Type || instr.type === FloatType || instr.type === DoubleType, "Expected number type got $type", { instr, type: instr.type })
     
     if (instr.type === FloatType) {
-      format(writer, `  $ = fadd $ 0.0, $ ; literal $\n`, dest, instr.type, floatToLlvmHex(instr.value), instr.value)
+      format(writer, `  $ = fadd $ 0.0, $ ; literal $\n`, dest, instr.type, floatToLlvmHex(instr.value as number), instr.value)
     } else if (instr.type === DoubleType) {
-      format(writer, `  $ = fadd $ 0.0, $ ; literal $\n`, dest, instr.type, doubleToLlvmHex(instr.value), instr.value)
+      format(writer, `  $ = fadd $ 0.0, $ ; literal $\n`, dest, instr.type, doubleToLlvmHex(instr.value as number), instr.value)
     } else {
       format(writer, `  $ = add $ 0, $ ; literal $\n`, dest, instr.type, instr.value, instr.value)
     }
@@ -296,6 +296,13 @@ const instructionWriter = {
     writer.writer.registers.set(instr.dest, reg)
   },
 
+  assign: (writer: LlvmFunctionWriter, instr: AssignInstruction) => {
+    const source = writer.writer.registers.get(instr.source)
+    compilerAssert(source, "Register not found", { instr })
+    const dest = defineRegister(writer, instr.dest, source.type)
+    format(writer, "  $ = bitcast $ $ to $; assign\n", dest, source.type, generateName(writer.writer, source), source.type)
+  },
+
   end_access: (writer: LlvmFunctionWriter, instr: EndAccessInstruction) => {
     // pass
   },
@@ -401,6 +408,7 @@ entry:
   Array.from(globalCompilerState.compiledFunctions.values()).map(func => {
     generateName(bytecodeWriter, func.binding, true)
     if (!func.body) return
+    if (func.functionDefinition.keywords?.includes("subscript")) return
     const fnIr = globalCompilerState.compiledIr.get(func.binding)
     compilerAssert(fnIr, `No instructions found for ${func.binding.name}`)
     const funcWriter = writeLlvmBytecodeFunction(bytecodeWriter, func, fnIr)

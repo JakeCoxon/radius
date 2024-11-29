@@ -1,6 +1,6 @@
-import { Capability, CapabilityRanking, compilerAssert, FunctionParameter, Type } from "../src/defs";
+import { capabilitiesLargerOrEqualTo, Capability, CapabilityRanking, compilerAssert, FunctionParameter, Type } from "../src/defs";
 import { ControlFlowGraph, buildCFG } from "./controlflow";
-import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, EndAccessInstruction, PhiInstruction, textColors, InstructionId, CommentInstruction, getInstructionResult, DeallocStackInstruction, CallExpressionNode, MarkInitializedInstruction, PointerOffsetInstruction, formatInstruction, ProjectBundleInstruction } from "./defs";
+import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, EndAccessInstruction, PhiInstruction, textColors, InstructionId, CommentInstruction, getInstructionResult, DeallocStackInstruction, CallExpressionNode, MarkInitializedInstruction, PointerOffsetInstruction, formatInstruction, ProjectBundleInstruction, YieldInstruction } from "./defs";
 import { Worklist } from "./worklist";
 
 type BorrowedItem = {
@@ -162,6 +162,7 @@ export class ExclusivityCheckingPass {
     else if (instr instanceof EndAccessInstruction)       this.endAccess(instrId, instr);
     else if (instr instanceof ProjectBundleInstruction)   this.handleProjectBundleInstruction(instrId, instr);
     else if (instr instanceof DeallocStackInstruction)    this.handleDeallocStackInstruction(instr);
+    else if (instr instanceof YieldInstruction)           this.handleYieldInstruction(instr);
     else if (instr instanceof PhiInstruction)             this.handlePhiInstruction(instr);
     else if (instr instanceof CommentInstruction)         { }
     else compilerAssert(false, `Unknown instruction in exclusivity pass: ${instr.irType}`)
@@ -254,11 +255,16 @@ export class ExclusivityCheckingPass {
     const addrStr = Array.from(addrs).join(', ');
     if (this.debugLog) console.log(`Accessing ${source} at ${addrStr} ${capability} to ${dest}`);
 
+    const reborrowId = this.getReborrowSource(dest)
+
+    // If there are no addresses in the set, it means that the value is a basic value
+    // and access doesn't matter. So this part will be skipped
     for (const addr of addrs) {
       const ids = addr.split('.')
       const rootAddress = ids[0]
-      let borrowSet = this.state.memory.get(rootAddress);
+      let borrowSet = this.state.memory.get(rootAddress)?.clone()
       compilerAssert(borrowSet, `No memory state found for ${rootAddress}`);
+      this.state.memory.set(rootAddress, borrowSet)
 
       if (borrowSet.borrows.length === 0) {
         borrowSet.insert(addr, capability, instrId, dest)
@@ -271,12 +277,19 @@ export class ExclusivityCheckingPass {
 
       const exclusiveBorrows = borrowSet.getExclusiveBorrows(addr, capability)
 
-      if (exclusiveBorrows.length === 1) {
-        if (CapabilityRanking.indexOf(capability) <= CapabilityRanking.indexOf(exclusiveBorrows[0].capability)) {
-          console.log("Reborrowing")
+      if (exclusiveBorrows.length >= 1) {
+        const allowedCapabilities = capabilitiesLargerOrEqualTo(capability);
+        (() => {
+          if (!reborrowId) return false
+          if (exclusiveBorrows[0].blockId !== reborrowId.blockId) return false
+          if (exclusiveBorrows[0].instructionId !== reborrowId.instrId) return false
+          if (!allowedCapabilities.includes(exclusiveBorrows[0].capability)) return false
+
+          // console.log("Reborrowing")
+          // console.log({ reborrowId, exclusiveBorrows })
           borrowSet.clear()
           exclusiveBorrows.length = 0
-        }
+        })()
       }
       
       if (exclusiveBorrows.length > 0) {
@@ -285,6 +298,7 @@ export class ExclusivityCheckingPass {
       }
 
       borrowSet.insert(addr, capability, instrId, dest)
+      // console.log({ newBorrows: borrowSet.borrows })
     }
 
     this.state.locals.set(dest, addrs);
@@ -300,12 +314,18 @@ export class ExclusivityCheckingPass {
     const sid = this.findInstructionIdByDest(source)!
     const s = this.cfg.blocks.find(b => b.label === sid.blockId)!.instructions[sid.instrId]
     compilerAssert(s instanceof AccessInstruction || s instanceof ProjectBundleInstruction, "Expected access instruction")
-    const s2id = this.findInstructionIdByDest(s.source)!
-    if (!s2id) return null
-    const s2 = this.cfg.blocks.find(b => b.label === s2id.blockId)!.instructions[s2id.instrId]
-    if (s2 instanceof AccessInstruction) return s2id
-    if (s2 instanceof ProjectBundleInstruction) return s2id
-    return null
+
+    const getSource = (source: string) => {
+      const s2id = this.findInstructionIdByDest(source)!
+      if (!s2id) return null
+      const s2 = this.cfg.blocks.find(b => b.label === s2id.blockId)!.instructions[s2id.instrId]
+      if (s2 instanceof AccessInstruction) return s2id
+      if (s2 instanceof ProjectBundleInstruction) return s2id
+      if (s2 instanceof GetFieldPointerInstruction) return getSource(s2.address)
+      return null
+    }
+
+    return getSource(s.source)
   }
 
   findInstructionIdByDest(dest: string) {
@@ -334,18 +354,24 @@ export class ExclusivityCheckingPass {
     for (const addr of addrs) {
       const ids = addr.split('.')
       const rootAddress = ids[0]
-      let borrowSet = this.state.memory.get(rootAddress);
+      let borrowSet = this.state.memory.get(rootAddress)?.clone()
       compilerAssert(borrowSet, `No memory state found for ${addr}`);
-      let removeIndex = borrowSet.findIndex(addr, capability, originalId)
+      this.state.memory.set(rootAddress, borrowSet)
+
+      let removeIndex = borrowSet.findIndex(capability, originalId)
       compilerAssert(removeIndex !== -1, "Could not find borrow to remove", { rootAddress, addr, capability, instrId, instr, borrowSet})
 
+      // console.log({ removeIndex })
+
       borrowSet.removeIndex(removeIndex)
+      // console.log("Removed borrow")
+      // console.log("Remaining", borrowSet.borrows)
 
       if (reborrowId) {
         const reborrow = this.cfg.blocks.find(b => b.label === reborrowId.blockId)!.instructions[reborrowId.instrId] as AccessInstruction | ProjectBundleInstruction
         if (reborrow.capabilities[0] === Capability.Let) {
-          const foundIndex = borrowSet.findIndex(addr, reborrow.capabilities[0], reborrowId)
-          compilerAssert(foundIndex !== -1, "Expected existing borrow", { borrowSet })
+          const foundIndex = borrowSet.findIndex(reborrow.capabilities[0], reborrowId)
+          compilerAssert(foundIndex !== -1, "Expected existing borrow", { borrowSet, addr, capability: reborrow.capabilities[0], reborrowId })
         } else {
           borrowSet.insert(addr, reborrow.capabilities[0], reborrowId)
         }
@@ -353,6 +379,10 @@ export class ExclusivityCheckingPass {
     }
 
     if (this.debugLog) printMemory(this.state.memory)
+  }
+
+  handleYieldInstruction(instr: YieldInstruction) {
+    // Not sure yet
   }
 
   handleDeallocStackInstruction(instr: DeallocStackInstruction) {
@@ -370,6 +400,10 @@ class BorrowSet {
     this.borrows = borrows;
   }
 
+  clone() {
+    return new BorrowSet([...this.borrows]);
+  }
+
   insert(address: string, capability: Capability, instr: InstructionId | null, resultReg: string | null = null) {
     const ids = address.split('.')
     const rootAddress = ids[0]
@@ -385,9 +419,8 @@ class BorrowSet {
     this.borrows.length = 0;
   }
 
-  findIndex(address: string, capability: Capability, instr: InstructionId): number {
+  findIndex(capability: Capability, instr: InstructionId): number {
     return this.borrows.findIndex(b => {
-      if (b.address !== address) return false
       if (b.capability !== capability) return false
       if (b.blockId === "" || b.instructionId === -1) return false // Parameter borrow
       return b.blockId === instr.blockId && b.instructionId === instr.instrId

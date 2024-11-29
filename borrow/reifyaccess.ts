@@ -50,6 +50,10 @@ export class ReifyAccessPass {
         const cap = instr.capabilities.find(x => CapabilityRanking.indexOf(x) >= min) ?? minCapability(instr.capabilities)
         compilerAssert(cap !== undefined, 'No capability found', { capabilities: instr.capabilities, min, max })
         instr.capabilities = [cap]
+        if (instr instanceof ProjectBundleInstruction) {
+          compilerAssert(instr.funcs, 'No functions found', { instr })
+          compilerAssert(instr.funcs[cap] !== undefined, 'No function found', { funcs: instr.funcs, cap, instr })
+        }
       } else {
         compilerAssert(false, 'Not implemented yet')
       }

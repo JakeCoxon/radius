@@ -27,7 +27,7 @@ export class PhiSource {
   constructor(public value: string, public block: string) {}
 }
 
-/* unused? */ export class AssignInstruction extends IRInstruction {              irType = 'assign';                constructor(public dest: string, public source: string) { super(); } }
+export class AssignInstruction extends IRInstruction {              irType = 'assign';                constructor(public dest: string, public type: Type, public source: string) { super(); } }
 export class LoadConstantInstruction extends IRInstruction {        irType = 'loadconst';             constructor(public dest: string, public type: Type, public value: number | string) { super(); } }
 export class AllocInstruction extends IRInstruction {               irType = 'alloc';                 constructor(public dest: string, public type: Type) { super(); } }
 export class GetFieldPointerInstruction extends IRInstruction {     irType = 'getfieldptr';           constructor(public dest: string, public address: string, public field: TypeField) { super(); } }
@@ -36,15 +36,16 @@ export class JumpInstruction extends IRInstruction {                irType = 'ju
 export class ConditionalJumpInstruction extends IRInstruction {     irType = 'cjump';                 constructor(public condition: string, public targetLabel: string, public elseLabel: string) { super(); } }
 export class BinaryOperationInstruction extends IRInstruction {     irType = 'binaryop';              constructor(public dest: string, public type: Type, public operator: string, public left: string, public right: string, public paramType: Type) { super(); } }
 export class CallInstruction extends IRInstruction {                irType = 'call';                  constructor(public target: string | null, public type: Type, public binding: Binding, public args: string[], public paramTypes: Type[], public capabilities: Capability[]) { super(); } }
-export class ReturnInstruction extends IRInstruction {              irType = 'return';                constructor(public value: string | null) { super(); } }
+export class ReturnInstruction extends IRInstruction {              irType = 'return';                constructor(public type: Type, public value: string | null) { super(); } }
 export class AccessInstruction extends IRInstruction {              irType = 'access';                constructor(public dest: string, public source: string, public capabilities: Capability[], public type: Type) { super(); } }
 export class EndAccessInstruction extends IRInstruction {           irType = 'end_access';            constructor(public source: string, public capabilities: Capability[]) { super(); } }
-export class ProjectBundleInstruction extends IRInstruction {       irType = 'project_bundle';        constructor(public target: string, public capabilities: Capability[], public source: string, public operands: string[]) { super(); } }
+export class ProjectBundleInstruction extends IRInstruction {       irType = 'project_bundle';        constructor(public target: string, public type: Type, public capabilities: Capability[], public source: string, public operands: string[], public funcs: {[key: string]: Binding}) { super(); } }
 export class StoreToAddressInstruction extends IRInstruction {      irType = 'store_to_address';      constructor(public address: string, public type: Type, public source: string) { super(); } }
 export class LoadFromAddressInstruction extends IRInstruction {     irType = 'load_from_address';     constructor(public dest: string, public type: Type, public address: string) { super(); } }
 export class MoveInstruction extends IRInstruction {                irType = 'move';                  constructor(public target: string, public source: string, public type: Type) { super(); } }
 export class MarkInitializedInstruction extends IRInstruction {     irType = 'mark_initialized';      constructor(public target: string, public type: Type, public initialized: boolean) { super(); } }
 export class DeallocStackInstruction extends IRInstruction {        irType = 'dealloc_stack';         constructor(public target: string, public type: Type) { super(); } }
+export class YieldInstruction extends IRInstruction {               irType = 'yield';                 constructor(public dest: string, public type: Type, public value: string | null) { super(); } }
 export class PhiInstruction extends IRInstruction {                 irType = 'phi';                   constructor(public dest: string, public type: Type, public sources: PhiSource[]) { super(); } }
 export class CommentInstruction extends IRInstruction {             irType = 'comment';               constructor(public comment: string) { super(); } }
 
@@ -71,6 +72,7 @@ export const getInstructionOperands = (instr: IRInstruction): string[] => {
   else if (instr instanceof LoadConstantInstruction)    { return []; }
   else if (instr instanceof ConditionalJumpInstruction) { return [instr.condition]; }
   else if (instr instanceof JumpInstruction)            { return []; }
+  else if (instr instanceof YieldInstruction)           { return instr.value ? [instr.value] : []; }
   else { compilerAssert(false, 'Unknown instruction type', { instr }) }
 }
 
@@ -97,6 +99,7 @@ export const getInstructionResult = (instr: IRInstruction): string | null => {
   else if (instr instanceof LoadConstantInstruction)    { return instr.dest; }
   else if (instr instanceof ConditionalJumpInstruction) { return null; }
   else if (instr instanceof JumpInstruction)            { return null; }
+  else if (instr instanceof YieldInstruction)           { return instr.dest; }
   else { compilerAssert(false, 'Unknown instruction type', { instr }) }
 }
 
@@ -203,7 +206,7 @@ export function formatInstruction(instr: IRInstruction): string {
   } else if (instr instanceof EndAccessInstruction) {
     return `end_access [${instr.capabilities.join(', ')}] ${instr.source}`;
   } else if (instr instanceof GetFieldPointerInstruction) {
-    return `${instr.dest} = offset address ${instr.address} .${instr.field.index}`;
+    return `${instr.dest} = offset address field ${instr.address} .${instr.field.index}`;
   } else if (instr instanceof PointerOffsetInstruction) {
     return `${instr.dest} = offset address ${instr.address} by ${instr.offsetReg} ${instr.fieldType.shortName}`;
   } else if (instr instanceof MoveInstruction) {
@@ -214,6 +217,8 @@ export function formatInstruction(instr: IRInstruction): string {
     return `${instr.target} = project_bundle [${instr.capabilities.join(', ')}] ${instr.source} index (${instr.operands.join(', ')})`;
   } else if (instr instanceof DeallocStackInstruction) {
     return `dealloc_stack ${instr.target}: ${instr.type.shortName}`;
+  } else if (instr instanceof YieldInstruction) {
+    return `${instr.dest} = yield ${instr.value ? instr.value : ''}`;
   } else if (instr instanceof PhiInstruction) {
     return `${instr.dest} = phi(${instr.sources.map(x => `${x.value} @ ${x.block}`).join(', ')})`;
   } else if (instr instanceof CommentInstruction) {

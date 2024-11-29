@@ -1,7 +1,7 @@
 import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, UserCallAst, CallAst, Ast, NumberAst, OperatorAst, SetAst, OrAst, AndAst, ListAst, IfAst, StatementsAst, Scope, createScope, Closure, ExternalFunction, compilerAssert, VoidType, IntType, FunctionPrototype, Vm, ParseTreeTable, Token, createStatements, DoubleType, FloatType, StringType, expectMap, bytecodeToString, ParseCall, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, StringAst, WhileAst, BoolAst, BindingAst, SourceLocation, BytecodeInstr, ReturnAst, ParserFunctionDecl, ScopeEventsSymbol, BoolType, Tuple, ParseTuple, TaskContext, ParseElse, ParseIf, InstructionMapping, GlobalCompilerState, expectType, expectAst, expectAll, expectAsts, BreakAst, LabelBlock, BlockAst, findLabelBlockByType, ParserClassDecl, ClassDefinition, isType, CompiledClass, ConcreteClassType, FieldAst, ParseField, SetFieldAst, CompilerError, VoidAst, SubCompilerState, ParseLetConst, PrimitiveType, CastAst, ParseFunction, ListTypeConstructor, SubscriptAst, ExternalTypeConstructor, ParameterizedType, ParseMeta, createAnonymousParserFunctionDecl, NotAst, BytecodeProgram, ParseImport, createCompilerError, createAnonymousToken, textColors, ParseCompilerIden, TypeField, ParseValue, ParseConstructor, ConstructorAst, TypeVariable, TypeMatcher, TypeConstructor, TypeInfo, TupleTypeConstructor, ParsedModule, Module, ParseSymbol, ScopeParentSymbol, isPlainObject, ParseLet, ParseList, ParseExpand, ParseBlock, findLabelByBinding, ParseSubscript, ParseNumber, ParseQuote, ParseWhile, ParseOperator, ParseBytecode, ParseOpEq, ParseSet, ParseFreshIden, UnknownObject, ParseNote, DefaultConsAst, RawPointerType, ValueFieldAst, SetValueFieldAst, FloatLiteralType, IntLiteralType, CompilerFunction, DerefAst, SetDerefAst, ParseSlice, CompilerFunctionCallContext, NeverType, LoopObject, CompTimeObjAst, CompileTimeObjectType, NamedArgAst, TypeCheckVar, TypeCheckConfig, u8Type, u64Type, FreshBindingToken, isCompilerCallable, ParseIs, VariantCastAst, EnumVariantAst, Capability, MutSigilAst, insertTypeInfoFields, TypeFieldDef, LetType } from "./defs";
 import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, functionCompileTimeCompileTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, compileExportedFunctionTask } from "./compiler_functions";
 import { Event, Task, TaskDef, Unit, isTask, isTaskResult, withContext } from "./tasks";
-import { createCompilerModuleTask, createListConstructor, defaultMetaFunction, guardSugar, ifMultiSugar, isSugar, matchSugar, optionBlockSugar, optionCastSugar, orElseSugar, print, questionSugar } from "./compiler_sugar";
+import { createCompilerModuleTask, createListConstructor, defaultMetaFunction, guardSugar, ifMultiSugar, isSugar, matchSugar, optionBlockSugar, optionCastSugar, orElseSugar, print, questionSugar, subscriptCompiler } from "./compiler_sugar";
 import { expandDotsSugar, expandFuncAllSugar, expandFuncAnySugar, expandFuncConcatSugar, expandFuncFirstSugar, expandFuncLastSugar, expandFuncMaxSugar, expandFuncMinSugar, expandFuncSumSugar, expandIteratorSugar, foldSugar, forExprSugar, forLoopSugar, listComprehensionSugar, listConstructorSugar, sliceSugar, whileExprSugar } from "./compiler_iterator"
 import { OptionTypeConstructor, canAssignTypeTo, classDefinitionToType, compileTypeConstructorTask, createParameterizedExternalType, getCommonType, hashValues, isParameterizedTypeOf, propagateLiteralType, propagatedLiteralAst, typeTableGetOrInsert, typecheckEquality, typecheckNumberComparison, typecheckNumberOperator } from "./compiler_types";
 
@@ -1104,24 +1104,11 @@ const instructions: InstructionMapping = {
   subscriptast: (vm, {}) => {
     const right = propagatedLiteralAst(expectAst(popStack(vm)))
     const left = expectAst(popStack(vm))
-    if (isParameterizedTypeOf(left.type, ListTypeConstructor)) {
-      compilerAssert(isParameterizedTypeOf(left.type, ListTypeConstructor), "Expected list got $x", { x: left.type })
-      compilerAssert(right.type === IntType, "Expected int got $x", { x: right.type })
-      compilerAssert(left.type instanceof ParameterizedType)
-      const elemType = expectType(left.type.args[0])
-      vm.stack.push(new SubscriptAst(elemType, vm.location, left, right))
-      return
-    }
-    const subscript = left.type.typeInfo.metaobject['subscript']
-    compilerAssert(subscript, "No 'subscript' operator found for $type", { type: left.type })
     const ctx: CompilerFunctionCallContext = { location: vm.location, compilerState: vm.context.subCompilerState, resultAst: undefined, typeCheckResult: undefined }
-    return (
-      createCallAstFromValue(ctx, subscript, [], [left, right])
-      .chainFn((task, res) => { 
-        vm.stack.push(new SubscriptAst(res.type, vm.location, left, right))
-        return Task.success()
-      })
-    )
+    return subscriptCompiler(ctx, left, [right]).chainFn((task, value) => { 
+      vm.stack.push(value); return Task.success()
+    })
+    
   },
   staticsubscriptast: (vm, {}) => {
     const right = popStack(vm)

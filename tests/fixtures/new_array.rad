@@ -11,19 +11,6 @@ type Foo @struct:
   x: int
   y: float
 
-  const __subscript = subscript_foo
-  const __subscript_inout = subscript_inout_foo
-
-
-fn subscript_foo(arr: Foo, idx: int, f) @subscript:
-  let x = 123 + idx * 10
-  f(x)
-
-fn subscript_inout_foo(arr: inout Foo, idx: int, f) @subscript:
-  var x = 123 + idx * 10
-  f(x)
-  print("Subscript inout", x)
-
 
 type Buffer @struct:
   size: int
@@ -84,8 +71,8 @@ type Array!(T) @struct:
   const __subscript = get_array
   const __subscript_inout = subscript_inout
   const __copy = copy_array
-  # const __move_init = move_init_array
-  # const __move_assign = move_assign_array
+  const __move_init = move_init_array
+  const __move_assign = move_assign_array
   const __destructor = deinit_array
 
 
@@ -150,20 +137,20 @@ fn copy_array!(T)(dst: set Array!T, src: Array!T):
   # TODO: Too many moves ends up calling destructorFoo a lot
   # TODO: The copy is moving the value out of src[i] (need projection)
 
-# fn move_init_array!(T)(dst: set Array!T, src: sink Array!T):
-#   print("Move init array")
-#   dst.len = src.len&
-#   dst.data = src.data&
-#   src.data = Buffer(0, rawptr(0))
-#   print("Move init array done")
+fn move_init_array!(T)(dst: set Array!T, src: sink Array!T):
+  print("Move init array")
+  dst.len = src.len&
+  dst.data = src.data&
+  src.data = Buffer(0, rawptr(0))
+  print("Move init array done")
 
-# fn move_assign_array!(T)(dst: inout Array!T, src: sink Array!T):
-#   print("Move assign array")
-#   deinit_array(dst&)
-#   dst.len = src.len&
-#   dst.data = src.data&
-#   src.data = Buffer(0, rawptr(0))
-#   print("Move assign array done")
+fn move_assign_array!(T)(dst: inout Array!T, src: sink Array!T):
+  print("Move assign array")
+  deinit_array(dst&)
+  dst.len = src.len&
+  dst.data = src.data&
+  src.data = Buffer(0, rawptr(0))
+  print("Move assign array done")
 
 fn deinit_array!(T)(arr: sink Array!T):
   print("Deinit array")
@@ -314,12 +301,6 @@ fn test_project():
   print(arr[0])
   # print(moved)
 
-fn test_basic_project():
-  var f = Foo(1, 2.0)
-
-  print(f[0])
-  print(f[10])
-  foo(f[0]&)
 
 fn foo(foo: inout int):
   foo += 1
@@ -363,36 +344,3 @@ fn main():
   # test_array2()
   # test_array3()
   test_project()
-  test_basic_project()
-
-  # test_foo_move()
-  # test_print()
-
-
-  # test_basic_array()
-
-  # let zzz = 3
-  # let z: int = 2
-  # # let x: int = ifx 2 == 2: z else: 2
-  # let x = z + 232
-
-  # var foo = Foo(1, 2.0)
-  # foo.x += 1
-  # print(foo.x)
-
-  # bar(foo.x&)
-  # print(foo.x)
-  # baz(foo&)
-  # print(foo.x)
-
-  # while foo.x < 10:
-  #   foo.x += 1
-
-  # print(foo.x)
-
-
-  # if !!!(2 == 2):
-  #   print(21) 
-
-  # if 3 == 1 and 2 > 1:
-  #   print(1)

@@ -98,11 +98,41 @@ test('option_expansion', async () => {
   }
 })
 
-test('basicasdf', async () => {
+test('basic', async () => {
   const testObject = createTest({ 
     moduleName: 'basic',
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/basic.rad`,
+  })
+  try {
+    const input = await Bun.file(testObject.inputPath).text()
+    runCompilerTest(input, { testObject })
+    await writeLlvmBytecodeFile(testObject)
+  } finally {
+    testObject.close()
+  }
+})
+
+test('new_array', async () => {
+  const testObject = createTest({ 
+    moduleName: 'new_array',
+    globalOptions,
+    inputPath: `${import.meta.dir}/fixtures/new_array.rad`,
+  })
+  try {
+    const input = await Bun.file(testObject.inputPath).text()
+    runCompilerTest(input, { testObject })
+    await writeLlvmBytecodeFile(testObject)
+  } finally {
+    testObject.close()
+  }
+})
+
+test('subscript', async () => {
+  const testObject = createTest({ 
+    moduleName: 'subscript',
+    globalOptions,
+    inputPath: `${import.meta.dir}/fixtures/subscript.rad`,
   })
   try {
     const input = await Bun.file(testObject.inputPath).text()

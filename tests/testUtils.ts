@@ -11,7 +11,7 @@ import { basename, extname, normalize } from 'node:path';
 import { exec } from 'node:child_process';
 import { writeSyntax } from '../src/codegen_syntax';
 import { CodeGenerator, FunctionCodeGenerator } from '../borrow/codegen_ir';
-import { FunctionBlock, Module, printIR } from '../borrow/defs';
+import { AssignInstruction, BasicBlock, FunctionBlock, InstructionId, IRInstruction, JumpInstruction, LoadConstantInstruction, Module, printIR, ProjectBundleInstruction, ReturnInstruction } from '../borrow/defs';
 import { generateConstructor, generateMoveFunction } from '../borrow/codegen_ast';
 import { writeLlvmBytecodeBorrow } from '../borrow/codegen_llvm';
 import { buildCFG, printCFG, printDominators } from '../borrow/controlflow';
@@ -19,6 +19,7 @@ import { ReifyAccessPass } from '../borrow/reifyaccess';
 import { InitializationCheckingPass } from '../borrow/initialization';
 import { insertCloseAccesses } from '../borrow/liveness';
 import { ExclusivityCheckingPass } from '../borrow/exclusivity';
+import { inlineProjectBundlesPass } from '../borrow/inlining';
 
 const runTestInner = (
   testObject: TestObject,
@@ -134,6 +135,7 @@ const runMandatoryPasses = (fnGenerator: FunctionCodeGenerator, mod: Module, fn:
   printIR(fn.blocks);
   console.log(`\n/// finished ${fn.name} ///\n`);
 }
+
 
 export const runCompilerTest = (
   input: string,
@@ -253,6 +255,8 @@ export const runCompilerTest = (
 
       globalCompiler.compiledIr.set(func.binding, fn)
     })
+
+    inlineProjectBundlesPass(globalCompiler, codeGenerator)
 
     // writeLlvmBytecodeBorrow(globalCompiler, writer)
 

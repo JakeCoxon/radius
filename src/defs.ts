@@ -347,6 +347,10 @@ export enum Capability {
 
 export const CapabilityRanking = [Capability.Let, Capability.Set, Capability.Inout, Capability.Sink]
 
+export const capabilitiesLargerOrEqualTo = (cap: Capability) => {
+  return CapabilityRanking.slice(CapabilityRanking.indexOf(cap))
+}
+
 export class CompiledFunction {
   isDestructor: boolean = false
   constructor(
@@ -501,7 +505,7 @@ export class SetFieldAst extends AstRoot {      key = 'setfield' as const;      
 export class SetValueFieldAst extends AstRoot { key = 'setvaluefield' as const;  constructor(public type: Type, public location: SourceLocation, public left: BindingAst, public fieldPath: TypeField[], public value: Ast) { super() } }
 export class VoidAst extends AstRoot {          key = 'void' as const;           constructor(public type: Type, public location: SourceLocation) { super() } }
 export class CastAst extends AstRoot {          key = 'cast' as const;           constructor(public type: Type, public location: SourceLocation, public expr: Ast) { super() } }
-export class SubscriptAst extends AstRoot {     key = 'subscript' as const;      constructor(public type: Type, public location: SourceLocation, public left: Ast, public right: Ast) { super() } }
+export class SubscriptAst extends AstRoot {     key = 'subscript' as const;      constructor(public type: Type, public location: SourceLocation, public left: Ast, public right: Ast, public funcs: {[key: string]: Binding}) { super() } }
 export class SetSubscriptAst extends AstRoot {  key = 'setsubscript' as const;   constructor(public type: Type, public location: SourceLocation, public left: Ast, public right: Ast, public value: Ast) { super() } }
 export class NotAst extends AstRoot {           key = 'not' as const;            constructor(public type: Type, public location: SourceLocation, public expr: Ast) { super() } }
 export class ConstructorAst extends AstRoot {   key = 'constructor' as const;    constructor(public type: Type, public location: SourceLocation, public args: Ast[]) { super() } }
@@ -516,12 +520,13 @@ export class CompTimeObjAst extends AstRoot {   key = 'comptimeobj' as const;   
 export class InterleaveAst extends AstRoot {    key = 'interleave' as const;     constructor(public type: Type, public location: SourceLocation, public binding: Binding, public entryLabels: Binding[], public elseLabels: Binding[], public entryBlock: Ast, public elseBlock: Ast) { super() } }
 export class ContinueInterAst extends AstRoot { key = 'continueinter' as const;  constructor(public type: Type, public location: SourceLocation, public interleaveBinding: Binding, public labelBinding: Binding) { super() } }
 export class MutSigilAst extends AstRoot {      key = 'mut' as const;            constructor(public type: Type, public location: SourceLocation, public expr: Ast) { super() } }
+export class YieldAst extends AstRoot {         key = 'yield' as const;          constructor(public type: Type, public location: SourceLocation, public expr: Ast) { super() } }
 
 export type Ast = NumberAst | LetAst | SetAst | OperatorAst | IfAst | ListAst | CallAst | AndAst | UserCallAst |
   OrAst | StatementsAst | WhileAst | ReturnAst | SetFieldAst | VoidAst | CastAst | SubscriptAst | ConstructorAst |
   BindingAst | StringAst | NotAst | FieldAst | BlockAst | BreakAst | BoolAst | CastAst | DefaultConsAst | ValueFieldAst |
   SetValueFieldAst | SetSubscriptAst | AddressAst | DerefAst | SetDerefAst | CompTimeObjAst | NamedArgAst | InterleaveAst | 
-  ContinueInterAst | VariantCastAst | EnumVariantAst | MutSigilAst
+  ContinueInterAst | VariantCastAst | EnumVariantAst | MutSigilAst | YieldAst
 export const isAst = (value: unknown): value is Ast => value instanceof AstRoot;
 
 export class Tuple {

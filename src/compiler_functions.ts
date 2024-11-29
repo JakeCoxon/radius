@@ -175,11 +175,18 @@ export function functionTemplateTypeCheckAndCompileTask(ctx: TaskContext, { func
   })
   
   func.params.forEach(({ name, type, storage }, i) => {
-    const binding = new Binding(name.token.value, result.concreteTypes[i]);
+    const nameValue = name.token.value
+    if (result.concreteTypes[i] === CompileTimeObjectType) {
+      compilerAssert(result.sortedArgs[i] instanceof CompTimeObjAst, "Expected compile time object")
+      templateScope[nameValue] = result.sortedArgs[i].value
+      // TODO: argBindings?
+      return
+    }
+    const binding = new Binding(nameValue, result.concreteTypes[i]);
     binding.storage = storage // TODO: Use Capability
     compilerAssert(storage !== 'ref', "Not implemented yet. use capability")
     binding.definitionCompiler = subCompilerState
-    templateScope[name.token.value] = binding
+    templateScope[nameValue] = binding
     argBindings.push(binding)
   });
 

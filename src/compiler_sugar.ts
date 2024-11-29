@@ -3,7 +3,7 @@ import { BytecodeSecondOrder, callFunctionFromValueTask, compileFunctionPrototyp
 import { compileAndExecuteFunctionHeaderTask, compileExportedFunctionTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, FunctionCallArg, functionTemplateTypeCheckAndCompileTask, insertFunctionDefinition } from "./compiler_functions"
 import { concat, generator } from "./compiler_iterator"
 import { NoneTypeConstructor, OptionTypeConstructor, SomeTypeConstructor, createParameterizedExternalType, hashValues, isTypeInteger, isTypeScalar, propagateLiteralType, propagatedLiteralAst } from "./compiler_types"
-import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, UserCallAst, NeverType, IfAst, BoolType, VoidAst, LoopObject, CompileTimeObjectType, u64Type, FunctionDefinition, ParserFunctionDecl, StatementsAst, IntLiteralType, FloatLiteralType, isAst, isType, isTypeCheckError, InterleaveAst, ContinueInterAst, CompTimeObjAst, ParseEvalFunc, SetAst, DefaultConsAst, WhileAst, BoolAst, isArray, ExpansionSelector, ParseNote, ExpansionCompilerState, ParseBoolean, ParseOr, ParseBreak, ParseIs, filterNotNull, ParseLetConst, ParseCast, VariantCastAst, ExternalTypeConstructor, GlobalCompilerState, ParseOrElse, ParseField, ParseQuestion, ParseBreakOpt, LabelBlock, BlockAst, ParseMatch, ParseExtract, ParseMatchCase, ParseTuple, ParseString, Tuple, ParseNot, EnumVariantAst, ParseIfMulti, ParseGuard, ParseBlockNoScope, Capability, TypeCheckResult, CompiledFunction, LetType } from "./defs"
+import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, UserCallAst, NeverType, IfAst, BoolType, VoidAst, LoopObject, CompileTimeObjectType, u64Type, FunctionDefinition, ParserFunctionDecl, StatementsAst, IntLiteralType, FloatLiteralType, isAst, isType, isTypeCheckError, InterleaveAst, ContinueInterAst, CompTimeObjAst, ParseEvalFunc, SetAst, DefaultConsAst, WhileAst, BoolAst, isArray, ExpansionSelector, ParseNote, ExpansionCompilerState, ParseBoolean, ParseOr, ParseBreak, ParseIs, filterNotNull, ParseLetConst, ParseCast, VariantCastAst, ExternalTypeConstructor, GlobalCompilerState, ParseOrElse, ParseField, ParseQuestion, ParseBreakOpt, LabelBlock, BlockAst, ParseMatch, ParseExtract, ParseMatchCase, ParseTuple, ParseString, Tuple, ParseNot, EnumVariantAst, ParseIfMulti, ParseGuard, ParseBlockNoScope, Capability, TypeCheckResult, CompiledFunction, LetType, YieldAst } from "./defs"
 import { Event, Task, TaskDef, isTask } from "./tasks"
 
 const insertMetaObjectPairwiseOperator = (compiledClass: CompiledClass, operatorName: string, operatorSymbol: string) => {
@@ -83,6 +83,8 @@ export const defaultMetaFunction = (subCompilerState: SubCompilerState, compiled
   compilerAssert(!iterate || iterate instanceof Closure)
   const subscript = templateScope['__subscript']
   compilerAssert(!subscript || subscript instanceof Closure)
+  const subscript_inout = templateScope['__subscript_inout']
+  compilerAssert(!subscript_inout || subscript_inout instanceof Closure)
   const set_subscript = templateScope['__set_subscript']
   compilerAssert(!set_subscript || set_subscript instanceof Closure)
   const destructor = templateScope['__destructor']
@@ -108,7 +110,7 @@ export const defaultMetaFunction = (subCompilerState: SubCompilerState, compiled
   const funcDef = insertFunctionDefinition(subCompilerState.globalCompiler, decl)
   const constructor = new Closure(funcDef, definitionScope, subCompilerState.lexicalParent!)
 
-  Object.assign(compiledClass.metaobject, { iterate, subscript, set_subscript, constructor, destructor, moveInit, moveAssign, copy })
+  Object.assign(compiledClass.metaobject, { iterate, subscript, subscript_inout, set_subscript, constructor, destructor, moveInit, moveAssign, copy })
 
   return (
     compileCustomDestructor(subCompilerState, compiledClass.debugName, destructor as Closure | undefined, compiledClass)
@@ -1076,6 +1078,57 @@ export const metaLetIn = (token: Token, node: ParseNode, f: (iden: ParseFreshIde
   const iden = new ParseFreshIden(token, new FreshBindingToken('let_in'))
   const let_ = new ParseLetConst(token, iden, node)
   return new ParseStatements(token, [let_, ...f(iden)])
+}
+
+export const subscriptCompiler = (ctx: CompilerFunctionCallContext, subject: Ast, args: Ast[]): Task<Ast, CompilerError> => {
+  compilerAssert(args.length === 1, "Expected one argument", { args })
+  const compiled = subject.type.typeInfo.metaobject['subscriptCompiled']
+  if (compiled) {
+    return Task.of(new SubscriptAst(compiled.type, ctx.location, subject, args[0], compiled.capabilities))
+  }
+  const subscript = subject.type.typeInfo.metaobject['subscript']
+  compilerAssert(subscript, "No 'subscript' operator found for $type", { type: subject.type })
+  compilerAssert(subscript instanceof Closure, "Expected closure", { subscript })
+
+  const subscriptInout = subject.type.typeInfo.metaobject['subscript_inout']
+  compilerAssert(subscriptInout, "No 'subscript_inout' operator found for $type", { type: subject.type })
+  compilerAssert(subscriptInout instanceof Closure, "Expected closure", { subscriptInout })
+
+  type SubscriptResult = { type: Type, binding: Binding }
+  const compileSubscript = (name: string, closure: Closure): Task<SubscriptResult, CompilerError> => {
+    let type: Type
+    const lambda2 = new CompilerFunction(name, (ctx, typeArgs, args) => {
+      const ast = propagatedLiteralAst(args[0])
+      type = ast.type
+      compilerAssert(type, "Expected type", { ast })
+      compilerAssert(type !== VoidType, "Expected non-void type", { type })
+      return Task.of(new YieldAst(VoidType, ctx.location, ast))
+    })
+    const lambdaAst = new CompTimeObjAst(CompileTimeObjectType, ctx.location, lambda2)
+
+    return (
+      createCallAstFromValue(ctx, closure, [], [subject, args[0], lambdaAst])
+      .chainFn((task, res) => {
+        compilerAssert(type, "Expected result for inout type", { type, res })
+        compilerAssert(res instanceof UserCallAst, "Expected call ast", { res })
+        return Task.of({ type, binding: res.binding })
+      })
+    )
+  }
+
+  return compileSubscript("subscript", subscript).chainFn((task, letResult) => {
+    return compileSubscript("subscript_inout", subscriptInout).chainFn((task, inoutResult) => {
+      compilerAssert(inoutResult.type === letResult.type, "Expected types to match", { inoutResult, letResult })
+      const type = inoutResult.type
+
+      const compiled = { type: type, capabilities: {
+        [Capability.Let]: letResult.binding,
+        [Capability.Inout]: inoutResult.binding
+      }}
+      subject.type.typeInfo.metaobject['subscriptCompiled'] = compiled
+      return Task.of(new SubscriptAst(type, ctx.location, subject, args[0], compiled.capabilities))
+    })
+  })
 }
 
 export const createCompilerModuleTask = (ctx: TaskContext): Task<Module, CompilerError> => {

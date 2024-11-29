@@ -137,14 +137,14 @@ const extendLiveness = (liveness: LivenessMap, usages: UsageMap, cfg: ControlFlo
       // console.log("Extending liveness for LoadFromAddressInstruction", instr.dest, "from", register)
       // mergeLivenessBlocks(liveness[register], liveness[instr.dest], instr.dest)
     } else if (instr instanceof PointerOffsetInstruction) {
-      // extendLiveness(liveness, usages, cfg, instr.dest)
-      // compilerAssert(liveness[instr.dest], `No liveness found for ${instr.dest}`)
+      extendLiveness(liveness, usages, cfg, instr.dest)
+      compilerAssert(liveness[instr.dest], `No liveness found for ${instr.dest}`)
       // console.log("Extending liveness for PointerOffsetInstruction", instr.dest, "from", register)
-      // mergeLivenessBlocks(liveness[register], liveness[instr.dest], instr.dest)
+      mergeLivenessBlocks(liveness[register], liveness[instr.dest], instr.dest)
     } else if (instr instanceof GetFieldPointerInstruction) {
-      // extendLiveness(liveness, usages, cfg, instr.dest)
-      // compilerAssert(liveness[instr.dest], `No liveness found for ${instr.dest}`)
-      // mergeLivenessBlocks(liveness[register], liveness[instr.dest], instr.dest)
+      extendLiveness(liveness, usages, cfg, instr.dest)
+      compilerAssert(liveness[instr.dest], `No liveness found for ${instr.dest}`)
+      mergeLivenessBlocks(liveness[register], liveness[instr.dest], instr.dest)
     }
 
   }
