@@ -89,8 +89,6 @@ export const defaultMetaFunction = (subCompilerState: SubCompilerState, compiled
   compilerAssert(!subscript_sink || subscript_sink instanceof Closure)
   const subscript_set = templateScope['__subscript_set']
   compilerAssert(!subscript_set || subscript_set instanceof Closure)
-  const set_subscript = templateScope['__set_subscript']
-  compilerAssert(!set_subscript || set_subscript instanceof Closure)
   const destructor = templateScope['__destructor']
   compilerAssert(!destructor || destructor instanceof Closure)
   const moveInit = templateScope['__move_init']
@@ -114,7 +112,7 @@ export const defaultMetaFunction = (subCompilerState: SubCompilerState, compiled
   const funcDef = insertFunctionDefinition(subCompilerState.globalCompiler, decl)
   const constructor = new Closure(funcDef, definitionScope, subCompilerState.lexicalParent!)
 
-  Object.assign(compiledClass.metaobject, { iterate, subscript, subscript_inout, subscript_sink, subscript_set, set_subscript, constructor, destructor, moveInit, moveAssign, copy })
+  Object.assign(compiledClass.metaobject, { iterate, subscript, subscript_inout, subscript_sink, subscript_set, constructor, destructor, moveInit, moveAssign, copy })
 
   return (
     compileCustomDestructor(subCompilerState, compiledClass.debugName, destructor as Closure | undefined, compiledClass)

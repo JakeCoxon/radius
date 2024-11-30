@@ -416,6 +416,14 @@ export function createCallAstFromValue(ctx: CompilerFunctionCallContext, value: 
     return value.func(ctx, typeArgs, args)
   }
 
+  if (value instanceof CompiledFunction) {
+    args.forEach((arg, i) => {
+      const type = propagateLiteralType(value.parameters[i].type, arg)
+      compilerAssert(type === value.parameters[i].type, "Expected type $expected got $got", { expected: value.parameters[i].type, got: type })
+    })
+    return Task.of(new UserCallAst(value.returnType, location, value.binding, args))
+  }
+
   if (value instanceof Closure) {
     
     const { func, scope: parentScope, lexicalParent } = value

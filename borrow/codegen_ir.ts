@@ -793,24 +793,6 @@ export class FunctionCodeGenerator {
     }
   }
 
-  generateAssignmentSubscript(ast: SetSubscriptAst) {
-    compilerAssert(this.ensureMutable(ast.left), 'Cannot assign to a member of an immutable struct');
-    const objReg = this.toValue(ast.left.type,
-      this.generateExpression(ast.left, { valueCategory: 'lvalue' }),
-      'subscript object')
-    
-    const elementType = ast.value.type
-    const reg = this.newRegister();
-
-    const offset = this.toValue(ast.right.type, this.generateExpression(ast.right, { valueCategory: 'rvalue' }), 'subscript offset')
-    const astWithoutMutSigil = ast.value instanceof MutSigilAst ? ast.value.expr : ast.value
-    const newValue = this.generateExpression(astWithoutMutSigil, { valueCategory: 'rvalue' });
-    const valueReg = this.storeResult(elementType, newValue)
-    this.addInstruction(new PointerOffsetInstruction(reg, objReg.register, elementType, offset.register));
-
-    this.generateMovePointerInstructionWithCapabilityCheck(reg, valueReg, ast.value)
-  }
-
   generateMovePointerInstruction(targetPointer: string, sourcePointer: Pointer, type: Type) {
     if (type instanceof PrimitiveType) {
       compilerAssert(type !== VoidType, 'Cannot move void type');
@@ -949,6 +931,25 @@ export class FunctionCodeGenerator {
     this.addInstruction(new ProjectBundleInstruction(destReg, ast.type, [Capability.Let, Capability.Inout, Capability.Set, Capability.Sink], objReg.address, [offset.register], ast.funcs));
     return new Pointer(destReg);
 
+  }
+
+  generateAssignmentSubscript(ast: SetSubscriptAst) {
+    compilerAssert(ast.left.type === RawPointerType, 'Subscript assignment only supported for raw pointers');
+    compilerAssert(this.ensureMutable(ast.left), 'Cannot assign to a member of an immutable struct');
+    const objReg = this.toValue(ast.left.type,
+      this.generateExpression(ast.left, { valueCategory: 'lvalue' }),
+      'subscript object')
+    
+    const elementType = ast.value.type
+    const reg = this.newRegister();
+
+    const offset = this.toValue(ast.right.type, this.generateExpression(ast.right, { valueCategory: 'rvalue' }), 'subscript offset')
+    const astWithoutMutSigil = ast.value instanceof MutSigilAst ? ast.value.expr : ast.value
+    const newValue = this.generateExpression(astWithoutMutSigil, { valueCategory: 'rvalue' });
+    const valueReg = this.storeResult(elementType, newValue)
+    this.addInstruction(new PointerOffsetInstruction(reg, objReg.register, elementType, offset.register));
+
+    this.generateMovePointerInstructionWithCapabilityCheck(reg, valueReg, ast.value)
   }
 
 

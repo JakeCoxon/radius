@@ -1121,9 +1121,24 @@ const instructions: InstructionMapping = {
     const value = propagatedLiteralAst(expectAst(popStack(vm)))
     const right = propagatedLiteralAst(expectAst(popStack(vm)))
     const left = propagatedLiteralAst(expectAst(popStack(vm)))
-    const set_subscript = left.type.typeInfo.metaobject['set_subscript']
-    compilerAssert(set_subscript, "No 'set_subscript' operator found for $type", { type: left.type })
-    return createCallAstFromValueAndPushValue(vm, set_subscript, [], [left, right, value])
+    const ctx: CompilerFunctionCallContext = { location: vm.location, compilerState: vm.context.subCompilerState, resultAst: undefined, typeCheckResult: undefined }
+    return subscriptCompiler(ctx, left, [right]).chainFn((task, subscriptAst) => {
+      compilerAssert(subscriptAst instanceof SubscriptAst, "Expected subscript ast got $value", { subscriptAst })
+      const binding = subscriptAst.funcs[Capability.Inout]
+      const yieldType = subscriptAst.type
+      compilerAssert(yieldType === value.type, "Type mismatch got $got expected $expected", { got: value.type, expected: yieldType, value })
+      compilerAssert(binding, "Expected inout subscript", { subscriptAst })
+      const fn = vm.context.subCompilerState.globalCompiler.compiledFunctions.get(binding)
+      compilerAssert(fn, "Expected function for binding", { binding })
+
+      const letBinding = new Binding("", yieldType);
+      const stmts = createStatements(vm.location, [
+        new LetAst(VoidType, vm.location, letBinding, subscriptAst, LetType.VarRef),
+        new SetAst(VoidType, vm.location, letBinding, value)
+      ])
+      vm.stack.push(stmts)
+      return Task.success()
+    })
   },
   list: (vm, { count }) => vm.stack.push(popValues(vm, count)),
   

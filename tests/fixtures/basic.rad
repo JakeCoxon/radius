@@ -25,6 +25,13 @@ fn subscript_inout_foo(arr: inout Foo, idx: int, f) @subscript:
   print("Subscript inout", x)
 
 
+fn memset(ptr: inout rawptr, value: u8, size: int):
+  var i = 0
+  while i < size:
+    compiler.unsafe_set_subscript(ptr, i, value)
+    i += 1
+
+
 type Buffer @struct:
   size: int
   data: rawptr
@@ -39,10 +46,7 @@ fn buffer_alloc(buf: inout Buffer, size: int):
   print("Alloc size", size)
   buf.size = size
   buf.data = malloc_or_exit(size)
-  var i = 0
-  while i < size:
-    compiler.unsafe_set_subscript(buf.data, i, u8(0))
-    i += 1
+  memset(buf.data&, u8(0), size)
 
 
 fn copy_buffer(dst: set Buffer, buf: Buffer):
@@ -80,7 +84,6 @@ type Array!(T) @struct:
   len: int
   data: Buffer
 
-  const __set_subscript = set_array
   const __subscript = get_array
   const __subscript_inout = subscript_inout
   const __subscript_sink = subscript_sink
@@ -106,18 +109,6 @@ fn reserve_array!(T)(arr: inout Array!T, len: int):
     arr.len = len
     let size_bytes = len * (meta T.sizeof)
     arr.data&.buffer_alloc(size_bytes)
-
-
-fn set_array!(T)(arr: inout Array!T, index: int, value: sink T) @inline:
-  arr&.reserve_array(index + 1)
-  # if arr.data.data == rawptr(0):
-  #   print("Not allocated")
-  #   exit(0)
-  # if index < 0 or index >= arr.len:
-  #   print("Bounds check failed")
-  #   exit(0)
-    # arr&.init_array(10)
-  compiler.unsafe_set_subscript(arr.data.data, index, value&)
 
 
 fn get_array!(T)(arr: Array!T, index: int, f) @subscript:
@@ -389,6 +380,14 @@ fn foo(foo: inout int):
 #   let foo = Foo(2, 3)
 #   print(foo)
 
+fn test_set():
+  var buffer = Buffer(0, rawptr(0))
+  var arr = Array!Foo(0, buffer&)
+  arr&.init_array(10)
+
+  arr[0] = Foo(1, 2.0)
+  print("Set", arr[0])
+
 fn test_loop():
 
   var foo = Foo(1, 2.0)
@@ -399,14 +398,14 @@ fn test_loop():
 
 fn main():
 
-  # test_array1()
+  test_array1()
   # test_array2()
-  # test_array3()
-  # test_move()
+  test_array3()
+  test_move()
   test_project()
-  # test_loop()
-  # test_basic_project()
-  # test_array_project()
+  test_loop()
+  test_basic_project()
+  test_set()
 
   # test_foo_move()
   # test_print()
