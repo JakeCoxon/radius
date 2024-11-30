@@ -125,14 +125,14 @@ fn copy_array!(T)(dst: set Array!T, src: Array!T):
   dst.len = src.len
   dst.data = Buffer(0, rawptr(0))
   # # print("Copy", src.len)
-  # dst.data&.buffer_alloc(src.len * (meta T.sizeof))
+  dst.data&.buffer_alloc(src.len * (meta T.sizeof))
 
   # print("data", dst.data.data)
 
-  # var i = 0
-  # while i < src.len:
-  #   dst[i] = src[i]
-  #   i += 1
+  var i = 0
+  while i < src.len:
+    dst[i] = src[i].copy
+    i += 1
 
   # TODO: Too many moves ends up calling destructorFoo a lot
   # TODO: The copy is moving the value out of src[i] (need projection)
@@ -154,11 +154,13 @@ fn move_assign_array!(T)(dst: inout Array!T, src: sink Array!T):
 
 fn deinit_array!(T)(arr: sink Array!T):
   print("Deinit array")
-  # var i = 0
-  # while i < arr.len:
-  #   var input = compiler.unsafe_subscript!T(arr.data.data, i)&
-  #   i += 1
-  # arr.data&.deinit_buffer()
+  if arr.data.data != rawptr(0):
+    var i = 0
+    while i < arr.len:
+      print("Deinit", i)
+      var input = compiler.unsafe_subscript!T(arr.data.data, i)&
+      i += 1
+    arr.data&.deinit_buffer()
 
 fn bar(x: inout int):
   x += 1
@@ -220,7 +222,7 @@ fn subscript_inout!(T)(arr: inout Array!T, idx: int, f) @subscript:
   # var x = 32 + idx
   var ref input = compiler.unsafe_subscript!T(arr.data.data, idx)&
   f(input)
-  compiler.unsafe_set_subscript(arr.data.data, idx, input&)
+  # compiler.unsafe_set_subscript(arr.data.data, idx, input&)
 
 fn subscript_let!(T)(arr: Array!T, idx: int, f) @subscript:
   let input = compiler.unsafe_subscript!T(arr.data.data, idx)

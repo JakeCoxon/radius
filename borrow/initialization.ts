@@ -20,8 +20,8 @@ type Sequence = {
   elements: InitializationState[]; // Array of SD elements representing fields
 }
 
-const BOTTOM = { kind: 'Bottom' } as const;
-const TOP = { kind: 'Top' } as const;
+const BOTTOM: Bottom = { kind: 'Bottom' } as const;
+const TOP: Top = { kind: 'Top' } as const;
 
 class AddressSet {
   addresses: Set<string>;
@@ -476,9 +476,7 @@ export class InitializationCheckingPass {
 
   updateMemoryAddressPathState(addr: string, rootType: Type, newState: InitializationState) {
     const ids = addr.split('.')
-    let current = this.state.memory.get(ids[0])
-    compilerAssert(current, `Address ${addr} is not initialized`)
-    
+    const current = this.state.memory.get(ids[0]) ?? BOTTOM;
     const statePath = createStatePathState(ids.slice(1), rootType)
     const newSd = meetInitializationStatePath(current, statePath, newState)
     this.state.memory.set(ids[0], newSd)
@@ -629,8 +627,9 @@ function mergeMemoryMaps(
   const result = new Map<string, InitializationState>();
   const allAddresses = new Set([...map1.keys(), ...map2.keys()]);
   for (const addr of allAddresses) {
-    const val1 = map1.get(addr) || BOTTOM;
-    const val2 = map2.get(addr) || BOTTOM;
+    const val1 = map1.get(addr);
+    const val2 = map2.get(addr);
+    if (val1 === undefined || val2 === undefined) continue
     result.set(addr, meetInitializationState(val1, val2));
   }
   return result;

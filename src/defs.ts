@@ -1050,6 +1050,7 @@ export const textColors = {
   yellow: (string: string) => `\x1b[33m${string}\x1b[39m`,
   green: (string: string) => `\x1b[32m${string}\x1b[39m`,
   cyan: (string: string) => `\x1b[36m${string}\x1b[39m`,
+  blue: (string: string) => `\x1b[34m${string}\x1b[39m`,
   gray: (string: string) => `\x1b[38;5;242m${string}\x1b[39m`,
 }
 
