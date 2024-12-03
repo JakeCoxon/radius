@@ -1,0 +1,31 @@
+fn main():
+  
+  print("OK")
+
+  let p1 = Point(1, 2)
+  p1.x = 3
+  p1.y += 2
+
+  while p1.x < 10:
+    print(p1.x)
+    p1.x += 1
+
+  if 3 > 0:
+    print("OK")
+  else:
+    3 + 1
+
+  let x = (ifx 2 == 0: 200 else: 100)
+  
+  let foo = (ifx 2 == 0:
+            645645 - 
+              345346 + 
+                315436
+                  else:
+                    3123 + 
+                      23123 * 
+                        3123124)
+
+  let thing123 = ifx 2 == 2: 123 else: 32
+
+  print(thing123)
