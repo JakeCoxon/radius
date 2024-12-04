@@ -144,16 +144,16 @@ export class FunctionCodeGenerator {
     }
     if (ast instanceof VoidAst) return
 
-    if (ast instanceof LetAst)      { return this.generateVariableDeclaration(ast) }
-    if (ast instanceof SetAst)      { return this.generateAssignmentStatement(ast) }
-    if (ast instanceof IfAst)       { return this.generateIfStatement(ast) }
-    if (ast instanceof WhileAst)    { return this.generateWhileStatement(ast) }
-    if (ast instanceof ReturnAst)   { return this.generateReturnStatement(ast) }
-    if (ast instanceof SetFieldAst) { return this.generateAssignmentField(ast) }
+    if (ast instanceof LetAst)           { return this.generateVariableDeclaration(ast) }
+    if (ast instanceof SetAst)           { return this.generateAssignmentStatement(ast) }
+    if (ast instanceof IfAst)            { return this.generateIfStatement(ast) }
+    if (ast instanceof WhileAst)         { return this.generateWhileStatement(ast) }
+    if (ast instanceof ReturnAst)        { return this.generateReturnStatement(ast) }
+    if (ast instanceof SetFieldAst)      { return this.generateAssignmentField(ast) }
     if (ast instanceof SetValueFieldAst) { return this.generateAssignmentValueField(ast) }
-    if (ast instanceof BreakAst)    { return this.generateBreakStatement(ast) }
-    if (ast instanceof BlockAst)    { return this.generateBlockStatement(ast) }
-    if (ast instanceof SetSubscriptAst) { return this.generateAssignmentSubscript(ast) }
+    if (ast instanceof BreakAst)         { return this.generateBreakStatement(ast) }
+    if (ast instanceof BlockAst)         { return this.generateBlockStatement(ast) }
+    if (ast instanceof SetSubscriptAst)  { return this.generateAssignmentSubscript(ast) }
 
     this.generateExpression(ast, { valueCategory: 'rvalue' })
     
@@ -180,19 +180,21 @@ export class FunctionCodeGenerator {
     if (ast instanceof CastAst)        { return this.generateCastExpression(ast, context) }
     if (ast instanceof YieldAst)       { return this.generateYieldExpression(ast, context) }
     // if (ast instanceof MutSigilAst)    { return this.generateExpression(ast.expr, context) }
-    if (ast instanceof StatementsAst) {
-      for (const stmt of ast.statements.slice(0, -1)) {
-        this.generate(stmt);
-      }
-      if (ast.type !== VoidType) {
-        return this.generateExpression(ast.statements[ast.statements.length - 1], context);
-      } else {
-        this.generate(ast.statements[ast.statements.length - 1])
-        return new Pointer('')
-      }
-    }
+    if (ast instanceof StatementsAst) { return this.generateStatementsExpression(ast, context) }
     
     compilerAssert(false, 'Not implemented expression', { ast })
+  }
+
+  generateStatementsExpression(ast: StatementsAst, context: ExpressionContext): IRValue {
+    for (const stmt of ast.statements.slice(0, -1)) {
+      this.generate(stmt);
+    }
+    if (ast.type !== VoidType) {
+      return this.generateExpression(ast.statements[ast.statements.length - 1], context);
+    } else {
+      this.generate(ast.statements[ast.statements.length - 1])
+      return new Pointer('')
+    }
   }
 
   _createUnusedBlock() {
@@ -324,10 +326,11 @@ export class FunctionCodeGenerator {
 
   generateVariableDeclaration(ast: LetAst) {
     this.addInstruction(new CommentInstruction(`let ${ast.letType} ${ast.binding.name}`))
-    const value = ast.value ? (() => {
+    const value = (() => {
+      if (!ast.value) return null
       const astWithoutMutSigil = ast.value instanceof MutSigilAst ? ast.value.expr : ast.value
       return this.generateExpression(astWithoutMutSigil, { valueCategory: 'rvalue' }) 
-    })() : null
+    })()
 
     if (ast.letType === LetType.VarRef || ast.letType === LetType.Let) {
       return this.generateProjection(ast, value);
@@ -564,26 +567,8 @@ export class FunctionCodeGenerator {
 
   }
 
-  generateCopy(ast: Ast, context: ExpressionContext): IRValue {
+  generateCopyCall(ast: Ast, context: ExpressionContext): IRValue {
     const binding = new Binding('copy', ast.type)
-    if (ast.type instanceof PrimitiveType) {
-      const targetAccessReg = this.newRegister();
-      const type = ast.type
-      compilerAssert(type !== VoidType, 'Cannot copy void type');
-      const source = this.generateExpression(ast, { valueCategory: 'rvalue' })
-      let valueReg = source instanceof Value ? source.register : this.newRegister()
-      if (source instanceof Pointer) {
-        const sourceAccessReg = this.newRegister();
-        // Load from pointer, using a let capability because it is a primitive type and a copy is safe
-        this.addInstruction(new AccessInstruction(sourceAccessReg, source.address, [Capability.Let], type));
-        this.addInstruction(new LoadFromAddressInstruction(valueReg, type, sourceAccessReg));
-      }
-      const targetPointer = this.generateAlloc(type);
-      this.addInstruction(new AccessInstruction(targetAccessReg, targetPointer, [Capability.Set], type));
-      this.addInstruction(new StoreToAddressInstruction(targetAccessReg, type, valueReg));
-      this.addInstruction(new EndAccessInstruction(targetAccessReg, [Capability.Set]));
-      return new Pointer(targetPointer)
-    }
     
     this.generate(new LetAst(VoidType, SourceLocation.anon, binding, null, LetType.Var))
     const bindingAst = new BindingAst(binding.type, SourceLocation.anon, binding)
@@ -592,6 +577,25 @@ export class FunctionCodeGenerator {
     const dest = new MutSigilAst(bindingAst.type, SourceLocation.anon, bindingAst);
     this.generateCallExpression(new CallAst(ast.type, SourceLocation.anon, copyConstructor, [dest, ast], []), context)
     return this.generateBinding(new BindingAst(binding.type, SourceLocation.anon, binding), context)
+  }
+
+  generatePrimitiveCopy(ast: Ast) {
+    const targetAccessReg = this.newRegister();
+    const type = ast.type;
+    compilerAssert(type !== VoidType, 'Cannot copy void type');
+    const source = this.generateExpression(ast, { valueCategory: 'rvalue' });
+    let valueReg = source instanceof Value ? source.register : this.newRegister();
+    if (source instanceof Pointer) {
+      const sourceAccessReg = this.newRegister();
+      // Load from pointer, using a let capability because it is a primitive type and a copy is safe
+      this.addInstruction(new AccessInstruction(sourceAccessReg, source.address, [Capability.Let], type));
+      this.addInstruction(new LoadFromAddressInstruction(valueReg, type, sourceAccessReg));
+    }
+    const targetPointer = this.generateAlloc(type);
+    this.addInstruction(new AccessInstruction(targetAccessReg, targetPointer, [Capability.Set], type));
+    this.addInstruction(new StoreToAddressInstruction(targetAccessReg, type, valueReg));
+    this.addInstruction(new EndAccessInstruction(targetAccessReg, [Capability.Set]));
+    return new Pointer(targetPointer);
   }
 
   generatePrint(ast: Ast, context: ExpressionContext): IRValue {
@@ -623,7 +627,8 @@ export class FunctionCodeGenerator {
 
   generateCallExpression(ast: CallAst, context: ExpressionContext): IRValue {
     if (ast.binding === externalBuiltinBindings.copy) {
-      return this.generateCopy(ast.args[0], context)
+      if (ast.type instanceof PrimitiveType) return this.generatePrimitiveCopy(ast);
+      return this.generateCopyCall(ast.args[0], context)
     } else if (ast.binding === externalBuiltinBindings.print) {
       return this.generatePrint(ast.args[0], context)
     } else if (ast.binding === externalBuiltinBindings.printf) {
