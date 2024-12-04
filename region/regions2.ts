@@ -2,7 +2,7 @@ import { compilerAssert, ParseFunction, textColors } from "../src/defs";
 
 import * as fs from "node:fs";
 import { makeParser } from "../src/parser";
-import { Codegen, IrFunction, IrInstruction, printFunction } from "./region_codegen";
+import { Codegen, IrFunction, IrInstruction, printFunction, printIrFunction } from "./region_codegen";
 import { BasicRegionCompiler } from "./basicRegionCompiler";
 import { inspect } from "node:util";
 
@@ -43,7 +43,7 @@ try {
 
 console.log("")
 console.log("Function:")
-printFunction(compiler.irFunction)
+printIrFunction(compiler.irFunction)
 
 // compiler.compile(parser.rootNode);
 

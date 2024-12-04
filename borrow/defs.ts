@@ -103,6 +103,33 @@ export const getInstructionResult = (instr: IRInstruction): string | null => {
   else { compilerAssert(false, 'Unknown instruction type', { instr }) }
 }
 
+export const getInstructionIdentifier = (instr: IRInstruction): string | null => {
+  if (instr instanceof AssignInstruction)               { return instr.dest; } 
+  else if (instr instanceof AllocInstruction)           { return instr.dest; } 
+  else if (instr instanceof CallInstruction)            { return null; } 
+  else if (instr instanceof GetFieldPointerInstruction) { return instr.dest; } 
+  else if (instr instanceof LoadFromAddressInstruction) { return instr.dest } 
+  else if (instr instanceof PointerOffsetInstruction)   { return instr.dest; }
+  else if (instr instanceof ReturnInstruction)          { return null; } 
+  else if (instr instanceof BinaryOperationInstruction) { return instr.dest; } 
+  else if (instr instanceof StoreToAddressInstruction)  { return null; } // This is different from getInstructionResult
+  else if (instr instanceof AccessInstruction)          { return instr.dest; } 
+  else if (instr instanceof LoadConstantInstruction)    { return instr.dest; } 
+  else if (instr instanceof MoveInstruction)            { return null; }
+  else if (instr instanceof PhiInstruction)             { return instr.dest; }
+  else if (instr instanceof DeallocStackInstruction)    { return null; }
+  else if (instr instanceof CommentInstruction)         { return null; }
+  else if (instr instanceof MarkInitializedInstruction) { return null; }
+  else if (instr instanceof EndAccessInstruction)       { return null; }
+  else if (instr instanceof ProjectBundleInstruction)   { return instr.target; }
+  else if (instr instanceof AllocInstruction)           { return instr.dest; }
+  else if (instr instanceof LoadConstantInstruction)    { return instr.dest; }
+  else if (instr instanceof ConditionalJumpInstruction) { return null; }
+  else if (instr instanceof JumpInstruction)            { return null; }
+  else if (instr instanceof YieldInstruction)           { return instr.dest; }
+  else { compilerAssert(false, 'Unknown instruction type', { instr }) }
+}
+
 // Basic Block
 export class BasicBlock {
   constructor(public label: string, public instructions: IRInstruction[]) {}

@@ -1,3 +1,4 @@
+import { IrFunction, printIrFunction, RegionCodegen } from "../region/region_codegen";
 import { externalBuiltinBindings } from "../src/compiler_sugar";
 import { AndAst, Ast, Binding, BindingAst, BlockAst, BoolAst, BreakAst, CallAst, Capability, CastAst, CompiledFunction, compilerAssert, ConstructorAst, DefaultConsAst, FieldAst, FunctionParameter, IfAst, IntType, LetAst, LetType, MutSigilAst, NotAst, NumberAst, OperatorAst, OrAst, ParameterizedType, PrimitiveType, RawPointerType, ReturnAst, SetAst, SetFieldAst, SetSubscriptAst, SetValueFieldAst, SourceLocation, StatementsAst, StringAst, SubscriptAst, Type, UserCallAst, ValueFieldAst, VoidAst, VoidType, WhileAst, YieldAst } from "../src/defs";
 import { ASTNode, AllocInstruction, AssignInstruction, AssignmentNode, BasicBlock, BinaryExpressionNode, BinaryOperationInstruction, BlockStatementNode, CallExpressionNode, CallInstruction, AccessInstruction, ConditionalJumpInstruction, CreateStructNode, ExpressionNode, ExpressionStatementNode, FunctionBlock, FunctionDeclarationNode, IRInstruction, IRValue, IdentifierNode, IfStatementNode, JumpInstruction, LetConstNode, LiteralNode, LoadConstantInstruction, LoadFromAddressInstruction, MemberExpressionNode, ProgramNode, Pointer, Value, ReturnInstruction, ReturnNode, StoreToAddressInstruction, Variable, VariableDeclarationNode, WhileStatementNode, GetFieldPointerInstruction, AndNode, OrNode, PhiInstruction, CommentInstruction, MoveInstruction, EndAccessInstruction, printIR, MarkInitializedInstruction, InstructionId, PhiSource, DeallocStackInstruction, PointerOffsetInstruction, ProjectBundleInstruction, YieldInstruction } from "./defs";
@@ -46,6 +47,8 @@ export class FunctionCodeGenerator {
 
   unusedBlocks: Set<string> = new Set();
 
+  regionCodegen: RegionCodegen
+
   constructor(
     public codegen: CodeGenerator,
     public compiledFunction: CompiledFunction
@@ -67,6 +70,9 @@ export class FunctionCodeGenerator {
 
   addInstruction(instr: IRInstruction) {
     this.currentBlock.instructions.push(instr);
+
+    this.regionCodegen.ensureBlock()
+    this.regionCodegen.insertInstruction(instr)
   }
 
   // TODO: Clean this up because it's not clear exactly why it's needed
@@ -89,6 +95,9 @@ export class FunctionCodeGenerator {
   generateFunction(binding: Binding, params: FunctionParameter[], returnType: Type, body: Ast) {
     compilerAssert(!this.currentFunction, 'Already generating in a function');
     console.log("Begin generating function", binding.name);
+
+    this.regionCodegen = new RegionCodegen(new IrFunction())
+    this.regionCodegen.createRootSequenceRegion()    
 
     const entryLabel = this.newLabel();
     const entryBlock = new BasicBlock(entryLabel, []);
@@ -120,6 +129,9 @@ export class FunctionCodeGenerator {
     this.currentFunction.blocks = this.blocks.filter(block => !this.unusedBlocks.has(block.label));
 
     this.codegen.functionBlocks.push(this.currentFunction)
+
+    console.log("--- IR function ", binding.name)
+    printIrFunction(this.regionCodegen.irFunction)
 
     return this.currentFunction
   }
@@ -212,6 +224,8 @@ export class FunctionCodeGenerator {
     const reg = this.newRegister()
     this.functionInstructions.push(new AllocInstruction(reg, type))
     this.scopes[this.scopes.length - 1].allocs.push([reg, type])
+
+    this.regionCodegen.insertBlockInstruction(this.regionCodegen.allocBlock!, new AllocInstruction(reg, type));
     return reg
   }
 
@@ -226,6 +240,12 @@ export class FunctionCodeGenerator {
 
   // TODO: Fold these together
   generateBlockStatement(ast: BlockAst) {
+    const blockRegion = this.regionCodegen.insertNewBlockRegion();
+    this.regionCodegen.insertChildSequence(blockRegion)
+    this.regionCodegen.blockRegion = blockRegion
+
+    this.addInstruction(new CommentInstruction(`Block ${ast.binding.name}`))
+
     const label = this.newLabel()
     const scope = new Scope()
     scope.breakBlockLabel = label
@@ -233,6 +253,11 @@ export class FunctionCodeGenerator {
     this.blockScopeDepth.set(ast.binding, this.scopes.length - 1)
     this.generate(ast.body)
     this.finalizeScope()
+
+    const blockRegion2 = this.regionCodegen.insertNewBlockRegion();
+    this.regionCodegen.insertChildSequence(blockRegion2)
+    this.regionCodegen.blockRegion = blockRegion
+
     this.addInstruction(new JumpInstruction(label))
     this.scopes.pop()
     this.newBlock(label)
@@ -247,6 +272,13 @@ export class FunctionCodeGenerator {
     scope.breakBlockLabel = label
     this.scopes.push(scope);
     this.blockScopeDepth.set(ast.binding, this.scopes.length - 1)
+    
+    const blockRegion = this.regionCodegen.insertNewBlockRegion();
+    this.regionCodegen.insertChildSequence(blockRegion)
+    this.regionCodegen.blockRegion = blockRegion
+
+    this.addInstruction(new CommentInstruction(`Block ${ast.binding.name}`))
+
     const value = this.generateExpression(ast.body, context)
     // TODO: Figure this out cleanly
     if (value instanceof Value) {
@@ -255,6 +287,11 @@ export class FunctionCodeGenerator {
       this.generateMovePointerInstruction(resultPtr, value, ast.type)
     }
     this.finalizeScope()
+
+    const blockRegion2 = this.regionCodegen.insertNewBlockRegion();
+    this.regionCodegen.insertChildSequence(blockRegion2)
+    this.regionCodegen.blockRegion = blockRegion
+
     this.addInstruction(new JumpInstruction(label))
     this.scopes.pop()
     this.newBlock(label)
@@ -370,50 +407,54 @@ export class FunctionCodeGenerator {
 
   // TODO: Fold these together
   generateIfStatement(ast: IfAst) {
-    const conditionReg = this.generateExpression(ast.expr, { valueCategory: 'rvalue' });
-    compilerAssert(conditionReg instanceof Value, 'If condition must be an RValue');
+    this.generateIf(ast, false)
+  }
+
+  generateIfExpression(ast: IfAst, context: ExpressionContext): IRValue {
+    return this.generateIf(ast, true)
+  }
+
+  generateIf(ast: IfAst, isExpression: boolean): IRValue {
     const thenLabel = this.newLabel();
     const elseLabel = this.newLabel();
-    const afterLabel = this.newLabel();
+    const afterLabel = this.newLabel()
+
+    const ifRegion = this.regionCodegen.insertNewIfRegion()
+    this.regionCodegen.insertChildSequenceAndPushState(ifRegion)
+
+    this.regionCodegen.enterRegionSequence(ifRegion, this.regionCodegen.getIfRegion(ifRegion).conditionSequence)
+    
+    const conditionValue = this.generateExpression(ast.expr, { valueCategory: 'rvalue' });
+    const conditionReg = isExpression ? this.toValue(ast.type, conditionValue, 'if cond') : (() => {
+      compilerAssert(conditionValue instanceof Value, 'If condition must be an RValue');
+      return conditionValue
+    })()
 
     this.addInstruction(new ConditionalJumpInstruction(conditionReg.register, thenLabel, elseLabel));
+
+    this.regionCodegen.enterRegionSequence(ifRegion, this.regionCodegen.getIfRegion(ifRegion).thenSequence)
 
     this.newBlock(thenLabel);
     this.generate(ast.trueBody);
     this.addInstruction(new JumpInstruction(afterLabel));
 
+    this.regionCodegen.enterRegionSequence(ifRegion, this.regionCodegen.getIfRegion(ifRegion).elseSequence)
+
     this.newBlock(elseLabel);
     if (ast.falseBody) this.generate(ast.falseBody);
     this.addInstruction(new JumpInstruction(afterLabel));
     this.newBlock(afterLabel);
-  }
 
-  generateIfExpression(ast: IfAst, context: ExpressionContext): IRValue {
-    const conditionValue = this.generateExpression(ast.expr, { valueCategory: 'rvalue' });
-    const conditionReg = this.toValue(ast.type, conditionValue, 'if cond')
-    const outReg = this.newRegister();
-    const thenLabel = this.newLabel();
-    const elseLabel = this.newLabel();
-    const afterLabel = this.newLabel();
-    compilerAssert(ast.falseBody, 'If expression must have a false body');
+    this.regionCodegen.popRegionState()
 
-    this.addInstruction(new ConditionalJumpInstruction(conditionReg.register, thenLabel, elseLabel));
+    if (isExpression) {
+      const outReg = this.newRegister();
+      this.regionCodegen.getIfRegion(ifRegion).result = outReg
+      this.addInstruction(new PhiInstruction(outReg, ast.type, [new PhiSource(conditionReg.register, thenLabel), new PhiSource(conditionReg.register, elseLabel)]))
+      return new Value(outReg);
+    }
 
-    this.newBlock(thenLabel);
-    const expr1 = this.generateExpression(ast.trueBody, context);
-    const value1 = this.toValue(ast.type, expr1, 'if expr')
-    const phiSource1 = new PhiSource(value1.register, this.currentBlock.label)
-    this.addInstruction(new JumpInstruction(afterLabel));
-
-    this.newBlock(elseLabel);
-    const expr2 = this.generateExpression(ast.falseBody, context);
-    const value2 = this.toValue(ast.type, expr2, 'else expr')
-    const phiSource2 = new PhiSource(value2.register, this.currentBlock.label)
-    this.addInstruction(new JumpInstruction(afterLabel));
-    this.newBlock(afterLabel);
-
-    this.addInstruction(new PhiInstruction(outReg, ast.type, [phiSource1, phiSource2]))
-    return new Value(outReg);
+    return new Pointer('')
   }
 
   generateWhileStatement(ast: WhileAst) {
@@ -421,8 +462,13 @@ export class FunctionCodeGenerator {
     const bodyLabel = this.newLabel();
     const afterLabel = this.newLabel();
 
+    const whileRegion = this.regionCodegen.insertNewWhileRegion();
+    this.regionCodegen.insertChildSequenceAndPushState(whileRegion)
+
     // Jump to condition check
     this.addInstruction(new JumpInstruction(conditionLabel));
+
+    this.regionCodegen.enterRegionSequence(whileRegion, this.regionCodegen.getWhileRegion(whileRegion).conditionSequence)
 
     const conditionBlock = new BasicBlock(conditionLabel, []);
     this.blocks.push(conditionBlock);
@@ -431,8 +477,13 @@ export class FunctionCodeGenerator {
     compilerAssert(conditionReg instanceof Value, 'While condition must be an RValue');
     this.addInstruction(new ConditionalJumpInstruction(conditionReg.register, bodyLabel, afterLabel));
 
+    this.regionCodegen.enterRegionSequence(whileRegion, this.regionCodegen.getWhileRegion(whileRegion).bodySequence)
+
     this.newBlock(bodyLabel);
     this.generate(ast.body);
+
+    this.regionCodegen.popRegionState()
+
     this.addInstruction(new JumpInstruction(conditionLabel));
     this.newBlock(afterLabel);
   }
@@ -627,7 +678,7 @@ export class FunctionCodeGenerator {
 
   generateCallExpression(ast: CallAst, context: ExpressionContext): IRValue {
     if (ast.binding === externalBuiltinBindings.copy) {
-      if (ast.type instanceof PrimitiveType) return this.generatePrimitiveCopy(ast);
+      if (ast.args[0].type instanceof PrimitiveType) return this.generatePrimitiveCopy(ast.args[0]);
       return this.generateCopyCall(ast.args[0], context)
     } else if (ast.binding === externalBuiltinBindings.print) {
       return this.generatePrint(ast.args[0], context)

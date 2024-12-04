@@ -1,5 +1,5 @@
 import { inspect } from "bun";
-import { CommentInstruction, formatInstruction, getInstructionResult, IRInstruction } from "../borrow/defs";
+import { CommentInstruction, formatInstruction, getInstructionIdentifier, getInstructionResult, IRInstruction } from "../borrow/defs";
 import { compilerAssert, textColors } from "../src/defs";
 
 export type Regions = Region[];
@@ -101,7 +101,7 @@ export type Region = BlockRegion | IfRegion | WhileRegion;
 //   }
 // }
 
-export const printFunction = (function_: IrFunction) => {
+export const printIrFunction = (function_: IrFunction) => {
 
   const regionsSet = new Set<number>(function_.regions.map((_, i) => i));
   const sequencesSet = new Set<number>(function_.sequences.map((_, i) => i));
@@ -183,7 +183,7 @@ export const printFunction = (function_: IrFunction) => {
     }
   }
 
-  console.dir({ sequences: function_.sequences.map((s, i) => ({ i, s })), regions: function_.regions.map((r, i) => ({ i, r })) }, { depth: 4 });
+  // console.dir({ sequences: function_.sequences.map((s, i) => ({ i, s })), regions: function_.regions.map((r, i) => ({ i, r })) }, { depth: 4 });
 
   // visitRegion(function_.regions[function_.root], "Root");
   visitSequence(function_.root, "Root");
@@ -255,9 +255,14 @@ export class RegionCodegen {
     this.blockRegion = null
   }
 
-  insertChildSequenceAndPushState(region: RegionId) {
+  insertChildSequence(region: RegionId) {
     compilerAssert(this.regionSequence !== null, 'No parentSequence', { parentSequence: this.regionSequence });
     this.insertSequenceChild(this.regionSequence, region)
+    this.currentRegion = region
+  }
+
+  insertChildSequenceAndPushState(region: RegionId) {
+    this.insertChildSequence(region)
     this.pushRegionState()
   }
 
@@ -299,7 +304,7 @@ export class RegionCodegen {
   }
 
   createInstructionId(parent: RegionId, instruction: IRInstruction): InstructionId {
-    const name = getInstructionResult(instruction) ?? `instr${this.freshId++}`;
+    const name = getInstructionIdentifier(instruction) ?? `instr${this.freshId++}`;
     return name as InstructionId;
   }
 
@@ -311,6 +316,7 @@ export class RegionCodegen {
 
   insertBlockInstruction(parent: RegionId, instruction: IRInstruction) {
     const instrId = this.createInstructionId(parent, instruction);
+    compilerAssert(!this.irFunction.getInstruction(instrId), "Instruction already exists", { instrId, instruction, instructions: this.irFunction.instructions });
     const region = this.irFunction.regions[parent] as BlockRegion;
     const newNode = new InstructionNode(instruction, region.lastInstruction, null, parent)
     this.irFunction.instructions[instrId] = newNode;
