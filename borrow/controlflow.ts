@@ -1,18 +1,21 @@
+import { BlockRegion, IfRegion, IrFunction, RegionId, SequenceId, WhileRegion } from "../region/region_codegen";
 import { compilerAssert } from "../src/defs";
 import { BasicBlock, ConditionalJumpInstruction, JumpInstruction } from "./defs";
 
-export class ControlFlowGraph {
-  blocks: BasicBlock[] = [];
-  entry: BasicBlock;
+export type ControlFlowGraph = ControlFlowGraphGeneric<BasicBlock>;
+
+export class ControlFlowGraphGeneric<T> {
+  blocks: T[] = [];
+  entry: T;
 
   // State maps
-  predecessors: Map<BasicBlock, BasicBlock[]> = new Map();
-  successors: Map<BasicBlock, BasicBlock[]> = new Map();
-  dom: Map<BasicBlock, BasicBlock | null> = new Map(); // Immediate dominators
-  rpoNumber: Map<BasicBlock, number> = new Map(); // Reverse post-order numbers
-  children: Map<BasicBlock, BasicBlock[]> = new Map(); // Children in the dominator tree
+  predecessors: Map<T, T[]> = new Map();
+  successors: Map<T, T[]> = new Map();
+  dom: Map<T, T | null> = new Map(); // Immediate dominators
+  rpoNumber: Map<T, number> = new Map(); // Reverse post-order numbers
+  children: Map<T, T[]> = new Map(); // Children in the dominator tree
 
-  constructor(entry: BasicBlock) {
+  constructor(entry: T) {
     this.entry = entry;
     this.blocks.push(entry);
 
@@ -21,13 +24,13 @@ export class ControlFlowGraph {
     this.successors.set(entry, []);
   }
 
-  addBlock(block: BasicBlock) {
+  addBlock(block: T) {
     this.blocks.push(block);
     this.predecessors.set(block, []);
     this.successors.set(block, []);
   }
 
-  addEdge(from: BasicBlock, to: BasicBlock) {
+  addEdge(from: T, to: T) {
     if (!this.successors.has(from)) {
       this.successors.set(from, []);
     }
@@ -39,10 +42,10 @@ export class ControlFlowGraph {
   }
 
   computeReversePostOrder() {
-    const visited = new Set<BasicBlock>();
-    const rpo: BasicBlock[] = [];
+    const visited = new Set<T>();
+    const rpo: T[] = [];
 
-    const dfs = (block: BasicBlock) => {
+    const dfs = (block: T) => {
       if (visited.has(block)) return;
       visited.add(block);
       const successors = this.successors.get(block) || [];
@@ -63,10 +66,10 @@ export class ControlFlowGraph {
     return rpo.reverse();
   }
 
-  computeDominanceDepth(): Map<BasicBlock, number> {
-    const depthMap: Map<BasicBlock, number> = new Map();
+  computeDominanceDepth(): Map<T, number> {
+    const depthMap: Map<T, number> = new Map();
 
-    const dfs = (block: BasicBlock, currentDepth: number) => {
+    const dfs = (block: T, currentDepth: number) => {
       depthMap.set(block, currentDepth);
       const children = this.children.get(block) || [];
       for (const child of children) {
@@ -96,7 +99,7 @@ export class ControlFlowGraph {
       for (const block of rpo) {
         if (block === this.entry) continue;
 
-        let newIdom: BasicBlock | null = null;
+        let newIdom: T | null = null;
 
         // Find first processed predecessor
         const preds = this.predecessors.get(block) || [];
@@ -134,7 +137,7 @@ export class ControlFlowGraph {
     }
   }
 
-  intersect(b1: BasicBlock, b2: BasicBlock): BasicBlock {
+  intersect(b1: T, b2: T): T {
     let finger1 = b1;
     let finger2 = b2;
 
@@ -149,9 +152,9 @@ export class ControlFlowGraph {
     return finger1;
   }
 
-  printDominatorTree() {
-    const printTree = (block: BasicBlock, indent: string) => {
-      console.log(`${indent}Block ${block.label}`);
+  printDominatorTree(print: (indent: string, block: T) => void) {
+    const printTree = (block: T, indent: string) => {
+      print(indent, block)
       const children = this.children.get(block);
       if (children) {
         for (const child of children) {
@@ -165,7 +168,7 @@ export class ControlFlowGraph {
   /**
    * Checks if block `a` dominates block `b`.
    */
-  dominates(a: BasicBlock, b: BasicBlock): boolean {
+  dominates(a: T, b: T): boolean {
     let current = b;
     while (current !== null && current !== a) {
       current = this.dom.get(current)!;
@@ -177,21 +180,21 @@ export class ControlFlowGraph {
   /**
    * Checks if block `a` strictly dominates block `b`.
    */
-  strictlyDominates(a: BasicBlock, b: BasicBlock): boolean {
+  strictlyDominates(a: T, b: T): boolean {
     return a !== b && this.dominates(a, b);
   }
 
   /**
    * Checks if block `a` immediately dominates block `b`.
    */
-  immediatelyDominates(a: BasicBlock, b: BasicBlock): boolean {
+  immediatelyDominates(a: T, b: T): boolean {
     return this.dom.get(b) === a;
   }
 
   /**
    * Retrieves the immediate dominator of a block.
    */
-  getImmediateDominator(block: BasicBlock): BasicBlock | null {
+  getImmediateDominator(block: T): T | null {
     return this.dom.get(block) || null;
   }
 }
@@ -202,7 +205,7 @@ export const buildCFG = (blocks: BasicBlock[]): ControlFlowGraph => {
     throw new Error("Entry block not found.");
   }
 
-  const cfg = new ControlFlowGraph(entryBlock);
+  const cfg = new ControlFlowGraphGeneric(entryBlock);
 
   // Add blocks to CFG
   for (const block of blocks) {
@@ -242,6 +245,81 @@ export const buildCFG = (blocks: BasicBlock[]): ControlFlowGraph => {
 
   return cfg;
 }
+
+export const buildCFGFromRegions = (irFunction: IrFunction): ControlFlowGraphGeneric<RegionId> => {
+
+  const regionIds = irFunction.regions.map((r, id) => id);
+  const entryRegion = 0;
+
+  const cfg = new ControlFlowGraphGeneric<RegionId>(entryRegion as RegionId);
+  for (const regionId of regionIds) {
+    if (regionId !== entryRegion) {
+      cfg.addBlock(regionId as RegionId);
+    }
+  }
+
+  const firstBlockRegion = (sequenceId: SequenceId) => {
+    const seq = irFunction.sequences[sequenceId];
+    let regionId = seq.firstChildRegion;
+    while (regionId !== null) {
+      const region = irFunction.regions[regionId];
+      if (region instanceof BlockRegion) return regionId;
+      else if (region instanceof IfRegion) return firstBlockRegion(region.conditionSequence);
+      else if (region instanceof WhileRegion) return firstBlockRegion(region.conditionSequence);
+      else compilerAssert(false, "Unknown region type", { region })
+    }
+    compilerAssert(false, "No block region found in sequence", { sequenceId })
+  }
+
+  const visitSequence = (prevRegionId: RegionId | null, sequenceId: SequenceId): RegionId | null => {
+    const seq = irFunction.sequences[sequenceId];
+    for (let region = seq.firstChildRegion; region !== null; region = irFunction.regions[region].nextRegion) {
+      
+      prevRegionId = visitRegion(prevRegionId, region);
+    }
+    return prevRegionId;
+  }
+  const visitRegion = (prevRegionId: RegionId | null, regionId: RegionId): RegionId | null => {
+    const region = irFunction.regions[regionId];
+    if (region instanceof BlockRegion) {
+      if (prevRegionId !== null) cfg.addEdge(prevRegionId, regionId);
+      return regionId
+      // compilerAssert(false, "Not implemented yet", { region, currentRegion, regionId })
+    } else if (region instanceof IfRegion) {
+
+      const first = firstBlockRegion(region.conditionSequence);
+      compilerAssert(first, "No condition block found", { region })
+      const exit = firstBlockRegion(region.exitSequence);
+      
+      const cond = visitSequence(prevRegionId, region.conditionSequence);
+      const then = visitSequence(cond, region.thenSequence);
+      const else_ = visitSequence(cond, region.elseSequence);
+      
+      compilerAssert(then, "No then block found", { region })
+      compilerAssert(else_, "No else block found", { region })
+      cfg.addEdge(then, exit);
+      cfg.addEdge(else_, exit);
+      return visitSequence(null, region.exitSequence);
+    } else if (region instanceof WhileRegion) {
+
+      const first = firstBlockRegion(region.conditionSequence);
+      compilerAssert(first, "No condition block found", { region })
+      const exit = firstBlockRegion(region.exitSequence);
+      const cond = visitSequence(prevRegionId, region.conditionSequence);
+      const body = visitSequence(cond, region.bodySequence);
+      compilerAssert(cond, "No condition block found", { region })
+      compilerAssert(body, "No body block found", { region })
+      cfg.addEdge(body, cond);
+      cfg.addEdge(cond, exit);
+      return visitSequence(null, region.exitSequence);
+    }
+    compilerAssert(false, "Unknown region type", { region })
+  }
+  visitSequence(null, irFunction.root)
+
+  return cfg;
+}
+
 
 export const printCFG = (cfg: ControlFlowGraph) => {
   // Print cfg as DOT format

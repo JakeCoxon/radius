@@ -96,7 +96,7 @@ export class FunctionCodeGenerator {
     compilerAssert(!this.currentFunction, 'Already generating in a function');
     console.log("Begin generating function", binding.name);
 
-    this.regionCodegen = new RegionCodegen(new IrFunction())
+    this.regionCodegen = new RegionCodegen(new IrFunction(binding.name))
     this.regionCodegen.createRootSequenceRegion()    
 
     const entryLabel = this.newLabel();
@@ -129,9 +129,6 @@ export class FunctionCodeGenerator {
     this.currentFunction.blocks = this.blocks.filter(block => !this.unusedBlocks.has(block.label));
 
     this.codegen.functionBlocks.push(this.currentFunction)
-
-    console.log("--- IR function ", binding.name)
-    printIrFunction(this.regionCodegen.irFunction)
 
     return this.currentFunction
   }

@@ -20,6 +20,9 @@ import { InitializationCheckingPass } from '../borrow/initialization';
 import { insertCloseAccesses } from '../borrow/liveness';
 import { ExclusivityCheckingPass } from '../borrow/exclusivity';
 import { inlineProjectBundlesPass } from '../borrow/inlining';
+import { createRegionUsageMap, printIrFunction, SequenceId } from '../region/region_codegen';
+import { RegionReifyAccessPass } from '../region/reifyaccess';
+import { CloseAccessPass, CloseRegionAccessPass, insertRegionCloseAccesses } from '../region/liveness';
 
 const runTestInner = (
   testObject: TestObject,
@@ -86,7 +89,7 @@ export const createModuleLoader = (importPaths: string[]) => {
 const originalLog = console.log
 
 const runMandatoryPasses = (fnGenerator: FunctionCodeGenerator, mod: Module, fn: FunctionBlock, body: Ast) => {
-  const DebugLog = true
+  const DebugLog = false
 
   console.log(textColors.yellow(`\n// ${fn.name} ///////////////////////////////////////////////////////////\n`));
   fn.params.forEach((p, i) => {
@@ -100,31 +103,66 @@ const runMandatoryPasses = (fnGenerator: FunctionCodeGenerator, mod: Module, fn:
   const cfgFirst = buildCFG(fn.blocks)
   fn.blocks = cfgFirst.blocks.filter(b => cfgFirst.predecessors.get(b)!.length > 0 || b === cfgFirst.entry)
   
-  printIR(fn.blocks);
+  if (DebugLog) printIR(fn.blocks);
 
   const cfg = buildCFG(fn.blocks)
   printCFG(cfg)
   printDominators(cfg)
 
-  const reify = new ReifyAccessPass(cfg, fn);
-  reify.debugLog = DebugLog;
-  reify.reifyAccesses();
+  // const reify = new ReifyAccessPass(cfg, fn);
+  // reify.debugLog = DebugLog;
+  // reify.reifyAccesses();
 
-  console.log("Reified")
-  printIR(fn.blocks);
+  const irFunction = fnGenerator.regionCodegen.irFunction
+
+  let closeAccessPass = new CloseRegionAccessPass(fnGenerator.regionCodegen)
+  try {
+
+    irFunction.sequences.forEach((seq, seqId) => {
+      if (seq.firstChildRegion === null) {
+        const regionId = fnGenerator.regionCodegen.insertNewBlockRegion()
+        fnGenerator.regionCodegen.insertSequenceChild(seqId as SequenceId, regionId)
+      }
+    })
+
+  const reify2 = new RegionReifyAccessPass(irFunction)
+  reify2.debugLog = true;
+  reify2.reifyAccesses();
+
+  closeAccessPass.insertRegionCloseAccesses()
+  
+
+  } catch (ex) {
+    throw ex
+  } finally {
+
+    // const usages = createRegionUsageMap(irFunction)
+
+    closeAccessPass.printDebug()
+
+    // printIrFunction(irFunction, { 
+    //   instructionNotes: usages.entries().reduce((acc, [key, value]) => {
+    //     acc[key] = value.map(x => x.instrId).join(', ')
+    //     return acc
+    //   }, {} as any)
+    //   // instructionNotes: closeAccessPass.debug
+    // })
+  }
+
+  if (DebugLog) printIR(fn.blocks);
 
   const interpreter = new InitializationCheckingPass(fnGenerator, mod, fn);
   interpreter.debugLog = DebugLog;
   interpreter.checkedInterpret();
 
   console.log("Initialized")
-  printIR(fn.blocks);
+  if (DebugLog) printIR(fn.blocks);
 
   console.log("")
   insertCloseAccesses(cfg, fn.blocks, DebugLog)
 
   console.log("Closed access")
-  printIR(fn.blocks);
+  if (DebugLog) printIR(fn.blocks);
 
   const interpreter2 = new ExclusivityCheckingPass(fn)
   interpreter2.debugLog = DebugLog;
@@ -132,7 +170,7 @@ const runMandatoryPasses = (fnGenerator: FunctionCodeGenerator, mod: Module, fn:
   console.log("")
 
   console.log(``);
-  printIR(fn.blocks);
+  if (DebugLog) printIR(fn.blocks);
   console.log(`\n/// finished ${fn.name} ///\n`);
 }
 
