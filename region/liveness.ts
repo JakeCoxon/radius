@@ -103,7 +103,7 @@ const getLiveness = (pass: CloseRegionAccessPass): LivenessMap => {
 
   function getApproximateCoverage(uses: Usage[], regionId: RegionId) {
     let occurrences: RegionId[] = [];
-    uses.forEach(use => occurrences.push(irFunction.getInstructionRegion(use.instrId)!));
+    uses.forEach(use => occurrences.push(irFunction.getInstructionRegion(use.instrId)));
 
     const approximateCoverage: Record<string, ApproxCoverage> = {};
     while (occurrences.length > 0) {
@@ -131,8 +131,9 @@ const usesOperand = (instr: IRInstruction, operand: string): boolean => {
 }
 
 const lastUseOfOperand = (irFunction: IrFunction, operand: string, regionid: RegionId): InstructionId => {
-  const block = irFunction.regions[regionid] as BlockRegion
-  for (let instrId = block.lastInstruction; instrId; instrId = irFunction.getInstructionNode(instrId)!.prev) {
+  const region = irFunction.regions[regionid] as BlockRegion
+  compilerAssert(region, `No region found`, { regionid })
+  for (let instrId = region.lastInstruction; instrId; instrId = irFunction.getInstructionNode(instrId)!.prev) {
     const instr = irFunction.getInstruction(instrId)!
     if (usesOperand(instr, operand)) {
       return instrId
@@ -213,7 +214,6 @@ const mergeLivenessBlocks = (irFunction: IrFunction, liveness: Record<string, Li
 
 export const insertRegionCloseAccesses = (pass: CloseRegionAccessPass) => {
 
-  pass.updateLiveness()
   const { irFunction } = pass
 
   irFunction.regions.forEach(region => {
@@ -240,12 +240,12 @@ export class CloseRegionAccessPass {
   // Must share RegionCodegen because we need to insert instructions and we need to share the same instruction IDs
   constructor(public codegen: RegionCodegen) {
     this.irFunction = codegen.irFunction
-    this.usage = createRegionUsageMap(this.irFunction)
+    
   }
-  updateLiveness() {
-    this.liveness = getLiveness(this)
-  }
+
   insertRegionCloseAccesses() {
+    this.usage = createRegionUsageMap(this.irFunction)
+    this.liveness = getLiveness(this)
     insertRegionCloseAccesses(this)
   }
   

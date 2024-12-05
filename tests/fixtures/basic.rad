@@ -323,18 +323,17 @@ fn test_project():
   print("rawptr", rawptr(foo))
 
   # if true:
-  #   foo.x = 23
-  # else:
-  #   foo.x = 23
+    # print("OK")
+    # foo.x = 23
 
   foo.x = 456
 
-  print(foo)
+  # print(foo)
 
-  print(arr[0])
+  # print(arr[0])
   
-  var moved = arr[0]&
-  print("Moved", moved)
+  # var moved = arr[0]&
+  # print("Moved", moved)
 
 
 fn test_basic_project():

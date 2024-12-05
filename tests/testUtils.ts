@@ -22,7 +22,8 @@ import { ExclusivityCheckingPass } from '../borrow/exclusivity';
 import { inlineProjectBundlesPass } from '../borrow/inlining';
 import { createRegionUsageMap, printIrFunction, SequenceId } from '../region/region_codegen';
 import { RegionReifyAccessPass } from '../region/reifyaccess';
-import { CloseAccessPass, CloseRegionAccessPass, insertRegionCloseAccesses } from '../region/liveness';
+import { CloseRegionAccessPass } from '../region/liveness';
+import { RegionInitializationCheckingPass } from '../region/initialization';
 
 const runTestInner = (
   testObject: TestObject,
@@ -116,6 +117,7 @@ const runMandatoryPasses = (fnGenerator: FunctionCodeGenerator, mod: Module, fn:
   const irFunction = fnGenerator.regionCodegen.irFunction
 
   let closeAccessPass = new CloseRegionAccessPass(fnGenerator.regionCodegen)
+  let initPass = new RegionInitializationCheckingPass(fnGenerator.regionCodegen, irFunction)
   try {
 
     irFunction.sequences.forEach((seq, seqId) => {
@@ -129,14 +131,19 @@ const runMandatoryPasses = (fnGenerator: FunctionCodeGenerator, mod: Module, fn:
   reify2.debugLog = true;
   reify2.reifyAccesses();
 
+  initPass.checkedInterpret()
+
   closeAccessPass.insertRegionCloseAccesses()
+  
+
   
 
   } catch (ex) {
     throw ex
   } finally {
 
-    closeAccessPass.printDebug()
+    // closeAccessPass.printDebug()
+    initPass.printDebug()
 
   }
 
@@ -310,7 +317,7 @@ export const runCompilerTest = (
 
       if ((ex.info as any)._userinfo) {
         ;(ex.info as any)._userinfo.forEach((name: string) => {
-          const item = ex.info[name]
+          const item = (ex.info as any)[name]
           if (item && Object.getPrototypeOf(item) === TokenRoot) {
             const text = outputSourceLocation(item.location)
             logger.log(text)
@@ -471,7 +478,7 @@ export const createTest = ({
   const file = Bun.file(outputPath)
   const writer = file.writer()
 
-  const writeToFile = (...args) => {
+  const writeToFile = (...args: any[]) => {
     args.forEach((arg) => {
       if (typeof arg === 'string') {
         writer.write(arg)
@@ -482,7 +489,7 @@ export const createTest = ({
   }
 
   const logger = {
-    log: (...args) => {
+    log: (...args: any[]) => {
       writeToFile(...args)
     },
   }

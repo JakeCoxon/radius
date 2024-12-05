@@ -253,7 +253,7 @@ export const buildCFGFromRegions = (irFunction: IrFunction): ControlFlowGraphGen
 
   const cfg = new ControlFlowGraphGeneric<RegionId>(entryRegion as RegionId);
   for (const regionId of regionIds) {
-    if (regionId !== entryRegion) {
+    if (regionId !== entryRegion && irFunction.regions[regionId] instanceof BlockRegion) {
       cfg.addBlock(regionId as RegionId);
     }
   }
@@ -316,6 +316,9 @@ export const buildCFGFromRegions = (irFunction: IrFunction): ControlFlowGraphGen
     compilerAssert(false, "Unknown region type", { region })
   }
   visitSequence(null, irFunction.root)
+
+  cfg.computeReversePostOrder();
+  cfg.computeDominatorTree();
 
   return cfg;
 }

@@ -9,7 +9,7 @@ type ExpressionContext = {
 
 class Scope {
   allocs: [string, Type][] = []
-  breakBlockLabel: string | null = null
+  constructor(public debugName: string, public breakBlockLabel: string | null = null) {}
 }
 
 export class CodeGenerator {
@@ -96,7 +96,14 @@ export class FunctionCodeGenerator {
     compilerAssert(!this.currentFunction, 'Already generating in a function');
     console.log("Begin generating function", binding.name);
 
-    this.regionCodegen = new RegionCodegen(new IrFunction(binding.name))
+    const paramRegs = params.map((param) => {
+      const paramReg = this.newRegister()
+      this.variableMap.set(param.binding, new Variable(param.binding.name, param.type, paramReg, param.capability));
+      return paramReg
+    });
+
+    const fn = new IrFunction(binding.name, params, paramRegs);
+    this.regionCodegen = new RegionCodegen(fn, this.compiledFunction, this.codegen)
     this.regionCodegen.createRootSequenceRegion()    
 
     const entryLabel = this.newLabel();
@@ -104,14 +111,8 @@ export class FunctionCodeGenerator {
     this.blocks.push(entryBlock);
     this.currentBlock = entryBlock;
 
-    this.scopes.push(new Scope());
+    this.scopes.push(new Scope("Function scope"));
 
-    const paramRegs = params.map((param) => {
-      const paramReg = this.newRegister()
-      this.variableMap.set(param.binding, new Variable(param.binding.name, param.type, paramReg, param.capability));
-
-      return paramReg
-    });
 
     this.currentFunction = new FunctionBlock(binding.name, binding, params, paramRegs, this.blocks);
 
@@ -230,6 +231,7 @@ export class FunctionCodeGenerator {
     compilerAssert(this.scopes.length > 0, 'No scopes to close');
     const scope = this.scopes[this.scopes.length - 1]
     const allocs = [...scope.allocs].reverse()
+    this.addInstruction(new CommentInstruction(`Finalize scope for ${scope.debugName} ${scope.breakBlockLabel}`))
     for (const alloc of allocs) {
       this.addInstruction(new DeallocStackInstruction(alloc[0], alloc[1]))
     }
@@ -244,8 +246,7 @@ export class FunctionCodeGenerator {
     this.addInstruction(new CommentInstruction(`Block ${ast.binding.name}`))
 
     const label = this.newLabel()
-    const scope = new Scope()
-    scope.breakBlockLabel = label
+    const scope = new Scope(`Block stmt ${ast.binding.name}`, label)
     this.scopes.push(scope);
     this.blockScopeDepth.set(ast.binding, this.scopes.length - 1)
     this.generate(ast.body)
@@ -253,7 +254,7 @@ export class FunctionCodeGenerator {
 
     const blockRegion2 = this.regionCodegen.insertNewBlockRegion();
     this.regionCodegen.insertChildSequence(blockRegion2)
-    this.regionCodegen.blockRegion = blockRegion
+    this.regionCodegen.blockRegion = blockRegion2
 
     this.addInstruction(new JumpInstruction(label))
     this.scopes.pop()
@@ -265,9 +266,8 @@ export class FunctionCodeGenerator {
     // return this.generateExpression(ast.body, context)
     const label = this.newLabel()
     const resultPtr = this.generateAlloc(ast.type)
-    const scope = new Scope()
-    scope.breakBlockLabel = label
-    this.scopes.push(scope);
+    const scope = new Scope("Block expr", label)
+    this.scopes.push(scope)
     this.blockScopeDepth.set(ast.binding, this.scopes.length - 1)
     
     const blockRegion = this.regionCodegen.insertNewBlockRegion();
@@ -483,6 +483,8 @@ export class FunctionCodeGenerator {
 
     this.addInstruction(new JumpInstruction(conditionLabel));
     this.newBlock(afterLabel);
+
+    this.addInstruction(new CommentInstruction('End of while loop'))
   }
 
   generateAndExpression(ast: AndAst, context: ExpressionContext): IRValue {
@@ -981,7 +983,8 @@ export class FunctionCodeGenerator {
       this.generateExpression(ast.right, { valueCategory: 'rvalue' }))
   
     compilerAssert(ast.funcs, 'Subscript must have funcs', { ast })
-    this.addInstruction(new ProjectBundleInstruction(destReg, ast.type, [Capability.Let, Capability.Inout, Capability.Set, Capability.Sink], objReg.address, [offset.register], ast.funcs));
+    const caps = [Capability.Let, Capability.Inout, Capability.Set, Capability.Sink]
+    this.addInstruction(new ProjectBundleInstruction(destReg, ast.type, caps, objReg.address, [offset.register], ast.funcs as any));
     return new Pointer(destReg);
 
   }

@@ -1,6 +1,7 @@
 import { inspect } from "bun";
-import { CommentInstruction, formatInstruction, getInstructionIdentifier, getInstructionOperands, getInstructionResult, IRInstruction } from "../borrow/defs";
-import { compilerAssert, textColors } from "../src/defs";
+import { AccessInstruction, CallInstruction, CommentInstruction, EndAccessInstruction, formatInstruction, GetFieldPointerInstruction, getInstructionIdentifier, getInstructionOperands, getInstructionResult, IRInstruction, MarkInitializedInstruction, MoveInstruction } from "../borrow/defs";
+import { Binding, Capability, CompiledFunction, compilerAssert, FunctionParameter, textColors, Type, VoidType } from "../src/defs";
+import { CodeGenerator } from "../borrow/codegen_ir";
 
 export type Regions = Region[];
 
@@ -14,11 +15,19 @@ export class IrFunction {
   instructions: { [key: string]: InstructionNode } = {}
   root: SequenceId
 
-  constructor(public debugName: string) {}
+  constructor(
+    public debugName: string,
+    public params: FunctionParameter[],
+    public parameterRegisters: string[],
+  ) {}
 
   getInstruction(instrId: InstructionId): IRInstruction | null { return this.instructions[instrId]?.instruction ?? null; }
   getInstructionNode(instrId: InstructionId): InstructionNode | null { return this.instructions[instrId] ?? null; }
-  getInstructionRegion(instrId: InstructionId): RegionId | null { return this.instructions[instrId]?.region ?? null; }
+  getInstructionRegion(instrId: InstructionId): RegionId { 
+    // @Speed issue, remove this later
+    compilerAssert(this.instructions[instrId], "Instruction not found", { instrId, instructions: this.instructions });
+    return this.instructions[instrId].region ?? null;
+  }
 }
 
 export type RegionId = number & { __regionId: true };
@@ -65,6 +74,13 @@ export class IfRegion {
   constructor() {}
 }
 
+export type InsertPosition = { startOfRegion: RegionId } | { endOfRegion: RegionId } | { afterInstruction: InstructionId } | { beforeInstruction: InstructionId };
+export const InsertPosition = {
+  startOfRegion: (region: RegionId): InsertPosition => ({ startOfRegion: region }),
+  endOfRegion: (region: RegionId): InsertPosition => ({ endOfRegion: region }),
+  after: (instr: InstructionId): InsertPosition => ({ afterInstruction: instr }),
+  before: (instr: InstructionId): InsertPosition => ({ beforeInstruction: instr }),
+}
 export type Region = BlockRegion | IfRegion | WhileRegion;
 
 export class IrDiagnostics {
@@ -175,7 +191,6 @@ export const printIrFunction = (function_: IrFunction, diagnostics?: IrDiagnosti
 };
 
 export class RegionCodegen {
-  irFunction: IrFunction
 
   regionSequence: SequenceId | null = null
   blockRegion: RegionId | null = null
@@ -185,9 +200,14 @@ export class RegionCodegen {
   regionState: { region: RegionId | null, sequence: SequenceId }[] = []
   freshId = 0
 
-  constructor(irFunction: IrFunction) {
-    this.irFunction = irFunction;
+  constructor(
+    public irFunction: IrFunction,
+    public compiledFunction: CompiledFunction,
+    public globalState: CodeGenerator
+  ) {
   }
+
+  newRegister() { return this.globalState.newRegister(); }
 
   createRootSequenceRegion() {
     this.regionSequence = this.insertNewSequenceRegion(null);
@@ -225,7 +245,7 @@ export class RegionCodegen {
 
   insertInstruction(instr: IRInstruction) {
     compilerAssert(this.blockRegion !== null, 'No blockRegion. Call ensureBlock()', { blockRegion: this.blockRegion });
-    this.insertBlockInstruction(this.blockRegion, instr);
+    return this.insertBlockInstruction(this.blockRegion, instr);
   }
 
   enterRegionSequence(region: RegionId, sequenceId: SequenceId) {
@@ -346,6 +366,79 @@ export class RegionCodegen {
     return instrId;
   }
 
+  insertInstructionBefore(nextId: InstructionId, instruction: IRInstruction) {
+    const regionId = this.irFunction.instructions[nextId].region;
+    const instrId = this.createInstructionId(regionId, instruction);
+    compilerAssert(!this.irFunction.getInstruction(instrId), "Instruction already exists", { instrId, instruction, instructions: this.irFunction.instructions });
+    const region = this.irFunction.regions[regionId] as BlockRegion;
+    const nextNode = this.irFunction.instructions[nextId];
+    const prevId = nextNode.prev;
+    const prevNode = this.irFunction.instructions[prevId!];
+    const newNode = new InstructionNode(instruction, prevId, nextId, regionId)
+    this.irFunction.instructions[instrId] = newNode;
+    nextNode.prev = instrId;
+    if (region.firstInstruction === nextId) {
+      region.firstInstruction = instrId;
+    } else {
+      prevNode.next = instrId;
+    }
+    return instrId;
+  }
+
+  insertInstructionAtPosition(insertPosition: InsertPosition, instruction: IRInstruction) {
+    if ('startOfRegion' in insertPosition) {
+      return this.insertInstructionAtBeginning(insertPosition.startOfRegion, instruction);
+    } else if ('endOfRegion' in insertPosition) {
+      return this.insertBlockInstruction(insertPosition.endOfRegion, instruction);
+    } else if ('afterInstruction' in insertPosition) {
+      return this.insertInstructionAfter(insertPosition.afterInstruction, instruction);
+    } else if ('beforeInstruction' in insertPosition) {
+      return this.insertInstructionBefore(insertPosition.beforeInstruction, instruction);
+    }
+    compilerAssert(false, "Invalid insertPosition", { insertPosition });
+  }
+
+  insertInstructionsAtPosition(insertPosition: InsertPosition, instructions: IRInstruction[]) {
+    const ids = { firstId: null as InstructionId | null, lastId: null as InstructionId | null }
+    instructions.forEach(instr => {
+      const newId = this.insertInstructionAtPosition(insertPosition, instr)
+      if (ids.firstId === null) ids.firstId = newId
+      ids.lastId = newId
+      insertPosition = { afterInstruction: newId }
+    })
+    return ids
+  }
+
+  deleteInstruction(instrId: InstructionId) {
+    const instrNode = this.irFunction.getInstructionNode(instrId);
+    compilerAssert(instrNode, "Instruction not found", { instrId, instructions: this.irFunction.instructions });
+    const region = this.irFunction.regions[instrNode.region] as BlockRegion;
+    let replacingPosition: InsertPosition
+    if (instrId === region.firstInstruction) {
+      region.firstInstruction = instrNode.next;
+      replacingPosition = InsertPosition.startOfRegion(instrNode.region);
+    } else {
+      const prevNode = this.irFunction.getInstructionNode(instrNode.prev!)!;
+      prevNode.next = instrNode.next;
+      replacingPosition = InsertPosition.after(instrNode.prev!);
+    }
+    if (instrId === region.lastInstruction) {
+      region.lastInstruction = instrNode.prev;
+    } else {
+      const nextNode = this.irFunction.getInstructionNode(instrNode.next!)!;
+      nextNode.prev = instrNode.prev;
+    }
+    instrNode.instruction = null!
+    delete this.irFunction.instructions[instrId];
+    return replacingPosition;
+  }
+
+  replaceInstruction(instrId: InstructionId, instruction: IRInstruction) {
+    const replacingPosition = this.deleteInstruction(instrId);
+    return this.insertInstructionAtPosition(replacingPosition, instruction);
+  }
+
+
   insertNewIfRegion(): RegionId {
     const region = new IfRegion()
     this.irFunction.regions.push(region);
@@ -370,6 +463,83 @@ export class RegionCodegen {
     region.exitSequence = this.insertNewSequenceRegion(regionId);
     return regionId
   }
+
+  ////////////////////////////////////////////////////////////////////////////////////////////////
+  // These are higher level APIs for generating IR so maybe it should be in a different class
+  //
+
+  createDestructorInstructions(source: string, type: Type) {
+    const destructor = type.typeInfo.metaobject.destructorBinding;
+    if (!destructor) {
+      return [
+        new CommentInstruction(`TODO: No destructor for dealloc stack ${source} of type ${type.shortName}`),
+        new MarkInitializedInstruction(source, type, false),
+      ]
+    }
+    compilerAssert(destructor && destructor instanceof Binding, `Destructor not found for ${type.shortName}`);
+
+    return [
+      // new CommentInstruction(`TODO: Replace dealloc stack ${instr.target} of type ${instr.type.shortName}`),
+      new CallInstruction(null, VoidType, destructor, [source], [type], [Capability.Sink])
+      // new AccessInstruction(accessReg, instrId.target, [Capability.Set]),
+      // new DeallocStackInstruction(accessReg, type),
+    ]
+  }
+
+  createParamDeallocStackInstructions(argIndex: number, type: Type) {
+    const target = this.irFunction.parameterRegisters[argIndex];
+
+    if (this.compiledFunction.isDestructor) {
+      const fields = type.typeInfo.fields;
+      const instrs = fields.flatMap((field, i) => {
+        const fieldReg = this.newRegister();
+        const getFieldPtr = new GetFieldPointerInstruction(fieldReg, target, field)
+        const dealloc = this.createDestructorInstructions(fieldReg, field.fieldType)
+        return [getFieldPtr, ...dealloc]
+      })
+      return instrs
+    }
+
+    const destructor = type.typeInfo.metaobject.destructorBinding;
+    if (!destructor) {
+      return [
+        new CommentInstruction(`TODO: No destructor for dealloc stack param ${argIndex} of type ${type.shortName}`),
+        new MarkInitializedInstruction(target, type, false),
+      ]
+    }
+
+    compilerAssert(destructor && destructor instanceof Binding, `Destructor not found for ${type.shortName}`);
+    
+    return [
+      // new CommentInstruction(`TODO: Insert dealloc stack param ${argIndex} of type ${type.shortName}`),
+      new CallInstruction(null, VoidType, destructor, [target], [type], [Capability.Sink])
+      // new AccessInstruction(accessReg, instr.value, [Capability.Set]),
+      // new DeallocStackInstruction(accessReg, instr.value),
+    ]
+  }
+
+  createMoveInstructions(instr: MoveInstruction, capability: Capability) {
+    const sourceAccessReg = this.newRegister();
+    const targetAccessReg = this.newRegister();
+    compilerAssert(capability === Capability.Set || capability === Capability.Inout, 'Invalid capability');
+    const metaobject = instr.type.typeInfo.metaobject;
+    const moveFnBinding = capability === Capability.Set ? metaobject.moveInitBinding : metaobject.moveAssignBinding;
+    compilerAssert(moveFnBinding && moveFnBinding instanceof Binding, `Move function not found for ${instr.type.shortName}`);
+    const moveFn = this.globalState.functions.get(moveFnBinding);
+    compilerAssert(moveFn, `Function not found: ${moveFnBinding.name}`);
+    const instrs = [
+      new CommentInstruction(`Replaced move with ${capability} to ${instr.target} from ${instr.source}`),
+      new AccessInstruction(sourceAccessReg, instr.source, [Capability.Sink], instr.type),
+      new AccessInstruction(targetAccessReg, instr.target, [capability], instr.type),
+      new CallInstruction(null, VoidType, moveFn.binding, [targetAccessReg, sourceAccessReg], moveFn.parameters.map(p => p.type), moveFn.parameters.map(p => p.capability)),
+      new MarkInitializedInstruction(targetAccessReg, instr.type, true),
+      new MarkInitializedInstruction(sourceAccessReg, instr.type, false),
+      new EndAccessInstruction(sourceAccessReg, [Capability.Sink]),
+      new EndAccessInstruction(targetAccessReg, [capability]),
+    ];
+    return instrs;
+  }
+
 
 }
 
