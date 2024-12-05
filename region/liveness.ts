@@ -1,7 +1,7 @@
 import { compilerAssert } from "../src/defs";
 import { buildCFGFromRegions, ControlFlowGraph, ControlFlowGraphGeneric } from "../borrow/controlflow";
 import { AccessInstruction, BasicBlock, EndAccessInstruction, FunctionBlock, GetFieldPointerInstruction, IRInstruction, LoadFromAddressInstruction, PointerOffsetInstruction, ProjectBundleInstruction, formatInstruction, getInstructionOperands, getInstructionResult } from "../borrow/defs";
-import { BlockRegion, createRegionUsageMap, type InstructionId, IrFunction, printIrFunction, Region, RegionCodegen, RegionId, Usage, UsageMap } from "./region_codegen";
+import { BlockRegion, createRegionUsageMap, type InstructionId, IrDiagnostics, IrFunction, printIrFunction, Region, RegionCodegen, RegionId, Usage, UsageMap } from "./region_codegen";
 import { inspect } from "bun";
 
 type InsertMap = {[key: string]: (
@@ -234,8 +234,8 @@ export class CloseRegionAccessPass {
   liveness: LivenessMap
   usage: UsageMap
   irFunction: IrFunction
-  debug: [InstructionId, string][] = []
 
+  diagnostics = new IrDiagnostics()
 
   // Must share RegionCodegen because we need to insert instructions and we need to share the same instruction IDs
   constructor(public codegen: RegionCodegen) {
@@ -250,12 +250,7 @@ export class CloseRegionAccessPass {
   }
   
   printDebug() {
-    printIrFunction(this.irFunction, {
-      instructionNotes: this.debug.reduce((acc, [id, note]) => {
-        acc[id] = (acc[id] ? acc[id] + '\n' : '') + note
-        return acc
-      }, {} as Record<string, string>)
-    })
+    printIrFunction(this.irFunction, this.diagnostics)
   }
   
 }
@@ -286,7 +281,7 @@ const closeAccess = (pass: CloseRegionAccessPass, sourceInstr: AccessInstruction
       const newId = liveness.lastUse ?
         pass.codegen.insertInstructionAfter(liveness.lastUse, newInstr)
         : pass.codegen.insertInstructionAtBeginning(regionId, newInstr)
-      pass.debug.push([newId, `Inserted end access for ${dest} (${liveness.livenessType}) last = ${liveness.lastUse}`])
+      pass.diagnostics.instructionNote(newId, `Inserted end access for ${dest} (${liveness.livenessType}) last = ${liveness.lastUse}`)
       
     }
   }
@@ -299,7 +294,7 @@ const closeAccess = (pass: CloseRegionAccessPass, sourceInstr: AccessInstruction
       if (liveness.livenessType === LivenessType.LiveIn) enclosingRegions.push(getEnclosingRegion(regionId))
     }
     if (enclosingRegions.length > 1) compilerAssert(enclosingRegions.every(r => r === enclosingRegions[0]), 'Multiple enclosing regions found', { dest, enclosingRegions })
-    pass.debug.push([dest, `Enclosing region=${enclosingRegions[0]}`])
+    pass.diagnostics.instructionNote(dest, `Enclosing region=${enclosingRegions[0]}`)
   }
 
   function getEnclosingRegion(endRegionId: RegionId) {

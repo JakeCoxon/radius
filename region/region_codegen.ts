@@ -67,23 +67,50 @@ export class IfRegion {
 
 export type Region = BlockRegion | IfRegion | WhileRegion;
 
-export const printIrFunction = (function_: IrFunction, opts?: { instructionNotes: {[key: InstructionId]: string} }) => {
+export class IrDiagnostics {
+  instructionNotes: { instrId: InstructionId, note: string }[] = []
+  regionNotes: { regionId: RegionId, note: string }[] = []
+
+  instructionNote(instrId: InstructionId, note: string) {
+    this.instructionNotes.push({ instrId, note });
+  }
+  regionNote(regionId: RegionId, note: string) {
+    this.regionNotes.push({ regionId, note });
+  }
+}
+
+export const printIrFunction = (function_: IrFunction, diagnostics?: IrDiagnostics) => {
 
   const regionsSet = new Set<number>(function_.regions.map((_, i) => i));
   const sequencesSet = new Set<number>(function_.sequences.map((_, i) => i));
+
+  const instructionNotes: { [key: string]: string[] } = {};
+  diagnostics?.instructionNotes.forEach(({ instrId, note }) => {
+    const origNote = instructionNotes[instrId] ?? [];
+    instructionNotes[instrId] = [...origNote, note];
+  });
+  const regionNotes: { [key: string]: string[] } = {};
+  diagnostics?.regionNotes.forEach(({ regionId, note }) => {
+    const origNote = regionNotes[regionId] ?? [];
+    regionNotes[regionId] = [...origNote, note];
+  });
   
-  // console.dir({ function_ }, { depth: 4 });
   const visitRegion = (region: Region, label: string, depth = 0, isLast = true, prefix = "", regionId: number) => {
     const branch = isLast ? "└─ " : "├─ ";
     const connection = depth > 0 ? prefix + branch : "";
     const typeLabel = region ? textColors.blue(`[${region.constructor.name.replace("Region", "")} ${regionId}]`) : textColors.gray("undefined");
     console.log(`${connection}${typeLabel}`, region?.result ?? "");
-    // const {instructions, ...regionWithoutInstructions} = region;
-    // console.dir({ regionId, regionWithoutInstructions }, { depth: 4 });
     compilerAssert(regionsSet.has(regionId), "Region already visited", { regionId, regionsSet });
     regionsSet.delete(regionId);
     
     let nextPrefix = prefix + (isLast ? "   " : "│  ");
+
+    if (regionNotes[regionId]) {
+      regionNotes[regionId].join("\n").split("\n").forEach(line => {
+        console.log(nextPrefix + textColors.green(`|  ${line}`));
+        // console.log(indent + textColors.green(`|`) + `  ${line}`);
+      })
+    }
     
     if (region instanceof BlockRegion) {
       for (let instrId = region.firstInstruction; instrId !== null; instrId = function_.getInstructionNode(instrId)?.next ?? null) {
@@ -97,8 +124,8 @@ export const printIrFunction = (function_: IrFunction, opts?: { instructionNotes
         let indent = nextPrefix + (isLastInstruction ? "   " : "   ")
         indent += (" ".repeat(Math.max(0, 15 - indent.length)));
         console.log(indent + label);
-        if (opts?.instructionNotes && opts.instructionNotes[instrId]) {
-          opts.instructionNotes[instrId].split("\n").forEach(line => {
+        if (instructionNotes[instrId]) {
+          instructionNotes[instrId].join("\n").split("\n").forEach(line => {
             console.log(indent + textColors.green(`|  ${line}`));
             // console.log(indent + textColors.green(`|`) + `  ${line}`);
           })
@@ -125,7 +152,6 @@ export const printIrFunction = (function_: IrFunction, opts?: { instructionNotes
     sequencesSet.delete(sequenceId);
     
     let nextPrefix = prefix + (depth === 0 ? '' : isLast ? "   " : "│  ");
-    // let nextPrefix = prefix + (isLast ? "   " : "│  ");
     
     let region = sequence.firstChildRegion;
     let i = 0;
@@ -138,9 +164,6 @@ export const printIrFunction = (function_: IrFunction, opts?: { instructionNotes
     }
   }
 
-  // console.dir({ sequences: function_.sequences.map((s, i) => ({ i, s })), regions: function_.regions.map((r, i) => ({ i, r })) }, { depth: 4 });
-
-  // visitRegion(function_.regions[function_.root], "Root");
   console.log(textColors.green(`Function: ${function_.debugName}`));
   visitSequence(function_.root, "Root");
   if (regionsSet.size > 0) {

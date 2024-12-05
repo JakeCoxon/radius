@@ -136,17 +136,8 @@ const runMandatoryPasses = (fnGenerator: FunctionCodeGenerator, mod: Module, fn:
     throw ex
   } finally {
 
-    // const usages = createRegionUsageMap(irFunction)
-
     closeAccessPass.printDebug()
 
-    // printIrFunction(irFunction, { 
-    //   instructionNotes: usages.entries().reduce((acc, [key, value]) => {
-    //     acc[key] = value.map(x => x.instrId).join(', ')
-    //     return acc
-    //   }, {} as any)
-    //   // instructionNotes: closeAccessPass.debug
-    // })
   }
 
   if (DebugLog) printIR(fn.blocks);
