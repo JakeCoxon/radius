@@ -98,7 +98,7 @@ const getLiveness = (pass: CloseRegionAccessPass): LivenessMap => {
 
   function getApproximateCoverage(uses: Usage[], regionId: RegionId) {
     let occurrences: RegionId[] = [];
-    uses.forEach(use => occurrences.push(irFunction.getInstructionRegion(use.instrId)));
+    uses.forEach(use => occurrences.push(irFunction.getInstructionRegion(use.instrId)!));
 
     const approximateCoverage: Record<string, ApproxCoverage> = {};
     while (occurrences.length > 0) {
@@ -143,38 +143,18 @@ const extendLiveness = (pass: CloseRegionAccessPass, register: string) => {
   // In that case we may repeatedly visit the same access multiple times, so we
   // should be able to cache the extended livetime
 
-  
   const { irFunction, liveness, usage } = pass
   const uses = usage.get(register);
   if (!uses) return
-  // compilerAssert(uses, `No uses found for register ${register}`);
 
   for (const use of uses) {
-    // const regionId = irFunction.getInstructionRegion(use.instrId)
-    const instr = irFunction.getInstruction(use.instrId)
-    // const region = irFunction.regions[regionId] as BlockRegion
-    // const block = cfg.blocks.find(b => b.label === use.instrId.blockId)!;
-    // const instr = block.instructions[use.instrId.instrId];
-    if (instr instanceof AccessInstruction) {
-      extendLiveness(pass, instr.dest)
-      compilerAssert(liveness[instr.dest], `No liveness found for ${instr.dest}`)
-      mergeLivenessBlocks(irFunction, liveness[register], liveness[instr.dest], instr.dest)
-    } else if (instr instanceof LoadFromAddressInstruction) {
-      // extendLiveness(pass, instr.dest)
-      // compilerAssert(liveness[instr.dest], `No liveness found for ${instr.dest}`)
-      // console.log("Extending liveness for LoadFromAddressInstruction", instr.dest, "from", register)
-      // mergeLivenessBlocks(liveness[register], liveness[instr.dest], instr.dest)
-    } else if (instr instanceof PointerOffsetInstruction) {
-      extendLiveness(pass, instr.dest)
-      compilerAssert(liveness[instr.dest], `No liveness found for ${instr.dest}`)
-      // console.log("Extending liveness for PointerOffsetInstruction", instr.dest, "from", register)
-      mergeLivenessBlocks(irFunction, liveness[register], liveness[instr.dest], instr.dest)
-    } else if (instr instanceof GetFieldPointerInstruction) {
-      extendLiveness(pass, instr.dest)
-      compilerAssert(liveness[instr.dest], `No liveness found for ${instr.dest}`)
-      mergeLivenessBlocks(irFunction, liveness[register], liveness[instr.dest], instr.dest)
-    }
-
+    const instr = irFunction.getInstruction(use.instrId)!
+    const dest = getInstructionResult(instr) as InstructionId
+    const toExtend = instr instanceof AccessInstruction || instr instanceof LoadFromAddressInstruction || instr instanceof PointerOffsetInstruction || instr instanceof GetFieldPointerInstruction
+    if (!toExtend) continue
+    extendLiveness(pass, dest)
+    compilerAssert(liveness[dest], `No liveness found for ${dest}`)
+    mergeLivenessBlocks(irFunction, liveness[register], liveness[dest], dest)
   }
 }
 
@@ -182,53 +162,52 @@ const extendLiveness = (pass: CloseRegionAccessPass, register: string) => {
 const mergeLivenessBlocks = (irFunction: IrFunction, liveness: Record<string, LivenessState>, other: Record<string, LivenessState>, register: string) => {
   if (!other) return
 
-  for (const [blockId, state] of Object.entries(other)) {
-    
-    const livenessType = liveness[blockId]?.livenessType
-    const livenessTypeOther = other[blockId].livenessType
-
-    if (!livenessType) { // Just copy the state
-      liveness[blockId] = state
-      continue
-    }
-
-    if (livenessType === LivenessType.LiveIn && livenessTypeOther === LivenessType.LiveOut
-      || livenessType === LivenessType.LiveOut && livenessTypeOther === LivenessType.LiveIn
-    ) {
-      compilerAssert(false, 'Cannot extend live-in with live-out')
-    }
-    if (livenessType === LivenessType.LiveOut || livenessTypeOther === LivenessType.LiveOut) {
-      liveness[blockId] = LivenessState.LiveOut;
-    } else if (livenessType === LivenessType.LiveInAndOut || livenessTypeOther === LivenessType.LiveInAndOut) {
-      liveness[blockId] = LivenessState.LiveInAndOut;
-    } else if (livenessType === LivenessType.Closed && livenessTypeOther === LivenessType.Closed) {
-      liveness[blockId] = LivenessState.Closed(lastUse());
-    } else if (livenessType === LivenessType.LiveIn && livenessTypeOther === LivenessType.Closed) {
-      liveness[blockId] = LivenessState.LiveIn(lastUse());
-    } else {
-      compilerAssert(false, 'Not implemented yet', { blockId, register, liveness: liveness[blockId], other: other[blockId] })
-    }
-    
-    function lastUse() {
-      const a = liveness[blockId].lastUse
-      const b = other[blockId].lastUse
-      // compilerAssert(false, 'Not implemented yet', { a, b })
-      compilerAssert(a && b, 'No last use found')
-
-      let n = irFunction.getInstructionNode(a)!
-      while (n.next) {
-        if (n.next === b) return b // b is the last use
-        n = irFunction.getInstructionNode(n.next)!
-      }
-      return a
-    }
+  for (const [regionId_, state] of Object.entries(other)) {
+    const regionId = Number(regionId_) as RegionId
+    liveness[regionId] = getNewLiveness(regionId, state)
   }
 
+  function getNewLiveness(regionId: RegionId, prevState: LivenessState) {
+
+    const livenessType = liveness[regionId]?.livenessType
+    const livenessTypeOther = other[regionId].livenessType
+
+    if (!livenessType) return prevState // Just copy the state
+    const thisIn = livenessType === LivenessType.LiveIn
+    const thisOut = livenessType === LivenessType.LiveOut
+    const thisInOut = livenessType === LivenessType.LiveInAndOut
+    const thisClosed = livenessType === LivenessType.Closed
+    const otherIn = livenessTypeOther === LivenessType.LiveIn
+    const otherOut = livenessTypeOther === LivenessType.LiveOut
+    const otherInOut = livenessTypeOther === LivenessType.LiveInAndOut
+    const otherClosed = livenessTypeOther === LivenessType.Closed
+
+    if (thisIn && otherOut || thisOut && otherIn) compilerAssert(false, 'Cannot extend live-in with live-out')
+    if (thisOut || otherOut)            return LivenessState.LiveOut;
+    else if (thisInOut || otherInOut)   return LivenessState.LiveInAndOut;
+    else if (thisClosed && otherClosed) return LivenessState.Closed(lastUse(regionId));
+    else if (thisIn && otherClosed)     return LivenessState.LiveIn(lastUse(regionId));
+    
+    compilerAssert(false, 'Not implemented yet', { regionId, register, liveness: liveness[regionId], other: other[regionId] })
+  }
+
+  function lastUse(blockId: RegionId) {
+    const a = liveness[blockId].lastUse
+    const b = other[blockId].lastUse
+    // compilerAssert(false, 'Not implemented yet', { a, b })
+    compilerAssert(a && b, 'No last use found')
+
+    let n = irFunction.getInstructionNode(a)!
+    while (n.next) {
+      if (n.next === b) return b // b is the last use
+      n = irFunction.getInstructionNode(n.next)!
+    }
+    return a
+  }
 }
 
 export const insertRegionCloseAccesses = (pass: CloseRegionAccessPass) => {
 
-  const insertsMap: InsertMap = {}
   pass.updateLiveness()
   const { irFunction } = pass
 
@@ -237,13 +216,12 @@ export const insertRegionCloseAccesses = (pass: CloseRegionAccessPass) => {
       for (let instrId = region.firstInstruction; instrId; instrId = irFunction.getInstructionNode(instrId)!.next) {
         const instr = irFunction.getInstruction(instrId)
         const toClose = instr instanceof AccessInstruction || instr instanceof ProjectBundleInstruction
-        if (toClose) closeAccess(pass, instr, insertsMap)
+        if (toClose) closeAccess(pass, instr)
       }
     }
   })
 
   return pass
-
 }
 
 export class CloseRegionAccessPass {
@@ -277,7 +255,7 @@ export class CloseRegionAccessPass {
   
 }
 
-const closeAccess = (pass: CloseRegionAccessPass, sourceInstr: AccessInstruction | ProjectBundleInstruction, inserts: InsertMap) => {
+const closeAccess = (pass: CloseRegionAccessPass, sourceInstr: AccessInstruction | ProjectBundleInstruction) => {
   const dest = getInstructionResult(sourceInstr)! as InstructionId
   extendLiveness(pass, dest)
   const boundaries = pass.liveness[dest]
@@ -294,16 +272,14 @@ const closeAccess = (pass: CloseRegionAccessPass, sourceInstr: AccessInstruction
   }
   
   for (const [regionId_, liveness] of Object.entries(boundaries)) {
+    const regionId = Number(regionId_) as RegionId
     if (liveness.livenessType === LivenessType.Closed || liveness.livenessType === LivenessType.LiveIn) {
       if (alreadyClosed(liveness.lastUse)) continue
       const newInstr = new EndAccessInstruction(dest, sourceInstr.capabilities)
-
-      if (liveness.lastUse) {
-        const newId = pass.codegen.insertInstructionAfter(liveness.lastUse, newInstr)
-        pass.debug.push([newId, `End access for ${dest} (${liveness.livenessType}) last = ${liveness.lastUse}`])
-      } else {
-        compilerAssert(false, 'Not implemented yet')
-      }
+      const newId = liveness.lastUse ?
+        pass.codegen.insertInstructionAfter(liveness.lastUse, newInstr)
+        : pass.codegen.insertInstructionAtBeginning(regionId, newInstr)
+      pass.debug.push([newId, `Inserted end access for ${dest} (${liveness.livenessType}) last = ${liveness.lastUse}`])
       
     }
   }

@@ -280,9 +280,26 @@ export class RegionCodegen {
       region.firstInstruction = instrId;
       region.lastInstruction = instrId;
     } else {
-      const lastNode = this.irFunction.getInstructionNode(region.lastInstruction);
+      const lastNode = this.irFunction.getInstructionNode(region.lastInstruction)!;
       lastNode.next = instrId;
       region.lastInstruction = instrId;
+    }
+    return instrId;
+  }
+
+  insertInstructionAtBeginning(parent: RegionId, instruction: IRInstruction) {
+    const instrId = this.createInstructionId(parent, instruction);
+    compilerAssert(!this.irFunction.getInstruction(instrId), "Instruction already exists", { instrId, instruction, instructions: this.irFunction.instructions });
+    const region = this.irFunction.regions[parent] as BlockRegion;
+    const newNode = new InstructionNode(instruction, null, region.firstInstruction, parent)
+    this.irFunction.instructions[instrId] = newNode;
+    if (region.firstInstruction === null) {
+      region.firstInstruction = instrId;
+      region.lastInstruction = instrId;
+    } else {
+      const firstNode = this.irFunction.getInstructionNode(region.firstInstruction)!;
+      firstNode.prev = instrId;
+      region.firstInstruction = instrId;
     }
     return instrId;
   }
@@ -344,8 +361,8 @@ export const createRegionUsageMap = (irFunction: IrFunction) => {
   const usages = new Map<string, Usage[]>();
   irFunction.regions.forEach((region, regionId) => {
     if (region instanceof BlockRegion) {
-      for (let instrId = region.firstInstruction; instrId !== null; instrId = irFunction.getInstructionNode(instrId).next) {
-        const instr = irFunction.getInstructionNode(instrId).instruction;
+      for (let instrId = region.firstInstruction; instrId !== null; instrId = irFunction.getInstructionNode(instrId)!.next) {
+        const instr = irFunction.getInstructionNode(instrId)!.instruction;
         const operands = getInstructionOperands(instr);
         for (let i = 0; i < operands.length; i++) {
           const operand = operands[i];
