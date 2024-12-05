@@ -1,7 +1,7 @@
 import { compilerAssert } from "../src/defs";
 import { buildCFGFromRegions, ControlFlowGraph, ControlFlowGraphGeneric } from "../borrow/controlflow";
 import { AccessInstruction, BasicBlock, EndAccessInstruction, FunctionBlock, GetFieldPointerInstruction, IRInstruction, LoadFromAddressInstruction, PointerOffsetInstruction, ProjectBundleInstruction, formatInstruction, getInstructionOperands, getInstructionResult } from "../borrow/defs";
-import { BlockRegion, createRegionUsageMap, type InstructionId, IrFunction, printIrFunction, RegionCodegen, RegionId, Usage, UsageMap } from "./region_codegen";
+import { BlockRegion, createRegionUsageMap, type InstructionId, IrFunction, printIrFunction, Region, RegionCodegen, RegionId, Usage, UsageMap } from "./region_codegen";
 import { inspect } from "bun";
 
 type InsertMap = {[key: string]: (
@@ -88,6 +88,11 @@ const getLiveness = (pass: CloseRegionAccessPass): LivenessMap => {
     }
 
     // Ensure that successors of live-out blocks are marked as live-in.
+    // This allows end access instructions to be inserted in unused if-else branches.
+    // However I think this requires there to be an empty branch already in the CFG.
+    // If not, this will mark the exit block as live-in even though it is not live-in on
+    // all paths, and some paths will have two end_access instructions - which is a problem
+    // for project_bundle since new actual code will be run at both end_accesses
     successors.forEach(regionId => {
       if (!finalCoverage[regionId]) {
         finalCoverage[regionId] = LivenessState.LiveIn(null); // Live in but last use unknown.
@@ -259,8 +264,9 @@ const closeAccess = (pass: CloseRegionAccessPass, sourceInstr: AccessInstruction
   const dest = getInstructionResult(sourceInstr)! as InstructionId
   extendLiveness(pass, dest)
   const boundaries = pass.liveness[dest]
-  
   if (!boundaries) return
+
+  const rootSequence = pass.irFunction.regions[pass.irFunction.getInstructionRegion(dest)!].parentSequence
 
   const alreadyClosed = (lastUse: InstructionId | null) => {
     if (lastUse === null) return false
@@ -273,6 +279,7 @@ const closeAccess = (pass: CloseRegionAccessPass, sourceInstr: AccessInstruction
   
   for (const [regionId_, liveness] of Object.entries(boundaries)) {
     const regionId = Number(regionId_) as RegionId
+
     if (liveness.livenessType === LivenessType.Closed || liveness.livenessType === LivenessType.LiveIn) {
       if (alreadyClosed(liveness.lastUse)) continue
       const newInstr = new EndAccessInstruction(dest, sourceInstr.capabilities)
@@ -282,6 +289,27 @@ const closeAccess = (pass: CloseRegionAccessPass, sourceInstr: AccessInstruction
       pass.debug.push([newId, `Inserted end access for ${dest} (${liveness.livenessType}) last = ${liveness.lastUse}`])
       
     }
+  }
+
+  if (sourceInstr instanceof ProjectBundleInstruction) {
+    const enclosingRegions: RegionId[] = []
+    for (const [regionId_, liveness] of Object.entries(boundaries)) {
+      const regionId = Number(regionId_) as RegionId
+      if (liveness.livenessType === LivenessType.Closed) enclosingRegions.push(regionId)
+      if (liveness.livenessType === LivenessType.LiveIn) enclosingRegions.push(getEnclosingRegion(regionId))
+    }
+    if (enclosingRegions.length > 1) compilerAssert(enclosingRegions.every(r => r === enclosingRegions[0]), 'Multiple enclosing regions found', { dest, enclosingRegions })
+    pass.debug.push([dest, `Enclosing region=${enclosingRegions[0]}`])
+  }
+
+  function getEnclosingRegion(endRegionId: RegionId) {
+    let regionId: RegionId | null = endRegionId
+    while (regionId !== null) {
+      let region: Region = pass.irFunction.regions[regionId];
+      if (region.parentSequence === rootSequence) return regionId
+      regionId = pass.irFunction.sequences[region.parentSequence].parentRegion
+    }
+    compilerAssert(false, 'No enclosing region found', { endRegionId, dest })
   }
 
 }
