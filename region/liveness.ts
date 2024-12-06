@@ -133,7 +133,7 @@ const usesOperand = (instr: IRInstruction, operand: string): boolean => {
 const lastUseOfOperand = (irFunction: IrFunction, operand: string, regionid: RegionId): InstructionId => {
   const region = irFunction.regions[regionid] as BlockRegion
   compilerAssert(region, `No region found`, { regionid })
-  for (let instrId = region.lastInstruction; instrId; instrId = irFunction.getInstructionNode(instrId)!.prev) {
+  for (let instrId = region.lastInstruction; instrId !== null; instrId = irFunction.getInstructionNode(instrId)!.prev) {
     const instr = irFunction.getInstruction(instrId)!
     if (usesOperand(instr, operand)) {
       return instrId
@@ -218,7 +218,7 @@ export const insertRegionCloseAccesses = (pass: CloseRegionAccessPass) => {
 
   irFunction.regions.forEach(region => {
     if (region instanceof BlockRegion) {
-      for (let instrId = region.firstInstruction; instrId; instrId = irFunction.getInstructionNode(instrId)!.next) {
+      for (let instrId = region.firstInstruction; instrId !== null; instrId = irFunction.getInstructionNode(instrId)!.next) {
         const instr = irFunction.getInstruction(instrId)
         const toClose = instr instanceof AccessInstruction || instr instanceof ProjectBundleInstruction
         if (toClose) closeAccess(pass, instr)

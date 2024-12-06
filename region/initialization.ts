@@ -170,8 +170,7 @@ export class RegionInitializationCheckingPass {
     while (this.instrId) {
       const node = this.function.getInstructionNode(this.instrId)!
       this.currentInstr = node.instruction
-      this.nextVisitInstruction = this.function.getInstructionNode(this.instrId)!.next
-      // this.currentInstrId = new InstructionId(regionId, this.instrId);
+      this.nextVisitInstruction = node.next
       this.executeInstruction(node.instruction);
 
       this.instrId = this.nextVisitInstruction

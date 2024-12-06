@@ -18,6 +18,7 @@ export class CodeGenerator {
   labelCount: number = 0;
   registerCount: number = 0;
   functions: Map<Binding, CompiledFunction> = new Map();
+  freshId: number = 0;
 
   functionGenerator(compiledFunction: CompiledFunction) {
     return new FunctionCodeGenerator(this, compiledFunction)
@@ -29,6 +30,10 @@ export class CodeGenerator {
 
   newRegister(): string {
     return `r${this.registerCount++}`;
+  }
+
+  newFreshId(): string {
+    return `i${this.freshId++}`;
   }
 
 }
@@ -296,6 +301,7 @@ export class FunctionCodeGenerator {
   }
 
   generateBreakStatement(ast: BreakAst) {
+    compilerAssert(false, 'Not implemented break statement', { ast })
     const depth = this.blockScopeDepth.get(ast.binding)
     compilerAssert(depth !== undefined, `Block depth not found: ${ast.binding.name}`)
     const scope = this.scopes[depth]

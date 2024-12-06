@@ -17,7 +17,7 @@ export class RegionReifyAccessPass {
 
     for (const region of this.irFunction.regions) {
       if (region instanceof BlockRegion) {
-        for (let instrId = region.firstInstruction; instrId; instrId = this.irFunction.getInstructionNode(instrId).next) {
+        for (let instrId = region.firstInstruction; instrId !== null; instrId = this.irFunction.getInstructionNode(instrId)!.next) {
           const instr = this.irFunction.getInstruction(instrId)
           if (instr instanceof AccessInstruction) {
             worklist.push(instrId)

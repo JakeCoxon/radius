@@ -25,7 +25,7 @@ export class IrFunction {
   getInstructionNode(instrId: InstructionId): InstructionNode | null { return this.instructions[instrId] ?? null; }
   getInstructionRegion(instrId: InstructionId): RegionId { 
     // @Speed issue, remove this later
-    compilerAssert(this.instructions[instrId], "Instruction not found", { instrId, instructions: this.instructions });
+    compilerAssert(this.instructions[instrId], "Instruction not found", { instrId });
     return this.instructions[instrId].region ?? null;
   }
 }
@@ -131,6 +131,8 @@ export const printIrFunction = (function_: IrFunction, diagnostics?: IrDiagnosti
     if (region instanceof BlockRegion) {
       for (let instrId = region.firstInstruction; instrId !== null; instrId = function_.getInstructionNode(instrId)?.next ?? null) {
         const instruction = function_.getInstruction(instrId)
+        const node = function_.getInstructionNode(instrId)
+        compilerAssert(node?.region === regionId, "Sanity check - Instruction region mismatch", { instrId, regionId, node });
         compilerAssert(instruction, "Instruction not found", { instrId, region, function_ });
         const isLastInstruction = instrId === region.lastInstruction;
         // let label = instruction.result ? `${instruction.result} = ${instruction.label}` : instruction.label;
@@ -198,7 +200,6 @@ export class RegionCodegen {
   currentRegion: RegionId | null = null
 
   regionState: { region: RegionId | null, sequence: SequenceId }[] = []
-  freshId = 0
 
   constructor(
     public irFunction: IrFunction,
@@ -208,6 +209,7 @@ export class RegionCodegen {
   }
 
   newRegister() { return this.globalState.newRegister(); }
+  newFreshId() { return this.globalState.newFreshId(); }
 
   createRootSequenceRegion() {
     this.regionSequence = this.insertNewSequenceRegion(null);
@@ -241,6 +243,12 @@ export class RegionCodegen {
       this.blockRegion = this.insertNewBlockRegion();
       this.insertSequenceChild(this.regionSequence, this.blockRegion);
     }
+  }
+
+  setInsertionBlock(regionId: RegionId) {
+    const region = this.irFunction.regions[regionId];
+    compilerAssert(region instanceof BlockRegion, "Region is not a block", { region });
+    this.blockRegion = regionId;
   }
 
   insertInstruction(instr: IRInstruction) {
@@ -295,6 +303,100 @@ export class RegionCodegen {
     childRegion.parentSequence = parentSequence;
   }
 
+  insertSequenceChildAfter(parentSequence: SequenceId, prevRegion: RegionId, child: RegionId) {
+    const region = this.irFunction.sequences[parentSequence];
+    compilerAssert(region, "Region not found", { parentSequence, prevRegion, child });
+    const childRegion = this.irFunction.regions[child];
+    if (region.lastChildRegion === prevRegion) {
+      this.insertSequenceChild(parentSequence, child);
+      return;
+    } else {
+      const prev = this.irFunction.regions[prevRegion];
+      compilerAssert(prev.nextRegion, "prev.next is null", { region, prevRegion, child, parentSequence });
+      const next = this.irFunction.regions[prev.nextRegion];
+      compilerAssert(next, "next is null", { region, prevRegion, child, parentSequence });
+      childRegion.nextRegion = prev.nextRegion;
+      childRegion.prevRegion = prevRegion;
+      childRegion.parentSequence = parentSequence;
+      prev.nextRegion = child;
+      next.prevRegion = child;
+    }
+  }
+
+  insertSequenceChildAtBeginning(parentSequence: SequenceId, child: RegionId) {
+    const region = this.irFunction.sequences[parentSequence];
+    const childRegion = this.irFunction.regions[child];
+    if (region.firstChildRegion === null) {
+      region.firstChildRegion = child;
+      region.lastChildRegion = child;
+    } else {
+      const firstChild = this.irFunction.regions[region.firstChildRegion];
+      compilerAssert(firstChild, "firstChild is null", { region, child, parentSequence });
+      firstChild.prevRegion = child;
+      childRegion.nextRegion = region.firstChildRegion;
+      region.firstChildRegion = child;
+    }
+    childRegion.parentSequence = parentSequence;
+  }
+
+  moveRegionsToAfter(prevRegion: RegionId, startRegion: RegionId, endRegion: RegionId) {
+    
+    const parentSequence = this.irFunction.regions[startRegion].parentSequence;
+    compilerAssert(parentSequence !== null, "Parent sequence not found", { startRegion, parentSequence });
+    const sequence = this.irFunction.sequences[parentSequence];
+    compilerAssert(sequence, "Sequence not found", { parentSequence, startRegion, endRegion });
+    const prev = this.irFunction.regions[prevRegion];
+    compilerAssert(prev, "prevRegion not found", { prevRegion, startRegion, endRegion });
+    const start = this.irFunction.regions[startRegion];
+    compilerAssert(start, "startRegion not found", { prevRegion, startRegion, endRegion });
+    const end = this.irFunction.regions[endRegion]
+    compilerAssert(end.parentSequence === start.parentSequence, "endRegion is not in the same sequence", { parentSequence, startRegion, endRegion });
+    const oldSequence = this.irFunction.sequences[start.parentSequence];
+
+    const oldPrevId = start.prevRegion;
+    const oldNextId = end.nextRegion;
+    const newNextId = prev.nextRegion;
+
+    prev.nextRegion = startRegion;
+    start.prevRegion = prevRegion;
+
+    if (sequence.lastChildRegion === prevRegion) {
+      sequence.lastChildRegion = endRegion
+    } else {
+      const next = this.irFunction.regions[newNextId!]
+      compilerAssert(next, "nextRegion not found", { prevRegion, startRegion, endRegion });
+      
+      end.nextRegion = newNextId;
+      next.prevRegion = prevRegion;
+    }
+
+    // Fix up old sequence
+
+    if (oldSequence.firstChildRegion === startRegion) {
+      oldSequence.firstChildRegion = oldNextId // pointer to the one after the end
+    } else {
+      const oldPrev = this.irFunction.regions[oldPrevId!]
+      compilerAssert(oldPrev, "prevRegion not found", { prevRegion, startRegion, endRegion });
+      oldPrev.nextRegion = oldNextId
+    }
+
+    if (oldSequence.lastChildRegion === endRegion) {
+      oldSequence.lastChildRegion = oldPrevId // pointer to the one before the start
+    } else {
+      const oldNext = this.irFunction.regions[oldNextId!]
+      compilerAssert(oldNext, "nextRegion not found", { prevRegion, startRegion, endRegion });
+      oldNext.prevRegion = oldPrevId
+    }
+
+    // Fix up parent sequence ids
+
+    for (let regionId: RegionId | null = startRegion; regionId !== null && regionId !== endRegion; regionId = this.irFunction.regions[regionId].nextRegion) {
+      this.irFunction.regions[regionId].parentSequence = parentSequence;
+    }
+
+  }
+    
+
   insertNewBlockRegion(): RegionId {
     const region = new BlockRegion()
     this.irFunction.regions.push(region);
@@ -303,7 +405,7 @@ export class RegionCodegen {
   }
 
   createInstructionId(parent: RegionId, instruction: IRInstruction): InstructionId {
-    const name = getInstructionIdentifier(instruction) ?? `instr${this.freshId++}`;
+    const name = getInstructionIdentifier(instruction) ?? this.newFreshId();
     return name as InstructionId;
   }
 
@@ -462,6 +564,38 @@ export class RegionCodegen {
     region.bodySequence = this.insertNewSequenceRegion(regionId);
     region.exitSequence = this.insertNewSequenceRegion(regionId);
     return regionId
+  }
+
+  splitBlockBeforeInstr(instrId: InstructionId) {
+    const prevRegionId = this.irFunction.getInstructionRegion(instrId)
+    const prevRegion = this.irFunction.regions[prevRegionId]
+    compilerAssert(prevRegion instanceof BlockRegion, "Region is not a block", { prevRegionId, prevRegion })
+    const sequenceId = prevRegion.parentSequence
+    compilerAssert(sequenceId !== null && sequenceId !== undefined, "Sequence not found", { prevRegionId, prevRegion, instrId })
+    // const instrIndex = instrId.instrId
+    // compilerAssert(instrIndex >= 0, "Instruction not found", { instrId, block })
+
+    const newRegionId = this.insertNewBlockRegion()
+    const newRegion = this.getBlockRegion(newRegionId)
+    this.insertSequenceChildAfter(sequenceId, prevRegionId, newRegionId)
+
+    const startNode = this.irFunction.getInstructionNode(instrId)!
+    const prevId = startNode.prev
+    const prevNode = this.irFunction.getInstructionNode(prevId!)
+    compilerAssert(prevNode, "prevNode not found", { prevId, prevNode, instrId, prevRegionId, newRegionId })
+    prevNode.next = null
+    startNode.prev = null
+    newRegion.parentSequence = sequenceId
+    newRegion.firstInstruction = instrId
+    newRegion.lastInstruction = newRegion.lastInstruction
+    prevRegion.lastInstruction = prevId
+    
+    for (let visitId: InstructionId | null = instrId; visitId !== null; visitId = this.irFunction.getInstructionNode(visitId)!.next) {
+      const node = this.irFunction.getInstructionNode(visitId)!
+      node.region = newRegionId
+    }
+
+    return [prevRegionId, newRegionId] as [RegionId, RegionId]
   }
 
   ////////////////////////////////////////////////////////////////////////////////////////////////
