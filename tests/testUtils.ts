@@ -20,10 +20,12 @@ import { InitializationCheckingPass } from '../borrow/initialization';
 import { insertCloseAccesses } from '../borrow/liveness';
 import { ExclusivityCheckingPass } from '../borrow/exclusivity';
 import { inlineProjectBundlesPass } from '../borrow/inlining';
-import { createRegionUsageMap, printIrFunction, SequenceId } from '../region/region_codegen';
+import { createRegionUsageMap, IrFunction, printIrFunction, SequenceId } from '../region/region_codegen';
 import { RegionReifyAccessPass } from '../region/reifyaccess';
 import { CloseRegionAccessPass } from '../region/liveness';
 import { RegionInitializationCheckingPass } from '../region/initialization';
+import { RegionExclusivityCheckingPass } from '../region/exclusivity';
+import { InlineRegionProjectBundlesPass, inlineRegionProjectBundlesPass } from '../region/inlining';
 
 const runTestInner = (
   testObject: TestObject,
@@ -118,6 +120,8 @@ const runMandatoryPasses = (fnGenerator: FunctionCodeGenerator, mod: Module, fn:
 
   let closeAccessPass = new CloseRegionAccessPass(fnGenerator.regionCodegen)
   let initPass = new RegionInitializationCheckingPass(fnGenerator.regionCodegen, irFunction)
+  let exclPass = new RegionExclusivityCheckingPass(irFunction)
+  
   try {
 
     irFunction.sequences.forEach((seq, seqId) => {
@@ -132,10 +136,8 @@ const runMandatoryPasses = (fnGenerator: FunctionCodeGenerator, mod: Module, fn:
   reify2.reifyAccesses();
 
   initPass.checkedInterpret()
-
   closeAccessPass.insertRegionCloseAccesses()
-  
-
+  exclPass.checkedInterpret()
   
 
   } catch (ex) {
@@ -275,6 +277,8 @@ export const runCompilerTest = (
     mod.functionMap = globalCompiler.compiledFunctions
     codeGenerator.functions = globalCompiler.compiledFunctions
 
+    const compiledRegionIr = new Map<Binding, IrFunction>()
+
     globalCompiler.compiledIr = new Map()
     globalCompiler.compiledFunctions.forEach((func) => {
       if (!func.body) return
@@ -290,8 +294,12 @@ export const runCompilerTest = (
       }
 
       globalCompiler.compiledIr.set(func.binding, fn)
+      compiledRegionIr.set(func.binding, fnGenerator.regionCodegen.irFunction)
     })
 
+
+    const inline = new InlineRegionProjectBundlesPass(globalCompiler, codeGenerator, compiledRegionIr)
+    inline.inlineRegionProjectBundlesPass()
     inlineProjectBundlesPass(globalCompiler, codeGenerator)
 
     // writeLlvmBytecodeBorrow(globalCompiler, writer)

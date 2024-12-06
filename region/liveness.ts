@@ -1,6 +1,6 @@
 import { compilerAssert } from "../src/defs";
 import { buildCFGFromRegions, ControlFlowGraph, ControlFlowGraphGeneric } from "../borrow/controlflow";
-import { AccessInstruction, BasicBlock, EndAccessInstruction, FunctionBlock, GetFieldPointerInstruction, IRInstruction, LoadFromAddressInstruction, PointerOffsetInstruction, ProjectBundleInstruction, formatInstruction, getInstructionOperands, getInstructionResult } from "../borrow/defs";
+import { AccessInstruction, BasicBlock, CommentInstruction, EndAccessInstruction, FunctionBlock, GetFieldPointerInstruction, IRInstruction, LoadFromAddressInstruction, PointerOffsetInstruction, ProjectBundleInstruction, formatInstruction, getInstructionOperands, getInstructionResult } from "../borrow/defs";
 import { BlockRegion, createRegionUsageMap, type InstructionId, IrDiagnostics, IrFunction, printIrFunction, Region, RegionCodegen, RegionId, Usage, UsageMap } from "./region_codegen";
 import { inspect } from "bun";
 
@@ -294,6 +294,19 @@ const closeAccess = (pass: CloseRegionAccessPass, sourceInstr: AccessInstruction
       if (liveness.livenessType === LivenessType.LiveIn) enclosingRegions.push(getEnclosingRegion(regionId))
     }
     if (enclosingRegions.length > 1) compilerAssert(enclosingRegions.every(r => r === enclosingRegions[0]), 'Multiple enclosing regions found', { dest, enclosingRegions })
+    // Don't bother with this?
+    // if (enclosingRegions[0] !== pass.irFunction.getInstructionRegion(dest)) {
+    //   let insertRegionId = enclosingRegions[0]
+    //   let insertRegion = pass.irFunction.regions[enclosingRegions[0]]
+    //   if (!(insertRegion instanceof BlockRegion)) {
+    //     const newRegionId = pass.codegen.insertNewBlockRegion()
+    //     pass.codegen.insertSequenceChildAfter(rootSequence, insertRegionId, newRegionId)
+    //     insertRegionId = newRegionId
+    //   }
+    //   pass.codegen.insertInstructionAtBeginning(insertRegionId, new CommentInstruction(`Project bundle end region`))
+    // }
+
+    // compilerAssert(insertRegion instanceof BlockRegion, 'Enclosing region is not a block region', { dest, enclosingRegionId: enclosingRegions[0] })
     pass.diagnostics.instructionNote(dest, `Enclosing region=${enclosingRegions[0]}`)
   }
 

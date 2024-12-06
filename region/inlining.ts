@@ -128,6 +128,7 @@ class ProjectYieldInliningPass {
       this.createParameterInstructions(newIr, projectInstr))
     this.diagnostics.instructionNote(inserts.lastId!, "Inserted inlining parameters")
 
+    this.codegen.insertInstructionAfter(instrId, new CommentInstruction(`Deleted project bundle (${instrId})`))
     this.codegen.deleteInstruction(instrId)
     // this.diagnostics.instructionNote(instrId, "To be deleted")
 
@@ -135,25 +136,9 @@ class ProjectYieldInliningPass {
     // prev.instructions.push(...this.createParameterInstructions(newIr, projectInstr, mapping))
     // next.instructions.shift() // Remove the project instruction
 
-
-    const endInstrs = filterInstructions(fn, (instr) => instr instanceof EndAccessInstruction && instr.source === projectInstr.target)
-    compilerAssert(endInstrs.length > 0, "End instruction not found", { instrId })
-    compilerAssert(endInstrs.length === 1, "Multiple end instructions not supported yet", { instrId })
-
-    const endInstrId = endInstrs[0]
-    compilerAssert(endInstrId, "End instruction not found", { instrId, fn })
-
-    const endRegionId = fn.getInstructionRegion(endInstrId);
-    const endSequenceId = fn.regions[endRegionId].parentSequence
-    compilerAssert(endSequenceId === originalSequenceId, "End sequence not the same. Not implemented yet", { endSequenceId, originalSequenceId })
-
-    const [endPrev, endNext] = this.codegen.splitBlockBeforeInstr(endInstrId)
-
-    this.diagnostics.instructionNote(endInstrId, "To be deleted")
-
     printIrFunction(newIr)
 
-    copyRegionsAfterRegion(this.codegen, this.mapping, fn, newIr, prev)
+    const newRegionsInserts = copyRegionsAfterRegion(this.codegen, this.mapping, fn, newIr, prev)
 
     const yieldInstrs = filterInstructions(fn, (instr) => instr instanceof YieldInstruction)
     compilerAssert(yieldInstrs.length > 0, "Yield instruction not found", { instrId })
@@ -163,6 +148,9 @@ class ProjectYieldInliningPass {
     const found = filterInstructions(fn, (instr) => instr instanceof YieldInstruction);
     // compilerAssert(found, "Yield instruction not found", { instrId, yieldInstrId })
     compilerAssert(found.includes(yieldInstrId), "Not found yield instr", { yieldInstrs, found, mapped: yieldInstrs.map(f => this.mapping[f]) })
+
+    const yieldSeq = fn.regions[fn.getInstructionRegion(yieldInstrId)].parentSequence
+    compilerAssert(yieldSeq === originalSequenceId, "Yield not in the root sequence. Not implemented yet", { yieldInstrId, yieldSeq, originalSequenceId }) // TODO: Will need to consider how to handle this with multiple end instructions
 
     const [yieldPrev, yieldNext] = this.codegen.splitBlockBeforeInstr(yieldInstrId)
     
@@ -181,7 +169,58 @@ class ProjectYieldInliningPass {
     this.codegen.deleteInstruction(yieldInstrId)
     // this.diagnostics.instructionNote(yieldInstrId, "To be deleted")
 
-    this.codegen.moveRegionsToAfter(yieldPrev, endPrev, endPrev)
+    const moveRange = (() => {
+
+      const endInstrs = filterInstructions(fn, (instr) => instr instanceof EndAccessInstruction && instr.source === projectInstr.target)
+      compilerAssert(endInstrs.length > 0, "End instruction not found", { instrId })
+
+      if (endInstrs.length === 1) {
+        
+        // If there is only one end instruction, we can split the region at the end instruction
+        // position and move the first part of the region inside the new function
+
+        const endInstrId = endInstrs[0]
+        compilerAssert(endInstrId, "End instruction not found", { instrId, fn })
+
+        const endRegionId = fn.getInstructionRegion(endInstrId);
+        const endSequenceId = fn.regions[endRegionId].parentSequence
+        compilerAssert(endSequenceId === originalSequenceId, "End sequence not the same. Not implemented yet", { endSequenceId, originalSequenceId })
+
+        const [endPrev, endNext] = this.codegen.splitBlockBeforeInstr(endInstrId)
+
+        this.diagnostics.instructionNote(endInstrId, "To be deleted")
+
+        this.codegen.moveRegionsToAfter(yieldPrev, endPrev, endPrev) // Only move the endPrev region
+
+      } else {
+
+        // If there are multiple end instructions, we need to do some trickery
+
+        const enclosingRegions = endInstrs.map(endInstrId => getEnclosingRegion(instrId, endInstrId))
+        compilerAssert(enclosingRegions.every((r) => r === enclosingRegions[0]), "Not all enclosing regions are the same", { enclosingRegions })
+        const enclosingRegion = enclosingRegions[0]
+
+        // compilerAssert(false, "Not implemented yet", { next, endInstrs, enclosingRegion, newRegionsInserts, yieldPrev, yieldNext })
+        this.codegen.moveRegionsToAfter(yieldPrev, next, enclosingRegion)
+
+      }
+      
+    })()
+
+    function getEnclosingRegion(startBundleId: InstructionId, instr: InstructionId) {
+      const rootSequence = fn.regions[fn.getInstructionRegion(startBundleId)].parentSequence
+      const endRegionId = fn.getInstructionRegion(instr)
+      let regionId: RegionId | null = endRegionId
+      while (regionId !== null) {
+        let region: Region = fn.regions[regionId];
+        if (region.parentSequence === rootSequence) return regionId
+        regionId = fn.sequences[region.parentSequence].parentRegion
+      }
+      compilerAssert(false, 'No enclosing region found', { endRegionId, instr })
+    }
+
+
+    // this.codegen.moveRegionsToAfter(yieldPrev, moveRange[0], moveRange[1])
 
     // compilerAssert(false, "Not implemented", { prev, next })
 
@@ -224,10 +263,15 @@ const copyRegionsAfterRegion = (
   const traverseSequence = (destParentSequenceId: SequenceId, prevRegionId: RegionId | null, sequenceId: SequenceId) => {
     const seq = sourceFn.sequences[sequenceId]
 
+    const inserts = { startRegionId: null as RegionId | null, endRegionId: null as RegionId | null }
+
     const insert = (newRegionId: RegionId) => {
       if (prevRegionId === null) codegen.insertSequenceChildAtBeginning(destParentSequenceId, newRegionId)
       else codegen.insertSequenceChildAfter(destParentSequenceId, prevRegionId, newRegionId)
+      if (!inserts.startRegionId) inserts.startRegionId = newRegionId
+      inserts.endRegionId = newRegionId
     }
+
     
     for (let regionId = seq.firstChildRegion; regionId !== null; regionId = sourceFn.regions[regionId].nextRegion) {
       const region = sourceFn.regions[regionId]
@@ -255,9 +299,10 @@ const copyRegionsAfterRegion = (
         prevRegionId = newRegionId
       }
     }
+    return inserts
   }
       
-  traverseSequence(existingSequence, prevRegionId, sourceFn.root)
+  return traverseSequence(existingSequence, prevRegionId, sourceFn.root)
 
 }
 
