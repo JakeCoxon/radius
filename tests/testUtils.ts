@@ -25,7 +25,8 @@ import { RegionReifyAccessPass } from '../region/reifyaccess';
 import { CloseRegionAccessPass } from '../region/liveness';
 import { RegionInitializationCheckingPass } from '../region/initialization';
 import { RegionExclusivityCheckingPass } from '../region/exclusivity';
-import { InlineRegionProjectBundlesPass, inlineRegionProjectBundlesPass } from '../region/inlining';
+import { InlineRegionProjectBundlesPass } from '../region/inlining';
+import { writeLlvmBytecodeBorrowRegion } from '../region/codegen_llvm_region';
 
 const runTestInner = (
   testObject: TestObject,
@@ -103,14 +104,14 @@ const runMandatoryPasses = (fnGenerator: FunctionCodeGenerator, mod: Module, fn:
 
 
   // Filter out blocks that are not reachable from the entry block
-  const cfgFirst = buildCFG(fn.blocks)
-  fn.blocks = cfgFirst.blocks.filter(b => cfgFirst.predecessors.get(b)!.length > 0 || b === cfgFirst.entry)
+  // const cfgFirst = buildCFG(fn.blocks)
+  // fn.blocks = cfgFirst.blocks.filter(b => cfgFirst.predecessors.get(b)!.length > 0 || b === cfgFirst.entry)
   
-  if (DebugLog) printIR(fn.blocks);
+  // if (DebugLog) printIR(fn.blocks);
 
-  const cfg = buildCFG(fn.blocks)
-  printCFG(cfg)
-  printDominators(cfg)
+  // const cfg = buildCFG(fn.blocks)
+  // printCFG(cfg)
+  // printDominators(cfg)
 
   // const reify = new ReifyAccessPass(cfg, fn);
   // reify.debugLog = DebugLog;
@@ -131,14 +132,15 @@ const runMandatoryPasses = (fnGenerator: FunctionCodeGenerator, mod: Module, fn:
       }
     })
 
-  const reify2 = new RegionReifyAccessPass(irFunction)
-  reify2.debugLog = true;
-  reify2.reifyAccesses();
+    printIrFunction(irFunction)
 
-  initPass.checkedInterpret()
-  closeAccessPass.insertRegionCloseAccesses()
-  exclPass.checkedInterpret()
-  
+    const reify2 = new RegionReifyAccessPass(irFunction)
+    reify2.debugLog = true;
+    reify2.reifyAccesses();
+
+    initPass.checkedInterpret()
+    closeAccessPass.insertRegionCloseAccesses()
+    exclPass.checkedInterpret()
 
   } catch (ex) {
     throw ex
@@ -149,28 +151,28 @@ const runMandatoryPasses = (fnGenerator: FunctionCodeGenerator, mod: Module, fn:
 
   }
 
-  if (DebugLog) printIR(fn.blocks);
+  // if (DebugLog) printIR(fn.blocks);
 
-  const interpreter = new InitializationCheckingPass(fnGenerator, mod, fn);
-  interpreter.debugLog = DebugLog;
-  interpreter.checkedInterpret();
+  // const interpreter = new InitializationCheckingPass(fnGenerator, mod, fn);
+  // interpreter.debugLog = DebugLog;
+  // interpreter.checkedInterpret();
 
-  console.log("Initialized")
-  if (DebugLog) printIR(fn.blocks);
+  // console.log("Initialized")
+  // if (DebugLog) printIR(fn.blocks);
 
-  console.log("")
-  insertCloseAccesses(cfg, fn.blocks, DebugLog)
+  // console.log("")
+  // insertCloseAccesses(cfg, fn.blocks, DebugLog)
 
-  console.log("Closed access")
-  if (DebugLog) printIR(fn.blocks);
+  // console.log("Closed access")
+  // if (DebugLog) printIR(fn.blocks);
 
-  const interpreter2 = new ExclusivityCheckingPass(fn)
-  interpreter2.debugLog = DebugLog;
-  interpreter2.checkedInterpret();
-  console.log("")
+  // const interpreter2 = new ExclusivityCheckingPass(fn)
+  // interpreter2.debugLog = DebugLog;
+  // interpreter2.checkedInterpret();
+  // console.log("")
 
-  console.log(``);
-  if (DebugLog) printIR(fn.blocks);
+  // console.log(``);
+  // if (DebugLog) printIR(fn.blocks);
   console.log(`\n/// finished ${fn.name} ///\n`);
 }
 
@@ -300,11 +302,8 @@ export const runCompilerTest = (
 
     const inline = new InlineRegionProjectBundlesPass(globalCompiler, codeGenerator, compiledRegionIr)
     inline.inlineRegionProjectBundlesPass()
-    inlineProjectBundlesPass(globalCompiler, codeGenerator)
+    globalCompiler.compiledRegionIr = compiledRegionIr
 
-    // writeLlvmBytecodeBorrow(globalCompiler, writer)
-
-    // writeBytecodeFile()
   } catch (ex) {
     gotError = true
 
@@ -358,7 +357,7 @@ export const runCompilerTest = (
 export const logError = (ex: Error, logger: Logger) => {
   if (ex instanceof Error) {
     // if (ex.stack) logger.log(ex.stack)
-    logger.log(ex.toString())
+    logger.log(ex.stack)
   }
   if (ex instanceof CompilerError) {
     const location = (ex.info as any).location as SourceLocation
@@ -392,7 +391,7 @@ export const writeLlvmBytecodeFile = async (testObject: TestObject) => {
   const file = Bun.file(path)
   const bytecodeWriter = file.writer()
   try {
-    writeLlvmBytecodeBorrow(testObject.globalCompiler, bytecodeWriter)
+    writeLlvmBytecodeBorrowRegion(testObject.globalCompiler, bytecodeWriter)
   } catch(ex) {
     // console.log(ex)
     logError(ex, testObject.logger)

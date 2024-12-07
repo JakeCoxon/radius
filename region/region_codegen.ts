@@ -59,6 +59,7 @@ export class WhileRegion {
   bodySequence: SequenceId
   exitSequence: SequenceId
   result: string
+  conditionRegister: string
   constructor() {}
 }
 
@@ -71,6 +72,7 @@ export class IfRegion {
   elseSequence: SequenceId
   exitSequence: SequenceId
   result: string
+  conditionRegister: string
   constructor() {}
 }
 

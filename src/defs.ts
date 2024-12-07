@@ -1,4 +1,5 @@
 import { FunctionBlock, IRInstruction } from "../borrow/defs";
+import { IrFunction } from "../region/region_codegen";
 import { Event, Task } from "./tasks";
 
 export type UnknownObject = {[key:string]:unknown}
@@ -895,6 +896,7 @@ export type GlobalCompilerState = {
   exports: {[key:string]: CompiledFunction},
   rootScope: Scope
   compiledIr: Map<Binding, FunctionBlock>
+  compiledRegionIr: Map<Binding, IrFunction>
 }
 export type ExternalCompilerOptions = {
   buildName: string
@@ -962,6 +964,8 @@ export const createDefaultGlobalCompiler = () => {
     initializerFunction: undefined, // Inserted later
     initializerFunctionBinding: new Binding(`radius_initializer`, FunctionType),
     mainFunction: undefined, // Inserted later
+    compiledIr: new Map(),
+    compiledRegionIr: new Map(),
     externalDefinitions: [],
     exports: {},
     rootScope: null!,

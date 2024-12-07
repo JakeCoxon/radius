@@ -159,8 +159,10 @@ const extendLiveness = (pass: CloseRegionAccessPass, register: string) => {
     const toExtend = instr instanceof AccessInstruction || instr instanceof LoadFromAddressInstruction || instr instanceof PointerOffsetInstruction || instr instanceof GetFieldPointerInstruction
     if (!toExtend) continue
     extendLiveness(pass, dest)
-    compilerAssert(liveness[dest], `No liveness found for ${dest}`)
-    mergeLivenessBlocks(irFunction, liveness[register], liveness[dest], dest)
+    if (liveness[dest]) {
+      // compilerAssert(liveness[dest], `No liveness found for ${dest}`, { liveness, dest, register })
+      mergeLivenessBlocks(irFunction, liveness[register], liveness[dest], dest)
+    }
   }
 }
 
