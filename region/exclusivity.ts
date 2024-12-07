@@ -1,6 +1,6 @@
 import { capabilitiesLargerOrEqualTo, Capability, CapabilityRanking, compilerAssert, FunctionParameter, Type } from "../src/defs";
 import { ControlFlowGraph, ControlFlowGraphGeneric, buildCFG, buildCFGFromRegions } from "../borrow/controlflow";
-import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, EndAccessInstruction, PhiInstruction, textColors, CommentInstruction, getInstructionResult, DeallocStackInstruction, CallExpressionNode, MarkInitializedInstruction, PointerOffsetInstruction, formatInstruction, ProjectBundleInstruction, YieldInstruction } from "../borrow/defs";
+import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, EndAccessInstruction, PhiInstruction, textColors, CommentInstruction, getInstructionResult, DeallocStackInstruction, CallExpressionNode, MarkInitializedInstruction, PointerOffsetInstruction, formatInstruction, ProjectBundleInstruction, YieldInstruction, BreakInstruction } from "../borrow/defs";
 import { RegionWorklist } from "./initialization";
 import { BlockRegion, InstructionId, IrFunction, RegionId } from "./region_codegen";
 
@@ -159,17 +159,18 @@ export class RegionExclusivityCheckingPass {
     else if (instr instanceof GetFieldPointerInstruction) this.handleGetFieldPointerInstruction(instr);
     else if (instr instanceof PointerOffsetInstruction)   this.handlePointerOffsetInstruction(instr);
     else if (instr instanceof BinaryOperationInstruction) this.handleBinaryOperationInstruction(instr);
-    else if (instr instanceof CallInstruction)            { }
-    else if (instr instanceof MarkInitializedInstruction) { }
-    else if (instr instanceof StoreToAddressInstruction)  { }
-    else if (instr instanceof ReturnInstruction)          { }
-    else if (instr instanceof JumpInstruction)            { }
-    else if (instr instanceof ConditionalJumpInstruction) { }
     else if (instr instanceof EndAccessInstruction)       this.endAccess(instrId, instr);
     else if (instr instanceof ProjectBundleInstruction)   this.handleProjectBundleInstruction(instrId, instr);
     else if (instr instanceof DeallocStackInstruction)    this.handleDeallocStackInstruction(instr);
     else if (instr instanceof YieldInstruction)           this.handleYieldInstruction(instr);
     else if (instr instanceof PhiInstruction)             this.handlePhiInstruction(instr);
+    else if (instr instanceof CallInstruction)            { }
+    else if (instr instanceof MarkInitializedInstruction) { }
+    else if (instr instanceof StoreToAddressInstruction)  { }
+    else if (instr instanceof ReturnInstruction)          { }
+    else if (instr instanceof BreakInstruction)           { }
+    else if (instr instanceof JumpInstruction)            { }
+    else if (instr instanceof ConditionalJumpInstruction) { }
     else if (instr instanceof CommentInstruction)         { }
     else compilerAssert(false, `Unknown instruction in exclusivity pass: ${instr.irType}`)
   }

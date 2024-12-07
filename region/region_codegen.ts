@@ -76,6 +76,16 @@ export class IfRegion {
   constructor() {}
 }
 
+export class ScopeRegion {
+  parentSequence: SequenceId
+  prevRegion: RegionId | null = null
+  nextRegion: RegionId | null = null
+  bodySequence: SequenceId
+  exitSequence: SequenceId
+  result: string
+  constructor() {}
+}
+
 export type InsertPosition = { startOfRegion: RegionId } | { endOfRegion: RegionId } | { afterInstruction: InstructionId } | { beforeInstruction: InstructionId };
 export const InsertPosition = {
   startOfRegion: (region: RegionId): InsertPosition => ({ startOfRegion: region }),
@@ -83,7 +93,7 @@ export const InsertPosition = {
   after: (instr: InstructionId): InsertPosition => ({ afterInstruction: instr }),
   before: (instr: InstructionId): InsertPosition => ({ beforeInstruction: instr }),
 }
-export type Region = BlockRegion | IfRegion | WhileRegion;
+export type Region = BlockRegion | IfRegion | WhileRegion | ScopeRegion;
 
 export class IrDiagnostics {
   instructionNotes: { instrId: InstructionId, note: string }[] = []
@@ -160,6 +170,11 @@ export const printIrFunction = (function_: IrFunction, diagnostics?: IrDiagnosti
       visitSequence(region.conditionSequence, "Cond", depth + 1, false, nextPrefix);
       visitSequence(region.bodySequence, "Body", depth + 1, false, nextPrefix);
       visitSequence(region.exitSequence, "Exit", depth + 1, true, nextPrefix);
+    } else if (region instanceof ScopeRegion) {
+      visitSequence(region.bodySequence, "Body", depth + 1, false, nextPrefix);
+      visitSequence(region.exitSequence, "Exit", depth + 1, true, nextPrefix);
+    } else {
+      compilerAssert(false, "Unknown region type", { region });
     }
   };
   const visitSequence = (sequenceId: number, label: string, depth = 0, isLast = true, prefix = "") => {
@@ -392,19 +407,13 @@ export class RegionCodegen {
 
     // Fix up parent sequence ids
 
-    for (let regionId: RegionId | null = startRegion; regionId !== null && regionId !== endRegion; regionId = this.irFunction.regions[regionId].nextRegion) {
+    const onePastEnd = this.irFunction.regions[endRegion].nextRegion
+    for (let regionId: RegionId | null = startRegion; regionId !== null && regionId !== onePastEnd; regionId = this.irFunction.regions[regionId].nextRegion) {
       this.irFunction.regions[regionId].parentSequence = parentSequence;
     }
 
   }
     
-
-  insertNewBlockRegion(): RegionId {
-    const region = new BlockRegion()
-    this.irFunction.regions.push(region);
-    const regionId = this.irFunction.regions.length - 1;
-    return regionId as RegionId;
-  }
 
   createInstructionId(parent: RegionId, instruction: IRInstruction): InstructionId {
     const name = getInstructionIdentifier(instruction) ?? this.newFreshId();
@@ -542,6 +551,17 @@ export class RegionCodegen {
     return this.insertInstructionAtPosition(replacingPosition, instruction);
   }
 
+  getIfRegion(region: RegionId): IfRegion { return this.irFunction.regions[region] as IfRegion; }
+  getWhileRegion(region: RegionId): WhileRegion { return this.irFunction.regions[region] as WhileRegion; }
+  getBlockRegion(region: RegionId): BlockRegion { return this.irFunction.regions[region] as BlockRegion; }
+  getScopeRegion(region: RegionId): ScopeRegion { return this.irFunction.regions[region] as ScopeRegion; }
+
+  insertNewBlockRegion(): RegionId {
+    const region = new BlockRegion()
+    this.irFunction.regions.push(region);
+    const regionId = this.irFunction.regions.length - 1;
+    return regionId as RegionId;
+  }
 
   insertNewIfRegion(): RegionId {
     const region = new IfRegion()
@@ -554,15 +574,20 @@ export class RegionCodegen {
     return regionId
   }
 
-  getIfRegion(region: RegionId): IfRegion { return this.irFunction.regions[region] as IfRegion; }
-  getWhileRegion(region: RegionId): WhileRegion { return this.irFunction.regions[region] as WhileRegion; }
-  getBlockRegion(region: RegionId): BlockRegion { return this.irFunction.regions[region] as BlockRegion; }
-  
   insertNewWhileRegion(): RegionId {
     const region = new WhileRegion()
     this.irFunction.regions.push(region);
     const regionId = this.irFunction.regions.length - 1 as RegionId
     region.conditionSequence = this.insertNewSequenceRegion(regionId);
+    region.bodySequence = this.insertNewSequenceRegion(regionId);
+    region.exitSequence = this.insertNewSequenceRegion(regionId);
+    return regionId
+  }
+
+  insertNewScopeRegion(): RegionId {
+    const region = new ScopeRegion()
+    this.irFunction.regions.push(region);
+    const regionId = this.irFunction.regions.length - 1 as RegionId
     region.bodySequence = this.insertNewSequenceRegion(regionId);
     region.exitSequence = this.insertNewSequenceRegion(regionId);
     return regionId

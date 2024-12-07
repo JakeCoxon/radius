@@ -1,3 +1,4 @@
+import { RegionId } from "../region/region_codegen";
 import { Binding, Capability, CompiledFunction, compilerAssert, escapeString, FunctionParameter, LetType, Type, TypeField } from "../src/defs";
 
 export class Pointer {
@@ -37,6 +38,7 @@ export class ConditionalJumpInstruction extends IRInstruction {     irType = 'cj
 export class BinaryOperationInstruction extends IRInstruction {     irType = 'binaryop';              constructor(public dest: string, public type: Type, public operator: string, public left: string, public right: string, public paramType: Type) { super(); } }
 export class CallInstruction extends IRInstruction {                irType = 'call';                  constructor(public target: string | null, public type: Type, public binding: Binding, public args: string[], public paramTypes: Type[], public capabilities: Capability[]) { super(); } }
 export class ReturnInstruction extends IRInstruction {              irType = 'return';                constructor(public type: Type, public value: string | null) { super(); } }
+export class BreakInstruction extends IRInstruction {               irType = 'break';                 constructor(public regionId: RegionId, public type: Type, public value: string | null) { super(); } }
 export class AccessInstruction extends IRInstruction {              irType = 'access';                constructor(public dest: string, public source: string, public capabilities: Capability[], public type: Type) { super(); } }
 export class EndAccessInstruction extends IRInstruction {           irType = 'end_access';            constructor(public source: string, public capabilities: Capability[]) { super(); } }
 export class ProjectBundleInstruction extends IRInstruction {       irType = 'project_bundle';        constructor(public target: string, public type: Type, public capabilities: Capability[], public source: string, public operands: string[], public funcs: {[key: string]: Binding}) { super(); } }
@@ -59,6 +61,7 @@ export const getInstructionOperands = (instr: IRInstruction): string[] => {
   else if (instr instanceof GetFieldPointerInstruction) { return [instr.address]; } 
   else if (instr instanceof PointerOffsetInstruction)   { return [instr.address, instr.offsetReg]; }
   else if (instr instanceof ReturnInstruction)          { return instr.value ? [instr.value] : []; } 
+  else if (instr instanceof BreakInstruction)           { return instr.value ? [instr.value] : []; } 
   else if (instr instanceof MoveInstruction)            { return [instr.target, instr.source]; }
   else if (instr instanceof PhiInstruction)             { return instr.sources.map(s => s.value); }
   else if (instr instanceof EndAccessInstruction)       { return [instr.source]; }
@@ -100,6 +103,7 @@ export const getInstructionResult = (instr: IRInstruction): string | null => {
   else if (instr instanceof ConditionalJumpInstruction) { return null; }
   else if (instr instanceof JumpInstruction)            { return null; }
   else if (instr instanceof YieldInstruction)           { return instr.dest; }
+  else if (instr instanceof BreakInstruction)           { return null; }
   else { compilerAssert(false, 'Unknown instruction type', { instr }) }
 }
 
@@ -127,6 +131,7 @@ export const getInstructionIdentifier = (instr: IRInstruction): string | null =>
   else if (instr instanceof ConditionalJumpInstruction) { return null; }
   else if (instr instanceof JumpInstruction)            { return null; }
   else if (instr instanceof YieldInstruction)           { return instr.dest; }
+  else if (instr instanceof BreakInstruction)           { return null; }
   else { compilerAssert(false, 'Unknown instruction type', { instr }) }
 }
 
@@ -222,6 +227,8 @@ export function formatInstruction(instr: IRInstruction): string {
     return `into ${instr.target} call ${instr.binding.name}(${instr.args.join(', ')})`;
   } else if (instr instanceof ReturnInstruction) {
     return `return ${instr.value}`;
+  } else if (instr instanceof BreakInstruction) {
+    return `break ${instr.value} to region ${instr.regionId}`;
   } else if (instr instanceof StoreToAddressInstruction) {
     return `into ${instr.address} store ${instr.source}`;
   } else if (instr instanceof LoadFromAddressInstruction) {

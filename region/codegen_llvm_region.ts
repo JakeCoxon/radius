@@ -1,7 +1,7 @@
 import { externalBuiltinBindings } from "../src/compiler_sugar";
 import { Ast, AstType, AstWriterTable, Binding, BindingAst, BlockAst, BoolType, CallAst, Capability, CompiledFunction, ConcreteClassType, ConstructorAst, DefaultConsAst, DoubleType, FileWriter, FloatType, FunctionType, GlobalCompilerState, IntType, LetAst, ListTypeConstructor, LlvmFunctionWriter, LlvmWriter, NeverType, NumberAst, ParameterizedType, Pointer, PrimitiveType, RawPointerType, Register, SetAst, SourceLocation, StatementsAst, StringType, Type, TypeField, UserCallAst, ValueFieldAst, VoidType, compilerAssert, escapeString, isAst, isType, textColors, u64Type, u8Type } from "../src/defs";
-import { AccessInstruction, AllocInstruction, AssignInstruction, BinaryOperationInstruction, CallInstruction, CommentInstruction, ConditionalJumpInstruction, EndAccessInstruction, formatInstruction, FunctionBlock, GetFieldPointerInstruction, getInstructionResult, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, MarkInitializedInstruction, PhiInstruction, PhiSource, PointerOffsetInstruction, ReturnInstruction, StoreToAddressInstruction } from "../borrow/defs";
-import { BlockRegion, IfRegion, IrFunction, SequenceId } from "./region_codegen";
+import { AccessInstruction, AllocInstruction, AssignInstruction, BinaryOperationInstruction, BreakInstruction, CallInstruction, CommentInstruction, ConditionalJumpInstruction, EndAccessInstruction, formatInstruction, FunctionBlock, GetFieldPointerInstruction, getInstructionResult, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, MarkInitializedInstruction, PhiInstruction, PhiSource, PointerOffsetInstruction, ReturnInstruction, StoreToAddressInstruction } from "../borrow/defs";
+import { BlockRegion, IfRegion, IrFunction, ScopeRegion, SequenceId, WhileRegion } from "./region_codegen";
 
 // Some useful commands
 //
@@ -313,13 +313,19 @@ const instructionWriter = {
     // pass
   },
 }
+
+const formatCJump = (writer: LlvmFunctionWriter, condition: string, target: string, elseTarget: string) => {
+  format(writer, "  br i1 $, label $, label $\n", register(condition), register(target), register(elseTarget))
+}
+const formatJump = (writer: LlvmFunctionWriter, target: string) => {
+  format(writer, "  br label $\n", register(target))
+}
+
 const writeInstructions = (writer: LlvmFunctionWriter, fnIr: IrFunction) => {
 
   const labels = fnIr.sequences.map((_, i) => freshLabel(writer))
 
-  const traverseSequence = (sequenceId: SequenceId, toJump: boolean) => {
-
-    if (toJump) instructionWriter.jump(writer, new JumpInstruction(labels[sequenceId]))
+  const traverseSequence = (sequenceId: SequenceId) => {
 
     format(writer, "\n  ; ## Sequence $ ($)\n\n", sequenceId, labels[sequenceId])
     format(writer, "$:\n", labels[sequenceId])
@@ -334,33 +340,48 @@ const writeInstructions = (writer: LlvmFunctionWriter, fnIr: IrFunction) => {
         format(writer, "  ; End block\n")
       } else if (region instanceof IfRegion) {
         format(writer, "\n  ; ### If Region $\n\n", regionId)
-        traverseSequence(region.conditionSequence, true)
+        formatJump(writer, labels[region.conditionSequence])
+        traverseSequence(region.conditionSequence)
         compilerAssert(region.conditionRegister !== null && region.conditionRegister !== undefined, "No result found", { region, regionId: fnIr.sequences[region.conditionSequence].lastChildRegion })
-        instructionWriter.cjump(writer, new ConditionalJumpInstruction(region.conditionRegister, labels[region.thenSequence], labels[region.elseSequence]))
-        traverseSequence(region.thenSequence, false)
-        instructionWriter.jump(writer, new JumpInstruction(labels[region.exitSequence]))
-        traverseSequence(region.elseSequence, false)
-        instructionWriter.jump(writer, new JumpInstruction(labels[region.exitSequence]))
-        traverseSequence(region.exitSequence, false)
+        formatCJump(writer, region.conditionRegister, labels[region.thenSequence], labels[region.elseSequence])
+        traverseSequence(region.thenSequence)
+        formatJump(writer, labels[region.exitSequence])
+        traverseSequence(region.elseSequence)
+        formatJump(writer, labels[region.exitSequence])
+        traverseSequence(region.exitSequence)
         format(writer, "  ; End if\n")
-      } else {
+      } else if (region instanceof WhileRegion) {
         format(writer, "\n  ; ### While Region $\n\n", regionId)
-        traverseSequence(region.conditionSequence, true)
+        formatJump(writer, labels[region.conditionSequence])
+        traverseSequence(region.conditionSequence)
         compilerAssert(region.conditionRegister !== null && region.conditionRegister !== undefined, "No result found", { region, regionId: fnIr.sequences[region.conditionSequence].lastChildRegion })
-        instructionWriter.cjump(writer, new ConditionalJumpInstruction(region.conditionRegister, labels[region.bodySequence], labels[region.exitSequence]))
-        traverseSequence(region.bodySequence, false)
-        instructionWriter.jump(writer, new JumpInstruction(labels[region.conditionSequence]))
-        traverseSequence(region.exitSequence, false)
+        formatCJump(writer, region.conditionRegister, labels[region.bodySequence], labels[region.exitSequence])
+        traverseSequence(region.bodySequence)
+        formatJump(writer, labels[region.conditionSequence])
+        traverseSequence(region.exitSequence)
         format(writer, "  ; End loop\n")
-      }
+      } else if (region instanceof ScopeRegion) {
+        format(writer, "\n  ; ### Scope Region $\n\n", regionId)
+        formatJump(writer, labels[region.bodySequence])
+        traverseSequence(region.bodySequence)
+        formatJump(writer, labels[region.exitSequence])
+        traverseSequence(region.exitSequence)
+        format(writer, "  ; End scope\n")
+      } else compilerAssert(false, "Unknown region", { region })
     }
   }
 
-  traverseSequence(fnIr.root, true)
+  formatJump(writer, labels[fnIr.root])
+  traverseSequence(fnIr.root)
 
   function printBlock(region: BlockRegion) {
     for (let instrId = region.firstInstruction; instrId !== null; instrId = fnIr.instructions[instrId].next) {
       const instr = fnIr.instructions[instrId].instruction
+      if (instr instanceof BreakInstruction) {
+        const region = fnIr.regions[instr.regionId] as ScopeRegion
+        formatJump(writer, labels[region.exitSequence])
+        continue
+      }
       const func = (instructionWriter as any)[instr.irType]
       compilerAssert(func, `Instruction not found ${instr.irType}`, { instr })
       func(writer, instr)

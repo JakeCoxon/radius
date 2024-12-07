@@ -1,4 +1,4 @@
-import { BlockRegion, IfRegion, IrFunction, RegionId, SequenceId, WhileRegion } from "../region/region_codegen";
+import { BlockRegion, IfRegion, IrFunction, RegionId, ScopeRegion, SequenceId, WhileRegion } from "../region/region_codegen";
 import { compilerAssert } from "../src/defs";
 import { BasicBlock, ConditionalJumpInstruction, JumpInstruction } from "./defs";
 
@@ -311,6 +311,15 @@ export const buildCFGFromRegions = (irFunction: IrFunction): ControlFlowGraphGen
       compilerAssert(body, "No body block found", { region })
       cfg.addEdge(body, cond);
       cfg.addEdge(cond, exit);
+      return visitSequence(null, region.exitSequence);
+    } else if (region instanceof ScopeRegion) {
+      const first = firstBlockRegion(region.bodySequence);
+      const exit = firstBlockRegion(region.exitSequence);
+      compilerAssert(first, "No body block found", { region })
+      compilerAssert(exit, "No exit block found", { region })
+      const body = visitSequence(prevRegionId, region.bodySequence);
+      compilerAssert(body, "No body block found", { region })
+      cfg.addEdge(body, exit);
       return visitSequence(null, region.exitSequence);
     }
     compilerAssert(false, "Unknown region type", { region })

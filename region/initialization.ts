@@ -1,7 +1,7 @@
 import { Binding, Capability, compilerAssert, ConcreteClassType, PrimitiveType, Type, VoidType } from "../src/defs";
 import { CodeGenerator, FunctionCodeGenerator } from "../borrow/codegen_ir";
 import { ControlFlowGraph, ControlFlowGraphGeneric, buildCFG, buildCFGFromRegions } from "../borrow/controlflow";
-import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, EndAccessInstruction, PhiInstruction, MoveInstruction, CommentInstruction, textColors, MarkInitializedInstruction, formatInstruction, Module, DeallocStackInstruction, PointerOffsetInstruction, printIR, ProjectBundleInstruction, YieldInstruction } from "../borrow/defs";
+import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, EndAccessInstruction, PhiInstruction, MoveInstruction, CommentInstruction, textColors, MarkInitializedInstruction, formatInstruction, Module, DeallocStackInstruction, PointerOffsetInstruction, printIR, ProjectBundleInstruction, YieldInstruction, BreakInstruction } from "../borrow/defs";
 import { BlockRegion, InsertPosition, InstructionId, IrDiagnostics, IrFunction, printIrFunction, RegionCodegen, RegionId } from "./region_codegen";
 
 type InitializationState = Top | Bottom | Sequence;
@@ -79,8 +79,10 @@ export class RegionInitializationCheckingPass {
       console.error(e);
       console.log("Current block", this.currentRegion);
       console.log("Current instr", this.currentInstr);
-      printLocals(this.state.locals);
-      printMemory(this.state.memory);
+      if (this.state) {
+        printLocals(this.state.locals);
+        printMemory(this.state.memory);
+      }
       // this.printDebug()
       throw e;
     }
@@ -207,6 +209,7 @@ export class RegionInitializationCheckingPass {
     else if (instr instanceof GetFieldPointerInstruction) this.executeGetFieldPointer(instr);
     else if (instr instanceof PointerOffsetInstruction)   this.executePointerOffset(instr);
     else if (instr instanceof JumpInstruction)            { }
+    else if (instr instanceof BreakInstruction)           { }
     else if (instr instanceof ConditionalJumpInstruction) this.executeConditionalJump(instr);
     else if (instr instanceof ProjectBundleInstruction)   this.executeProjectBundle(instr);
     else if (instr instanceof EndAccessInstruction)       { }

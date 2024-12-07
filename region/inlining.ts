@@ -126,7 +126,8 @@ class ProjectYieldInliningPass {
     const newRegionsInserts = copyRegionsAfterRegion(this.codegen, this.mapping, fn, newIr, prev)
 
     // Handle returns
-    for (let regionId = newRegionsInserts.startRegionId, endRegionId = fn.regions[newRegionsInserts.endRegionId!].nextRegion; regionId !== null && regionId !== endRegionId; regionId = fn.regions[regionId].nextRegion) {
+    const onePastEndRegionId = fn.regions[newRegionsInserts.endRegionId!].nextRegion
+    for (let regionId = newRegionsInserts.startRegionId; regionId !== null && regionId !== onePastEndRegionId; regionId = fn.regions[regionId].nextRegion) {
       const region = fn.regions[regionId]
       if (region instanceof BlockRegion) {
         for (let instrId = region.firstInstruction; instrId !== null; instrId = fn.getInstructionNode(instrId)?.next ?? null) {

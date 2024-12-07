@@ -1,7 +1,7 @@
-import { IrFunction, printIrFunction, RegionCodegen } from "../region/region_codegen";
+import { IrFunction, printIrFunction, RegionCodegen, RegionId } from "../region/region_codegen";
 import { externalBuiltinBindings } from "../src/compiler_sugar";
 import { AndAst, Ast, Binding, BindingAst, BlockAst, BoolAst, BoolType, BreakAst, CallAst, Capability, CastAst, CompiledFunction, compilerAssert, ConstructorAst, DefaultConsAst, FieldAst, FunctionParameter, IfAst, IntType, LetAst, LetType, MutSigilAst, NotAst, NumberAst, OperatorAst, OrAst, ParameterizedType, PrimitiveType, RawPointerType, ReturnAst, SetAst, SetFieldAst, SetSubscriptAst, SetValueFieldAst, SourceLocation, StatementsAst, StringAst, SubscriptAst, Type, UserCallAst, ValueFieldAst, VoidAst, VoidType, WhileAst, YieldAst } from "../src/defs";
-import { ASTNode, AllocInstruction, AssignInstruction, AssignmentNode, BasicBlock, BinaryExpressionNode, BinaryOperationInstruction, BlockStatementNode, CallExpressionNode, CallInstruction, AccessInstruction, ConditionalJumpInstruction, CreateStructNode, ExpressionNode, ExpressionStatementNode, FunctionBlock, FunctionDeclarationNode, IRInstruction, IRValue, IdentifierNode, IfStatementNode, JumpInstruction, LetConstNode, LiteralNode, LoadConstantInstruction, LoadFromAddressInstruction, MemberExpressionNode, ProgramNode, Pointer, Value, ReturnInstruction, ReturnNode, StoreToAddressInstruction, Variable, VariableDeclarationNode, WhileStatementNode, GetFieldPointerInstruction, AndNode, OrNode, PhiInstruction, CommentInstruction, MoveInstruction, EndAccessInstruction, printIR, MarkInitializedInstruction, InstructionId, PhiSource, DeallocStackInstruction, PointerOffsetInstruction, ProjectBundleInstruction, YieldInstruction } from "./defs";
+import { ASTNode, AllocInstruction, AssignInstruction, AssignmentNode, BasicBlock, BinaryExpressionNode, BinaryOperationInstruction, BlockStatementNode, CallExpressionNode, CallInstruction, AccessInstruction, ConditionalJumpInstruction, CreateStructNode, ExpressionNode, ExpressionStatementNode, FunctionBlock, FunctionDeclarationNode, IRInstruction, IRValue, IdentifierNode, IfStatementNode, JumpInstruction, LetConstNode, LiteralNode, LoadConstantInstruction, LoadFromAddressInstruction, MemberExpressionNode, ProgramNode, Pointer, Value, ReturnInstruction, ReturnNode, StoreToAddressInstruction, Variable, VariableDeclarationNode, WhileStatementNode, GetFieldPointerInstruction, AndNode, OrNode, PhiInstruction, CommentInstruction, MoveInstruction, EndAccessInstruction, printIR, MarkInitializedInstruction, InstructionId, PhiSource, DeallocStackInstruction, PointerOffsetInstruction, ProjectBundleInstruction, YieldInstruction, BreakInstruction } from "./defs";
 
 type ExpressionContext = {
   valueCategory: 'rvalue' | 'lvalue';
@@ -9,6 +9,7 @@ type ExpressionContext = {
 
 class Scope {
   allocs: [string, Type][] = []
+  regionId: RegionId | null = null
   constructor(public debugName: string, public breakBlockLabel: string | null = null) {}
 }
 
@@ -248,6 +249,13 @@ export class FunctionCodeGenerator {
 
   // TODO: Fold these together
   generateBlockStatement(ast: BlockAst) {
+
+    const scopeRegionId = this.regionCodegen.insertNewScopeRegion()
+    const scopeRegion = this.regionCodegen.getScopeRegion(scopeRegionId)
+    this.regionCodegen.insertChildSequenceAndPushState(scopeRegionId)
+
+    this.regionCodegen.enterRegionSequence(scopeRegionId, scopeRegion.bodySequence)
+
     const blockRegion = this.regionCodegen.insertNewBlockRegion();
     this.regionCodegen.insertChildSequence(blockRegion)
     this.regionCodegen.blockRegion = blockRegion
@@ -256,16 +264,19 @@ export class FunctionCodeGenerator {
 
     const label = this.newLabel()
     const scope = new Scope(`Block stmt ${ast.binding.name}`, label)
+    scope.regionId = scopeRegionId
     this.scopes.push(scope);
     this.blockScopeDepth.set(ast.binding, this.scopes.length - 1)
     this.generate(ast.body)
     this.finalizeScope()
 
-    const blockRegion2 = this.regionCodegen.insertNewBlockRegion();
-    this.regionCodegen.insertChildSequence(blockRegion2)
-    this.regionCodegen.blockRegion = blockRegion2
+    // const blockRegion2 = this.regionCodegen.insertNewBlockRegion();
+    // this.regionCodegen.insertChildSequence(blockRegion2)
+    // this.regionCodegen.blockRegion = blockRegion2
 
-    this.addInstruction(new JumpInstruction(label))
+    this.regionCodegen.popRegionState()
+
+    // this.addInstruction(new JumpInstruction(label))
     this.scopes.pop()
     this.newBlock(label)
   }
@@ -278,8 +289,15 @@ export class FunctionCodeGenerator {
     const scope = new Scope("Block expr", label)
     this.scopes.push(scope)
     this.blockScopeDepth.set(ast.binding, this.scopes.length - 1)
+
+    const scopeRegionId = this.regionCodegen.insertNewScopeRegion()
+    const scopeRegion = this.regionCodegen.getScopeRegion(scopeRegionId)
+    this.regionCodegen.insertChildSequenceAndPushState(scopeRegionId)
+    scope.regionId = scopeRegionId
     
+    this.regionCodegen.enterRegionSequence(scopeRegionId, scopeRegion.bodySequence)
     const blockRegion = this.regionCodegen.insertNewBlockRegion();
+
     this.regionCodegen.insertChildSequence(blockRegion)
     this.regionCodegen.blockRegion = blockRegion
 
@@ -294,25 +312,30 @@ export class FunctionCodeGenerator {
     }
     this.finalizeScope()
 
-    const blockRegion2 = this.regionCodegen.insertNewBlockRegion();
-    this.regionCodegen.insertChildSequence(blockRegion2)
-    this.regionCodegen.blockRegion = blockRegion
+    // const blockRegion2 = this.regionCodegen.insertNewBlockRegion();
+    // this.regionCodegen.insertChildSequence(blockRegion2)
+    // this.regionCodegen.blockRegion = blockRegion
 
-    this.addInstruction(new JumpInstruction(label))
+    this.regionCodegen.popRegionState()
+
+    // this.addInstruction(new JumpInstruction(label))
     this.scopes.pop()
     this.newBlock(label)
     return new Pointer(resultPtr)
   }
 
   generateBreakStatement(ast: BreakAst) {
-    compilerAssert(false, 'Not implemented break statement', { ast })
     const depth = this.blockScopeDepth.get(ast.binding)
     compilerAssert(depth !== undefined, `Block depth not found: ${ast.binding.name}`)
     const scope = this.scopes[depth]
     compilerAssert(scope, `Block scope not found: ${ast.binding.name}`)
     const label = scope.breakBlockLabel
     compilerAssert(label, `Break label not found: ${ast.binding.name}`)
-    this.addInstruction(new JumpInstruction(label))
+    compilerAssert(scope.regionId, `Region id not found: ${ast.binding.name}`)
+    compilerAssert(ast.expr === null, 'Break statement must not have an expression', { ast })
+    this.addInstruction(new CommentInstruction(`Break ${ast.binding.name} ${scope.regionId}`))
+    this.addInstruction(new BreakInstruction(scope.regionId, VoidType, null))
+    // this.addInstruction(new JumpInstruction(label))
     this._createUnusedBlock()
   }
 
