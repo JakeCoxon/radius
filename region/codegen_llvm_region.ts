@@ -23,29 +23,6 @@ import { BlockRegion, IfRegion, IrFunction, ScopeRegion, SequenceId, WhileRegion
 // `),`,
 
 
-const operatorMapSignedInt: {[key: string]:string} = {
-  "+": "add",
-  "-": "sub",
-  "*": "mul",
-  "/": "sdiv", // signed
-  "==": "icmp eq",
-  "!=": "icmp ne",
-
-  "<<": "shl",
-  ">>": "lshr", // Logical shift right
-
-  "&": "and",
-  "|": "or",
-
-  // Signed
-  ">": "icmp sgt",
-  "<": "icmp slt",
-  "<=": "icmp sle",
-  ">=": "icmp sge",
-
-  "mod": "srem"
-}
-
 const operatorMapUnsignedInt: {[key: string]:string} = {
   "+": "add",
   "-": "sub",
@@ -69,29 +46,48 @@ const operatorMapUnsignedInt: {[key: string]:string} = {
   "mod": "urem"
 }
 
-const operatorMapFloat: {[key: string]:string} = {
-  "+": "fadd",
-  "-": "fsub",
-  "*": "fmul",
-  "/": "fdiv",
+const operatorMapAll: {[key: string]: (writer: Writable, typeName: string, left: string, right: string) => string} = {
+  // Result type _ param type _ operator
+  
+  "int_int_+":      (w, t, l, r) => `add ${t} ${l}, ${r}`,
+  "int_int_-":      (w, t, l, r) => `sub ${t} ${l}, ${r}`,
+  "int_int_*":      (w, t, l, r) => `mul ${t} ${l}, ${r}`,
+  "int_int_/":      (w, t, l, r) => `sdiv ${t} ${l}, ${r}`,
+  "bool_int_==":    (w, t, l, r) => `icmp eq ${t} ${l}, ${r}`,
+  "bool_int_!=":    (w, t, l, r) => `icmp ne ${t} ${l}, ${r}`,
+  "int_int_<<":     (w, t, l, r) => `shl ${t} ${l}, ${r}`,
+  "int_int_>>":     (w, t, l, r) => `lshr ${t} ${l}, ${r}`, // Logical shift right
+  "int_int_&":      (w, t, l, r) => `and ${t} ${l}, ${r}`,
+  "int_int_|":      (w, t, l, r) => `or ${t} ${l}, ${r}`,
+  "int_int_>":      (w, t, l, r) => `icmp sgt ${t} ${l}, ${r}`,
+  "int_int_<":      (w, t, l, r) => `icmp slt ${t} ${l}, ${r}`,
+  "int_int_<=":     (w, t, l, r) => `icmp sle ${t} ${l}, ${r}`,
+  "int_int_>=":     (w, t, l, r) => `icmp sge ${t} ${l}, ${r}`,
+  "int_int_mod":    (w, t, l, r) => `srem ${t} ${l}, ${r}`,
+
+  "float_float_+":  (w, t, l, r) => `fadd ${t} ${l}, ${r}`,
+  "float_float_-":  (w, t, l, r) => `fsub ${t} ${l}, ${r}`,
+  "float_float_*":  (w, t, l, r) => `fmul ${t} ${l}, ${r}`,
+  "float_float_/":  (w, t, l, r) => `fdiv ${t} ${l}, ${r}`,
 
   // https://llvm.org/docs/LangRef.html#fcmp-instruction
   // O means ordered
-  "==": "fcmp oeq",
-  "!=": "fcmp one",
-  ">": "fcmp ogt",
-  "<": "fcmp olt",
-  "<=": "fcmp ole",
-  ">=": "fcmp oge",
+  "bool_float_==":  (w, t, l, r) => `fcmp oeq ${t} ${l}, ${r}`,
+  "bool_float_!=":  (w, t, l, r) => `fcmp one ${t} ${l}, ${r}`,
+  "float_float_>":  (w, t, l, r) => `fcmp ogt ${t} ${l}, ${r}`,
+  "float_float_<":  (w, t, l, r) => `fcmp olt ${t} ${l}, ${r}`,
+  "float_float_<=": (w, t, l, r) => `fcmp ole ${t} ${l}, ${r}`,
+  "float_float_>=": (w, t, l, r) => `fcmp oge ${t} ${l}, ${r}`,
+  
+  "bool_bool_&":    (w, t, l, r) => `and ${t} ${l}, ${r}`,
+  "bool_bool_|":    (w, t, l, r) => `or ${t} ${l}, ${r}`,
+  "bool_bool_==":   (w, t, l, r) => `icmp eq ${t} ${l}, ${r}`,
+  "bool_bool_!=":   (w, t, l, r) => `icmp ne ${t} ${l}, ${r}`,
+
+  "int_float_cast": (w, t, l, r) => `fptosi float ${l} to i32`,
+  // "int_float_cast": (w, t, l, r) => `sitofp i32 ${l} to float`,
 }
-
-const operatorMapLogical: {[key: string]:string} = {
-  "&": "and",
-  "|": "or",
-  "==": "icmp eq",
-  "!=": "icmp ne",
-};
-
+  
 const log = (...args: any[]) => {
   if ((globalThis as any).logger) (globalThis as any).logger.log(...args)
 }
@@ -225,11 +221,14 @@ const instructionWriter = {
       format(writer, "  $ = xor $ 1, $ ; not\n", dest, instr.type, register(instr.left))
       return
     }
-    const paramType = instr.paramType
-    const operatorMap = paramType === IntType || paramType === u64Type ? operatorMapSignedInt : paramType === FloatType || paramType === DoubleType ? operatorMapFloat : operatorMapLogical
-    const operator = operatorMap[instr.operator]
-    compilerAssert(operator, "Operator not found", { instr })
-    format(writer, "  $ = $ $ $, $\n", dest, operator, paramType, register(instr.left), register(instr.right))
+    const key = `${instr.type.shortName}_${instr.paramType.shortName}_${instr.operator}`
+    const operator = operatorMapAll[key]
+    compilerAssert(operator, "Operator not found", { key, instr })
+    const typeName = getTypeName(writer.writer, instr.paramType)
+    const left = getRegisterName(writer, instr.left)
+    const right = instr.right ? getRegisterName(writer, instr.right) : ''
+    const op = operator(writer, typeName, left, right)
+    format(writer, "  $ = $\n", dest, op)
   },
 
   store_to_address: (writer: LlvmFunctionWriter, instr: StoreToAddressInstruction) => {

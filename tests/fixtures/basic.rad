@@ -299,13 +299,13 @@ fn test_array3():
   # print(arr3[0])
   # print(arr3[1]
   
-  # array_iterate_inout(arr, {|x|
-  #   print(x.len)
-  #   if x.len > 0:
-  #     x[0].x = 123
+  array_iterate_inout(arr, {|x|
+    print(x.len)
+    if x.len > 0:
+      x[0].x = 123
 
-  #   print_array(x)
-  # })
+    print_array(x)
+  })
 
   for x in arr:
     for y in x:
@@ -460,12 +460,20 @@ fn test_break():
   print("Done")
 
 
+fn test_borrow():
+  var foo = Foo(1, 2.0)
+  var ref foo2 = foo
+  if true:
+    let x = foo2.x
+    print(x)
+
 fn main():
 
   # test_array1()
   # test_break()
   # # test_array2()
-  test_array3()
+  # test_array3()
+  test_borrow()
   # test_move()
   # test_project()
   # test_loop()

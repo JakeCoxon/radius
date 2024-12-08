@@ -27,6 +27,7 @@ import { RegionInitializationCheckingPass } from '../region/initialization';
 import { RegionExclusivityCheckingPass } from '../region/exclusivity';
 import { InlineRegionProjectBundlesPass } from '../region/inlining';
 import { writeLlvmBytecodeBorrowRegion } from '../region/codegen_llvm_region';
+import { createDefaultTypeFunctions } from '../src/compiler_types';
 
 const runTestInner = (
   testObject: TestObject,
@@ -262,8 +263,7 @@ export const runCompilerTest = (
 
   try {
 
-    // TODO: Put this somewhere else
-    generateTypeMethods(globalCompiler, StringType)
+    createDefaultTypeFunctions(globalCompiler)
 
     runTestInner(testObject, queue, input, `${testObject.moduleName}.rad`, globalCompiler)
 

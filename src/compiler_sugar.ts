@@ -218,10 +218,8 @@ const compileCustomCopy = (subCompilerState: SubCompilerState, structName: strin
 
 export const generateTypeMethods = (globalCompiler: GlobalCompilerState, type: Type) => {
 
-
   const name = type.shortName
   const typeInfo = type.typeInfo
-
 
   if (!typeInfo.metaobject.constructorBinding) {
     const constructor = generateConstructor(name, type);
@@ -327,8 +325,8 @@ export const assert = new CompilerFunction('assert', (ctx, typeArgs: unknown[], 
   if (!existing) globalCompiler.externalDefinitions.push({ name: name, binding, paramHash, paramTypes: concreteTypes, returnType: NeverType })
 
   // Gotta be a nicer way to do this automatically
-  const left = new LetAst(VoidType, location, new Binding("", op.args[0].type), op.args[0], LetType.VarRef)
-  const right = new LetAst(VoidType, location, new Binding("", op.args[1].type), op.args[1], LetType.VarRef)
+  const left = new LetAst(VoidType, location, new Binding("", op.args[0].type), op.args[0], LetType.Let)
+  const right = new LetAst(VoidType, location, new Binding("", op.args[1].type), op.args[1], LetType.Let)
   const leftBinding = new BindingAst(left.binding.type, location, left.binding)
   const rightBinding = new BindingAst(right.binding.type, location, right.binding)
   const newOp = new OperatorAst(op.type, location, op.operator, [leftBinding, rightBinding])

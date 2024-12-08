@@ -1,4 +1,4 @@
-import { compilerAssert } from "../src/defs";
+import { compilerAssert, CompilerError } from "../src/defs";
 import { buildCFGFromRegions, ControlFlowGraph, ControlFlowGraphGeneric } from "../borrow/controlflow";
 import { AccessInstruction, BasicBlock, CommentInstruction, EndAccessInstruction, FunctionBlock, GetFieldPointerInstruction, IRInstruction, LoadFromAddressInstruction, PointerOffsetInstruction, ProjectBundleInstruction, formatInstruction, getInstructionOperands, getInstructionResult } from "../borrow/defs";
 import { BlockRegion, createRegionUsageMap, type InstructionId, IrDiagnostics, IrFunction, printIrFunction, Region, RegionCodegen, RegionId, Usage, UsageMap } from "./region_codegen";
@@ -171,7 +171,7 @@ const extendLiveness = (pass: CloseRegionAccessPass, register: string) => {
 }
 
 // Merges the liveness information from an instruction and an access instruction (as other)
-const mergeLivenessBlocks = (irFunction: IrFunction, liveness: Record<string, LivenessState>, other: Record<string, LivenessState>, register: string, dest: string) => {
+const mergeLivenessBlocks = (irFunction: IrFunction, liveness: Record<string, LivenessState>, other: Record<string, LivenessState>, register: string, usage: string) => {
   if (!other) return
 
   for (const [regionId_, state] of Object.entries(other)) {
@@ -181,27 +181,23 @@ const mergeLivenessBlocks = (irFunction: IrFunction, liveness: Record<string, Li
 
   function getNewLiveness(regionId: RegionId, prevState: LivenessState) {
 
-    const livenessType = liveness[regionId]?.livenessType
-    const livenessTypeOther = other[regionId].livenessType
+    const a = liveness[regionId]?.livenessType
+    const b = other[regionId].livenessType
 
-    if (!livenessType) return prevState // Just copy the state
-    const thisIn = livenessType === LivenessType.LiveIn
-    const thisOut = livenessType === LivenessType.LiveOut
-    const thisInOut = livenessType === LivenessType.LiveInAndOut
-    const thisClosed = livenessType === LivenessType.Closed
-    const otherIn = livenessTypeOther === LivenessType.LiveIn
-    const otherOut = livenessTypeOther === LivenessType.LiveOut
-    const otherInOut = livenessTypeOther === LivenessType.LiveInAndOut
-    const otherClosed = livenessTypeOther === LivenessType.Closed
+    if (!a) return prevState // Just copy the state
+    const { LiveIn, LiveOut, LiveInAndOut, Closed } = LivenessType
 
-    if (thisIn && otherOut || thisOut && otherIn) compilerAssert(false, 'Cannot extend live-in with live-out')
-    if (thisOut || otherOut)            return LivenessState.LiveOut;
-    else if (thisInOut || otherInOut)   return LivenessState.LiveInAndOut;
-    else if (thisClosed && otherClosed) return LivenessState.Closed(lastUse(regionId));
-    else if (thisIn && otherClosed)     return LivenessState.LiveIn(lastUse(regionId));
-    else if (thisIn && otherIn)         return LivenessState.LiveIn(lastUse(regionId));
+    if (a === LiveOut && b === LiveIn)
+      compilerAssert(false, 'Cannot extend live-in with live-out', { regionId, instrId: register, usage, liveness: liveness, other })
+
+    if (a === LiveIn && b === LiveOut)            return LivenessState.LiveInAndOut;
+    if (a === LiveOut || b === LiveOut)           return LivenessState.LiveOut;
+    if (a === LiveInAndOut || b === LiveInAndOut) return LivenessState.LiveInAndOut;
+    if (a === Closed && b === Closed)             return LivenessState.Closed(lastUse(regionId));
+    if (a === LiveIn && b === Closed)             return LivenessState.LiveIn(lastUse(regionId));
+    if (a === LiveIn && b === LiveIn)             return LivenessState.LiveIn(lastUse(regionId));
     
-    compilerAssert(false, 'Not implemented yet', { regionId, register, dest, liveness: liveness[regionId], other: other[regionId] })
+    compilerAssert(false, 'Not implemented yet', { regionId, register, liveness, other })
   }
 
   function lastUse(blockId: RegionId) {
@@ -250,9 +246,17 @@ export class CloseRegionAccessPass {
   }
 
   insertRegionCloseAccesses() {
-    this.usage = createRegionUsageMap(this.irFunction)
-    this.liveness = getLiveness(this)
-    insertRegionCloseAccesses(this)
+    try {
+      this.usage = createRegionUsageMap(this.irFunction)
+      this.liveness = getLiveness(this)
+      insertRegionCloseAccesses(this)
+    } catch (e) {
+      if (e instanceof CompilerError) {
+        if ((e.info as any).instrId) this.diagnostics.instructionNote((e.info as any).instrId, e.message)
+      }
+      this.printDebug()
+      throw e
+    }
   }
   
   printDebug() {

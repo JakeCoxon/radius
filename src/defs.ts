@@ -772,12 +772,8 @@ export const ListTypeConstructor: ExternalTypeConstructor = new ExternalTypeCons
   return Task.of(type);
 })
 
-
 export const TupleTypeConstructor: ExternalTypeConstructor = new ExternalTypeConstructor("Tuple", (compiler, argTypes) => {
-  const type = new ParameterizedType(TupleTypeConstructor, argTypes, { sizeof: 0, alignment: 0, fields: [], metaobject: Object.create(null), isReferenceType: false });
-  // TODO: Add getter for length
-  insertTypeInfoFields(type, argTypes.map((argType, i) => ({ sourceLocation: SourceLocation.anon, name: `_${i+1}`, fieldType: argType })))
-  return Task.of(type)
+  compilerAssert(false, "Tuple type not implemented here. See compiler_types.ts", { argTypes })
 })
 
 export const BuiltinTypes = {

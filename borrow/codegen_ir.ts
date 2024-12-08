@@ -108,10 +108,12 @@ export class FunctionCodeGenerator {
 
     const paramRegs = params.map((param) => {
       const paramReg = this.newRegister()
-      this.variableMap.set(param.binding, new Variable(param.binding.name, param.type, paramReg, param.capability));
+      const variable = new Variable(param.binding.name, param.type, paramReg, param.capability);
+      this.variableMap.set(param.binding, variable);
       return paramReg
     });
 
+    this.body = body
     const fn = new IrFunction(binding.name, params, paramRegs);
     this.regionCodegen = new RegionCodegen(fn, this.compiledFunction, this.codegen)
     this.regionCodegen.createRootSequenceRegion()    
@@ -365,7 +367,7 @@ export class FunctionCodeGenerator {
   generateCastExpression(ast: CastAst, context: ExpressionContext): IRValue {
     const value = this.generateExpression(ast.expr, { valueCategory: 'rvalue' });
     const reg = this.newRegister();
-    this.addInstruction(new CommentInstruction(`Cast ${ast.type.shortName}`))
+    this.addInstruction(new CommentInstruction(`Cast ${ast.expr.type.shortName} to ${ast.type.shortName}`))
     if (ast.type === RawPointerType) {
       // Ugly weird stuff. Come back to this later
       if (!(ast.expr instanceof BindingAst)) {
@@ -377,7 +379,7 @@ export class FunctionCodeGenerator {
       this.addInstruction(new MarkInitializedInstruction(value.address, ast.type, true));
       return new Value(value.address)
     }
-    const v = this.toValue(ast.type, value, 'cast')
+    const v = this.toValue(ast.expr.type, value, 'cast')
     this.addInstruction(new BinaryOperationInstruction(reg, ast.type, 'cast', v.register, '', ast.expr.type));
     return new Value(reg);
   }
@@ -755,7 +757,9 @@ export class FunctionCodeGenerator {
     if (ast instanceof BindingAst) {
       const variable = this.variableMap.get(ast.binding);
       compilerAssert(variable, `Undefined variable: ${ast.binding.name}`);
-      return variable.capability === Capability.Inout || variable.capability === Capability.Set || variable.capability === Capability.Sink
+      const mutable = variable.capability === Capability.Inout || variable.capability === Capability.Set || variable.capability === Capability.Sink
+      compilerAssert(mutable, 'Cannot assign to a member of an immutable struct', { location: ast.location, variable, body: this.body  });
+      return mutable
     } else if (ast instanceof FieldAst) {
       return this.ensureMutable(ast.left)
     } else if (ast instanceof ValueFieldAst) {
@@ -769,7 +773,7 @@ export class FunctionCodeGenerator {
   }
 
   generateAssignmentField(ast: SetFieldAst) {
-    compilerAssert(this.ensureMutable(ast.left), 'Cannot assign to a member of an immutable struct', { location: ast.left.location });
+    this.ensureMutable(ast.left)
     const objReg = this.generateExpression(ast.left, { valueCategory: 'lvalue' });
     compilerAssert(objReg instanceof Pointer, 'Object must be an pointer');
     
@@ -784,7 +788,7 @@ export class FunctionCodeGenerator {
   }
 
   generateAssignmentValueField(ast: SetValueFieldAst) {
-    compilerAssert(this.ensureMutable(ast.left), 'Cannot assign to a member of an immutable struct', { location: ast.left.location, ast })
+    this.ensureMutable(ast.left)
     this.addInstruction(new CommentInstruction(`Set value field ${ast.fieldPath.map(x => x.name).join(", ")}`))
     const objReg = this.generateExpression(ast.left, { valueCategory: 'lvalue' });
     compilerAssert(objReg instanceof Pointer, 'Object must be an pointer');
@@ -1004,7 +1008,7 @@ export class FunctionCodeGenerator {
 
   generateAssignmentSubscript(ast: SetSubscriptAst) {
     compilerAssert(ast.left.type === RawPointerType, 'Subscript assignment only supported for raw pointers');
-    compilerAssert(this.ensureMutable(ast.left), 'Cannot assign to a member of an immutable struct');
+    this.ensureMutable(ast.left)
     const objReg = this.toValue(ast.left.type,
       this.generateExpression(ast.left, { valueCategory: 'lvalue' }),
       'subscript object')

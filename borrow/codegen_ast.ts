@@ -14,7 +14,6 @@ export const generateConstructor = (structName: string, structType: Type) => {
   const fields = structType.typeInfo.fields;
   fields.forEach((f, i) => {
     const type = f.fieldType;
-    fields[i] = new TypeField(SourceLocation.anon, f.name, structType, i, type);
     const argBinding = new Binding(f.name, type);
     funcParams.push(createParameter(argBinding, Capability.Sink));
     argBindings.push(argBinding);

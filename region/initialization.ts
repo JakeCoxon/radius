@@ -101,7 +101,6 @@ export class RegionInitializationCheckingPass {
     const worklist = new RegionWorklist(this.cfg);
 
     const { regionId } = worklist.shift()!;
-    console.log("Checking block", regionId);
     this.executeRegion(regionId, entryState);
     worklist.visited.add(regionId);
 
@@ -110,7 +109,6 @@ export class RegionInitializationCheckingPass {
       if (runs++ > 1000) {
         compilerAssert(false, "Infinite loop");
       }
-      console.log("Checking block", regionId);
       const predecessors = this.cfg.predecessors.get(regionId) || [];
       const state = this.blockStates.get(regionId)!;
       compilerAssert(predecessors.length > 0, `Block has no predecessors`, { regionId, cfg: this.cfg });

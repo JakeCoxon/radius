@@ -1,5 +1,6 @@
 import { compileClassTask } from "./compiler"
-import { Ast, BoolType, ClassDefinition, Closure, CompilerError, ConcreteClassType, DoubleType, EnumVariantAst, ExternalTypeConstructor, FloatLiteralType, FloatType, FunctionDefinition, GlobalCompilerState, IntLiteralType, IntType, MutSigilAst, NeverType, NumberAst, OperatorAst, ParameterizedType, ParseCall, ParseIdentifier, ParseNode, PrimitiveType, RawPointerType, Scope, ScopeParentSymbol, SourceLocation, StatementsAst, TaskContext, Tuple, Type, TypeCheckConfig, TypeCheckResult, TypeCheckVar, TypeConstructor, TypeField, TypeMatcher, TypeTable, TypeVariable, UnknownObject, VariantCastAst, VoidType, compilerAssert, getUniqueId, insertTypeInfoFields, isType, u64Type, u8Type } from "./defs"
+import { generateTypeMethods } from "./compiler_sugar"
+import { Ast, BoolType, ClassDefinition, Closure, CompilerError, ConcreteClassType, DoubleType, EnumVariantAst, ExternalTypeConstructor, FloatLiteralType, FloatType, FunctionDefinition, GlobalCompilerState, IntLiteralType, IntType, MutSigilAst, NeverType, NumberAst, OperatorAst, ParameterizedType, ParseCall, ParseIdentifier, ParseNode, PrimitiveType, RawPointerType, Scope, ScopeParentSymbol, SourceLocation, StatementsAst, StringType, TaskContext, Tuple, TupleTypeConstructor, Type, TypeCheckConfig, TypeCheckResult, TypeCheckVar, TypeConstructor, TypeField, TypeMatcher, TypeTable, TypeVariable, UnknownObject, VariantCastAst, VoidType, compilerAssert, getUniqueId, insertTypeInfoFields, isType, tupleTypes, u64Type, u8Type } from "./defs"
 import { Task, TaskDef } from "./tasks"
 
 export const isTypeInteger = (type: Type) => type === IntType || type === u64Type || type === u8Type
@@ -244,6 +245,14 @@ export const createParameterizedExternalType = (globalCompiler: GlobalCompilerSt
     if (value instanceof Tuple) compilerAssert(false, "Not implemented yet")
     compilerAssert(false, "Expected types got $expected", { value }); 
   })
+
+  if (typeConstructor === TupleTypeConstructor) {
+    return (createTupleType(globalCompiler, newArgTypes)
+      .chainFn((task, type) => {
+        return Task.of(typeTableGetOrInsert(globalCompiler.typeTable, type))
+      }))
+  }
+
   return (
     typeConstructor.createType(globalCompiler, newArgTypes)
     .chainFn((task, type) => {
@@ -416,3 +425,16 @@ export const OptionTypeConstructor: ExternalTypeConstructor = new ExternalTypeCo
     })
   )
 })
+
+export const createTupleType = (globalCompiler: GlobalCompilerState, argTypes: Type[]): Task<ParameterizedType, CompilerError> => {
+  const type = new ParameterizedType(TupleTypeConstructor, argTypes, { sizeof: 0, alignment: 0, fields: [], metaobject: Object.create(null), isReferenceType: false });
+  // TODO: Add getter for length
+  insertTypeInfoFields(type, argTypes.map((argType, i) => ({ sourceLocation: SourceLocation.anon, name: `_${i+1}`, fieldType: argType })))
+  generateTypeMethods(globalCompiler, type)
+  return Task.of(type)
+}
+  
+
+export const createDefaultTypeFunctions = (globalCompiler: GlobalCompilerState) => {
+  generateTypeMethods(globalCompiler, StringType)
+}
