@@ -156,7 +156,11 @@ const extendLiveness = (pass: CloseRegionAccessPass, register: string) => {
   for (const use of uses) {
     const instr = irFunction.getInstruction(use.instrId)!
     const dest = getInstructionResult(instr) as InstructionId
-    const toExtend = instr instanceof AccessInstruction || instr instanceof LoadFromAddressInstruction || instr instanceof PointerOffsetInstruction || instr instanceof GetFieldPointerInstruction
+    const toExtend = instr instanceof AccessInstruction || 
+      instr instanceof LoadFromAddressInstruction || 
+      instr instanceof PointerOffsetInstruction || 
+      instr instanceof GetFieldPointerInstruction ||
+      instr instanceof ProjectBundleInstruction
     if (!toExtend) continue
     extendLiveness(pass, dest)
     if (liveness[dest]) {
