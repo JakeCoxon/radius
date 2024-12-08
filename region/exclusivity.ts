@@ -2,7 +2,7 @@ import { capabilitiesLargerOrEqualTo, Capability, CapabilityRanking, compilerAss
 import { ControlFlowGraph, ControlFlowGraphGeneric, buildCFG, buildCFGFromRegions } from "../borrow/controlflow";
 import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, EndAccessInstruction, PhiInstruction, textColors, CommentInstruction, getInstructionResult, DeallocStackInstruction, CallExpressionNode, MarkInitializedInstruction, PointerOffsetInstruction, formatInstruction, ProjectBundleInstruction, YieldInstruction, BreakInstruction } from "../borrow/defs";
 import { RegionWorklist } from "./initialization";
-import { BlockRegion, InstructionId, IrFunction, RegionId } from "./region_codegen";
+import { BlockRegion, InstructionId, IrDiagnostics, IrFunction, printIrFunction, RegionId } from "./region_codegen";
 
 type BorrowedItem = {
   rootAddress: string;
@@ -31,9 +31,11 @@ export class RegionExclusivityCheckingPass {
   function: IrFunction;
   freshAddressCounter = 0;
   addressTypes = new Map<string, Type>(); // Quick lookup for address types
-  debugLog = false
+  debugLog = true
   runs = 0
   instrId: InstructionId | null = null
+  iterationIndex = 0
+  diagnostics = new IrDiagnostics()
 
   constructor(fn: IrFunction) {
     this.function = fn;
@@ -45,12 +47,30 @@ export class RegionExclusivityCheckingPass {
     try {
       this.interpret()
     } catch (e) {
+      this.printDebug()
       console.error(e)
       console.log("State:")
-      printLocals(this.state.locals)
-      printMemory(this.state.memory)
+      // printLocals(this.state.locals)
+      // printMemory(this.state.memory)
       throw e
     }
+  }
+
+  printDebug() {
+    printIrFunction(this.function, this.diagnostics)
+  }
+
+  printLocals(locals: LocalMap) {
+    this.diagnostics.instructionNote(this.instrId!, `  (${this.iterationIndex}) Locals: ${Array.from(locals.entries()).flatMap(([key, val]) => {
+      if (val.size === 0) return `${key} -> ⊤`
+      return `${key} -> ${Array.from(val).join(', ')}`
+    }).join(' | ')}`)
+  }
+  printMemory(memory: MemoryMap) {
+    this.diagnostics.instructionNote(this.instrId!, `  (${this.iterationIndex}) Memory: ${Array.from(memory.entries()).flatMap(([key, val]) => {
+      if (val === undefined) return `${key} -> undefined`
+      return `${key} -> ${borrowedItemsToString(val.borrows)}`
+    }).join(' | ')}`)
   }
 
   interpret() {
@@ -118,12 +138,11 @@ export class RegionExclusivityCheckingPass {
       console.log(textColors.red(`\nExecuting block: ${regionId}`));
       console.log("Input state for block:", regionId)
 
-      printLocals(inputState.locals)
-      printMemory(inputState.memory)
+      this.printLocals(inputState.locals)
+      this.printMemory(inputState.memory)
     }
 
     this.instrId = region.firstInstruction
-    let i = 0
     while (this.instrId) {
       const node = this.function.getInstructionNode(this.instrId)
       const instr = node?.instruction
@@ -132,15 +151,15 @@ export class RegionExclusivityCheckingPass {
       this.execute(this.instrId, instr);
 
       this.instrId = node.next
-      if (i++ > 10000) {
+      if (this.iterationIndex++ > 10000) {
         compilerAssert(false, "Infinite instruction loop")
       }
     }
 
     if (this.debugLog) {
       console.log("Computed state for block:", regionId)
-      printLocals(this.state.locals)
-      printMemory(this.state.memory)
+      this.printLocals(this.state.locals)
+      this.printMemory(this.state.memory)
     }
 
     this.blockStates.set(regionId, { input: inputState, output: cloneState(this.state) });
@@ -205,8 +224,8 @@ export class RegionExclusivityCheckingPass {
   handlePointerOffsetInstruction(instr: PointerOffsetInstruction): void {
     if (this.debugLog) {
       console.log("State before pointer offset")
-      printMemory(this.state.memory)
-      printLocals(this.state.locals)
+      this.printMemory(this.state.memory)
+      this.printLocals(this.state.locals)
     }
     const addresses = this.state.locals.get(instr.address);
     compilerAssert(addresses, `Register ${instr.address} is not found`);
@@ -301,7 +320,7 @@ export class RegionExclusivityCheckingPass {
       
       if (exclusiveBorrows.length > 0) {
         const str = capability === Capability.Let ? "already mutably borrowed" : "already borrowed"
-        compilerAssert(false, `Cannot access with ${capability} (${str})`, { exclusiveBorrows })
+        compilerAssert(false, `Cannot access with ${capability} (${str})`, { addr, dest, source, exclusiveBorrows })
       }
 
       borrowSet.insert(addr, capability, instrId, dest)
@@ -312,8 +331,8 @@ export class RegionExclusivityCheckingPass {
     
     if (this.debugLog) {
       console.log("State after access")
-      printMemory(this.state.memory)
-      printLocals(this.state.locals)
+      this.printMemory(this.state.memory)
+      this.printLocals(this.state.locals)
     }
   }
 
@@ -373,7 +392,7 @@ export class RegionExclusivityCheckingPass {
       }
     }
 
-    if (this.debugLog) printMemory(this.state.memory)
+    if (this.debugLog) this.printMemory(this.state.memory)
   }
 
   handleYieldInstruction(instr: YieldInstruction) {

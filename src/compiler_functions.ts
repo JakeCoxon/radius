@@ -558,7 +558,7 @@ export const createMethodCall = (vm: Vm, receiver: Ast, name: string, typeArgs: 
     closure = findClosure(type.parentScope)
   }
 
-  compilerAssert(closure && closure instanceof Closure, "No method $name found for type $type", { name, t: receiver.type, receiver })
+  compilerAssert(closure && closure instanceof Closure, "No method $name found for type $type", { name, type: receiver.type, receiver })
   return createCallAstFromValueAndPushValue(vm, closure, typeArgs, [receiver, ...args])
 
 }

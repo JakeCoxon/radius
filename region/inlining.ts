@@ -64,7 +64,7 @@ export class InlineRegionProjectBundlesPass {
         
         const compiledFunc = this.globalCompiler.compiledFunctions.get(func.binding)!;
         const regionCodegen = new RegionCodegen(fn, compiledFunc, this.codegen)
-        const pass = new ProjectYieldInliningPass(this.globalCompiler, regionCodegen, compiledFunc, fn, subscriptIr)
+        const pass = new ProjectYieldInliningPass(this.globalCompiler, regionCodegen, compiledFunc, fn, subscriptIr, runs)
 
         try {
           pass.inlineIr(fn, projectInstrId, subscriptIr)
@@ -97,6 +97,7 @@ class ProjectYieldInliningPass {
     public compiledFunction: CompiledFunction,
     public fn: IrFunction,
     public subscriptIr: IrFunction,
+    public runId: number
   ) {}
 
   printDebug() {
@@ -156,8 +157,10 @@ class ProjectYieldInliningPass {
     const yieldSeq = fn.regions[fn.getInstructionRegion(yieldInstrId)].parentSequence
     compilerAssert(yieldSeq === originalSequenceId, "Yield not in the root sequence. Not implemented yet", { yieldInstrId, yieldSeq, originalSequenceId }) // TODO: Will need to consider how to handle this with multiple end instructions
 
+    const yieldAtEnd = fn.getInstructionRegion(yieldInstrId) === newRegionsInserts.endRegionId
     const [yieldPrev, yieldNext] = this.codegen.splitBlockBeforeInstr(yieldInstrId)
-    
+    this.codegen.insertInstructionAtBeginning(yieldNext, new CommentInstruction(`!! After split copied region`))
+    if (yieldAtEnd) newRegionsInserts.endRegionId = yieldNext
 
     {
       const yieldInstr = fn.getInstruction(yieldInstrId) as YieldInstruction
@@ -173,10 +176,11 @@ class ProjectYieldInliningPass {
     this.codegen.deleteInstruction(yieldInstrId)
     // this.diagnostics.instructionNote(yieldInstrId, "To be deleted")
 
+    const endInstrs = filterInstructions(fn, (instr) => instr instanceof EndAccessInstruction && instr.source === projectInstr.target)
+    compilerAssert(endInstrs.length > 0, "End instruction not found", { instrId })
+
     const moveRange = (() => {
 
-      const endInstrs = filterInstructions(fn, (instr) => instr instanceof EndAccessInstruction && instr.source === projectInstr.target)
-      compilerAssert(endInstrs.length > 0, "End instruction not found", { instrId })
 
       if (endInstrs.length === 1) {
         
@@ -188,26 +192,30 @@ class ProjectYieldInliningPass {
 
         const endRegionId = fn.getInstructionRegion(endInstrId);
         const endSequenceId = fn.regions[endRegionId].parentSequence
-        compilerAssert(endSequenceId === originalSequenceId, "End sequence not the same. Not implemented yet", { endSequenceId, originalSequenceId })
+        if (endSequenceId === originalSequenceId) {
+          // Easy case, the end instruction is in the same sequence
 
-        const [endPrev, endNext] = this.codegen.splitBlockBeforeInstr(endInstrId)
+          const [endPrev, endNext] = this.codegen.splitBlockBeforeInstr(endInstrId)
+          
+          this.diagnostics.instructionNote(endInstrId, "To be deleted")
 
-        this.diagnostics.instructionNote(endInstrId, "To be deleted")
+           // Move the regions after the yield to after the end instruction
+          this.codegen.moveRegionsToAfter(endPrev, yieldNext, newRegionsInserts.endRegionId!)
 
-        this.codegen.moveRegionsToAfter(yieldPrev, endPrev, endPrev) // Only move the endPrev region
-
-      } else {
-
-        // If there are multiple end instructions, we need to do some trickery
-
-        const enclosingRegions = endInstrs.map(endInstrId => getEnclosingRegion(instrId, endInstrId))
-        compilerAssert(enclosingRegions.every((r) => r === enclosingRegions[0]), "Not all enclosing regions are the same", { enclosingRegions })
-        const enclosingRegion = enclosingRegions[0]
-
-        // compilerAssert(false, "Not implemented yet", { next, endInstrs, enclosingRegion, newRegionsInserts, yieldPrev, yieldNext })
-        this.codegen.moveRegionsToAfter(yieldPrev, next, enclosingRegion)
-
+          return
+        }
       }
+
+      // If there are multiple end instructions  or the end instruction is in a different sequence,
+      // we need to move the regions to the right place. In the future we can try to use an interleave region
+
+      const enclosingRegions = endInstrs.map(endInstrId => getEnclosingRegion(instrId, endInstrId))
+      compilerAssert(enclosingRegions.every((r) => r === enclosingRegions[0]), "Not all enclosing regions are the same", { enclosingRegions })
+      const enclosingRegion = enclosingRegions[0]
+
+      // compilerAssert(false, "Not implemented yet", { next, endInstrs, enclosingRegion, newRegionsInserts, yieldPrev, yieldNext })
+      this.codegen.moveRegionsToAfter(yieldPrev, next, enclosingRegion)
+
       
     })()
 

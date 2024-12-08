@@ -165,13 +165,13 @@ const extendLiveness = (pass: CloseRegionAccessPass, register: string) => {
     extendLiveness(pass, dest)
     if (liveness[dest]) {
       // compilerAssert(liveness[dest], `No liveness found for ${dest}`, { liveness, dest, register })
-      mergeLivenessBlocks(irFunction, liveness[register], liveness[dest], dest)
+      mergeLivenessBlocks(irFunction, liveness[register], liveness[dest], register, dest)
     }
   }
 }
 
 // Merges the liveness information from an instruction and an access instruction (as other)
-const mergeLivenessBlocks = (irFunction: IrFunction, liveness: Record<string, LivenessState>, other: Record<string, LivenessState>, register: string) => {
+const mergeLivenessBlocks = (irFunction: IrFunction, liveness: Record<string, LivenessState>, other: Record<string, LivenessState>, register: string, dest: string) => {
   if (!other) return
 
   for (const [regionId_, state] of Object.entries(other)) {
@@ -199,15 +199,15 @@ const mergeLivenessBlocks = (irFunction: IrFunction, liveness: Record<string, Li
     else if (thisInOut || otherInOut)   return LivenessState.LiveInAndOut;
     else if (thisClosed && otherClosed) return LivenessState.Closed(lastUse(regionId));
     else if (thisIn && otherClosed)     return LivenessState.LiveIn(lastUse(regionId));
+    else if (thisIn && otherIn)         return LivenessState.LiveIn(lastUse(regionId));
     
-    compilerAssert(false, 'Not implemented yet', { regionId, register, liveness: liveness[regionId], other: other[regionId] })
+    compilerAssert(false, 'Not implemented yet', { regionId, register, dest, liveness: liveness[regionId], other: other[regionId] })
   }
 
   function lastUse(blockId: RegionId) {
     const a = liveness[blockId].lastUse
     const b = other[blockId].lastUse
-    // compilerAssert(false, 'Not implemented yet', { a, b })
-    compilerAssert(a && b, 'No last use found')
+    if (!a && !b) return null
 
     let n = irFunction.getInstructionNode(a)!
     while (n.next) {

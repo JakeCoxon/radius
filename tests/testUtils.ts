@@ -147,7 +147,7 @@ const runMandatoryPasses = (fnGenerator: FunctionCodeGenerator, mod: Module, fn:
   } finally {
 
     // closeAccessPass.printDebug()
-    initPass.printDebug()
+    // initPass.printDebug()
 
   }
 

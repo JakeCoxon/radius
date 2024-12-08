@@ -84,6 +84,7 @@ type Array!(T) @struct:
   len: int
   data: Buffer
 
+  const __iterate = array_iterate
   const __subscript = get_array
   const __subscript_inout = subscript_inout
   const __subscript_sink = subscript_sink
@@ -145,6 +146,24 @@ fn copy_array!(T)(dst: set Array!T, src: Array!T):
 
   # TODO: Too many moves ends up calling destructorFoo a lot
   # TODO: The copy is moving the value out of src[i] (need projection)
+
+fn print_array!(T)(arr: Array!T):
+  var i = 0
+  while i < arr.len:
+    print(arr[i])
+    i += 1
+
+fn array_iterate!(f, T)(array: Array!T) -> void @inline:
+  var i = 0
+  while i < array.len:
+    f(array[i])
+    i += 1
+
+fn array_iterate_inout!(T)(array: inout Array!T, f) -> void @inline:
+  var i = 0
+  while i < array.len:
+    f(array[i]&)
+    i += 1
 
 fn move_init_array!(T)(dst: set Array!T, src: sink Array!T):
   print("Move init array")
@@ -261,7 +280,39 @@ fn test_array3():
 #   # asd[0] = Foo(42, 2.0)
 
 #   print("Foo")
-#   arr[0][0] = Foo(42, 2.0)
+  # arr[0][0] = Foo(42, 2.0)
+
+  # print("arr[0][0]", arr[0][0])
+
+  if true:
+    var ref foo = arr[0][0]&
+    foo.x = 23
+    print("foo", foo)
+
+  var ref arr2 = arr[0]&
+  arr2[1] = Foo(43, 2.0)
+  print("arr2[1]", arr2[1])
+  print(arr[0][1])
+  
+  # var arr3 = arr2.copy
+
+  # print(arr3[0])
+  # print(arr3[1]
+  
+  # array_iterate_inout(arr, {|x|
+  #   print(x.len)
+  #   if x.len > 0:
+  #     x[0].x = 123
+
+  #   print_array(x)
+  # })
+
+  for x in arr:
+    for y in x:
+      # y.x = 42
+      print(y)
+    print(x)
+
 #   # subscript_1(arr, 0, {|x|
 #   #   subscript_1(x, 0, {|y|
 #   #     y = Foo(13, 2.0)
@@ -322,11 +373,13 @@ fn test_project():
   var ref foo = arr[0]&
   print("rawptr", rawptr(foo))
 
-  # if true:
+  if true:
     # print("OK")
-    # foo.x = 23
+    foo.x = 23
+  else:
+    foo.x = 32
 
-  foo.x = 456
+  # foo.x = 456
 
   # print(foo)
 
@@ -382,6 +435,7 @@ fn foo(foo: inout int):
 fn test_set():
   var buffer = Buffer(0, rawptr(0))
   var arr = Array!Foo(0, buffer&)
+
   arr&.init_array(10)
 
   arr[0] = Foo(1, 2.0)
@@ -392,48 +446,33 @@ fn test_loop():
   var foo = Foo(1, 2.0)
   var i = 0
   while i < 10:
-    print(foo[i])
+    print("x", foo[i])
     i += 1
+
+
+fn test_break():
+  var i = 0
+  while i < 10:
+    print("i", i)
+    i += 1
+    if i == 5:
+      break
+  print("Done")
+
 
 fn main():
 
-  test_array1()
-  # test_array2()
+  # test_array1()
+  # test_break()
+  # # test_array2()
   test_array3()
-  test_move()
-  test_project()
-  test_loop()
-  test_basic_project()
-  test_set()
+  # test_move()
+  # test_project()
+  # test_loop()
+  # test_basic_project()
+  # test_set()
 
-  # test_foo_move()
-  # test_print()
+  print("x", 123)
 
-
-  # test_basic_array()
-
-  # let zzz = 3
-  # let z: int = 2
-  # # let x: int = ifx 2 == 2: z else: 2
-  # let x = z + 232
-
-  # var foo = Foo(1, 2.0)
-  # foo.x += 1
-  # print(foo.x)
-
-  # bar(foo.x&)
-  # print(foo.x)
-  # baz(foo&)
-  # print(foo.x)
-
-  # while foo.x < 10:
-  #   foo.x += 1
-
-  # print(foo.x)
-
-
-  # if !!!(2 == 2):
-  #   print(21) 
-
-  # if 3 == 1 and 2 > 1:
-  #   print(1)
+  if 2 == 2:
+    print("Hello")
