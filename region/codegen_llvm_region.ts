@@ -1,6 +1,6 @@
 import { externalBuiltinBindings } from "../src/compiler_sugar";
 import { Ast, AstType, AstWriterTable, Binding, BindingAst, BlockAst, BoolType, CallAst, Capability, CompiledFunction, ConcreteClassType, ConstructorAst, DefaultConsAst, DoubleType, FileWriter, FloatType, FunctionType, GlobalCompilerState, IntType, LetAst, ListTypeConstructor, LlvmFunctionWriter, LlvmWriter, NeverType, NumberAst, ParameterizedType, Pointer, PrimitiveType, RawPointerType, Register, SetAst, SourceLocation, StatementsAst, StringType, Type, TypeField, UserCallAst, ValueFieldAst, VoidType, compilerAssert, escapeString, isAst, isType, textColors, u64Type, u8Type } from "../src/defs";
-import { AccessInstruction, AllocInstruction, AssignInstruction, BinaryOperationInstruction, BreakInstruction, CallInstruction, CommentInstruction, ConditionalJumpInstruction, EndAccessInstruction, formatInstruction, FunctionBlock, GetFieldPointerInstruction, getInstructionResult, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, MarkInitializedInstruction, PhiInstruction, PhiSource, PointerOffsetInstruction, ReturnInstruction, StoreToAddressInstruction } from "../borrow/defs";
+import { AccessInstruction, AllocInstruction, AssignInstruction, BinaryOperationInstruction, BreakInstruction, CallInstruction, CommentInstruction, ConditionalJumpInstruction, EndAccessInstruction, formatInstruction, FunctionBlock, GetFieldPointerInstruction, GetGlobalAddress, getInstructionResult, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, MarkInitializedInstruction, PhiInstruction, PhiSource, PointerOffsetInstruction, ReturnInstruction, StoreToAddressInstruction } from "../borrow/defs";
 import { BlockRegion, IfRegion, IrFunction, ScopeRegion, SequenceId, WhileRegion } from "./region_codegen";
 
 // Some useful commands
@@ -78,6 +78,18 @@ const operatorMapAll: {[key: string]: (writer: Writable, typeName: string, left:
   "bool_float_<":   (w, t, l, r) => `fcmp olt ${t} ${l}, ${r}`,
   "bool_float_<=":  (w, t, l, r) => `fcmp ole ${t} ${l}, ${r}`,
   "bool_float_>=":  (w, t, l, r) => `fcmp oge ${t} ${l}, ${r}`,
+
+  "double_double_+":  (w, t, l, r) => `fadd ${t} ${l}, ${r}`,
+  "double_double_-":  (w, t, l, r) => `fsub ${t} ${l}, ${r}`,
+  "double_double_*":  (w, t, l, r) => `fmul ${t} ${l}, ${r}`,
+  "double_double_/":  (w, t, l, r) => `fdiv ${t} ${l}, ${r}`,
+
+  "bool_double_==":  (w, t, l, r) => `fcmp oeq ${t} ${l}, ${r}`,
+  "bool_double_!=":  (w, t, l, r) => `fcmp one ${t} ${l}, ${r}`,
+  "bool_double_>":   (w, t, l, r) => `fcmp ogt ${t} ${l}, ${r}`,
+  "bool_double_<":   (w, t, l, r) => `fcmp olt ${t} ${l}, ${r}`,
+  "bool_double_<=":  (w, t, l, r) => `fcmp ole ${t} ${l}, ${r}`,
+  "bool_double_>=":  (w, t, l, r) => `fcmp oge ${t} ${l}, ${r}`,
   
   "bool_bool_&":    (w, t, l, r) => `and ${t} ${l}, ${r}`,
   "bool_bool_|":    (w, t, l, r) => `or ${t} ${l}, ${r}`,
@@ -89,6 +101,7 @@ const operatorMapAll: {[key: string]: (writer: Writable, typeName: string, left:
 
   "int_float_cast": (w, t, l, r) => `fptosi float ${l} to i32`,
   "float_int_cast": (w, t, l, r) => `sitofp i32 ${l} to float`,
+  "int_double_cast": (w, t, l, r) => `fptosi double ${l} to i32`,
   // "int_float_cast": (w, t, l, r) => `sitofp i32 ${l} to float`,
 }
   
@@ -254,6 +267,12 @@ const instructionWriter = {
     const sourceType = getDataTypeName(writer.writer, field.sourceType);
     const pointerType = getPointerName(writer, field.sourceType);
     format(writer, "  $ = getelementptr inbounds $, $ $, i32 0, i32 $\n", dest, sourceType, pointerType, source, field.index)
+  },
+
+  get_global_address: (writer: LlvmFunctionWriter, instr: GetGlobalAddress) => {
+    const dest = defineRegister(writer, instr.dest, RawPointerType)
+    const name = `@${instr.global}`
+    format(writer, "  $ = getelementptr inbounds $, $ $, i32 0\n", dest, getDataTypeName(writer.writer, instr.type), getPointerName(writer, instr.type), name)
   },
 
   pointer_offset: (writer: LlvmFunctionWriter, instr: PointerOffsetInstruction) => {
@@ -466,9 +485,9 @@ entry:
 }
 `)
 
-  globalCompilerState.globalLets.forEach(globalLet => {
-    const name = generateName(bytecodeWriter, globalLet.binding, true)
-    format(bytecodeWriter, "$ = global $ $\n", name, globalLet.binding.type, defaultValueLiteral(bytecodeWriter, globalLet.binding.type))
+  globalCompilerState.globalVars.forEach(globalVar => {
+    const name = globalVar.register
+    format(bytecodeWriter, "@$ = global $ $\n", name, globalVar.binding.type, defaultValueLiteral(bytecodeWriter, globalVar.binding.type))
   })
   bytecodeWriter.outputHeaders.push(`\n`)
 

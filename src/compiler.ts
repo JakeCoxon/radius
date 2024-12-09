@@ -4,6 +4,7 @@ import { Event, Task, TaskDef, Unit, isTask, isTaskResult, withContext } from ".
 import { createCompilerModuleTask, createListConstructor, defaultMetaFunction, guardSugar, ifMultiSugar, isSugar, matchSugar, optionBlockSugar, optionCastSugar, orElseSugar, print, questionSugar, subscriptCompiler } from "./compiler_sugar";
 import { expandDotsSugar, expandFuncAllSugar, expandFuncAnySugar, expandFuncConcatSugar, expandFuncFirstSugar, expandFuncLastSugar, expandFuncMaxSugar, expandFuncMinSugar, expandFuncSumSugar, expandIteratorSugar, foldSugar, forExprSugar, forLoopSugar, listComprehensionSugar, listConstructorSugar, sliceSugar, whileExprSugar } from "./compiler_iterator"
 import { OptionTypeConstructor, canAssignTypeTo, classDefinitionToType, compileTypeConstructorTask, createParameterizedExternalType, getCommonType, hashValues, isParameterizedTypeOf, propagateLiteralType, propagatedLiteralAst, typeTableGetOrInsert, typecheckEquality, typecheckNumberComparison, typecheckNumberOperator } from "./compiler_types";
+import { createDefaultConstructorAst } from "../borrow/codegen_ast";
 
 export const pushBytecode = <T extends BytecodeInstr>(out: BytecodeWriter, token: Token, instr: T) => {
   out.bytecode.locations.push(token.location);
@@ -736,7 +737,7 @@ const letLocalAst = (vm: Vm, name: string, type: Type | null, value: Ast | null,
     compilerAssert(canAssignTypeTo(value.type, inferType), "Mismatch types got $got expected $expected", { got: value.type, expected: inferType })
   }
   binding.definitionCompiler = vm.context.subCompilerState
-  value ||= new DefaultConsAst(inferType.typeInfo.isReferenceType ? RawPointerType : inferType, vm.location)
+  value ||= createDefaultConstructorAst(inferType.typeInfo.isReferenceType ? RawPointerType : inferType, vm.location)
   return new LetAst(VoidType, vm.location, binding, value, letType);
 }
 
@@ -1638,6 +1639,14 @@ const topLevelLet = (ctx: TaskContext, expr: ParseLet, moduleScope: Scope) => {
     .chainFn((task, result) => {
       compilerAssert(result instanceof LetAst, "Expected let ast")
       ctx.globalCompiler.globalLets.push(result)
+      ctx.globalCompiler.globalVars.set(result.binding, {
+        binding: result.binding,
+        initializer: result.value,
+        letType: expr.letType,
+        location: expr.token.location,
+        type: result.value?.type ?? VoidType,
+        register: "",
+      })
       return Task.success()
     })
   );
@@ -1768,7 +1777,7 @@ const createInitializerFunctionTask = (ctx: TaskContext) => {
 
   // Map initializers 
   const lets = ctx.globalCompiler.globalLets.map(globalLet => {
-    const value = globalLet.value || new DefaultConsAst(globalLet.binding.type, globalLet.location)
+    const value = globalLet.value || createDefaultConstructorAst(globalLet.binding.type, globalLet.location)
     return new SetAst(VoidType, globalLet.location, globalLet.binding, value)
   })
   const ast = new StatementsAst(VoidType, SourceLocation.anon, [...lets])

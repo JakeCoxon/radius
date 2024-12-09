@@ -1,6 +1,6 @@
 import { capabilitiesLargerOrEqualTo, Capability, CapabilityRanking, compilerAssert, FunctionParameter, Type } from "../src/defs";
 import { ControlFlowGraph, ControlFlowGraphGeneric, buildCFG, buildCFGFromRegions } from "../borrow/controlflow";
-import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, EndAccessInstruction, PhiInstruction, textColors, CommentInstruction, getInstructionResult, DeallocStackInstruction, CallExpressionNode, MarkInitializedInstruction, PointerOffsetInstruction, formatInstruction, ProjectBundleInstruction, YieldInstruction, BreakInstruction } from "../borrow/defs";
+import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, EndAccessInstruction, PhiInstruction, textColors, CommentInstruction, getInstructionResult, DeallocStackInstruction, CallExpressionNode, MarkInitializedInstruction, PointerOffsetInstruction, formatInstruction, ProjectBundleInstruction, YieldInstruction, BreakInstruction, GetGlobalAddress } from "../borrow/defs";
 import { RegionWorklist } from "./initialization";
 import { BlockRegion, InstructionId, IrDiagnostics, IrFunction, printIrFunction, RegionId } from "./region_codegen";
 
@@ -186,6 +186,7 @@ export class RegionExclusivityCheckingPass {
     else if (instr instanceof DeallocStackInstruction)    this.handleDeallocStackInstruction(instr);
     else if (instr instanceof YieldInstruction)           this.handleYieldInstruction(instr);
     else if (instr instanceof PhiInstruction)             this.handlePhiInstruction(instr);
+    else if (instr instanceof GetGlobalAddress)           this.handleGetGlobalAddress(instr);
     else if (instr instanceof CallInstruction)            { }
     else if (instr instanceof MarkInitializedInstruction) { }
     else if (instr instanceof StoreToAddressInstruction)  { }
@@ -245,6 +246,12 @@ export class RegionExclusivityCheckingPass {
     // TODO: We should actually copy the state from the block
     // that we came from. Need a test case for this
     this.state.locals.set(instr.dest, new Set([]));
+  }
+
+  handleGetGlobalAddress(instr: GetGlobalAddress): void {
+    const addr = this.newAddress(instr.type);
+    this.state.locals.set(instr.dest, new Set([addr]));
+    this.state.memory.set(addr, new BorrowSet());
   }
 
   newAddress(type: Type): string {

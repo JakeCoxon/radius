@@ -193,7 +193,7 @@ const astWriter: SyntaxAstWriterTable = {
     format(writer, `$ as $`, ast.expr, ast.type)
   },
   defaultcons: (writer, ast) => {
-    
+    compilerAssert(false, "Not implemented 'defaultcons'", { ast })
     if (ast.type === IntType || ast.type === FloatType || ast.type === DoubleType || ast.type === RawPointerType) {
       return writeExpr(writer, new NumberAst(ast.type, ast.location, 0))
     }

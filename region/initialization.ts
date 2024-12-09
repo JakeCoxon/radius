@@ -1,7 +1,7 @@
 import { Binding, Capability, compilerAssert, ConcreteClassType, PrimitiveType, Type, VoidType } from "../src/defs";
 import { CodeGenerator, FunctionCodeGenerator } from "../borrow/codegen_ir";
 import { ControlFlowGraph, ControlFlowGraphGeneric, buildCFG, buildCFGFromRegions } from "../borrow/controlflow";
-import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, EndAccessInstruction, PhiInstruction, MoveInstruction, CommentInstruction, textColors, MarkInitializedInstruction, formatInstruction, Module, DeallocStackInstruction, PointerOffsetInstruction, printIR, ProjectBundleInstruction, YieldInstruction, BreakInstruction } from "../borrow/defs";
+import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, EndAccessInstruction, PhiInstruction, MoveInstruction, CommentInstruction, textColors, MarkInitializedInstruction, formatInstruction, Module, DeallocStackInstruction, PointerOffsetInstruction, printIR, ProjectBundleInstruction, YieldInstruction, BreakInstruction, GetGlobalAddress } from "../borrow/defs";
 import { BlockRegion, InsertPosition, InstructionId, IrDiagnostics, IrFunction, printIrFunction, RegionCodegen, RegionId } from "./region_codegen";
 
 type InitializationState = Top | Bottom | Sequence;
@@ -215,6 +215,7 @@ export class RegionInitializationCheckingPass {
     else if (instr instanceof ProjectBundleInstruction)   this.executeProjectBundle(instr);
     else if (instr instanceof EndAccessInstruction)       { }
     else if (instr instanceof MoveInstruction)            this.executeMove(instr);
+    else if (instr instanceof GetGlobalAddress)           this.executeGetGlobalAddress(instr);
     else if (instr instanceof MarkInitializedInstruction) this.executeMarkInitialized(instr);
     else if (instr instanceof DeallocStackInstruction)    this.executeDeallocStackInstruction(instr);
     else if (instr instanceof YieldInstruction)           this.executeYield(instr);
@@ -379,6 +380,12 @@ export class RegionInitializationCheckingPass {
     } else if (this.isDefinitelyUninitialized(instr.target)) {
       this.replaceMove(instrId, instr, Capability.Set);
     } else compilerAssert(false, `Target is not definitely initialized or uninitialized`);
+  }
+
+  executeGetGlobalAddress(instr: GetGlobalAddress): void {
+    const addr = this.newAddress(instr.type);
+    this.state.locals.set(instr.dest, new AddressSet([addr]));
+    this.state.memory.set(addr, TOP);
   }
 
   executeMarkInitialized(instr: MarkInitializedInstruction): void {

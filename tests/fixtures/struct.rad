@@ -9,12 +9,12 @@ fn fam!(T)(a: int):
 fn famz!(T)(a: T):
   print(a)
 
-type Thing @struct:
-  x : int
-  y : float
+type Thing:
+  x: int
+  y: float
 
-type MyList!(T) @struct:
-  elem : T
+type MyList!(T):
+  elem: T
 
 fn foothing(a: Thing):
   print(a.x)
@@ -23,17 +23,28 @@ fn foothing(a: Thing):
 fn foo_list!(E)(a: MyList!E):
   print(a.elem)
 
+
+
+fn foo(x: int, y: float) -> Thing:
+  Thing(x, y)
+
+
+fn create_thing() -> MyList!Thing:
+  var foo = foo(1, float(2))
+  MyList!Thing(foo&)
+
+
 fn main():
 
   const foo = {|x| x + 1}
 
   foo(1)
 
-  let my_list: MyList!int
+  var my_list: MyList!int
   my_list.elem = 32
   foo_list!int(my_list)
 
-  let thing: Thing
+  var thing: Thing
   print(thing.x + 32)
   foothing(thing)
 
@@ -44,3 +55,7 @@ fn main():
   famz!bool(true)
 
   let thing2 = Thing(1, float(2))
+
+  let ret_val = create_thing()
+  print(ret_val)
+  print(ret_val.elem)

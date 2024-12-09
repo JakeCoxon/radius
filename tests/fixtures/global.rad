@@ -1,9 +1,13 @@
+import compiler
+
 # Globals can be out of order
 
-let foo1 = Foo(float(2), thing2)
+let foo1 = Foo(2.0, thing2)
+
+var global1 = 123
 
 let thing2 = foo()
-let thing = 100
+var thing = 100
 let thing3 = meta 1 + 2 + 3
 
 type Foo @struct:
@@ -15,9 +19,17 @@ fn foo() -> int:
   thing * 10
 
 fn main():
+  compiler.assert(thing == 101)
+
   foo()
   foo()
   thing += 10
   print(thing)
-  #print(foo1.y) # TODO
-  
+  print(foo1)
+
+  compiler.assert(thing3 == 6)
+  compiler.assert(global1 == 123)
+  compiler.assert(foo1.x == 2.0)
+  compiler.assert(foo1.y == 1010)
+
+  print("Passed")

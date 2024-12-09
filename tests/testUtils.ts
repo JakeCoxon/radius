@@ -274,19 +274,24 @@ export const runCompilerTest = (
       writer.write('\n\n')
     })
 
-    const codeGenerator = new CodeGenerator();
+    const codeGenerator = new CodeGenerator(globalCompiler)
     const mod = new Module()
     mod.functionMap = globalCompiler.compiledFunctions
     codeGenerator.functions = globalCompiler.compiledFunctions
 
     const compiledRegionIr = new Map<Binding, IrFunction>()
 
+    globalCompiler.globalVars.forEach((gv) => {
+      gv.register = codeGenerator.newGlobalId()
+    })
+
     globalCompiler.compiledIr = new Map()
     globalCompiler.compiledFunctions.forEach((func) => {
       if (!func.body) return
       const fnGenerator = codeGenerator.functionGenerator(func)
-      const fn = fnGenerator.generateFunction(func.binding, func.parameters, func.returnType, func.body)
+      let fn
       try {
+        fn = fnGenerator.generateFunction(func.binding, func.parameters, func.returnType, func.body)
         runMandatoryPasses(fnGenerator, mod, fn, func.body)
       } catch (ex) {
         if (ex instanceof CompilerError) {

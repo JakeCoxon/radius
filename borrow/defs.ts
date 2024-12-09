@@ -44,6 +44,7 @@ export class EndAccessInstruction extends IRInstruction {           irType = 'en
 export class ProjectBundleInstruction extends IRInstruction {       irType = 'project_bundle';        constructor(public target: string, public type: Type, public capabilities: Capability[], public source: string, public operands: string[], public funcs: {[key: string]: Binding}) { super(); } }
 export class StoreToAddressInstruction extends IRInstruction {      irType = 'store_to_address';      constructor(public address: string, public type: Type, public source: string) { super(); } }
 export class LoadFromAddressInstruction extends IRInstruction {     irType = 'load_from_address';     constructor(public dest: string, public type: Type, public address: string) { super(); } }
+export class GetGlobalAddress extends IRInstruction {               irType = 'get_global_address';    constructor(public dest: string, public type: Type, public global: string) { super(); } }
 export class MoveInstruction extends IRInstruction {                irType = 'move';                  constructor(public target: string, public source: string, public type: Type) { super(); } }
 export class MarkInitializedInstruction extends IRInstruction {     irType = 'mark_initialized';      constructor(public target: string, public type: Type, public initialized: boolean) { super(); } }
 export class DeallocStackInstruction extends IRInstruction {        irType = 'dealloc_stack';         constructor(public target: string, public type: Type) { super(); } }
@@ -71,6 +72,7 @@ export const getInstructionOperands = (instr: IRInstruction): string[] => {
   else if (instr instanceof CommentInstruction)         { return []; }
   else if (instr instanceof MarkInitializedInstruction) { return [instr.target]; }
   else if (instr instanceof EndAccessInstruction)       { return [instr.source]; }
+  else if (instr instanceof GetGlobalAddress)           { return []; }
   else if (instr instanceof AllocInstruction)           { return []; }
   else if (instr instanceof LoadConstantInstruction)    { return []; }
   else if (instr instanceof ConditionalJumpInstruction) { return [instr.condition]; }
@@ -97,6 +99,7 @@ export const getInstructionResult = (instr: IRInstruction): string | null => {
   else if (instr instanceof CommentInstruction)         { return null; }
   else if (instr instanceof MarkInitializedInstruction) { return null; }
   else if (instr instanceof EndAccessInstruction)       { return null; }
+  else if (instr instanceof GetGlobalAddress)           { return instr.dest; }
   else if (instr instanceof ProjectBundleInstruction)   { return instr.target; }
   else if (instr instanceof AllocInstruction)           { return instr.dest; }
   else if (instr instanceof LoadConstantInstruction)    { return instr.dest; }
@@ -125,6 +128,7 @@ export const getInstructionIdentifier = (instr: IRInstruction): string | null =>
   else if (instr instanceof CommentInstruction)         { return null; }
   else if (instr instanceof MarkInitializedInstruction) { return null; }
   else if (instr instanceof EndAccessInstruction)       { return null; }
+  else if (instr instanceof GetGlobalAddress)           { return instr.dest; }
   else if (instr instanceof ProjectBundleInstruction)   { return instr.target; }
   else if (instr instanceof AllocInstruction)           { return instr.dest; }
   else if (instr instanceof LoadConstantInstruction)    { return instr.dest; }
@@ -239,6 +243,8 @@ export function formatInstruction(instr: IRInstruction): string {
     return `${instr.dest} = access [${instr.capabilities.join(', ')}] ${instr.source}`;
   } else if (instr instanceof EndAccessInstruction) {
     return `end_access [${instr.capabilities.join(', ')}] ${instr.source}`;
+  } else if (instr instanceof GetGlobalAddress) {
+    return `${instr.dest} = get_global_address ${instr.global}`;
   } else if (instr instanceof GetFieldPointerInstruction) {
     return `${instr.dest} = offset address field ${instr.address} .${instr.field.index}`;
   } else if (instr instanceof PointerOffsetInstruction) {

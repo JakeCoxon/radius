@@ -1,5 +1,13 @@
 import { externalBuiltinBindings } from "../src/compiler_sugar";
-import { Binding, BindingAst, CallAst, Capability, CompiledClass, CompiledFunction, compilerAssert, ConcreteClassType, FieldAst, FunctionParameter, MutSigilAst, PrimitiveType, RawPointerType, SetFieldAst, SourceLocation, StatementsAst, Type, TypeField, TypeInfo, UserCallAst, VoidType } from "../src/defs";
+import { Ast, Binding, BindingAst, CallAst, Capability, CompiledClass, CompiledFunction, compilerAssert, ConcreteClassType, ConstructorAst, DoubleType, FieldAst, FloatType, FunctionParameter, IntType, MutSigilAst, NumberAst, PrimitiveType, RawPointerType, SetFieldAst, SourceLocation, StatementsAst, Type, TypeField, TypeInfo, UserCallAst, VoidType } from "../src/defs";
+
+
+export const createDefaultConstructorAst = (type: Type, location: SourceLocation): Ast => {
+  const isNum = type === IntType || type === FloatType || type === DoubleType || type === RawPointerType
+  if (isNum) return new NumberAst(type, location, 0)
+  const fields = type.typeInfo.fields.map(x => createDefaultConstructorAst(x.fieldType, location))
+  return new ConstructorAst(type, location, fields)
+}
 
 export const generateConstructor = (structName: string, structType: Type) => {
   const funcParams: FunctionParameter[] = [];

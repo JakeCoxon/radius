@@ -625,6 +625,7 @@ test('tuple_return_type', async () => {
     testObject.close()
   }
 })
+
 test('dict', async () => {
   const testObject = createTest({ 
     moduleName: 'dict',

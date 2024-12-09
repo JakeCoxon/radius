@@ -184,7 +184,7 @@ export function functionTemplateTypeCheckAndCompileTask(ctx: TaskContext, { func
     }
     const binding = new Binding(nameValue, result.concreteTypes[i]);
     binding.storage = storage // TODO: Use Capability
-    compilerAssert(storage !== 'ref', "Not implemented yet. use capability")
+    compilerAssert(storage !== 'ref', "Not implemented yet. use capability", { storage, func })
     binding.definitionCompiler = subCompilerState
     templateScope[nameValue] = binding
     argBindings.push(binding)

@@ -1,3 +1,4 @@
+import { createDefaultConstructorAst } from "../borrow/codegen_ast";
 import { externalBuiltinBindings } from "./compiler_sugar";
 import { Ast, AstType, AstWriterTable, Binding, BindingAst, BlockAst, BoolType, CallAst, CompiledFunction, ConcreteClassType, ConstructorAst, DefaultConsAst, DoubleType, FileWriter, FloatType, FunctionType, GlobalCompilerState, IntType, LetAst, ListTypeConstructor, LlvmFunctionWriter, LlvmWriter, NeverType, NumberAst, ParameterizedType, Pointer, PrimitiveType, RawPointerType, Register, SetAst, SourceLocation, StatementsAst, StringType, Type, TypeField, UserCallAst, ValueFieldAst, VoidType, compilerAssert, escapeString, isAst, isType, textColors, u64Type, u8Type } from "./defs";
 
@@ -406,7 +407,7 @@ const astWriter: LlvmAstWriterTable = {
     // Funky stuff with implicit returns, break with expression etc
     // This could probably be a prepass before codegen, along with other stuff like interleave tracking
     // TODO: Use IR pass for this
-    if (ast.breakExprBinding) writeExpr(writer, new LetAst(VoidType, ast.location, ast.breakExprBinding, new DefaultConsAst(ast.type, ast.location), true))
+    if (ast.breakExprBinding) writeExpr(writer, new LetAst(VoidType, ast.location, ast.breakExprBinding, createDefaultConstructorAst(ast.type, ast.location), true))
     writer.blocks.push({ binding: ast.binding, breakExprBinding: ast.breakExprBinding }) // not strictly necessary?
     let result = null
     const rewriteImplicitReturn = ast.breakExprBinding && ast.body.type !== VoidType && ast.body.type !== NeverType
@@ -580,6 +581,7 @@ const astWriter: LlvmAstWriterTable = {
     return { register }
   },
   defaultcons: (writer, ast) => {
+    compilerAssert(false, "Not implemented 'defaultcons'", { ast })
     if (ast.type === IntType || ast.type === FloatType || ast.type === DoubleType || ast.type === RawPointerType) {
       return writeExpr(writer, new NumberAst(ast.type, ast.location, 0))
     }

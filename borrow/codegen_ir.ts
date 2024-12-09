@@ -1,7 +1,7 @@
 import { IrFunction, printIrFunction, RegionCodegen, RegionId } from "../region/region_codegen";
 import { externalBuiltinBindings } from "../src/compiler_sugar";
-import { AndAst, Ast, Binding, BindingAst, BlockAst, BoolAst, BoolType, BreakAst, CallAst, Capability, CastAst, CompiledFunction, compilerAssert, ConstructorAst, DefaultConsAst, FieldAst, FunctionParameter, IfAst, IntType, LetAst, LetType, MutSigilAst, NotAst, NumberAst, OperatorAst, OrAst, ParameterizedType, PrimitiveType, RawPointerType, ReturnAst, SetAst, SetFieldAst, SetSubscriptAst, SetValueFieldAst, SourceLocation, StatementsAst, StringAst, SubscriptAst, Type, UserCallAst, ValueFieldAst, VoidAst, VoidType, WhileAst, YieldAst } from "../src/defs";
-import { ASTNode, AllocInstruction, AssignInstruction, AssignmentNode, BasicBlock, BinaryExpressionNode, BinaryOperationInstruction, BlockStatementNode, CallExpressionNode, CallInstruction, AccessInstruction, ConditionalJumpInstruction, CreateStructNode, ExpressionNode, ExpressionStatementNode, FunctionBlock, FunctionDeclarationNode, IRInstruction, IRValue, IdentifierNode, IfStatementNode, JumpInstruction, LetConstNode, LiteralNode, LoadConstantInstruction, LoadFromAddressInstruction, MemberExpressionNode, ProgramNode, Pointer, Value, ReturnInstruction, ReturnNode, StoreToAddressInstruction, Variable, VariableDeclarationNode, WhileStatementNode, GetFieldPointerInstruction, AndNode, OrNode, PhiInstruction, CommentInstruction, MoveInstruction, EndAccessInstruction, printIR, MarkInitializedInstruction, InstructionId, PhiSource, DeallocStackInstruction, PointerOffsetInstruction, ProjectBundleInstruction, YieldInstruction, BreakInstruction } from "./defs";
+import { AndAst, Ast, Binding, BindingAst, BlockAst, BoolAst, BoolType, BreakAst, CallAst, Capability, CastAst, CompiledFunction, compilerAssert, ConstructorAst, DefaultConsAst, FieldAst, FunctionParameter, GlobalCompilerState, IfAst, IntType, LetAst, LetType, MutSigilAst, NotAst, NumberAst, OperatorAst, OrAst, ParameterizedType, PrimitiveType, RawPointerType, ReturnAst, SetAst, SetFieldAst, SetSubscriptAst, SetValueFieldAst, SourceLocation, StatementsAst, StringAst, SubscriptAst, Type, UserCallAst, ValueFieldAst, VoidAst, VoidType, WhileAst, YieldAst } from "../src/defs";
+import { ASTNode, AllocInstruction, AssignInstruction, AssignmentNode, BasicBlock, BinaryExpressionNode, BinaryOperationInstruction, BlockStatementNode, CallExpressionNode, CallInstruction, AccessInstruction, ConditionalJumpInstruction, CreateStructNode, ExpressionNode, ExpressionStatementNode, FunctionBlock, FunctionDeclarationNode, IRInstruction, IRValue, IdentifierNode, IfStatementNode, JumpInstruction, LetConstNode, LiteralNode, LoadConstantInstruction, LoadFromAddressInstruction, MemberExpressionNode, ProgramNode, Pointer, Value, ReturnInstruction, ReturnNode, StoreToAddressInstruction, Variable, VariableDeclarationNode, WhileStatementNode, GetFieldPointerInstruction, AndNode, OrNode, PhiInstruction, CommentInstruction, MoveInstruction, EndAccessInstruction, printIR, MarkInitializedInstruction, InstructionId, PhiSource, DeallocStackInstruction, PointerOffsetInstruction, ProjectBundleInstruction, YieldInstruction, BreakInstruction, GetGlobalAddress } from "./defs";
 
 type ExpressionContext = {
   valueCategory: 'rvalue' | 'lvalue';
@@ -21,22 +21,18 @@ export class CodeGenerator {
   functions: Map<Binding, CompiledFunction> = new Map();
   irFunctions: Map<Binding, IrFunction> = new Map();
   freshId: number = 0;
+  globalId: number = 0;
+
+  constructor(public globalCompiler: GlobalCompilerState) {}
 
   functionGenerator(compiledFunction: CompiledFunction) {
-    return new FunctionCodeGenerator(this, compiledFunction)
+    return new FunctionCodeGenerator(this, compiledFunction, this.globalCompiler)
   }
 
-  newLabel(): string {
-    return `L${this.labelCount++}`;
-  }
-
-  newRegister(): string {
-    return `r${this.registerCount++}`;
-  }
-
-  newFreshId(): string {
-    return `i${this.freshId++}`;
-  }
+  newLabel(): string { return `L${this.labelCount++}`; }
+  newRegister(): string { return `r${this.registerCount++}`; }
+  newFreshId(): string { return `i${this.freshId++}`; }
+  newGlobalId(): string { return `g${this.globalId++}` }
 
 }
 
@@ -60,7 +56,8 @@ export class FunctionCodeGenerator {
 
   constructor(
     public codegen: CodeGenerator,
-    public compiledFunction: CompiledFunction
+    public compiledFunction: CompiledFunction,
+    public globalCompiler: GlobalCompilerState
   ) {}
 
   newLabel(): string {
@@ -567,7 +564,6 @@ export class FunctionCodeGenerator {
 
     const structReg = this.generateAlloc(structType)
     
-    // this.generateCallExpression(new CallAst(VoidType, SourceLocation.anon, fnBinding, [...ast.args], []), context)
     const fn = this.codegen.functions.get(fnBinding)
     compilerAssert(fn, `Function ${fnBinding.name} not found`);
 
@@ -584,16 +580,11 @@ export class FunctionCodeGenerator {
       argRegs.push(reg)
     }
     this.addInstruction(new CallInstruction(null, VoidType, fnBinding, argRegs, fn.parameters.map(b => b.type), fn.parameters.map(b => b.capability)))
-    // this.addInstruction(new MarkInitializedInstruction(structReg, true));
     return new Pointer(structReg)
   }
 
   generateDefaultConstructorExpression(ast: DefaultConsAst, context: ExpressionContext): IRValue {
-    const structType = ast.type
-    compilerAssert(structType, `Struct type not found`);
-    const structReg = this.generateAlloc(structType)
-    this.addInstruction(new CommentInstruction(`Default constructor ${structType.shortName}`))
-    return new Pointer(structReg)
+    compilerAssert(false, `Don't use default constructor AST, use createDefaultConstructorAst instead`, { ast })
   }
 
   storeResult(type: Type, value: IRValue) {
@@ -718,6 +709,7 @@ export class FunctionCodeGenerator {
     } else if (ast.binding === externalBuiltinBindings.exit) {
       return this.generateExit(ast.args, context)
     } else if (ast.binding === externalBuiltinBindings.initializer) {
+      this.addInstruction(new CallInstruction(null, VoidType, ast.binding, [], [], []))
       return new Pointer('')
     }
     compilerAssert(ast.binding instanceof Binding, 'Expected binding', { ast });
@@ -774,12 +766,25 @@ export class FunctionCodeGenerator {
 
   generateAssignmentStatement(ast: SetAst) {
     let variable = this.variableMap.get(ast.binding)
+    if (!variable) {
+      const isInitializer = this.compiledFunction.binding === this.globalCompiler.initializerFunction?.binding
+      const global = this.globalCompiler.globalVars.get(ast.binding)
+      compilerAssert(global, `Undefined variable: ${ast.binding.name}`);
+      compilerAssert(global.letType === LetType.Var || isInitializer, 'Cannot assign to a let variable', { location: ast.location, global, ast })
+      const astWithoutMutSigil = ast.value instanceof MutSigilAst ? ast.value.expr : ast.value
+      const value = this.generateExpression(astWithoutMutSigil, { valueCategory: 'rvalue' });
+      const lvalue = this.storeResult(global.type, value)
+      const targetReg = this.newRegister();
+      this.addInstruction(new GetGlobalAddress(targetReg, global.type, global.register));
+      this.generateMovePointerInstructionWithCapabilityCheck(targetReg, lvalue, ast.value)
+      return
+    }
     compilerAssert(variable, `Undefined variable: ${ast.binding.name}`);
     const type = variable.type
 
     const astWithoutMutSigil = ast.value instanceof MutSigilAst ? ast.value.expr : ast.value
-    const newLocal = this.generateExpression(astWithoutMutSigil, { valueCategory: 'rvalue' });
-    const lvalue = this.storeResult(type, newLocal)
+    const value = this.generateExpression(astWithoutMutSigil, { valueCategory: 'rvalue' });
+    const lvalue = this.storeResult(type, value)
 
     compilerAssert(variable.capability === Capability.Inout || variable.capability === Capability.Set || variable.capability === Capability.Sink, 'Cannot assign to a let variable', { location: ast.location, variable, ast })
     this.generateMovePointerInstructionWithCapabilityCheck(variable.register, lvalue, ast.value)
@@ -853,6 +858,7 @@ export class FunctionCodeGenerator {
     if (value instanceof NumberAst)      return [Capability.Let,  false]
     if (value instanceof OperatorAst)    return [Capability.Let,  false]
     if (value instanceof ConstructorAst) return [Capability.Sink, true]
+    if (value instanceof DefaultConsAst) return [Capability.Sink, true]
     if (value instanceof SubscriptAst)   return [Capability.Sink, false]
     if (value instanceof BlockAst)       return this.getCapabilityAndOwnership(value.body)
     if (value instanceof StatementsAst)  return this.getCapabilityAndOwnership(value.statements[value.statements.length - 1])
@@ -945,6 +951,15 @@ export class FunctionCodeGenerator {
 
   generateBinding(ast: BindingAst, context: ExpressionContext): IRValue {
     const addressReg = this.variableMap.get(ast.binding);
+    if (!addressReg) {
+      if (this.globalCompiler.globalVars.has(ast.binding)) {
+        const global = this.globalCompiler.globalVars.get(ast.binding)
+        compilerAssert(global, `Undefined variable: ${ast.binding.name}`);
+        const reg = this.newRegister();
+        this.addInstruction(new GetGlobalAddress(reg, global.type, global.register));
+        return new Pointer(reg)
+      }
+    }
     compilerAssert(addressReg, `Undefined variable: ${ast.binding.name}`);
     return new Pointer(addressReg.register);
   }

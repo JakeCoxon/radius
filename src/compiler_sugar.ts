@@ -1,4 +1,4 @@
-import { generateConstructor, generateDestructor, generateMoveFunction } from "../borrow/codegen_ast"
+import { createDefaultConstructorAst, generateConstructor, generateDestructor, generateMoveFunction } from "../borrow/codegen_ast"
 import { BytecodeSecondOrder, callFunctionFromValueTask, compileFunctionPrototype, getOperatorTable, loadModule, pushBytecode, resolveScope, unknownToAst, visitParseNode } from "./compiler"
 import { compileAndExecuteFunctionHeaderTask, compileExportedFunctionTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, FunctionCallArg, functionTemplateTypeCheckAndCompileTask, insertFunctionDefinition } from "./compiler_functions"
 import { concat, generator } from "./compiler_iterator"
@@ -403,10 +403,13 @@ export const print = new CompilerFunction('print', (ctx, typeArgs: unknown[], ar
         const let_ = new LetAst(VoidType, location, binding, arg, LetType.Let)
         localStmts.push(let_)
         localStmts.push(printf(rawstr(`${textColors.green(arg.type.shortName)}(`)))
-        const fieldsToPrint = binding.type.typeInfo.fields.filter(x => formats.has(x.fieldType))
-        fieldsToPrint.forEach((field, j) => {
+        binding.type.typeInfo.fields.forEach((field, j) => {
           
           if (j !== 0) localStmts.push(printf(rawstr(", ")))
+          if (!formats.has(field.fieldType)) {
+            localStmts.push(printf(rawstr(`${field.name}=${field.fieldType.shortName}(...)`)))
+            return
+          }
           localStmts.push(printf(rawstr(`${field.name}=`)))
 
           const fmt = formats.get(field.fieldType)
@@ -444,6 +447,7 @@ export const printToPrintf = new CompilerFunction('printToPrintf', (ctx, typeArg
   formats.set(RawPointerType, '%p')
   formats.set(FloatType, '%f')
   formats.set(DoubleType, '%f')
+
 
   args.forEach((arg, i) => {
     propagatedLiteralAst(arg)
@@ -576,7 +580,7 @@ export const static_length = new ExternalFunction('static_length', VoidType, (ct
 export const createDefaultFromType = new ExternalFunction('createDefaultFromType', VoidType, (ctx, values) => {
   let [type] = values
   compilerAssert(isType(type), "Expected type", { type })
-  return new DefaultConsAst(type, ctx.location)
+  return createDefaultConstructorAst(type, ctx.location)
 })
 export const maxOfType = new ExternalFunction('maxOfType', VoidType, (ctx, values) => {
   let [type] = values

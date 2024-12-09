@@ -32,13 +32,13 @@ type Baz:
   x : int
   y : int
 
-fn my_bar(bar: ref Bar):
+fn my_bar(bar: inout Bar):
   bar.x = 200
 
 fn main():
 
-  let bar = Bar(1, 2)
-  my_bar(bar)
+  var bar = Bar(1, 2)
+  my_bar(bar&)
 
   if false:
     exit(1)

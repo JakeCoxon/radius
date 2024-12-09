@@ -893,6 +893,7 @@ export type GlobalCompilerState = {
   rootScope: Scope
   compiledIr: Map<Binding, FunctionBlock>
   compiledRegionIr: Map<Binding, IrFunction>
+  globalVars: Map<Binding, GlobalVariable>
 }
 export type ExternalCompilerOptions = {
   buildName: string
@@ -944,6 +945,15 @@ export interface TaskContext {
   globalCompiler: GlobalCompilerState
 }
 
+export type GlobalVariable = {
+  binding: Binding,
+  location: SourceLocation,
+  type: Type,
+  register: string,
+  initializer: Ast | null
+  letType: LetType
+}
+
 export const createDefaultGlobalCompiler = () => {
   const globalCompiler: GlobalCompilerState = {
     compiledFunctions: new Map(),
@@ -952,6 +962,7 @@ export const createDefaultGlobalCompiler = () => {
     classDefinitions: [],
     allWaitingEvents: [],
     globalLets: [],
+    globalVars: new Map<Binding, GlobalVariable>(),
     moduleLoader: null!,
     methods: new WeakMap(),
     typeTable: new TypeTable(),
