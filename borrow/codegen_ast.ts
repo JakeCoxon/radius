@@ -9,7 +9,7 @@ export const createDefaultConstructorAst = (type: Type, location: SourceLocation
   return new ConstructorAst(type, location, fields)
 }
 
-export const generateConstructor = (structName: string, structType: Type) => {
+export const generateConstructor = (structName: string, structType: Type, binding: Binding) => {
   const funcParams: FunctionParameter[] = [];
   const argBindings: Binding[] = [];
   const concreteTypes: Type[] = [];
@@ -27,7 +27,7 @@ export const generateConstructor = (structName: string, structType: Type) => {
     argBindings.push(argBinding);
     concreteTypes.push(type);
   });
-  const constructorBinding = new Binding(`constructor${structName}`, VoidType);
+  // const constructorBinding = new Binding(`constructor${structName}`, VoidType);
 
   const [param, ...fieldBindings] = argBindings;
   const fieldAsts = fields.map((field, i) => {
@@ -38,11 +38,11 @@ export const generateConstructor = (structName: string, structType: Type) => {
   });
   const constructorBody = new StatementsAst(VoidType, SourceLocation.anon, fieldAsts);
 
-  const compiledFunc = new CompiledFunction(constructorBinding, { debugName: constructorBinding.name } as any, VoidType, concreteTypes, constructorBody, argBindings, funcParams, [], 0);
+  const compiledFunc = new CompiledFunction(binding, { debugName: binding.name } as any, VoidType, concreteTypes, constructorBody, argBindings, funcParams, [], 0);
   return compiledFunc
 }
 
-export const generateDestructor = (structName: string, structType: Type) => {
+export const generateDestructor = (structName: string, structType: Type, binding: Binding) => {
   const funcParams: FunctionParameter[] = [];
   const argBindings: Binding[] = [];
   const concreteTypes: Type[] = [];
@@ -54,14 +54,13 @@ export const generateDestructor = (structName: string, structType: Type) => {
 
   // An empty function is enough because later passes will insert the
   // necessary instructions sink instructions
-  const destructorBinding = new Binding(`destructor${structName}`, VoidType);
   const destructorBody = new StatementsAst(VoidType, SourceLocation.anon, []);
-  const compiledFunc = new CompiledFunction(destructorBinding, { debugName: destructorBinding.name } as any, VoidType, concreteTypes, destructorBody, argBindings, funcParams, [], 0);
+  const compiledFunc = new CompiledFunction(binding, { debugName: binding.name } as any, VoidType, concreteTypes, destructorBody, argBindings, funcParams, [], 0);
   compiledFunc.isDestructor = true;
   return compiledFunc
 }
 
-export const generateMoveFunction = (structType: Type, fnName: string, destCapability: Capability, sourceCapability: Capability) => {
+export const generateMoveFunction = (structType: Type, fnName: string, destCapability: Capability, sourceCapability: Capability, binding: Binding) => {
   const funcParams: FunctionParameter[] = [];
   const argBindings: Binding[] = [];
   const concreteTypes: Type[] = [];
@@ -76,7 +75,6 @@ export const generateMoveFunction = (structType: Type, fnName: string, destCapab
   funcParams.push(new FunctionParameter(srcArgBinding, structType, true, RawPointerType, sourceCapability));
   concreteTypes.push(structType);
 
-  const binding = new Binding(fnName, VoidType);
   const constructorBinding = structType.typeInfo.metaobject.constructorBinding
   compilerAssert(constructorBinding && constructorBinding instanceof Binding, `Constructor not found for ${structType.shortName}`);
 

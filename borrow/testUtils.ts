@@ -77,18 +77,19 @@ export class BasicCompiler {
     });
 
     this.defineConstant(name, structType);
-    const constructor = generateConstructor(name, structType);
-    typeInfo.metaobject.constructorBinding = constructor.binding;
-
-    const moveInit = generateMoveFunction(structType, `moveInit${name}`, Capability.Set, Capability.Sink);
-    const moveAssign = generateMoveFunction(structType, `moveAssign${name}`, Capability.Inout, Capability.Sink);
-    const copyConstructor = generateMoveFunction(structType, `copy${name}`, Capability.Set, Capability.Let);
+    const constructorBinding = typeInfo.metaobject.constructorBinding = new Binding(`constructor${name}`, VoidType);
+    const constructor = generateConstructor(name, structType, constructorBinding);
 
     Object.assign(typeInfo.metaobject, { 
-      moveInitBinding: moveInit.binding,
-      moveAssignBinding: moveAssign.binding,
-      copyConstructorBinding: copyConstructor.binding,
+      moveInitBinding: new Binding(`moveInit${name}`, VoidType),
+      moveAssignBinding: new Binding(`moveAssign${name}`, VoidType),
+      copyConstructorBinding: new Binding(`copy${name}`, VoidType),
     })
+
+    const moveInit = generateMoveFunction(structType, `moveInit${name}`, Capability.Set, Capability.Sink, typeInfo.metaobject.moveInitBinding as any);
+    const moveAssign = generateMoveFunction(structType, `moveAssign${name}`, Capability.Inout, Capability.Sink, typeInfo.metaobject.moveAssignBinding as any);
+    const copyConstructor = generateMoveFunction(structType, `copy${name}`, Capability.Set, Capability.Let, typeInfo.metaobject.copyConstructorBinding as any);
+
 
     this.allFunctions.set(constructor.binding, constructor)
     this.allFunctions.set(moveInit.binding, moveInit)

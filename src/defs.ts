@@ -758,6 +758,14 @@ export const StringType = (() => {
     { sourceLocation: SourceLocation.anon, name: "length", fieldType: IntType },
     { sourceLocation: SourceLocation.anon, name: "data", fieldType: RawPointerType }
   ])
+  // Hacks because StringType is global and we can't modify its typeInfo. See generateStringMethods
+  Object.assign(type.typeInfo.metaobject, {
+    constructorBinding: new Binding("string_constructor", FunctionType),
+    destructorBinding: new Binding("string_destructor", FunctionType),
+    copyConstructorBinding: new Binding("string_copy_constructor", FunctionType),
+    moveInitBinding: new Binding("string_move_init", FunctionType),
+    moveAssignBinding: new Binding("string_move_assign", FunctionType),
+  })
   return type
 })()
 

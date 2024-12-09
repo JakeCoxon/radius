@@ -222,32 +222,32 @@ export const generateTypeMethods = (globalCompiler: GlobalCompilerState, type: T
   const typeInfo = type.typeInfo
 
   if (!typeInfo.metaobject.constructorBinding) {
-    const constructor = generateConstructor(name, type);
-    typeInfo.metaobject.constructorBinding = constructor.binding;
+    const binding = typeInfo.metaobject.constructorBinding = new Binding(`constructor${name}`, VoidType)
+    const constructor = generateConstructor(name, type, binding)
     globalCompiler.compiledFunctions.set(constructor.binding, constructor)
   }
 
   if (!typeInfo.metaobject.destructorBinding) {
-    const destructor = generateDestructor(name, type);
-    typeInfo.metaobject.destructorBinding = destructor.binding;
+    const binding = typeInfo.metaobject.destructorBinding = new Binding(`destructor${name}`, VoidType)
+    const destructor = generateDestructor(name, type, binding)
     globalCompiler.compiledFunctions.set(destructor.binding, destructor)
   }
 
   if (!typeInfo.metaobject.copyConstructorBinding) {
-    const copyConstructor = generateMoveFunction(type, `copy${name}`, Capability.Set, Capability.Let);
-    typeInfo.metaobject.copyConstructorBinding = copyConstructor.binding;
+    const binding = typeInfo.metaobject.copyConstructorBinding = new Binding(`copyConstructor${name}`, VoidType)
+    const copyConstructor = generateMoveFunction(type, `copy${name}`, Capability.Set, Capability.Let, binding as any);
     globalCompiler.compiledFunctions.set(copyConstructor.binding, copyConstructor)
   }
 
   if (!typeInfo.metaobject.moveInitBinding) {
-    const moveInit = generateMoveFunction(type, `moveInit${name}`, Capability.Set, Capability.Sink);
-    typeInfo.metaobject.moveInitBinding = moveInit.binding;
+    const binding = typeInfo.metaobject.moveInitBinding = new Binding(`moveInit${name}`, VoidType)
+    const moveInit = generateMoveFunction(type, `moveInit${name}`, Capability.Set, Capability.Sink, binding);
     globalCompiler.compiledFunctions.set(moveInit.binding, moveInit)
   }
 
   if (!typeInfo.metaobject.moveAssignBinding) {
-    const moveAssign = generateMoveFunction(type, `moveAssign${name}`, Capability.Inout, Capability.Sink);
-    typeInfo.metaobject.moveAssignBinding = moveAssign.binding;
+    const binding = typeInfo.metaobject.moveAssignBinding = new Binding(`moveAssign${name}`, VoidType)
+    const moveAssign = generateMoveFunction(type, `moveAssign${name}`, Capability.Inout, Capability.Sink, binding);
     globalCompiler.compiledFunctions.set(moveAssign.binding, moveAssign)
   }
 }

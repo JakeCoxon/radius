@@ -1,6 +1,7 @@
+import { generateConstructor, generateDestructor, generateMoveFunction } from "../borrow/codegen_ast"
 import { compileClassTask } from "./compiler"
 import { generateTypeMethods } from "./compiler_sugar"
-import { Ast, BoolType, ClassDefinition, Closure, CompilerError, ConcreteClassType, DoubleType, EnumVariantAst, ExternalTypeConstructor, FloatLiteralType, FloatType, FunctionDefinition, GlobalCompilerState, IntLiteralType, IntType, MutSigilAst, NeverType, NumberAst, OperatorAst, ParameterizedType, ParseCall, ParseIdentifier, ParseNode, PrimitiveType, RawPointerType, Scope, ScopeParentSymbol, SourceLocation, StatementsAst, StringType, TaskContext, Tuple, TupleTypeConstructor, Type, TypeCheckConfig, TypeCheckResult, TypeCheckVar, TypeConstructor, TypeField, TypeMatcher, TypeTable, TypeVariable, UnknownObject, VariantCastAst, VoidType, compilerAssert, getUniqueId, insertTypeInfoFields, isType, tupleTypes, u64Type, u8Type } from "./defs"
+import { Ast, Binding, BoolType, Capability, ClassDefinition, Closure, CompilerError, ConcreteClassType, DoubleType, EnumVariantAst, ExternalTypeConstructor, FloatLiteralType, FloatType, FunctionDefinition, GlobalCompilerState, IntLiteralType, IntType, MutSigilAst, NeverType, NumberAst, OperatorAst, ParameterizedType, ParseCall, ParseIdentifier, ParseNode, PrimitiveType, RawPointerType, Scope, ScopeParentSymbol, SourceLocation, StatementsAst, StringType, TaskContext, Tuple, TupleTypeConstructor, Type, TypeCheckConfig, TypeCheckResult, TypeCheckVar, TypeConstructor, TypeField, TypeMatcher, TypeTable, TypeVariable, UnknownObject, VariantCastAst, VoidType, compilerAssert, getUniqueId, insertTypeInfoFields, isType, tupleTypes, u64Type, u8Type } from "./defs"
 import { Task, TaskDef } from "./tasks"
 
 export const isTypeInteger = (type: Type) => type === IntType || type === u64Type || type === u8Type
@@ -436,5 +437,30 @@ export const createTupleType = (globalCompiler: GlobalCompilerState, argTypes: T
   
 
 export const createDefaultTypeFunctions = (globalCompiler: GlobalCompilerState) => {
-  generateTypeMethods(globalCompiler, StringType)
+
+  generateStringMethods(globalCompiler)
+}
+
+const generateStringMethods = (globalCompiler: GlobalCompilerState) => {
+  // Hacks because StringType is global and we can't modify its typeInfo.
+  // Generate the functions but override the bindings to the original StringType bindings.
+
+  const type = StringType
+  const name = type.shortName
+  const typeInfo = type.typeInfo
+
+  const constructor = generateConstructor(name, type, typeInfo.metaobject.constructorBinding as Binding);
+  globalCompiler.compiledFunctions.set(constructor.binding, constructor)
+
+  const destructor = generateDestructor(name, type, typeInfo.metaobject.destructorBinding as Binding);
+  globalCompiler.compiledFunctions.set(destructor.binding, destructor)
+
+  const copyConstructor = generateMoveFunction(type, `copy${name}`, Capability.Set, Capability.Let, typeInfo.metaobject.copyConstructorBinding as Binding);
+  globalCompiler.compiledFunctions.set(copyConstructor.binding, copyConstructor)
+
+  const moveInit = generateMoveFunction(type, `moveInit${name}`, Capability.Set, Capability.Sink, typeInfo.metaobject.moveInitBinding as Binding);
+  globalCompiler.compiledFunctions.set(moveInit.binding, moveInit)
+
+  const moveAssign = generateMoveFunction(type, `moveAssign${name}`, Capability.Inout, Capability.Sink, typeInfo.metaobject.moveAssignBinding as Binding);
+  globalCompiler.compiledFunctions.set(moveAssign.binding, moveAssign)
 }
