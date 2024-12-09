@@ -296,6 +296,7 @@ export const runCompilerTest = (
       }
 
       globalCompiler.compiledIr.set(func.binding, fn)
+      codeGenerator.irFunctions.set(func.binding, fnGenerator.regionCodegen.irFunction)
       compiledRegionIr.set(func.binding, fnGenerator.regionCodegen.irFunction)
     })
 

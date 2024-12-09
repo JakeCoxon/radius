@@ -55,14 +55,14 @@ const operatorMapAll: {[key: string]: (writer: Writable, typeName: string, left:
   "int_int_/":      (w, t, l, r) => `sdiv ${t} ${l}, ${r}`,
   "bool_int_==":    (w, t, l, r) => `icmp eq ${t} ${l}, ${r}`,
   "bool_int_!=":    (w, t, l, r) => `icmp ne ${t} ${l}, ${r}`,
+  "bool_int_>":     (w, t, l, r) => `icmp sgt ${t} ${l}, ${r}`,
+  "bool_int_<":     (w, t, l, r) => `icmp slt ${t} ${l}, ${r}`,
+  "bool_int_<=":    (w, t, l, r) => `icmp sle ${t} ${l}, ${r}`,
+  "bool_int_>=":    (w, t, l, r) => `icmp sge ${t} ${l}, ${r}`,
   "int_int_<<":     (w, t, l, r) => `shl ${t} ${l}, ${r}`,
   "int_int_>>":     (w, t, l, r) => `lshr ${t} ${l}, ${r}`, // Logical shift right
   "int_int_&":      (w, t, l, r) => `and ${t} ${l}, ${r}`,
   "int_int_|":      (w, t, l, r) => `or ${t} ${l}, ${r}`,
-  "int_int_>":      (w, t, l, r) => `icmp sgt ${t} ${l}, ${r}`,
-  "int_int_<":      (w, t, l, r) => `icmp slt ${t} ${l}, ${r}`,
-  "int_int_<=":     (w, t, l, r) => `icmp sle ${t} ${l}, ${r}`,
-  "int_int_>=":     (w, t, l, r) => `icmp sge ${t} ${l}, ${r}`,
   "int_int_mod":    (w, t, l, r) => `srem ${t} ${l}, ${r}`,
 
   "float_float_+":  (w, t, l, r) => `fadd ${t} ${l}, ${r}`,
@@ -74,17 +74,21 @@ const operatorMapAll: {[key: string]: (writer: Writable, typeName: string, left:
   // O means ordered
   "bool_float_==":  (w, t, l, r) => `fcmp oeq ${t} ${l}, ${r}`,
   "bool_float_!=":  (w, t, l, r) => `fcmp one ${t} ${l}, ${r}`,
-  "float_float_>":  (w, t, l, r) => `fcmp ogt ${t} ${l}, ${r}`,
-  "float_float_<":  (w, t, l, r) => `fcmp olt ${t} ${l}, ${r}`,
-  "float_float_<=": (w, t, l, r) => `fcmp ole ${t} ${l}, ${r}`,
-  "float_float_>=": (w, t, l, r) => `fcmp oge ${t} ${l}, ${r}`,
+  "bool_float_>":   (w, t, l, r) => `fcmp ogt ${t} ${l}, ${r}`,
+  "bool_float_<":   (w, t, l, r) => `fcmp olt ${t} ${l}, ${r}`,
+  "bool_float_<=":  (w, t, l, r) => `fcmp ole ${t} ${l}, ${r}`,
+  "bool_float_>=":  (w, t, l, r) => `fcmp oge ${t} ${l}, ${r}`,
   
   "bool_bool_&":    (w, t, l, r) => `and ${t} ${l}, ${r}`,
   "bool_bool_|":    (w, t, l, r) => `or ${t} ${l}, ${r}`,
   "bool_bool_==":   (w, t, l, r) => `icmp eq ${t} ${l}, ${r}`,
   "bool_bool_!=":   (w, t, l, r) => `icmp ne ${t} ${l}, ${r}`,
 
+  "bool_rawptr_!=": (w, t, l, r) => `icmp ne ${t} ${l}, ${r}`,
+  "bool_rawptr_==": (w, t, l, r) => `icmp eq ${t} ${l}, ${r}`,
+
   "int_float_cast": (w, t, l, r) => `fptosi float ${l} to i32`,
+  "float_int_cast": (w, t, l, r) => `sitofp i32 ${l} to float`,
   // "int_float_cast": (w, t, l, r) => `sitofp i32 ${l} to float`,
 }
   
@@ -582,10 +586,24 @@ const writeLlvmBytecodeFunction = (bytecodeWriter: LlvmWriter, func: CompiledFun
     format(funcWriter, `$: $ $`, param.binding.name, param.capability.toLowerCase(), param.type.shortName)
   })
   format(funcWriter, `\n`)
-  format(funcWriter, `define $ $(`, func.returnType, name)
+  format(funcWriter, `define $ $(`, fnIr.returnType, name)
+
+  let sep = false
+  if (fnIr.returnParameter) {
+    const regName = fnIr.returnRegister
+    const type = fnIr.returnParameter.type
+    const reg = defineRegister(funcWriter, regName, RawPointerType)
+    generateName(bytecodeWriter, reg)
+    format(funcWriter, `ptr sret($) $`, type, register(regName))
+    // format(funcWriter, `) {\n`, func.returnType, name)
+    // format(funcWriter, "  $ = alloca $ ; $\n", reg, reg.type, getDataTypeName(funcWriter.writer, reg.type))
+    // format(funcWriter, "  store $ $, $ $\n", func.returnType, reg, 'ptr', reg)
+    sep = true
+  }
 
   func.parameters.forEach((param, i) => {
-    if (i !== 0) format(funcWriter, ", ")
+    if (sep) format(funcWriter, ", ")
+    sep = true
     // @ParameterPassing
     format(funcWriter, `$ $`, param.passingType, argValueBindings[i])
   })

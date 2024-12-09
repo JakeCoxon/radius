@@ -11,13 +11,13 @@ fn foo2(tup: (int, float, Thing)):
 
 
 fn main():
-  let thing = Thing(4, 3)
+  var thing = Thing(4, 3)
 
-  let tup = (1, float(2), thing)
+  var tup = (1, float(2), thing&)
 
   print(tup._1 + int(tup._2) + tup._3.x + tup._3.y)
 
-  tup = (23, float(67), thing)
+  tup = (23, float(67), tup._3&)
 
   foo(tup)
   foo2(tup)

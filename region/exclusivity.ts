@@ -85,6 +85,9 @@ export class RegionExclusivityCheckingPass {
       const argIndex = i++;
       this.initializeFunctionParam(entryState, param, this.function.parameterRegisters[argIndex]);
     }
+    if (this.function.returnParameter) {
+      this.initializeFunctionParam(entryState, this.function.returnParameter, this.function.returnRegister)
+    }
 
     const worklist = new RegionWorklist(this.cfg);
 

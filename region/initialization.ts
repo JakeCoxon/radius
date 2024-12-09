@@ -97,6 +97,9 @@ export class RegionInitializationCheckingPass {
       const argIndex = i++;
       this.initializeFunctionParam(entryState, param.binding, this.function.parameterRegisters[argIndex], param.type, param.capability);
     }
+    if (this.function.returnParameter) {
+      this.initializeFunctionParam(entryState, this.function.returnParameter.binding, this.function.returnRegister, this.function.returnParameter.type, this.function.returnParameter.capability);
+    }
 
     const worklist = new RegionWorklist(this.cfg);
 

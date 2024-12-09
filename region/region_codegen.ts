@@ -14,6 +14,9 @@ export class IrFunction {
   sequences: RegionSequence[] = []
   instructions: { [key: string]: InstructionNode } = {}
   root: SequenceId
+  returnParameter: FunctionParameter | null = null
+  returnRegister: string;
+  returnType: Type // May be converted to VoidType if returnRegister is used
 
   constructor(
     public debugName: string,

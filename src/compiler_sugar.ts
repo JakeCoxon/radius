@@ -98,8 +98,8 @@ export const defaultMetaFunction = (subCompilerState: SubCompilerState, compiled
   const copy = templateScope['__copy']
   compilerAssert(!copy || copy instanceof Closure)
 
-  if (compiledClass.classDefinition.keywords.includes('struct'))
-    compiledClass.type.typeInfo.isReferenceType = false
+  // if (compiledClass.classDefinition.keywords.includes('struct'))
+  compiledClass.type.typeInfo.isReferenceType = false // Always false for now
 
   const fnParams: ParserFunctionParameter[] = compiledClass.fields.map(x => 
     ({ name: new ParseIdentifier(createAnonymousToken(x.name)), storage: null,

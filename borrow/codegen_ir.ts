@@ -19,6 +19,7 @@ export class CodeGenerator {
   labelCount: number = 0;
   registerCount: number = 0;
   functions: Map<Binding, CompiledFunction> = new Map();
+  irFunctions: Map<Binding, IrFunction> = new Map();
   freshId: number = 0;
 
   functionGenerator(compiledFunction: CompiledFunction) {
@@ -54,6 +55,8 @@ export class FunctionCodeGenerator {
   unusedBlocks: Set<string> = new Set();
 
   regionCodegen: RegionCodegen
+  irFunction: IrFunction;
+  body: Ast;
 
   constructor(
     public codegen: CodeGenerator,
@@ -115,6 +118,16 @@ export class FunctionCodeGenerator {
 
     this.body = body
     const fn = new IrFunction(binding.name, params, paramRegs);
+    fn.returnType = returnType
+    this.irFunction = fn
+    if (!(returnType instanceof PrimitiveType)) {
+      fn.returnParameter = new FunctionParameter(new Binding('return', returnType), returnType, false, RawPointerType, Capability.Set);
+      const returnReg = this.newRegister();
+      const variable = new Variable('return', RawPointerType, returnReg, Capability.Set);
+      this.variableMap.set(fn.returnParameter.binding, variable)
+      fn.returnRegister = returnReg
+      fn.returnType = VoidType
+    }
     this.regionCodegen = new RegionCodegen(fn, this.compiledFunction, this.codegen)
     this.regionCodegen.createRootSequenceRegion()    
 
@@ -354,11 +367,15 @@ export class FunctionCodeGenerator {
         this.finalizeScope()
         this.addInstruction(new ReturnInstruction(ast.expr.type, value.register));
       } else {
-        // Not implemented yet. try it out with tests
-        // const value = this.toValue(ast.type, returnReg)
-        // this.finalizeScope()
-        // this.addInstruction(new ReturnInstruction(value.register));
-        compilerAssert(false, 'Not implemented return statement', { ast })
+        // Perform a move to the return variable
+        compilerAssert(returnReg instanceof Pointer, 'Return value must be a pointer', { ast })
+        const returnParameter = this.irFunction.returnParameter;
+        compilerAssert(returnParameter, 'Return parameter not found', { ast })
+        const variable = this.variableMap.get(returnParameter.binding)
+        compilerAssert(variable, 'Return variable not found', { ast })
+        this.generateMovePointerInstruction(variable.register, returnReg, ast.expr.type)
+        this.finalizeScope()
+        this.addInstruction(new ReturnInstruction(VoidType, null));
       }
     }
     this._createUnusedBlock();
@@ -711,10 +728,15 @@ export class FunctionCodeGenerator {
       c: this.codegen.functions
     });
     this.addInstruction(new CommentInstruction(`Call ${ast.binding.name}`))
-
+    const fnIr = this.codegen.irFunctions.get(ast.binding)
+    if (fn.body) compilerAssert(fnIr, `Function ${ast.binding.name} not found`, { ast });
+    
     compilerAssert(ast.args.length === fn.argBindings.length, 'Argument count mismatch', { binding: ast.binding, got: ast.args.length, expected: fn.argBindings.length });
     
     const argRegs: string[] = [];
+    const capabilities = fn.parameters.map(p => p.capability)
+    const argTypes = fn.parameters.map(p => p.type)
+
     let i = 0
     for (const givenArg of ast.args) {
       const argIndex = i++;
@@ -724,15 +746,25 @@ export class FunctionCodeGenerator {
       argRegs.push(argReg);
     }
 
+    let resultReg: string | null = null
+    if (fnIr?.returnParameter) {
+      resultReg = this.generateAlloc(fn.returnType);
+      argRegs.unshift(resultReg)
+      capabilities.unshift(Capability.Set)
+      argTypes.unshift(RawPointerType)
+    }
+
     // Call the function
-    if (fn.returnType === VoidType) {
-      this.addInstruction(new CallInstruction(null, fn.returnType, ast.binding, argRegs, fn.parameters.map(b => b.type), fn.parameters.map(b => b.capability)))
+    const returnType = fnIr?.returnType || fn.returnType
+    if (returnType === VoidType) {
+      this.addInstruction(new CallInstruction(null, returnType, ast.binding, argRegs, argTypes, capabilities))
+      if (fnIr?.returnParameter) return new Pointer(resultReg!)
       return new Pointer('') // hack. Make sure this is not used
     }
     const accessReg = this.newRegister()
-    const resultReg = this.generateAlloc(fn.returnType);
+    resultReg = this.generateAlloc(fn.returnType);
     this.addInstruction(new AccessInstruction(accessReg, resultReg, [Capability.Set], fn.returnType));
-    this.addInstruction(new CallInstruction(accessReg, fn.returnType, ast.binding, argRegs, fn.parameters.map(b => b.type), fn.parameters.map(b => b.capability)))
+    this.addInstruction(new CallInstruction(accessReg, fn.returnType, ast.binding, argRegs, argTypes, capabilities))
     return new Pointer(resultReg)
   }
 
