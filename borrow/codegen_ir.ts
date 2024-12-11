@@ -1,6 +1,6 @@
 import { IrFunction, printIrFunction, RegionCodegen, RegionId } from "../region/region_codegen";
 import { externalBuiltinBindings } from "../src/compiler_sugar";
-import { AndAst, Ast, Binding, BindingAst, BlockAst, BoolAst, BoolType, BreakAst, CallAst, Capability, CastAst, CompiledFunction, compilerAssert, ConstructorAst, DefaultConsAst, FieldAst, FunctionParameter, GlobalCompilerState, IfAst, IntType, LetAst, LetType, MutSigilAst, NotAst, NumberAst, OperatorAst, OrAst, ParameterizedType, PrimitiveType, RawPointerType, ReturnAst, SetAst, SetFieldAst, SetSubscriptAst, SetValueFieldAst, SourceLocation, StatementsAst, StringAst, SubscriptAst, Type, UserCallAst, ValueFieldAst, VoidAst, VoidType, WhileAst, YieldAst } from "../src/defs";
+import { AliasAst, AndAst, Ast, Binding, BindingAst, BlockAst, BoolAst, BoolType, BreakAst, CallAst, Capability, CastAst, CompiledFunction, compilerAssert, ConstructorAst, DefaultConsAst, FieldAst, FunctionParameter, GlobalCompilerState, IfAst, IntType, LetAst, LetType, MutSigilAst, NeverType, NotAst, NumberAst, OperatorAst, OrAst, ParameterizedType, PrimitiveType, RawPointerType, ReturnAst, SetAst, SetFieldAst, SetSubscriptAst, SetValueFieldAst, SourceLocation, StatementsAst, StringAst, SubscriptAst, Type, UserCallAst, ValueFieldAst, VoidAst, VoidType, WhileAst, YieldAst } from "../src/defs";
 import { ASTNode, AllocInstruction, AssignInstruction, AssignmentNode, BasicBlock, BinaryExpressionNode, BinaryOperationInstruction, BlockStatementNode, CallExpressionNode, CallInstruction, AccessInstruction, ConditionalJumpInstruction, CreateStructNode, ExpressionNode, ExpressionStatementNode, FunctionBlock, FunctionDeclarationNode, IRInstruction, IRValue, IdentifierNode, IfStatementNode, JumpInstruction, LetConstNode, LiteralNode, LoadConstantInstruction, LoadFromAddressInstruction, MemberExpressionNode, ProgramNode, Pointer, Value, ReturnInstruction, ReturnNode, StoreToAddressInstruction, Variable, VariableDeclarationNode, WhileStatementNode, GetFieldPointerInstruction, AndNode, OrNode, PhiInstruction, CommentInstruction, MoveInstruction, EndAccessInstruction, printIR, MarkInitializedInstruction, InstructionId, PhiSource, DeallocStackInstruction, PointerOffsetInstruction, ProjectBundleInstruction, YieldInstruction, BreakInstruction, GetGlobalAddress } from "./defs";
 
 type ExpressionContext = {
@@ -138,8 +138,9 @@ export class FunctionCodeGenerator {
 
     this.currentFunction = new FunctionBlock(binding.name, binding, params, paramRegs, this.blocks);
 
-    if (returnType !== VoidType) {
-      this.generate(new ReturnAst(body.type, SourceLocation.anon, body))
+    if (body.type !== VoidType && body.type !== NeverType) {
+      this.body = new ReturnAst(body.type, SourceLocation.anon, body)
+      this.generate(this.body)
     } else {
       this.generate(body);
       this.finalizeScope();
@@ -177,6 +178,7 @@ export class FunctionCodeGenerator {
     if (ast instanceof VoidAst) return
 
     if (ast instanceof LetAst)           { return this.generateVariableDeclaration(ast) }
+    if (ast instanceof AliasAst)         { return this.generateAliasDeclaration(ast) }
     if (ast instanceof SetAst)           { return this.generateAssignmentStatement(ast) }
     if (ast instanceof IfAst)            { return this.generateIfStatement(ast) }
     if (ast instanceof WhileAst)         { return this.generateWhileStatement(ast) }
@@ -214,14 +216,14 @@ export class FunctionCodeGenerator {
     // if (ast instanceof MutSigilAst)    { return this.generateExpression(ast.expr, context) }
     if (ast instanceof StatementsAst) { return this.generateStatementsExpression(ast, context) }
     
-    compilerAssert(false, 'Not implemented expression', { ast })
+    compilerAssert(false, 'Not implemented expression', { ast, fnBody: this.body })
   }
 
   generateStatementsExpression(ast: StatementsAst, context: ExpressionContext): IRValue {
     for (const stmt of ast.statements.slice(0, -1)) {
       this.generate(stmt);
     }
-    if (ast.type !== VoidType) {
+    if (ast.type !== VoidType && ast.type !== NeverType) {
       return this.generateExpression(ast.statements[ast.statements.length - 1], context);
     } else {
       this.generate(ast.statements[ast.statements.length - 1])
@@ -422,6 +424,19 @@ export class FunctionCodeGenerator {
     this.generateMutableVariableDeclaration(ast, value);
   }
 
+  generateAliasDeclaration(ast: AliasAst) {
+    // Like let but with lower capabilities
+    this.addInstruction(new CommentInstruction(`Alias ${ast.binding.name}`))
+    const astWithoutMutSigil = ast.value instanceof MutSigilAst ? ast.value.expr : ast.value
+    const value = this.generateExpression(astWithoutMutSigil, { valueCategory: 'rvalue' }) 
+    const type = ast.value.type;
+    const ptr = this.storeResult(type, value)
+    const reg = this.newRegister();
+    this.variableMap.set(ast.binding, new Variable(ast.binding.name, type, reg, Capability.Sink, true));
+    // this.addInstruction(new AccessInstruction(reg, ptr.address, [Capability.Sink], type));
+    this.addInstruction(new AssignInstruction(reg, type, ptr.address));
+  }
+
   generateProjection(ast: LetAst, value: IRValue | null) {
     const type = ast.binding.type
     const reg = this.newRegister();
@@ -607,7 +622,7 @@ export class FunctionCodeGenerator {
       if (capability === Capability.Sink || capability === Capability.Set || capability === Capability.Inout) {
         const [expectedCapability, owned] = this.getCapabilityAndOwnership(ast)
         compilerAssert(expectedCapability !== Capability.Let, 'Cannot mutate or sink an immutable variable', { ast, stmt: this.currentStatement, location: ast.location.source ? ast.location : this.currentLocation });
-        compilerAssert(hasMutSigil, 'Expected mutation sigil on mutable argument', { ast, stmt: this.currentStatement, location: ast.location.source ? ast.location : this.currentLocation });
+        if (!owned) compilerAssert(hasMutSigil, 'Expected mutation sigil on mutable argument', { ast, stmt: this.currentStatement, location: ast.location.source ? ast.location : this.currentLocation });
       }
 
       const argReg = this.generateExpression(ast, { valueCategory: 'lvalue' });
@@ -632,8 +647,9 @@ export class FunctionCodeGenerator {
 
     if (hasMutSigil) {
       compilerAssert(capability !== Capability.Let, 'Unexpected mutation sigil', { ast, stmt: this.currentStatement, location: ast.location.source ? ast.location : this.currentLocation });
-      compilerAssert(argReg instanceof Pointer, 'Function argument must be an pointer', { ast, capability, passingType });
-      this.addInstruction(new MarkInitializedInstruction(argReg.address, ast.type, false));
+      // compilerAssert(argReg instanceof Pointer, 'Function argument must be an pointer', { ast, capability, passingType });
+      const ptr = this.storeResult(ast.type, argReg)
+      this.addInstruction(new MarkInitializedInstruction(ptr.address, ast.type, false));
     }
 
     return newReg
@@ -849,6 +865,7 @@ export class FunctionCodeGenerator {
     if (value instanceof BindingAst) {
       const variable = this.variableMap.get(value.binding)
       compilerAssert(variable, 'Variable not found', { value })
+      if (variable.alias) return [variable.capability, true]
       return [variable.capability, false]
     }
     if (value instanceof ValueFieldAst)  return this.getCapabilityAndOwnership(value.left)
@@ -857,11 +874,13 @@ export class FunctionCodeGenerator {
     if (value instanceof CallAst)        return [Capability.Sink, true]
     if (value instanceof NumberAst)      return [Capability.Let,  false]
     if (value instanceof OperatorAst)    return [Capability.Let,  false]
+    if (value instanceof StringAst)      return [Capability.Sink, true]
     if (value instanceof ConstructorAst) return [Capability.Sink, true]
     if (value instanceof DefaultConsAst) return [Capability.Sink, true]
     if (value instanceof SubscriptAst)   return [Capability.Sink, false]
     if (value instanceof BlockAst)       return this.getCapabilityAndOwnership(value.body)
     if (value instanceof StatementsAst)  return this.getCapabilityAndOwnership(value.statements[value.statements.length - 1])
+    if (value instanceof CastAst)        return this.getCapabilityAndOwnership(value.expr)
     compilerAssert(false, 'Not implemented', { value, currentStatement: this.currentStatement })
   }
 
@@ -981,7 +1000,7 @@ export class FunctionCodeGenerator {
   }
 
   generateStringLiteral(ast: StringAst, context: ExpressionContext): IRValue {
-    compilerAssert(context.valueCategory === 'rvalue', 'Literal must be an RValue');
+    // compilerAssert(context.valueCategory === 'rvalue', 'Literal must be an RValue');
     if (ast.type === RawPointerType) {
       const resultPtr = this.newRegister();
       this.addInstruction(new LoadConstantInstruction(resultPtr, ast.type, ast.value));

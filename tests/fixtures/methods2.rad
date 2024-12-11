@@ -11,7 +11,7 @@ fn bam(thing: Thing) @method:
 
 fn main():
 
-  let thing = Thing(0, 0)
+  var thing = Thing(0, 0)
 
   thing.x = 1
   thing.y = 10
@@ -22,4 +22,4 @@ fn main():
 
   const fam = {|x| x + 100}
 
-  let x = 2.fam
+  var x = 2.fam

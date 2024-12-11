@@ -1,4 +1,3 @@
-
 fn foo(x: int, y: float):
   print(x)
 

@@ -8,13 +8,13 @@ type Foo @struct:
 
 fn main():
 
-  let thing: Thing
+  var thing: Thing
   print(thing.x)
   print(thing.y)
   thing.x = 41
   thing.y = 2.23
 
-  let foo: Foo
+  var foo: Foo
 
   # We can get the local directly since the fieldpath are all value types
   print(foo.thing1.x)

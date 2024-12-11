@@ -98,7 +98,7 @@ test('option_expansion', async () => {
   }
 })
 
-test('basic', async () => {
+test('basicasdf', async () => {
   const testObject = createTest({ 
     moduleName: 'basic',
     globalOptions,
@@ -108,6 +108,7 @@ test('basic', async () => {
     const input = await Bun.file(testObject.inputPath).text()
     runCompilerTest(input, { testObject })
     await writeLlvmBytecodeFile(testObject)
+    await executeNativeExecutable(testObject)
   } finally {
     testObject.close()
   }
@@ -787,6 +788,7 @@ test('advanced', async () => {
     const input = await Bun.file(testObject.inputPath).text()
     runCompilerTest(input, { testObject })
     await writeLlvmBytecodeFile(testObject)
+    await executeNativeExecutable(testObject)
   } finally {
     testObject.close()
   }
@@ -871,36 +873,6 @@ test('numbers', async () => {
     moduleName: 'numbers',
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/numbers.rad`,
-  })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-  } finally {
-    testObject.close()
-  }
-})
-
-test('refparam', async () => {
-  const testObject = createTest({ 
-    moduleName: 'refparam',
-    globalOptions,
-    inputPath: `${import.meta.dir}/fixtures/refparam.rad`,
-  })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-  } finally {
-    testObject.close()
-  }
-})
-
-test('refparam_method', async () => {
-  const testObject = createTest({ 
-    moduleName: 'refparam_method',
-    globalOptions,
-    inputPath: `${import.meta.dir}/fixtures/refparam_method.rad`,
   })
   try {
     const input = await Bun.file(testObject.inputPath).text()

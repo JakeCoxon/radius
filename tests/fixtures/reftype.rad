@@ -1,8 +1,10 @@
+import compiler for assert
+
 type Thing:
   x : int
   y : float
 
-fn foothing(a: Thing):
+fn foothing(a: inout Thing):
   print(a.x)
   # print(a)
   a.x = 64
@@ -10,9 +12,12 @@ fn foothing(a: Thing):
 
 fn main():
 
-  let thing: Thing
+  var thing: Thing
   thing = Thing(32, float(100))
 
   print(thing.x)
   print(thing.y)
-  foothing(thing)
+  foothing(thing&)
+
+  assert(thing.x == 64)
+  assert(thing.y == 100.0)

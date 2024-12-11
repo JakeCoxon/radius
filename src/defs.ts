@@ -487,6 +487,7 @@ export class StringAst extends AstRoot {        key = 'string' as const;        
 export class BindingAst extends AstRoot {       key = 'binding' as const;        constructor(public type: Type, public location: SourceLocation, public binding: Binding) { super() } }
 export class BoolAst extends AstRoot {          key = 'bool' as const;           constructor(public type: Type, public location: SourceLocation, public value: boolean) { super() } }
 export class LetAst extends AstRoot {           key = 'let' as const;            constructor(public type: Type, public location: SourceLocation, public binding: Binding, public value: Ast | null, public letType: LetType) { super() } }
+export class AliasAst extends AstRoot {         key = 'alias' as const;          constructor(public type: Type, public location: SourceLocation, public binding: Binding, public value: Ast) { super() } }
 export class SetAst extends AstRoot {           key = 'set' as const;            constructor(public type: Type, public location: SourceLocation, public binding: Binding, public value: Ast) { super() } }
 export class OperatorAst extends AstRoot {      key = 'operator' as const;       constructor(public type: Type, public location: SourceLocation, public operator: string, public args: Ast[]) { super() } }
 export class IfAst extends AstRoot {            key = 'if' as const;             constructor(public type: Type, public location: SourceLocation, public expr: Ast, public trueBody: Ast, public falseBody: Ast | null) { super() } }
@@ -527,7 +528,7 @@ export type Ast = NumberAst | LetAst | SetAst | OperatorAst | IfAst | ListAst | 
   OrAst | StatementsAst | WhileAst | ReturnAst | SetFieldAst | VoidAst | CastAst | SubscriptAst | ConstructorAst |
   BindingAst | StringAst | NotAst | FieldAst | BlockAst | BreakAst | BoolAst | CastAst | DefaultConsAst | ValueFieldAst |
   SetValueFieldAst | SetSubscriptAst | AddressAst | DerefAst | SetDerefAst | CompTimeObjAst | NamedArgAst | InterleaveAst | 
-  ContinueInterAst | VariantCastAst | EnumVariantAst | MutSigilAst | YieldAst
+  ContinueInterAst | VariantCastAst | EnumVariantAst | MutSigilAst | YieldAst | AliasAst
 export const isAst = (value: unknown): value is Ast => value instanceof AstRoot;
 
 export class Tuple {

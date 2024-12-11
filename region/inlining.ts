@@ -1,7 +1,7 @@
 import { Binding, Capability, CompiledFunction, CompilerError, GlobalCompilerState, PrimitiveType, RawPointerType, VoidType, compilerAssert } from "../src/defs"; // prettier-ignore
 import { CodeGenerator } from '../borrow/codegen_ir';
 import { AccessInstruction, AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, CommentInstruction, ConditionalJumpInstruction, EndAccessInstruction, FunctionBlock, GetFieldPointerInstruction, getInstructionOperands, getInstructionResult, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, MarkInitializedInstruction, Module, PhiInstruction, PhiSource, PointerOffsetInstruction, printIR, ProjectBundleInstruction, ReturnInstruction, StoreToAddressInstruction, YieldInstruction } from '../borrow/defs';
-import { BlockRegion, IfRegion, InsertPosition, InstructionId, IrDiagnostics, IrFunction, printIrFunction, Region, RegionCodegen, RegionId, SequenceId, WhileRegion } from "./region_codegen";
+import { BlockRegion, IfRegion, InsertPosition, InstructionId, IrDiagnostics, IrFunction, printIrFunction, Region, RegionCodegen, RegionId, ScopeRegion, SequenceId, WhileRegion } from "./region_codegen";
 
 
 type RegisterMapping = {
@@ -124,7 +124,7 @@ class ProjectYieldInliningPass {
 
     printIrFunction(newIr)
 
-    const newRegionsInserts = copyRegionsAfterRegion(this.codegen, this.mapping, fn, newIr, prev)
+    const newRegionsInserts = this.copyRegionsAfterRegion(newIr, prev)
 
     // Handle returns
     const onePastEndRegionId = fn.regions[newRegionsInserts.endRegionId!].nextRegion
@@ -196,7 +196,7 @@ class ProjectYieldInliningPass {
           // Easy case, the end instruction is in the same sequence
 
           const [endPrev, endNext] = this.codegen.splitBlockBeforeInstr(endInstrId)
-          
+
           this.diagnostics.instructionNote(endInstrId, "To be deleted")
 
            // Move the regions after the yield to after the end instruction
@@ -250,69 +250,87 @@ class ProjectYieldInliningPass {
     return insertedInstructions
   }
 
-}
 
-const copyRegionsAfterRegion = (
-  codegen: RegionCodegen, mapping: RegisterMapping, destFn: IrFunction, sourceFn: IrFunction, prevRegionId: RegionId) => {
+  copyRegionsAfterRegion(sourceFn: IrFunction, prevRegionId: RegionId) {
+    const destFn = this.fn
+    const { codegen, mapping } = this
 
-  const existingSequence = destFn.regions[prevRegionId].parentSequence
+    const existingSequence = destFn.regions[prevRegionId].parentSequence
 
-  const traverseSequence = (destParentSequenceId: SequenceId, prevRegionId: RegionId | null, sequenceId: SequenceId) => {
-    const seq = sourceFn.sequences[sequenceId]
+    const debug = this.fn.debugName === 'main compiled 0' && this.runId === 1
+    // if (this.fn.debugName === 'main compiled 0') {
+    //   if (this.runId === 2) compilerAssert(false, "Breakpoint", {})
+    //   console.log({ copyRegionsAfterRegion: this.fn.debugName, run: this.runId })
+    // }
 
-    const inserts = { startRegionId: null as RegionId | null, endRegionId: null as RegionId | null }
+    const traverseSequence = (destParentSequenceId: SequenceId, prevRegionId: RegionId | null, sequenceId: SequenceId) => {
+      const seq = sourceFn.sequences[sequenceId]
 
-    const insert = (newRegionId: RegionId) => {
-      if (prevRegionId === null) codegen.insertSequenceChildAtBeginning(destParentSequenceId, newRegionId)
-      else codegen.insertSequenceChildAfter(destParentSequenceId, prevRegionId, newRegionId)
-      if (!inserts.startRegionId) inserts.startRegionId = newRegionId
-      inserts.endRegionId = newRegionId
-    }
+      const inserts = { startRegionId: null as RegionId | null, endRegionId: null as RegionId | null }
 
-    
-    for (let regionId = seq.firstChildRegion; regionId !== null; regionId = sourceFn.regions[regionId].nextRegion) {
-      const region = sourceFn.regions[regionId]
-      if (region instanceof BlockRegion) {
-        const newRegionId = codegen.insertNewBlockRegion()
-        insert(newRegionId)
-        prevRegionId = newRegionId
-        codegen.setInsertionBlock(newRegionId)
-        codegen.insertInstruction(new CommentInstruction(`!! Copied region`))
-        mapRegionInstructions(codegen, sourceFn, mapping, region, (instr) => {
-          codegen.insertInstruction(instr)
-        })
-      } else if (region instanceof IfRegion) {
-        const newRegionId = codegen.insertNewIfRegion()
-        const newRegion = codegen.getIfRegion(newRegionId)
-        insert(newRegionId)
-        prevRegionId = newRegionId
-        traverseSequence(newRegion.conditionSequence, null, region.conditionSequence)
-        traverseSequence(newRegion.thenSequence, null, region.thenSequence)
-        traverseSequence(newRegion.elseSequence, null, region.elseSequence)
-        traverseSequence(newRegion.exitSequence, null, region.exitSequence)
-        newRegion.conditionRegister = mapping[region.conditionRegister]
-        newRegion.result = mapping[region.result]
-        compilerAssert(newRegion.conditionRegister !== undefined, "Condition register not found", { 
-          irFunction: sourceFn.debugName,
-          newRegionId, regionId,
-          region, newRegion, mapping })
-      } else if (region instanceof WhileRegion) {
-        const newRegionId = codegen.insertNewWhileRegion()
-        const newRegion = codegen.getWhileRegion(newRegionId)
-        insert(newRegionId)
-        prevRegionId = newRegionId
-        traverseSequence(newRegion.conditionSequence, null, region.conditionSequence)
-        traverseSequence(newRegion.bodySequence, null, region.bodySequence)
-        newRegion.conditionRegister = mapping[region.conditionRegister]
-        compilerAssert(newRegion.conditionRegister !== undefined, "Condition register not found", { region, newRegion })
+      const insert = (newRegionId: RegionId) => {
+        if (prevRegionId === null) codegen.insertSequenceChildAtBeginning(destParentSequenceId, newRegionId)
+        else codegen.insertSequenceChildAfter(destParentSequenceId, prevRegionId, newRegionId)
+        if (!inserts.startRegionId) inserts.startRegionId = newRegionId
+        inserts.endRegionId = newRegionId
       }
-    }
-    return inserts
-  }
+
       
-  return traverseSequence(existingSequence, prevRegionId, sourceFn.root)
+      for (let regionId = seq.firstChildRegion; regionId !== null; regionId = sourceFn.regions[regionId].nextRegion) {
+        const region = sourceFn.regions[regionId]
+        if (region instanceof BlockRegion) {
+          const newRegionId = codegen.insertNewBlockRegion()
+          insert(newRegionId)
+          prevRegionId = newRegionId
+          codegen.setInsertionBlock(newRegionId)
+          codegen.insertInstruction(new CommentInstruction(`!! Copied region`))
+          mapRegionInstructions(codegen, sourceFn, mapping, region, (instr) => {
+            codegen.insertInstruction(instr)
+          })
+        } else if (region instanceof IfRegion) {
+          const newRegionId = codegen.insertNewIfRegion()
+          const newRegion = codegen.getIfRegion(newRegionId)
+          insert(newRegionId)
+          prevRegionId = newRegionId
+          traverseSequence(newRegion.conditionSequence, null, region.conditionSequence)
+          traverseSequence(newRegion.thenSequence, null, region.thenSequence)
+          traverseSequence(newRegion.elseSequence, null, region.elseSequence)
+          traverseSequence(newRegion.exitSequence, null, region.exitSequence)
+          newRegion.conditionRegister = mapping[region.conditionRegister]
+          newRegion.result = mapping[region.result]
+          compilerAssert(newRegion.conditionRegister !== undefined, "Condition register not found", { 
+            irFunction: sourceFn.debugName,
+            newRegionId, regionId,
+            region, newRegion, mapping })
+        } else if (region instanceof WhileRegion) {
+          const newRegionId = codegen.insertNewWhileRegion()
+          const newRegion = codegen.getWhileRegion(newRegionId)
+          insert(newRegionId)
+          prevRegionId = newRegionId
+          traverseSequence(newRegion.conditionSequence, null, region.conditionSequence)
+          traverseSequence(newRegion.bodySequence, null, region.bodySequence)
+          newRegion.conditionRegister = mapping[region.conditionRegister]
+          compilerAssert(newRegion.conditionRegister !== undefined, "Condition register not found", { region, newRegion })
+        } else if (region instanceof ScopeRegion) {
+          const newRegionId = codegen.insertNewScopeRegion()
+          const newRegion = codegen.getScopeRegion(newRegionId)
+          insert(newRegionId)
+          prevRegionId = newRegionId
+          traverseSequence(newRegion.bodySequence, null, region.bodySequence)
+          traverseSequence(newRegion.exitSequence, null, region.exitSequence)
+        } else compilerAssert(false, "Region not found", { region })
+      }
+      return inserts
+    }
+        
+    const result = traverseSequence(existingSequence, prevRegionId, sourceFn.root)
+
+    return result
+
+  }
 
 }
+
 
 
 const mapRegionInstructions = (codegen: RegionCodegen, fn: IrFunction, mapping: RegisterMapping, region: BlockRegion, func: (instr: IRInstruction) => void) => {

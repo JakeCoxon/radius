@@ -15,7 +15,8 @@ export class Variable {
     public name: string, 
     public type: Type,
     public register: string,
-    public capability: Capability
+    public capability: Capability,
+    public alias = false, // Just to make codegen easier for alias
   ) {}
 }
 

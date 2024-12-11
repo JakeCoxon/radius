@@ -1,7 +1,7 @@
 import { BytecodeDefault, BytecodeSecondOrder, callFunctionFromValueTask, compileClassTask, compileFunctionPrototype, createBytecodeVmAndExecuteTask, pushBytecode, pushGeneratedBytecode, unknownToAst, visitParseNode, visitParseNodeAndError } from "./compiler";
 import { externalBuiltinBindings, getEnumOf } from "./compiler_sugar";
 import { getCommonType, hashValues, isTypeInteger, normalizeNumberType, numberTypeToConcrete, propagateLiteralType, propagatedLiteralAst, typeCheckAssert, typeMatcherEquals, typeCheckFunctionResult, typeArgumentsToType } from "./compiler_types";
-import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, CallAst, IntType, Closure, UserCallAst, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition, ParseCall, TypeVariable, TypeMatcher, SourceLocation, ExternalTypeConstructor, ScopeParentSymbol, SubCompilerState, CompilerFunction, IntLiteralType, FloatLiteralType, FloatType, RawPointerType, AddressAst, BindingAst, UnknownObject, NeverType, CompilerFunctionCallContext, CompileTimeObjectType, CompTimeObjAst, ParseString, NamedArgAst, TypeCheckResult, u8Type, TypeCheckVar, ParseFreshIden, NumberAst, BoolAst, createStatements, ExternalFunction, BlockAst, LabelBlock, ConstructorAst, VariantCastAst, EnumVariantAst, FunctionParameter, Capability, MutSigilAst, LetType } from "./defs";
+import { BytecodeWriter, FunctionDefinition, Type, Binding, LetAst, Ast, StatementsAst, Scope, createScope, compilerAssert, VoidType, Vm, bytecodeToString, ParseIdentifier, ParseNode, CompiledFunction, AstRoot, isAst, pushSubCompilerState, ParseNil, createToken, ParseStatements, FunctionType, ParserFunctionDecl, Tuple, TaskContext, GlobalCompilerState, isType, ParseNote, createAnonymousToken, textColors, CompilerError, PrimitiveType, CastAst, CallAst, IntType, Closure, UserCallAst, ParameterizedType, expectMap, ConcreteClassType, ClassDefinition, ParseCall, TypeVariable, TypeMatcher, SourceLocation, ExternalTypeConstructor, ScopeParentSymbol, SubCompilerState, CompilerFunction, IntLiteralType, FloatLiteralType, FloatType, RawPointerType, AddressAst, BindingAst, UnknownObject, NeverType, CompilerFunctionCallContext, CompileTimeObjectType, CompTimeObjAst, ParseString, NamedArgAst, TypeCheckResult, u8Type, TypeCheckVar, ParseFreshIden, NumberAst, BoolAst, createStatements, ExternalFunction, BlockAst, LabelBlock, ConstructorAst, VariantCastAst, EnumVariantAst, FunctionParameter, Capability, MutSigilAst, LetType, AliasAst } from "./defs";
 import { Task, TaskDef, Unit } from "./tasks";
 
 
@@ -295,15 +295,15 @@ function functionInlineTask(ctx: TaskContext, { location, func, typeArgs, parent
     binding.definitionCompiler = inlineInto
     templateScope[nameValue] = binding
     propagateLiteralType(concreteTypes[i], arg)
+
+    compilerAssert(capability, "Expected capability on function param", { name: nameValue, func: func.debugName })
     // TODO: This breaks sink params stuff. think about having another capability to allow sinking
     // TODO: Handle inout params differently so we don't sink by default
     // Find a better way to forward arguments without using let statements
     // Maybe a custom AST, special capability, or custom IR
     const mutable = capability === Capability.Sink || capability === Capability.Inout
-    const letType = capability === Capability.Sink ? LetType.Var : capability === Capability.Inout ? LetType.VarRef : LetType.Let
-    // compilerAssert(capability !== Capability.Inout, "Not implemented inlining an inout parameter", { name, func: func.debugName, capability })
     if (mutable) arg = new MutSigilAst(arg.type, arg.location, arg)
-    statements.push(new LetAst(VoidType, location, binding, arg, letType))
+    statements.push(new AliasAst(VoidType, location, binding, arg))
     argBindings.push(binding)
   });
   

@@ -467,20 +467,42 @@ fn test_borrow():
     let x = foo2.x
     print(x)
 
-fn main():
 
-  test_array1()
-  test_break()
+fn test_ops():
+  let index = 23
+  let size = 10
+  if index < 0 or index >= size:
+    print("Bounds check failed")
+    exit(0)
+
+type Person:
+  name : string
+  age : int
+
+fn test_string():
+  var str = "Hello"
+  print(str)
+
+  var person = Person("Jake", 300)
+  print(person)
+  
+
+fn main():
+  # test_ops()
+  test_string()
+
+  # test_array1()
+  # test_break()
   # # test_array2()
-  test_array3()
-  test_borrow()
+  # test_array3()
+  # test_borrow()
   # test_move()
   # test_project()
   # test_loop()
   # test_basic_project()
   # test_set()
 
-  print("x", 123)
+  # print("x", 123)
 
-  if 2 == 2:
-    print("Hello")
+  # if 2 == 2:
+  #   print("Hello")

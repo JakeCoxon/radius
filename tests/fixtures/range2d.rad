@@ -17,7 +17,7 @@ type Range:
   const __iterate = range_iterate
 
 fn range_iterate!(f)(range: Range) -> void @inline:
-  let i = range.start
+  var i = range.start
   while i < range.end:
     f(i)
     i += 1
@@ -27,7 +27,7 @@ type vec2i:
   y: int
 
 fn main():
-  let range = Range2d(32, 64)
+  var range = Range2d(32, 64)
   for vec in range:
     if vec.x * vec.y > 256:
       continue # continue does the right thing

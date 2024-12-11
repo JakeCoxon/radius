@@ -3,7 +3,7 @@ import { BytecodeSecondOrder, callFunctionFromValueTask, compileFunctionPrototyp
 import { compileAndExecuteFunctionHeaderTask, compileExportedFunctionTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, FunctionCallArg, functionTemplateTypeCheckAndCompileTask, insertFunctionDefinition } from "./compiler_functions"
 import { concat, generator } from "./compiler_iterator"
 import { NoneTypeConstructor, OptionTypeConstructor, SomeTypeConstructor, createParameterizedExternalType, hashValues, isTypeInteger, isTypeScalar, propagateLiteralType, propagatedLiteralAst } from "./compiler_types"
-import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, UserCallAst, NeverType, IfAst, BoolType, VoidAst, LoopObject, CompileTimeObjectType, u64Type, FunctionDefinition, ParserFunctionDecl, StatementsAst, IntLiteralType, FloatLiteralType, isAst, isType, isTypeCheckError, InterleaveAst, ContinueInterAst, CompTimeObjAst, ParseEvalFunc, SetAst, DefaultConsAst, WhileAst, BoolAst, isArray, ExpansionSelector, ParseNote, ExpansionCompilerState, ParseBoolean, ParseOr, ParseBreak, ParseIs, filterNotNull, ParseLetConst, ParseCast, VariantCastAst, ExternalTypeConstructor, GlobalCompilerState, ParseOrElse, ParseField, ParseQuestion, ParseBreakOpt, LabelBlock, BlockAst, ParseMatch, ParseExtract, ParseMatchCase, ParseTuple, ParseString, Tuple, ParseNot, EnumVariantAst, ParseIfMulti, ParseGuard, ParseBlockNoScope, Capability, TypeCheckResult, CompiledFunction, LetType, YieldAst, textColors } from "./defs"
+import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, UserCallAst, NeverType, IfAst, BoolType, VoidAst, LoopObject, CompileTimeObjectType, u64Type, FunctionDefinition, ParserFunctionDecl, StatementsAst, IntLiteralType, FloatLiteralType, isAst, isType, isTypeCheckError, InterleaveAst, ContinueInterAst, CompTimeObjAst, ParseEvalFunc, SetAst, DefaultConsAst, WhileAst, BoolAst, isArray, ExpansionSelector, ParseNote, ExpansionCompilerState, ParseBoolean, ParseOr, ParseBreak, ParseIs, filterNotNull, ParseLetConst, ParseCast, VariantCastAst, ExternalTypeConstructor, GlobalCompilerState, ParseOrElse, ParseField, ParseQuestion, ParseBreakOpt, LabelBlock, BlockAst, ParseMatch, ParseExtract, ParseMatchCase, ParseTuple, ParseString, Tuple, ParseNot, EnumVariantAst, ParseIfMulti, ParseGuard, ParseBlockNoScope, Capability, TypeCheckResult, CompiledFunction, LetType, YieldAst, textColors, MutSigilAst, TypeField } from "./defs"
 import { Event, Task, TaskDef, isTask } from "./tasks"
 
 const insertMetaObjectPairwiseOperator = (compiledClass: CompiledClass, operatorName: string, operatorSymbol: string) => {
@@ -103,7 +103,7 @@ export const defaultMetaFunction = (subCompilerState: SubCompilerState, compiled
 
   const fnParams: ParserFunctionParameter[] = compiledClass.fields.map(x => 
     ({ name: new ParseIdentifier(createAnonymousToken(x.name)), storage: null,
-    type: new ParseValue(createAnonymousToken(''), x.fieldType)}) as ParserFunctionParameter)
+    type: new ParseValue(createAnonymousToken(''), x.fieldType), capability: Capability.Sink}) satisfies ParserFunctionParameter)
   const constructorBody = new ParseConstructor(
     createAnonymousToken(''), 
     new ParseValue(createAnonymousToken(''), compiledClass.type), 
@@ -253,6 +253,7 @@ export const generateTypeMethods = (globalCompiler: GlobalCompilerState, type: T
 }
 
 export const createListConstructor = (vm: Vm, elementType: Type, values: Ast[]) => {
+  compilerAssert(false, "Not implemented")
 
   // TODO: Prefer to do some bytecode manipulations here instead?
 
@@ -274,8 +275,9 @@ export const createListConstructor = (vm: Vm, elementType: Type, values: Ast[]) 
       binding = new Binding("", array.type)
       
       const calls = values.map(ast => {
+        const mutAst = new MutSigilAst(ast.type, vm.location, ast)
         return (
-          createMethodCall(vm, new BindingAst(binding.type, vm.location, binding), 'append', [elementType], [ast])
+          createMethodCall(vm, new BindingAst(binding.type, vm.location, binding), 'append', [elementType], [mutAst])
           .chainFn((task, _) => { const ast = expectAst(vm.stack.pop()); callArray.push(ast); return Task.success() })
         )
       })
@@ -365,6 +367,18 @@ export const print = new CompilerFunction('print', (ctx, typeArgs: unknown[], ar
   const rawstr = (str: string) => new StringAst(RawPointerType, location, str)
   const printf = (...args: any) => new UserCallAst(VoidType, location, externalBuiltinBindings.printf, args)
 
+  const formatField = (field: TypeField, binding: Binding) => {
+    const fmt = formats.get(field.fieldType)
+    const getter = fieldHelper(binding, field.name)
+    return printf(rawstr(fmt), getter)
+  }
+  const printStringAst = (ast: Ast) => {
+    const let_ = new LetAst(VoidType, location, new Binding("", StringType), ast, LetType.Let)
+    const lengthGetter = fieldHelper(let_.binding, 'length')
+    const dataGetter = fieldHelper(let_.binding, 'data')
+    return createStatements(location, [let_, printf(rawstr(textColors.yellow("\"%.*s\"")), lengthGetter, dataGetter)])
+  }
+
   args.forEach((arg, i) => {
     propagatedLiteralAst(arg)
     if (i !== 0) {
@@ -386,17 +400,26 @@ export const print = new CompilerFunction('print', (ctx, typeArgs: unknown[], ar
         // printfArgs.push(arg)
         // formatStr += formats.get(arg.type)
       } else if (arg.type instanceof ParameterizedType && arg.type.typeConstructor === TupleTypeConstructor) {
-        // const binding = new Binding("", arg.type)
-        // stmts.push(new LetAst(VoidType, location, binding, arg, false))
-        // formatStr += `(`
-        // const fieldsToPrint = binding.type.typeInfo.fields.filter(x => formats.has(x.fieldType))
-        // fieldsToPrint.forEach((field, j) => {
-        //   if (j !== 0) formatStr += ', '
-        //   const getter = fieldHelper(binding, field.name)
-        //   formatStr += formats.get(field.fieldType)
-        //   printfArgs.push(getter)
-        // })
-        // formatStr += ')'
+        const binding = new Binding("", arg.type)
+        const localStmts = []
+        localStmts.push(new LetAst(VoidType, location, binding, arg, LetType.Let))
+
+        localStmts.push(printf(rawstr(`(`)))
+        binding.type.typeInfo.fields.forEach((field, j) => {
+          
+          if (j !== 0) localStmts.push(printf(rawstr(", ")))
+          if (field.fieldType === StringType) {
+            return localStmts.push(printStringAst(fieldHelper(binding, field.name)))
+          }
+          if (!formats.has(field.fieldType)) {
+            localStmts.push(printf(rawstr(`${textColors.green(field.fieldType.shortName)}(...)`)))
+            return
+          }
+          localStmts.push(formatField(field, binding))
+        })
+
+        localStmts.push(printf(rawstr(`)`)))
+        return createStatements(location, localStmts)
       } else if (arg.type.typeInfo.fields.length && !arg.type.typeInfo.isReferenceType) {
         const localStmts = []
         const binding = new Binding("", arg.type)
@@ -406,15 +429,14 @@ export const print = new CompilerFunction('print', (ctx, typeArgs: unknown[], ar
         binding.type.typeInfo.fields.forEach((field, j) => {
           
           if (j !== 0) localStmts.push(printf(rawstr(", ")))
+          if (field.fieldType === StringType) {
+            return localStmts.push(printStringAst(fieldHelper(binding, field.name)))
+          }
           if (!formats.has(field.fieldType)) {
-            localStmts.push(printf(rawstr(`${field.name}=${field.fieldType.shortName}(...)`)))
-            return
+            return localStmts.push(printf(rawstr(`${field.name}=${textColors.green(field.fieldType.shortName)}(...)`)))
           }
           localStmts.push(printf(rawstr(`${field.name}=`)))
-
-          const fmt = formats.get(field.fieldType)
-          const getter = fieldHelper(binding, field.name)
-          localStmts.push(printf(rawstr(fmt), getter))
+          localStmts.push(formatField(field, binding))
         })
         localStmts.push(printf(rawstr(")")))
         return createStatements(location, localStmts)

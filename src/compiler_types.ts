@@ -1,7 +1,7 @@
 import { generateConstructor, generateDestructor, generateMoveFunction } from "../borrow/codegen_ast"
 import { compileClassTask } from "./compiler"
 import { generateTypeMethods } from "./compiler_sugar"
-import { Ast, Binding, BoolType, Capability, ClassDefinition, Closure, CompilerError, ConcreteClassType, DoubleType, EnumVariantAst, ExternalTypeConstructor, FloatLiteralType, FloatType, FunctionDefinition, GlobalCompilerState, IntLiteralType, IntType, MutSigilAst, NeverType, NumberAst, OperatorAst, ParameterizedType, ParseCall, ParseIdentifier, ParseNode, PrimitiveType, RawPointerType, Scope, ScopeParentSymbol, SourceLocation, StatementsAst, StringType, TaskContext, Tuple, TupleTypeConstructor, Type, TypeCheckConfig, TypeCheckResult, TypeCheckVar, TypeConstructor, TypeField, TypeMatcher, TypeTable, TypeVariable, UnknownObject, VariantCastAst, VoidType, compilerAssert, getUniqueId, insertTypeInfoFields, isType, tupleTypes, u64Type, u8Type } from "./defs"
+import { Ast, BasicType, Binding, BoolType, Capability, ClassDefinition, Closure, CompilerError, ConcreteClassType, DoubleType, EnumVariantAst, ExternalTypeConstructor, FloatLiteralType, FloatType, FunctionDefinition, GlobalCompilerState, IntLiteralType, IntType, MutSigilAst, NeverType, NumberAst, OperatorAst, ParameterizedType, ParseCall, ParseIdentifier, ParseNode, PrimitiveType, RawPointerType, Scope, ScopeParentSymbol, SourceLocation, StatementsAst, StringType, TaskContext, Tuple, TupleTypeConstructor, Type, TypeCheckConfig, TypeCheckResult, TypeCheckVar, TypeConstructor, TypeField, TypeMatcher, TypeTable, TypeVariable, UnknownObject, VariantCastAst, VoidType, compilerAssert, getUniqueId, insertTypeInfoFields, isType, tupleTypes, u64Type, u8Type } from "./defs"
 import { Task, TaskDef } from "./tasks"
 
 export const isTypeInteger = (type: Type) => type === IntType || type === u64Type || type === u8Type
@@ -81,6 +81,7 @@ export const typesEqual = (t1: unknown, t2: any): boolean => {
   }
   compilerAssert(t1 && t2, "Unexpected", { t1, t2 })
   if (t1 instanceof PrimitiveType) return t1 == t2;
+  if (t1 instanceof BasicType) return t1 == t2;
   if (t1 instanceof ConcreteClassType) return t1.compiledClass == t2.compiledClass;
   if (t1 instanceof ParameterizedType) {
     if (!typesEqual(t1.typeConstructor, t2.typeConstructor)) return false;

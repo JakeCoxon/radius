@@ -3,7 +3,7 @@ import { BytecodeSecondOrder, compileFunctionPrototype, getOperatorTable, loadMo
 import { compileExportedFunctionTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, insertFunctionDefinition } from "./compiler_functions"
 import { createDefaultFromType, maxOfType, minOfType, typeOf } from "./compiler_sugar"
 import { getCommonType, propagatedLiteralAst } from "./compiler_types"
-import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, CompileTimeObjectType, StatementsAst, isAst, isType, isTypeCheckError, InterleaveAst, ContinueInterAst, CompTimeObjAst, ParseEvalFunc, SetAst, DefaultConsAst, WhileAst, BoolAst, isArray, ExpansionSelector, ParseNote, ExpansionCompilerState, ParseBoolean, ParseOr, ParseBreak, filterNotNull, ParseTuple, ParseNot, ParseLetConst, ParseConcurrency, ParseCompTime, ParseNil, CompilerCallable, isCompilerCallable, ParseVoid, GlobalCompilerState, ParseIterator, LetType } from "./defs"
+import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, CompileTimeObjectType, StatementsAst, isAst, isType, isTypeCheckError, InterleaveAst, ContinueInterAst, CompTimeObjAst, ParseEvalFunc, SetAst, DefaultConsAst, WhileAst, BoolAst, isArray, ExpansionSelector, ParseNote, ExpansionCompilerState, ParseBoolean, ParseOr, ParseBreak, filterNotNull, ParseTuple, ParseNot, ParseLetConst, ParseConcurrency, ParseCompTime, ParseNil, CompilerCallable, isCompilerCallable, ParseVoid, GlobalCompilerState, ParseIterator, LetType, ParseMutSigil, MutSigilAst, Capability } from "./defs"
 import { Event, Task, TaskDef, isTask } from "./tasks"
 
 const createExpansionState = (debugName: string, location: SourceLocation): ExpansionCompilerState => {
@@ -23,7 +23,7 @@ export const forLoopSugar = (out: BytecodeWriter, node: ParseFor) => {
   compilerAssert(!expansion.fold, "Fold not supported in for loop")
 
   const fnIden = node.left instanceof ParseIdentifier ? node.left : new ParseFreshIden(node.token, new FreshBindingToken('it'))
-  const fnParams: ParserFunctionParameter[] = [{ name: fnIden, storage: null, type: null }]
+  const fnParams: ParserFunctionParameter[] = [{ name: fnIden, storage: null, type: null, capability: Capability.Let }]
   const extract = node.left instanceof ParseTuple ? new ParseLet(node.token, false, node.left, null, fnIden) : null
   const continueBlock = new ParseBlock(node.token, 'continue', null, new ParseStatements(node.token, filterNotNull([extract, node.body])))
   const decl = createAnonymousParserFunctionDecl("for", node.token, fnParams, continueBlock)
@@ -131,7 +131,9 @@ const arrayConstructorCreateAppend = new ExternalFunction('arrayConstructorCreat
   const binding = constructor.constructorBinding
   compilerAssert(binding, "Expected constructor binding", { constructor })
   const vm = ctx.compilerState.vm
-  const call_ = createMethodCall(vm, new BindingAst(binding.type, vm.location, binding), 'append', [constructor.elemType], [value])
+  const mutValue = new MutSigilAst(value.type, vm.location, value)
+  const mutBinding = new MutSigilAst(binding.type, vm.location, new BindingAst(binding.type, vm.location, binding))
+  const call_ = createMethodCall(vm, mutBinding, 'append', [constructor.elemType], [mutValue])
   return call_.chainFn((task, _) => { const ast = expectAst(vm.stack.pop()); return Task.of(ast) })
 })
 const arrayConstructorAddAppendCall = new ExternalFunction('arrayConstructorAddAppendCall', VoidType, (ctx, values) => {
@@ -163,7 +165,7 @@ const arrayConstructorFinish = new ExternalFunction('arrayConstructorFinish', Vo
   compilerAssert(constructor.arrayConstructor, "Expected array constructor", { constructor })
   const binding = constructor.constructorBinding
   compilerAssert(binding, "Expected list binding", { constructor })
-  const let_ = new LetAst(VoidType, ctx.location, binding, constructor.arrayConstructor, true)
+  const let_ = new LetAst(VoidType, ctx.location, binding, constructor.arrayConstructor, LetType.Var)
   const bindingAst = new BindingAst(binding.type, ctx.location, binding)
   return createStatements(ctx.location, [let_, ...constructor.calls, bindingAst])
 })
@@ -172,6 +174,7 @@ const appendValuePartialFn = (() => {
   const token = createAnonymousToken('')
   const consIdenParam = new ParseIdentifier(createAnonymousToken('cons'))
   const exprParam = new ParseIdentifier(createAnonymousToken('expr'))
+  
 
   const exprQuote = new ParseQuote(token, exprParam)
   const iden = new ParseFreshIden(token, new FreshBindingToken('elem'))
@@ -180,11 +183,12 @@ const appendValuePartialFn = (() => {
   const call2 = callV(token, arrayConstructorCreateAppend, [consIdenParam, iden], [])
   const call3 = callV(token, arrayConstructorAddAppendCall, [consIdenParam, call2], [])
   const meta_ = new ParseMeta(token, new ParseStatements(token, [let_, call, call3]))
-  const decl = createAnonymousParserFunctionDecl('appendValue', token, [], meta_)
+  const mutMeta = new ParseMutSigil(token, meta_)
+  const decl = createAnonymousParserFunctionDecl('appendValue', token, [], mutMeta)
 
   const params: ParserFunctionParameter[] = [
-    { name: consIdenParam, storage: null, type: null },
-    { name: exprParam, storage: null, type: null }
+    { name: consIdenParam, storage: null, type: null, capability: Capability.Let },
+    { name: exprParam, storage: null, type: null, capability: Capability.Let }
   ]
   return createAnonymousParserFunctionDecl('appendValuePartial', token, params, new ParseFunction(token, decl))
 })()
@@ -208,9 +212,9 @@ const appendValuePartialIfFn = (() => {
 
   // TODO: Create partial higher-order function ?
   const params: ParserFunctionParameter[] = [
-    { name: consIdenParam, storage: null, type: null },
-    { name: exprParam, storage: null, type: null },
-    { name: condParam, storage: null, type: null }
+    { name: consIdenParam, storage: null, type: null, capability: Capability.Let },
+    { name: exprParam, storage: null, type: null, capability: Capability.Let },
+    { name: condParam, storage: null, type: null, capability: Capability.Let }
   ]
   return createAnonymousParserFunctionDecl('appendValuePartial', token, params, new ParseFunction(token, decl))
 })()
@@ -283,7 +287,7 @@ const createArrayIterator = (token: Token, subCompilerState: SubCompilerState, s
   const yieldParam = new ParseFreshIden(token, new FreshBindingToken('yield'))
   const indexIdentifier = selector.indexIdentifier
   compilerAssert(indexIdentifier)
-  const fnParams: ParserFunctionParameter[] = [{ name: yieldParam, storage: null, type: null }]
+  const fnParams: ParserFunctionParameter[] = [{ name: yieldParam, storage: null, type: null, capability: Capability.Let }]
 
   const letNodeNode = new ParseLet(token, false, new ParseFreshIden(token, new FreshBindingToken('node')), null, selector.node)
   let lengthNode: ParseNode = getLength(token, letNodeNode.left)
@@ -314,7 +318,7 @@ const createArraySetterIterator2 = (token: Token, selector: { node: ParseNode, s
   const valueIdentifier = new ParseFreshIden(token, new FreshBindingToken('value'))
   const indexIdentifier = selector.indexIdentifier
   compilerAssert(indexIdentifier)
-  const fnParams: ParserFunctionParameter[] = [{ name: yieldParam, storage: null, type: null }]
+  const fnParams: ParserFunctionParameter[] = [{ name: yieldParam, storage: null, type: null, capability: Capability.Let }]
 
   let lengthNode: ParseNode = getLength(token, selector.node)
   if (selector.end) {
@@ -359,8 +363,8 @@ const createIteratorSliceLoopPartialFn = (() => {
   const indexIdentifier = new ParseFreshIden(token, new FreshBindingToken('index'))
   compilerAssert(indexIdentifier)
   const fnParams: ParserFunctionParameter[] = [
-    { name: consumeParam, storage: null, type: null },
-    { name: yieldParam, storage: null, type: null },
+    { name: consumeParam, storage: null, type: null, capability: Capability.Let },
+    { name: yieldParam, storage: null, type: null, capability: Capability.Let },
   ]
   const startIden = new ParseIdentifier(createAnonymousToken('start'))
   const endIden = new ParseIdentifier(createAnonymousToken('end'))
@@ -415,8 +419,8 @@ const createIteratorSliceLoopPartialFn = (() => {
     const consumeParam2 = new ParseFreshIden(token, new FreshBindingToken('consume'))
     const yieldParam2 = new ParseFreshIden(token, new FreshBindingToken('yield'))
     const fnParams2: ParserFunctionParameter[] = [
-      { name: consumeParam2, storage: null, type: null },
-      { name: yieldParam2, storage: null, type: null },
+      { name: consumeParam2, storage: null, type: null, capability: Capability.Let },
+      { name: yieldParam2, storage: null, type: null, capability: Capability.Let },
       // TODO: Support passing null values, otherwise this doesn't work, so I had to make them typeArgs
       // { name: startIden, storage: null, type: null },
       // { name: endIden, storage: null, type: null },
@@ -616,7 +620,7 @@ const compileExpansionToParseNode = (out: BytecodeWriter, expansion: ExpansionCo
 
   let loopNode: ParseNode
   if (zips.length === 1 && !expansion.setterSelector) {
-    const declParams: ParserFunctionParameter[] = [{ name: zips[0].elemIden, storage: null, type: null }]
+    const declParams: ParserFunctionParameter[] = [{ name: zips[0].elemIden, storage: null, type: null, capability: Capability.Let }]
     const decl1 = createAnonymousParserFunctionDecl(`${expansion.debugName}_consume`, createAnonymousToken(''), declParams, expansion.loopBodyNode)
     const consume = new ParseFunction(node.token, decl1)
     const consumer = new ParseFreshIden(node.token, new FreshBindingToken('consumer'))
