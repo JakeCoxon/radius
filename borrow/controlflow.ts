@@ -346,6 +346,19 @@ export const printCFG = (cfg: ControlFlowGraph) => {
   console.log('}');
 }
 
+
+export const printRegionCFG = <T>(cfg: ControlFlowGraphGeneric<T>, f: (block: T) => string) => {
+  // Print cfg as DOT format
+  console.log('digraph G {');
+  for (const block of cfg.blocks) {
+    const successors = cfg.successors.get(block) || [];
+    for (const succ of successors) {
+      console.log(`  ${f(block)} -> ${f(succ)}`);
+    }
+  }
+  console.log('}');
+}
+
 export const printDominators = (cfg: ControlFlowGraph) => {
   // as DOT format
   console.log('digraph G {');

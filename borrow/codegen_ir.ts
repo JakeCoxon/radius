@@ -143,7 +143,7 @@ export class FunctionCodeGenerator {
     this.currentFunction = new FunctionBlock(binding.name, binding, params, paramRegs, this.blocks);
 
     // Make sure to use the actual specified returnType, not the body.type
-    if (returnType !== VoidType && returnType !== NeverType) {
+    if (returnType !== VoidType && returnType !== NeverType && body.type !== NeverType) {
       this.body = new ReturnAst(body.type, SourceLocation.anon, body)
       this.generate(this.body)
     } else {
@@ -190,7 +190,6 @@ export class FunctionCodeGenerator {
     if (ast instanceof ReturnAst)        { return this.generateReturnStatement(ast) }
     if (ast instanceof SetFieldAst)      { return this.generateAssignmentField(ast) }
     if (ast instanceof SetValueFieldAst) { return this.generateAssignmentValueField(ast) }
-    if (ast instanceof BreakAst)         { return this.generateBreakStatement(ast) }
     if (ast instanceof BlockAst)         { return this.generateBlockStatement(ast) }
     if (ast instanceof SetSubscriptAst)  { return this.generateAssignmentSubscript(ast) }
 
@@ -220,9 +219,10 @@ export class FunctionCodeGenerator {
     if (ast instanceof CastAst)        { return this.generateCastExpression(ast, context) }
     if (ast instanceof VariantCastAst) { return this.generateVariantCastExpression(ast, context) }
     if (ast instanceof YieldAst)       { return this.generateYieldExpression(ast, context) }
+    if (ast instanceof BreakAst)       { return this.generateBreakExpression(ast, context) }
     // if (ast instanceof MutSigilAst)    { return this.generateExpression(ast.expr, context) }
-    if (ast instanceof StatementsAst) { return this.generateStatementsExpression(ast, context) }
-    
+    if (ast instanceof StatementsAst)  { return this.generateStatementsExpression(ast, context) }
+
     compilerAssert(false, 'Not implemented expression', { ast, fnBody: this.body })
   }
 
@@ -249,6 +249,8 @@ export class FunctionCodeGenerator {
   }
 
   generateAlloc(type: Type) {
+    compilerAssert(type !== VoidType, 'Cannot allocate void type');
+    compilerAssert(type !== NeverType, 'Cannot allocate never type');
     compilerAssert(!type.typeInfo.isReferenceType, "Not implemented reference type", { type })
     const reg = this.newRegister()
     this.functionInstructions.push(new AllocInstruction(reg, type))
@@ -333,7 +335,9 @@ export class FunctionCodeGenerator {
     return new Pointer(resultPtr)
   }
 
-  generateBreakStatement(ast: BreakAst) {
+  generateBreakExpression(ast: BreakAst, context: ExpressionContext): IRValue {
+    // Break can be an expression that returns NeverType
+    compilerAssert(ast.type === NeverType, 'Break expression must be of type never', { ast })
     const depth = this.blockScopeDepth.get(ast.binding)
     compilerAssert(depth !== undefined, `Block depth not found: ${ast.binding.name}`)
     const scope = this.scopes[depth]
@@ -356,11 +360,12 @@ export class FunctionCodeGenerator {
     this.addInstruction(new BreakInstruction(scope.regionId, VoidType, null))
     // this.addInstruction(new JumpInstruction(label))
     this._createUnusedBlock()
+    return new Pointer('')
   }
 
   generateReturnStatement(ast: ReturnAst) {
     
-    if (!ast.expr) {
+    if (!ast.expr || ast.expr.type === NeverType) {
       this.finalizeScope()
       this.addInstruction(new ReturnInstruction(VoidType, null));
     } else {
@@ -441,6 +446,7 @@ export class FunctionCodeGenerator {
   }
 
   generateAliasDeclaration(ast: AliasAst) {
+    compilerAssert(ast.type !== NeverType, 'Cannot alias never type', { ast });
     // Like let but with lower capabilities
     this.addInstruction(new CommentInstruction(`Alias ${ast.binding.name}`))
     const astWithoutMutSigil = ast.value instanceof MutSigilAst ? ast.value.expr : ast.value
@@ -485,7 +491,8 @@ export class FunctionCodeGenerator {
   }
 
   generateIfExpression(ast: IfAst, context: ExpressionContext): IRValue {
-    return this.generateIf(ast, true)
+    const isExpr = ast.type !== VoidType && ast.type !== NeverType
+    return this.generateIf(ast, isExpr)
   }
 
   generateIf(ast: IfAst, isExpression: boolean): IRValue {

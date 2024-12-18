@@ -1,6 +1,6 @@
-import { Binding, Capability, compilerAssert, ConcreteClassType, PrimitiveType, Type, VoidType } from "../src/defs";
+import { Binding, Capability, compilerAssert, CompilerError, ConcreteClassType, PrimitiveType, Type, VoidType } from "../src/defs";
 import { CodeGenerator, FunctionCodeGenerator } from "../borrow/codegen_ir";
-import { ControlFlowGraph, ControlFlowGraphGeneric, buildCFG, buildCFGFromRegions } from "../borrow/controlflow";
+import { ControlFlowGraph, ControlFlowGraphGeneric, buildCFG, buildCFGFromRegions, printRegionCFG } from "../borrow/controlflow";
 import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, EndAccessInstruction, PhiInstruction, MoveInstruction, CommentInstruction, textColors, MarkInitializedInstruction, formatInstruction, Module, DeallocStackInstruction, PointerOffsetInstruction, printIR, ProjectBundleInstruction, YieldInstruction, BreakInstruction, GetGlobalAddress, BitCastInstruction } from "../borrow/defs";
 import { BlockRegion, InsertPosition, InstructionId, IrDiagnostics, IrFunction, printIrFunction, RegionCodegen, RegionId } from "./region_codegen";
 
@@ -60,6 +60,7 @@ export class RegionInitializationCheckingPass {
   // currentInstrId: InstructionId
   instrId: InstructionId | null
   diagnostics = new IrDiagnostics()
+  visitRegionNum = 0
 
   constructor(public regionCodegen: RegionCodegen, fn: IrFunction) {
     this.function = fn;
@@ -73,22 +74,39 @@ export class RegionInitializationCheckingPass {
 
   checkedInterpret() {
     try {
-      this.cfg = buildCFGFromRegions(this.function);
       this.interpret()
     } catch (e) {
       console.error(e);
       console.log("Current block", this.currentRegion);
       console.log("Current instr", this.currentInstr);
-      if (this.state) {
-        printLocals(this.state.locals);
-        printMemory(this.state.memory);
+      this.diagnostics.regionNote(this.currentRegion, `Error in block ${this.currentRegion} at instruction ${this.instrId}`);
+      this.printLocalsMemory(this.currentRegion);
+      this.printDebug()
+      if (e instanceof CompilerError) {
+        Object.assign((e.info as any), { regionId: this.currentRegion, instrId: this.instrId });
       }
-      // this.printDebug()
+
       throw e;
     }
   }
 
+  printLocalsMemory(regionId: RegionId) {
+    this.diagnostics.regionNote(regionId, `  Locals: ${Array.from(this.state.locals.entries()).flatMap(([key, val]) => {
+      if (val instanceof InitializationStateObject) {
+        return `${key} -> ${initializationStateToString(val.state)}`
+      }
+      return `${key} -> ${Array.from(val.addresses).join(', ')}`
+    }).join(' | ')}`)
+    this.diagnostics.regionNote(regionId, `  Memory: ${Array.from(this.state.memory.entries()).flatMap(([key, val]) => {
+      return `${key} -> ${initializationStateToString(val)}`
+    }).join(' | ')}`)
+  }
+
+
   interpret() {
+    this.cfg = buildCFGFromRegions(this.function);
+
+    if (false) printRegionCFG(this.cfg, x => `${x}`)
 
     const entryState = createEmptyState();
 
@@ -121,7 +139,7 @@ export class RegionInitializationCheckingPass {
       const mergedInputState = inputStates.slice(1).reduce((acc, predState) => {
         return mergeStates(acc, predState.output);
       }, inputStates[0].output);
-      
+
       if (this.debugLog) {
         console.log("\n## Block", regionId, "\n");
         console.log("immediate dominator", this.cfg.getImmediateDominator(regionId));
@@ -131,10 +149,16 @@ export class RegionInitializationCheckingPass {
       }
 
       const allInputStates = inputStates.length === predecessors.length;
-
+      
       // Skip re-executing the block if the input state hasn't changed
       // This ensures we avoid redundant work and helps reach a fixed point efficiently.
       if (state && allInputStates && statesEqual(state.input, mergedInputState)) return;
+
+      if (false) {
+        const diff = state ? statesDiff(state.input, mergedInputState) : ''
+        this.diagnostics.regionNote(regionId, ` ${this.visitRegionNum}. Merging input states for ${regionId}: ${predecessors.join(', ')} - ${diff}`);
+        this.printLocalsMemory(regionId)
+      }
 
       try {
         this.executeRegion(regionId, mergedInputState);
@@ -144,6 +168,7 @@ export class RegionInitializationCheckingPass {
         // this.printDebug()
         throw e
       }
+      this.visitRegionNum ++
       worklist.addWork(regionId);
       worklist.visited.add(regionId);
     });
@@ -430,10 +455,14 @@ export class RegionInitializationCheckingPass {
     if (instr.type instanceof PrimitiveType) {
       const newId = this.regionCodegen.replaceInstruction(instrId, new MarkInitializedInstruction(instr.target, instr.type, false));
       this.diagnostics.instructionNote(newId, `Replaced a dealloc instruction for ${instr.target} ${instr.type.shortName}`);
+      this.nextVisitInstruction = newId
+      return
     } else {
       if (this.isDefinitelyUninitialized(instr.target)) {
         const newId = this.regionCodegen.replaceInstruction(instrId, new MarkInitializedInstruction(instr.target, instr.type, false));
         this.diagnostics.instructionNote(newId, `Replaced a dealloc instruction for ${instr.target} ${instr.type.shortName} because it was already uninitialized`);
+        this.nextVisitInstruction = newId
+        return
       } else if (this.isDefinitelyInitialized(instr.target)) {
         const instrs = this.regionCodegen.createDestructorInstructions(instr.target, instr.type);
         const replacingPosition = this.regionCodegen.deleteInstruction(instrId);
@@ -443,12 +472,6 @@ export class RegionInitializationCheckingPass {
         return // Dont update memory yet
       } else compilerAssert(false, `Target is not definitely initialized or uninitialized`);
     }
-    const addrs = this.state.locals.get(instr.target)
-    compilerAssert(addrs, `Register ${instr.target} is not found`);
-    compilerAssert(addrs instanceof AddressSet, `DeallocStackInstruction expects an address set`);
-    compilerAssert(addrs.addresses.size === 1, `DeallocStackInstruction expects a single address`);
-    const addr = Array.from(addrs.addresses)[0];
-    this.state.memory.delete(addr);
   }
 
   executePhi(instr: PhiInstruction): void {
@@ -479,6 +502,7 @@ export class RegionInitializationCheckingPass {
   }
 
   updateMemoryForRegister(register: string, type: Type, newState: InitializationState): void {
+
     const local = this.state.locals.get(register);
     compilerAssert(local, `Register ${register} is not found`);
     if (local instanceof InitializationStateObject) {
@@ -534,7 +558,9 @@ export class RegionInitializationCheckingPass {
 
   updateMemoryAddressPathState(addr: string, rootType: Type, newState: InitializationState) {
     const ids = addr.split('.')
-    const current = this.state.memory.get(ids[0]) ?? BOTTOM;
+    const current = this.state.memory.get(ids[0])
+    compilerAssert(current, `Memory address ${ids[0]} not found`);
+
     try {
       const statePath = createStatePathState(ids.slice(1), rootType)
       const newSd = meetInitializationStatePath(current, statePath, newState)
@@ -736,6 +762,59 @@ function statesEqual(state1: InterpreterState, state2: InterpreterState): boolea
     mapsEqual(state1.locals, state2.locals, localsEqual) &&
     mapsEqual(state1.memory, state2.memory, initializationStateEqual)
   );
+}
+
+function statesDiff(state1: InterpreterState, state2: InterpreterState): string {
+  const diffs = [];
+  for (const [key, val1] of state1.locals) {
+    const val2 = state2.locals.get(key);
+    const diff = localsDiff(val1, val2);
+    if (diff) diffs.push(`${key}:<${diff}>`);
+  }
+  for (const [key, val1] of state1.memory) {
+    const val2 = state2.memory.get(key);
+    const diff = initializationStateDiff(key, val1, val2);
+    if (diff) diffs.push(`${key}:<${diff}>`);
+  }
+  return diffs.join(', ');
+}
+
+const localsDiff = (val1: LocalMapValue | undefined, val2: LocalMapValue | undefined): string => {
+  if (val1 === undefined && val2 === undefined) {
+    return '';
+  }
+  if (val1 === undefined || val2 === undefined) {
+    return 'undefined';
+  }
+  if (val1 instanceof AddressSet && val2 instanceof AddressSet) {
+    return setsDiff(val1.addresses, val2.addresses);
+  }
+  if (val1 instanceof InitializationStateObject && val2 instanceof InitializationStateObject) {
+    if (!initializationStateEqual(val1.state, val2.state)) {
+      return `${initializationStateToString(val1.state)} != ${initializationStateToString(val2.state)}`;
+    }
+    return '';
+  }
+  return '<different types>';
+}
+
+const setsDiff = (set1: Set<string>, set2: Set<string>): string => {
+  if (setsEqual(set1, set2)) return '';
+  const removed = [...set1].filter(x => !set2.has(x));
+  const added = [...set2].filter(x => !set1.has(x));
+  return `-${removed.join(', ')} +${added.join(', ')}`;
+}
+
+const initializationStateDiff = (key: string, sd1: InitializationState | undefined, sd2: InitializationState | undefined): string => {
+  if (sd1 === undefined && sd2 === undefined) {
+    return '';
+  }
+  if (sd1 === undefined) return `+${key}`;
+  if (sd2 === undefined) return `-${key}`;
+  if (!initializationStateEqual(sd1, sd2)) {
+    return `${initializationStateToString(sd1)} != ${initializationStateToString(sd2)}`;
+  }
+  return '';
 }
 
 function setsEqual<T>(set1: Set<T>, set2: Set<T>): boolean {

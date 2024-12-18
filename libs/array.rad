@@ -51,7 +51,7 @@ fn deinit_buffer(buf: sink Buffer):
 
 
 type Array!(T) @struct:
-  len: int
+  length: int
   data: Buffer
 
   const __iterate = array_iterate
@@ -73,14 +73,14 @@ fn array_create!(T)(initial_capacity: int) -> Array!T:
 
 
 fn append!(T)(array: inout Array!T, element: sink T) @method:
-  if array.len == array.data.size:
+  if array.length == array.data.size:
     var new_capacity = array.data.size.copy
     new_capacity = 16 if new_capacity == 0
     new_capacity *= 2
     array&.reserve_array(new_capacity)
 
-  compiler.unsafe_set_subscript(array.data.data, array.len, element&)
-  array.len += 1
+  compiler.unsafe_set_subscript(array.data.data, array.length, element&)
+  array.length += 1
 
 
 fn reserve_array!(T)(arr: inout Array!T, capacity: int):
@@ -93,19 +93,19 @@ fn get_array!(T)(arr: Array!T, index: int, f) @subscript:
   if arr.data.data == rawptr(0):
     print("Not allocated")
     exit(0)
-  if index < 0 or index >= arr.len:
+  if index < 0 or index >= arr.length:
     print("Bounds check failed")
     exit(0)
   f(compiler.unsafe_subscript!T(arr.data.data, index))
 
 
 fn copy_array!(T)(dst: set Array!T, src: Array!T):
-  dst.len = src.len
+  dst.length = src.length
   dst.data = Buffer(0, rawptr(0))
-  dst.data&.buffer_alloc(src.len * (meta T.sizeof))
+  dst.data&.buffer_alloc(src.length * (meta T.sizeof))
 
   var i = 0
-  while i < src.len:
+  while i < src.length:
     dst[i] = src[i].copy
     i += 1
 
@@ -134,37 +134,37 @@ fn subscript_let!(T)(arr: Array!T, idx: int, f) @subscript:
 
 fn print_array!(T)(arr: Array!T):
   var i = 0
-  while i < arr.len:
+  while i < arr.length:
     print(arr[i])
     i += 1
 
 fn array_iterate!(f, T)(array: Array!T) -> void @inline:
   var i = 0
-  while i < array.len:
+  while i < array.length:
     f(array[i])
     i += 1
 
 fn array_iterate_inout!(T)(array: inout Array!T, f) -> void @inline:
   var i = 0
-  while i < array.len:
+  while i < array.length:
     f(array[i]&)
     i += 1
 
 fn move_init_array!(T)(dst: set Array!T, src: sink Array!T):
-  dst.len = src.len&
+  dst.length = src.length&
   dst.data = src.data&
   src.data = Buffer(0, rawptr(0))
 
 fn move_assign_array!(T)(dst: inout Array!T, src: sink Array!T):
   deinit_array(dst&)
-  dst.len = src.len&
+  dst.length = src.length&
   dst.data = src.data&
   src.data = Buffer(0, rawptr(0))
 
 fn deinit_array!(T)(arr: sink Array!T):
   if arr.data.data != rawptr(0):
     var i = 0
-    while i < arr.len:
+    while i < arr.length:
       var input = compiler.unsafe_subscript!T(arr.data.data, i)&
       i += 1
     arr.data&.deinit_buffer()
