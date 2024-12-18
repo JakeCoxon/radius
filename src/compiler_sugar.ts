@@ -538,7 +538,7 @@ export const unsafe_subscript = new CompilerFunction('unsafe_subscript', (ctx, t
   compilerAssert(right && right.type === IntType, "Expected int type", { right })
   compilerAssert(left && left.type === RawPointerType, "Expected rawptr", { left })
   const type = expectType(typeArgs[0])
-  return Task.of(new SubscriptAst(type, ctx.location, left, propagatedLiteralAst(right)))
+  return Task.of(new SubscriptAst(type, ctx.location, left, propagatedLiteralAst(right), {}))
 })
 export const unsafe_set_subscript = new CompilerFunction('unsafe_set_subscript', (ctx, typeArgs: unknown[], args: Ast[]) => {
   const [left, right, value] = args
@@ -792,7 +792,7 @@ export const guardSugar = (out: BytecodeWriter, node: ParseGuard) => {
     if (cond instanceof ParseLet) {
       if (cond.left instanceof ParseExtract) {
         compilerAssert(cond.value, "Expected value", { cond })
-        return extractToOption(cond.left, cond.value, break_)
+        return extractOrElse(cond.left, cond.value, break_)
       }
       compilerAssert(false, "Not implemented", { node })
     } else {
@@ -831,7 +831,7 @@ export const ifMultiSugar = (out: BytecodeWriter, node: ParseIfMulti) => {
     if (cond instanceof ParseLet) return new ParseGuard(token, [cond], breakInner)
     return new ParseIf(token, false, new ParseNot(token, cond), breakInner, null)
   })
-  const let_ = new ParseLet(token, LetType.Let, resultIden, null, node.trueBody)
+  const let_ = new ParseLet(token, LetType.Alias, resultIden, null, node.trueBody)
   const breakOuter = new ParseBreak(token, outerIden, resultIden)
   const stmts = new ParseStatements(token, [...conds, let_, breakOuter])
   const innerBlock = new ParseBlock(token, null, innerIden, stmts)
@@ -951,13 +951,12 @@ const guardAsExprSugar = (subject: ParseNode, asType: ParseNode, numFields: numb
 }
 
 
-const extractToOption = (node: ParseNode, subject: ParseNode, elseBlock: ParseNode): ParseNode => {
+const extractOrElse = (node: ParseNode, subject: ParseNode, elseBlock: ParseNode): ParseNode => {
+  // compilerAssert(false, "Not implemented", { node })
   const token = node.token
-  // const none = new ParseCall(token, new ParseValue(token, NoneTypeConstructor), [], [])
-  // const break_ = new ParseBreak(token, blockIden, none)
 
-  if (node instanceof ParseFreshIden) return new ParseLet(token, LetType.Let, node, null, subject)
-  if (node instanceof ParseIdentifier) return new ParseLet(token, LetType.Let, node, null, subject)
+  if (node instanceof ParseFreshIden) return new ParseLet(token, LetType.Alias, node, null, subject)
+  if (node instanceof ParseIdentifier) return new ParseLet(token, LetType.Alias, node, null, subject)
   if (node instanceof ParseNumber || node instanceof ParseString || node instanceof ParseBoolean) {
     return new ParseIf(token, false, new ParseOperator(createAnonymousToken('!='), [subject, node]), elseBlock, null)
   }
@@ -970,7 +969,7 @@ const extractToOption = (node: ParseNode, subject: ParseNode, elseBlock: ParseNo
 
     const guard = guardAsExprSugar(subject, node.name, numArgs, extractIden, elseBlock)
     const extractedSubject = new ParseField(token, extractIden, new ParseIdentifier(createAnonymousToken('value')))
-    const bind = node.args.map(x => extractToOption(x, extractedSubject, elseBlock))
+    const bind = node.args.map(x => extractOrElse(x, extractedSubject, elseBlock))
     return new ParseStatements(token, [guard, ...bind])
   }
 
@@ -979,7 +978,7 @@ const extractToOption = (node: ParseNode, subject: ParseNode, elseBlock: ParseNo
     const guard = guardAsExprSugar(subject, tupleType, node.exprs.length, extractIden, elseBlock)
     const bind = node.exprs.map((x, i) => {
       const field = new ParseField(token, extractIden, new ParseIdentifier(createAnonymousToken(`_${i+1}`)))
-      return extractToOption(x, field, elseBlock)
+      return extractOrElse(x, field, elseBlock)
     })
     return new ParseStatements(token, [guard, ...bind])
   }
@@ -987,34 +986,34 @@ const extractToOption = (node: ParseNode, subject: ParseNode, elseBlock: ParseNo
   compilerAssert(false, "Not implemented", { node })
 }
 
-const caseToOption = (node: ParseMatchCase, blockIden: ParseFreshIden | ParseIdentifier, subject: ParseNode): ParseNode => {
+const caseOrElse = (node: ParseMatchCase, subject: ParseNode, elseBlock: ParseNode): ParseNode => {
   const token = node.token
-  const none = new ParseCall(token, new ParseValue(token, NoneTypeConstructor), [], [])
-  const break_ = new ParseBreak(token, blockIden, none)
-  const smts = [extractToOption(node.extract, subject, break_)]
-  if (node.condition) smts.push(new ParseIf(token, false, new ParseNot(token, node.condition), break_, null))
+  const smts = [extractOrElse(node.extract, subject, elseBlock)]
+  if (node.condition) smts.push(new ParseIf(token, false, new ParseNot(token, node.condition), elseBlock, null))
 
   const resIden = new ParseFreshIden(token, new FreshBindingToken('res'))
-  const letRes = new ParseLet(token, LetType.Let, resIden, null, node.body)
-  const some = new ParseCall(subject.token, new ParseValue(subject.token, SomeTypeConstructor), [resIden], [])
-
-  return new ParseStatements(token, [...smts, letRes, some])
+  const letRes = new ParseLet(token, LetType.Alias, resIden, null, node.body)
+  return new ParseStatements(token, [...smts, letRes, resIden])
 }
 
 export const matchSugar = (out: BytecodeWriter, node: ParseMatch) => {
   const token = node.token
   const subjectIden = new ParseFreshIden(token, new FreshBindingToken('subject'))
   const letSubject = new ParseLet(token, LetType.Let, subjectIden, null, node.subject)
-  const blockIden = node.name ?? new ParseFreshIden(token, new FreshBindingToken('case'))
+  const outerIden = new ParseFreshIden(token, new FreshBindingToken('match'))
   const options = node.cases.map(case_ => {
-    const caseBlock = caseToOption(case_, blockIden, subjectIden)
-    return new ParseBlock(token, null, blockIden, new ParseStatements(token, [caseBlock]))
+    // The case block is named `node.name` so that a continue `name` statement will continue to the next case
+    // TODO: This is a bit of a hack so we should make a match block a specific type of block
+    // and then also allow break `name` statements to break out of the whole thing. Or seperate
+    // the block types and wrap a breakable block around the whole thing
+    const caseIden = node.name ?? new ParseFreshIden(token, new FreshBindingToken('case'))
+    const caseBlock = caseOrElse(case_, subjectIden, new ParseBreak(token, caseIden, null))
+    const res = new ParseBreak(token, outerIden, caseBlock)
+    return new ParseBlock(token, 'continue', caseIden, new ParseStatements(token, [res]))
   })
   const defaultElse = new ParseCall(token, new ParseIdentifier(createAnonymousToken('unreachable')), [], [])
 
-  const orElse = options.reverse().reduce((acc, next) => 
-    new ParseOrElse(node.token, next, acc), defaultElse as ParseNode)
-  const stmts = new ParseStatements(token, [letSubject, orElse])
+  const stmts = new ParseBlock(token, null, outerIden, new ParseStatements(token, [letSubject, ...options, defaultElse]))
   visitParseNode(out, stmts)
 }
 
@@ -1050,7 +1049,9 @@ const someOrVoid = new CompilerFunction('someOrVoid', (ctx, typeArgs, args): Tas
 const noneOrVoid = new CompilerFunction('noneOrVoid', (ctx, typeArgs, args): Task<Ast, CompilerError> => {
   if (typeArgs[0] === VoidType) return Task.of(new VoidAst(VoidType, ctx.location))
   const fnctx: CompilerFunctionCallContext = { location: ctx.location, compilerState: ctx.compilerState, resultAst: undefined, typeCheckResult: undefined }
-  return createCallAstFromValue(fnctx, NoneTypeConstructor, [typeArgs[0]], [])
+  compilerAssert(isType(typeArgs[0]), "Expected type", { type: typeArgs[0] })
+  const def_ = createDefaultConstructorAst(typeArgs[0], ctx.location)
+  return createCallAstFromValue(fnctx, NoneTypeConstructor, [typeArgs[0]], [def_])
 })
 
 export const optionBlockSugar = (out: BytecodeWriter, node: ParseBlock) => {

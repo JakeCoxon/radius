@@ -266,6 +266,7 @@ export const buildCFGFromRegions = (irFunction: IrFunction): ControlFlowGraphGen
       if (region instanceof BlockRegion) return regionId;
       else if (region instanceof IfRegion) return firstBlockRegion(region.conditionSequence);
       else if (region instanceof WhileRegion) return firstBlockRegion(region.conditionSequence);
+      else if (region instanceof ScopeRegion) return firstBlockRegion(region.bodySequence);
       else compilerAssert(false, "Unknown region type", { region })
     }
     compilerAssert(false, "No block region found in sequence", { sequenceId })

@@ -1,16 +1,18 @@
 import { externalBuiltinBindings } from "./compiler_sugar";
-import { Ast, AstType, AstWriterTable, Binding, BindingAst, BlockAst, BoolType, CallAst, CompiledFunction, ConcreteClassType, ConstructorAst, DefaultConsAst, DoubleType, FileWriter, FloatType, FunctionType, GlobalCompilerState, IntType, ListTypeConstructor, LlvmFunctionWriter, LlvmWriter, NeverType, NumberAst, ParameterizedType, Pointer, PrimitiveType, RawPointerType, Register, SourceLocation, StatementsAst, StringType, Type, TypeField, UserCallAst, ValueFieldAst, VoidAst, VoidType, compilerAssert, isAst, isType, textColors, u64Type, u8Type } from "./defs";
+import { Ast, AstRoot, AstType, AstWriterTable, Binding, BindingAst, BlockAst, BoolType, CallAst, CompiledFunction, ConcreteClassType, ConstructorAst, DefaultConsAst, DoubleType, FileWriter, FloatType, FunctionType, GlobalCompilerState, IntType, LetAst, LetType, ListTypeConstructor, LlvmFunctionWriter, LlvmWriter, NeverType, NumberAst, ParameterizedType, Pointer, PrimitiveType, RawPointerType, Register, SourceLocation, StatementsAst, StringType, Type, TypeField, UserCallAst, ValueFieldAst, VoidAst, VoidType, compilerAssert, isAst, isType, textColors, u64Type, u8Type } from "./defs";
 
 const log = (...args: any[]) => {
   if ((globalThis as any).logger) (globalThis as any).logger.log(...args)
 }
 
 const writeExpr = (writer: SyntaxWriter, ast: Ast) => {
+  if (ast === null) { format(writer, "null"); return }
+  compilerAssert(isAst(ast), "Not an AST", { ast })
   compilerAssert(!writer.writer.astVisitMap.has(ast), "Already visited AST", { ast }) 
   if (!(ast instanceof NumberAst || ast instanceof BindingAst)) {
     writer.writer.astVisitMap.set(ast, true) // Takes up a lot of memory
   }
-  compilerAssert(astWriter[ast.key], `Not implemented ast writer '${ast.key}'`, { ast })
+  compilerAssert(astWriter[ast.key], `Not implemented ast writer '${ast.key}'`, { ast, key: ast.key })
   const toPrint = !(ast instanceof StatementsAst || ast instanceof BlockAst) && writer.printNextStatement
   if (toPrint) {
     writer.printNextStatement = false
@@ -89,7 +91,16 @@ const astWriter: SyntaxAstWriterTable = {
   },
   let: (writer, ast) => {
     compilerAssert(ast.value)
-    format(writer, "let $ = $", ast.binding, ast.value)
+    const letType = ast.letType === LetType.Let ? 'let' : ast.letType === LetType.Var ? 'var' :
+      ast.letType === LetType.VarRef ? 'var ref' : ast.letType === LetType.Alias ? 'alias' : ''
+    compilerAssert(letType, "Unknown let type", { ast })
+    format(writer, "$ $ = $", letType, ast.binding, ast.value)
+  },
+  alias: (writer, ast) => {
+    format(writer, "alias $ = $", ast.binding, ast.value)
+  },
+  yield: (writer, ast) => {
+    format(writer, "yield $", ast.expr)
   },
   set: (writer, ast) => {
     format(writer, "$ = $", ast.binding, ast.value)
@@ -129,8 +140,8 @@ const astWriter: SyntaxAstWriterTable = {
   },
   break: (writer, ast) => {
     format(writer, "break")
-    if (ast.binding) format(writer, " '$", ast.binding)
-    if (ast.expr) format(writer, " with $", ast.expr)
+    if (ast.expr) format(writer, " $", ast.expr)
+    if (ast.binding) format(writer, " at $", ast.binding)
   },
   call: (writer, ast) => {
     format(writer, `$(`, ast.binding)
@@ -181,13 +192,11 @@ const astWriter: SyntaxAstWriterTable = {
     })
     format(writer, ` = $`, ast.value)
   },
+  mut: (writer, ast) => {
+    format(writer, `$&`, ast.expr)
+  },
   setfield: (writer, ast) => {
-    format(writer, `setfield not implemented`)
-    // const reg = toRegister(writer, writeExpr(writer, ast.left))
-    // const leftPtr = reg as unknown as Pointer // reinterpret reg as a pointer
-    // const fieldPtr = getElementPointer(writer, leftPtr, leftPtr.type, [ast.field])
-    // const valueReg = toRegister(writer, writeExpr(writer, ast.value))
-    // format(writer, "  store $ $, $ $\n", ast.field.fieldType, valueReg, 'ptr', fieldPtr)
+    format(writer, `$.$ = $`, ast.left, ast.field.name, ast.value)
   },
   cast: (writer, ast) => {
     format(writer, `$ as $`, ast.expr, ast.type)
@@ -294,7 +303,8 @@ export const writeSyntax = (globalCompilerState: GlobalCompilerState, outputWrit
     writer: null!,
     currentOutput: null!,
     mallocBinding: null!,
-    astVisitMap: new Map()
+    astVisitMap: new Map(),
+    registers: new Map(),
   }
   bytecodeWriter.writer = bytecodeWriter
   bytecodeWriter.currentOutput = bytecodeWriter.outputHeaders
@@ -361,7 +371,7 @@ export const writeSyntax = (globalCompilerState: GlobalCompilerState, outputWrit
 
   Array.from(globalCompilerState.compiledFunctions.values()).map(func => {
     generateName(bytecodeWriter, func.binding, true)
-    const funcWriter = writeLlvmBytecodeFunction(bytecodeWriter, func)
+    const funcWriter = writeSyntaxFunction(bytecodeWriter, func)
     return funcWriter
   })
 
@@ -416,7 +426,7 @@ const getDataTypeName = (writer: LlvmWriter, obj: Type): string => {
   return name
   // compilerAssert(false, "Type not implemented", { obj })
 }
-const writeLlvmBytecodeFunction = (bytecodeWriter: LlvmWriter, func: CompiledFunction) => {
+const writeSyntaxFunction = (bytecodeWriter: LlvmWriter, func: CompiledFunction) => {
   log("\nWriting func", func.functionDefinition.debugName, "\n")
   const funcWriter: SyntaxWriter = {
     writer: bytecodeWriter,
@@ -447,12 +457,10 @@ const writeLlvmBytecodeFunction = (bytecodeWriter: LlvmWriter, func: CompiledFun
     const storageType = binding.storage === 'ref' ? RawPointerType : binding.type
     generateName(bytecodeWriter, binding)
   
-    const argValueBinding = new Binding(binding.name, binding.type)
-    format(funcWriter, `$ $`, storageType, argValueBinding)
+    format(funcWriter, `$: $`, binding, storageType)
     
     // allocaHelper(funcWriter, binding as Pointer)
     funcWriter.currentOutput = funcWriter.outputFunctionHeaders
-    // format(funcWriter, "  store $ $, $ $\n", storageType, argValueBinding, 'ptr', binding)
     funcWriter.currentOutput = bytecodeWriter.outputStrings
   })
   format(funcWriter, `) -> $ `, func.returnType)
@@ -463,16 +471,6 @@ const writeLlvmBytecodeFunction = (bytecodeWriter: LlvmWriter, func: CompiledFun
   }
   bytecodeWriter.outputStrings.push(...funcWriter.outputFunctionBody)
 
-  if (isMain) { // hardcode for now
-    // format(funcWriter, `  ret i32 0\n`)
-  } else if (func.body.type === NeverType) {
-    // format(funcWriter, `  unreachable\n`)
-  } else if (func.returnType !== VoidType) {
-    // const v = toRegister(funcWriter, result)
-    // format(funcWriter, `  ret $ $\n`, func.returnType, v)
-  } else {
-    // format(funcWriter, `  ret void\n`)
-  }
   format(funcWriter, `\n\n`)
 
   return funcWriter

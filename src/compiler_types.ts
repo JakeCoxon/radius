@@ -1,8 +1,8 @@
 import { generateConstructor, generateDestructor, generateMoveFunction } from "../borrow/codegen_ast"
 import { compileClassTask } from "./compiler"
 import { generateTypeMethods } from "./compiler_sugar"
-import { Ast, BasicType, Binding, BoolType, Capability, ClassDefinition, Closure, CompilerError, ConcreteClassType, DoubleType, EnumVariantAst, ExternalTypeConstructor, FloatLiteralType, FloatType, FunctionDefinition, GlobalCompilerState, IntLiteralType, IntType, MutSigilAst, NeverType, NumberAst, OperatorAst, ParameterizedType, ParseCall, ParseIdentifier, ParseNode, PrimitiveType, RawPointerType, Scope, ScopeParentSymbol, SourceLocation, StatementsAst, StringType, TaskContext, Tuple, TupleTypeConstructor, Type, TypeCheckConfig, TypeCheckResult, TypeCheckVar, TypeConstructor, TypeField, TypeMatcher, TypeTable, TypeVariable, UnknownObject, VariantCastAst, VoidType, compilerAssert, getUniqueId, insertTypeInfoFields, isType, tupleTypes, u64Type, u8Type } from "./defs"
-import { Task, TaskDef } from "./tasks"
+import { Ast, BasicType, Binding, BoolType, Capability, ClassDefinition, Closure, CompilerError, ConcreteClassType, DoubleType, EnumVariantAst, ExternalTypeConstructor, FloatLiteralType, FloatType, FunctionDefinition, GlobalCompilerState, IntLiteralType, IntType, MutSigilAst, NeverType, NumberAst, OperatorAst, ParameterizedType, ParseCall, ParseIdentifier, ParseNode, PrimitiveType, RawPointerType, Scope, ScopeParentSymbol, SourceLocation, StatementsAst, StringType, TaskContext, Tuple, TupleTypeConstructor, Type, TypeCheckConfig, TypeCheckResult, TypeCheckVar, TypeConstructor, TypeField, TypeMatcher, TypeTable, TypeVariable, UnknownObject, VariantCastAst, VoidType, compilerAssert, getUniqueId, insertTypeInfoFields, isType, u64Type, u8Type } from "./defs"
+import { Event, Task, TaskDef } from "./tasks"
 
 export const isTypeInteger = (type: Type) => type === IntType || type === u64Type || type === u8Type
 export const isTypeFloating = (type: Type) => type === FloatType || type === DoubleType
@@ -43,6 +43,7 @@ export const getCommonType = (types: Type[]): Type => {
 }
 
 const typeTableGet = (typeTable: TypeTable, type: Type) => {
+  // @Speed: This is slow
   for (const t of typeTable.array) {
     if (typesEqual(t, type)) return t;
   }
@@ -57,6 +58,17 @@ export const typeTableGetOrInsert = (typeTable: TypeTable, type: Type) => {
   let v = typeTableGet(typeTable, type)
   if (v) return v;
   return typeTableInsert(typeTable, type)
+}
+
+const typeTableRemove = (typeTable: TypeTable, type: Type) => {
+  let i = 0
+  let foundIndex = -1
+  for (const t of typeTable.array) {
+    if (typesEqual(t, type)) { foundIndex = i; break }
+    i ++
+  }
+  compilerAssert(foundIndex !== -1, "Type not found", { type })
+  typeTable.array.splice(foundIndex, 1)
 }
 
 export const hashValues = (values: unknown[], info={}) => {
@@ -255,10 +267,23 @@ export const createParameterizedExternalType = (globalCompiler: GlobalCompilerSt
       }))
   }
 
+  const tempType = new ParameterizedType(typeConstructor, newArgTypes, { sizeof: 0, alignment: 0, fields: [], metaobject: Object.create(null), isReferenceType: false });
+  const existing = typeTableGet(globalCompiler.typeTable, tempType)
+  
+  if (existing && !existing.typeInfo.compilingEvent) return Task.of(existing)
+  if (existing && existing.typeInfo.compilingEvent) return Task.waitFor(existing.typeInfo.compilingEvent)
+
+  const compilingEvent = tempType.typeInfo.compilingEvent = new Event<ParameterizedType, CompilerError>()
+  typeTableGetOrInsert(globalCompiler.typeTable, tempType)
+
   return (
     typeConstructor.createType(globalCompiler, newArgTypes)
     .chainFn((task, type) => {
-      return Task.of(typeTableGetOrInsert(globalCompiler.typeTable, type))
+      // Replace with new type
+      typeTableRemove(globalCompiler.typeTable, tempType)
+      typeTableGetOrInsert(globalCompiler.typeTable, type)
+      compilingEvent.success(type)
+      return Task.of(type)
     })
   )
 }
@@ -382,7 +407,11 @@ export const NoneTypeConstructor: ExternalTypeConstructor = new ExternalTypeCons
   type.typeInfo.metaobject.isEnumVariant = true
   type.typeInfo.metaobject.enumConstructorVariantOf = OptionTypeConstructor
   type.typeInfo.metaobject.enumVariantIndex = 0
-  insertTypeInfoFields(type, [{ sourceLocation: SourceLocation.anon, name: "tag", fieldType: IntType }])
+  insertTypeInfoFields(type, [
+    { sourceLocation: SourceLocation.anon, name: "tag", fieldType: IntType },
+    { sourceLocation: SourceLocation.anon, name: "value", fieldType: argType }
+  ])
+  if (!type.typeInfo.isInvalidSize) generateTypeMethods(compiler, type)
   return Task.of(type)
 })
 
@@ -398,6 +427,7 @@ export const SomeTypeConstructor: ExternalTypeConstructor = new ExternalTypeCons
     { sourceLocation: SourceLocation.anon, name: "tag", fieldType: IntType },
     { sourceLocation: SourceLocation.anon, name: "value", fieldType: argType }
   ])
+  if (!type.typeInfo.isInvalidSize) generateTypeMethods(compiler, type)
   return Task.of(type)
 })
 
@@ -410,7 +440,10 @@ export const OptionTypeConstructor: ExternalTypeConstructor = new ExternalTypeCo
 
   opttype.typeInfo.isInvalidSize = argType === NeverType
   opttype.typeInfo.metaobject.isEnum = true
-  insertTypeInfoFields(opttype, [{ sourceLocation: SourceLocation.anon, name: "tag", fieldType: IntType }])
+  insertTypeInfoFields(opttype, [
+    { sourceLocation: SourceLocation.anon, name: "tag", fieldType: IntType },
+    { sourceLocation: SourceLocation.anon, name: "value", fieldType: argType }
+  ])
 
   return (
     createParameterizedExternalType(compiler, SomeTypeConstructor, [argType])
@@ -421,6 +454,9 @@ export const OptionTypeConstructor: ExternalTypeConstructor = new ExternalTypeCo
           opttype.typeInfo.metaobject.variants = [someType, noneType]
           opttype.typeInfo.metaobject.Some = someType
           opttype.typeInfo.metaobject.None = noneType
+
+          if (!opttype.typeInfo.isInvalidSize) generateTypeMethods(compiler, opttype)
+
           return Task.of(opttype)
         })
       )

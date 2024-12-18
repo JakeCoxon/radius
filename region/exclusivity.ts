@@ -1,6 +1,6 @@
 import { capabilitiesLargerOrEqualTo, Capability, CapabilityRanking, compilerAssert, FunctionParameter, Type } from "../src/defs";
 import { ControlFlowGraph, ControlFlowGraphGeneric, buildCFG, buildCFGFromRegions } from "../borrow/controlflow";
-import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, EndAccessInstruction, PhiInstruction, textColors, CommentInstruction, getInstructionResult, DeallocStackInstruction, CallExpressionNode, MarkInitializedInstruction, PointerOffsetInstruction, formatInstruction, ProjectBundleInstruction, YieldInstruction, BreakInstruction, GetGlobalAddress } from "../borrow/defs";
+import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, EndAccessInstruction, PhiInstruction, textColors, CommentInstruction, getInstructionResult, DeallocStackInstruction, CallExpressionNode, MarkInitializedInstruction, PointerOffsetInstruction, formatInstruction, ProjectBundleInstruction, YieldInstruction, BreakInstruction, GetGlobalAddress, BitCastInstruction } from "../borrow/defs";
 import { RegionWorklist } from "./initialization";
 import { BlockRegion, InstructionId, IrDiagnostics, IrFunction, printIrFunction, RegionId } from "./region_codegen";
 
@@ -187,6 +187,7 @@ export class RegionExclusivityCheckingPass {
     else if (instr instanceof YieldInstruction)           this.handleYieldInstruction(instr);
     else if (instr instanceof PhiInstruction)             this.handlePhiInstruction(instr);
     else if (instr instanceof GetGlobalAddress)           this.handleGetGlobalAddress(instr);
+    else if (instr instanceof BitCastInstruction)         this.handleBitCastInstruction(instr);
     else if (instr instanceof CallInstruction)            { }
     else if (instr instanceof MarkInitializedInstruction) { }
     else if (instr instanceof StoreToAddressInstruction)  { }
@@ -236,6 +237,13 @@ export class RegionExclusivityCheckingPass {
     compilerAssert(this.state.locals.get(instr.dest) === undefined, `Register ${instr.dest} is already initialized`);
     // const fields = [...addresses].map(addr => `${addr}.pointer`);
     this.state.locals.set(instr.dest, new Set([]));
+  }
+
+  handleBitCastInstruction(instr: BitCastInstruction): void {
+    // TODO:
+    const addresses = this.state.locals.get(instr.source);
+    compilerAssert(addresses, `Register ${instr.source} is not found`);
+    this.state.locals.set(instr.dest, new Set([...addresses]));
   }
 
   handleBinaryOperationInstruction(instr: BinaryOperationInstruction): void {

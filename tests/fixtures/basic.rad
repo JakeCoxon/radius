@@ -487,9 +487,17 @@ fn test_string():
   print(person)
   
 
+fn test_sink():
+  let asd = Foo(1, 2.0)
+  let two = asd
+  let thing = two.x
+  let num = thing + 2
+  print(num)
+
 fn main():
   # test_ops()
-  test_string()
+  # test_string()
+  test_sink()
 
   # test_array1()
   # test_break()

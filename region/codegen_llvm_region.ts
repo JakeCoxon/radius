@@ -1,6 +1,6 @@
 import { externalBuiltinBindings } from "../src/compiler_sugar";
 import { Ast, AstType, AstWriterTable, Binding, BindingAst, BlockAst, BoolType, CallAst, Capability, CompiledFunction, ConcreteClassType, ConstructorAst, DefaultConsAst, DoubleType, FileWriter, FloatType, FunctionType, GlobalCompilerState, IntType, LetAst, ListTypeConstructor, LlvmFunctionWriter, LlvmWriter, NeverType, NumberAst, ParameterizedType, Pointer, PrimitiveType, RawPointerType, Register, SetAst, SourceLocation, StatementsAst, StringType, Type, TypeField, UserCallAst, ValueFieldAst, VoidType, compilerAssert, escapeString, isAst, isType, textColors, u64Type, u8Type } from "../src/defs";
-import { AccessInstruction, AllocInstruction, AssignInstruction, BinaryOperationInstruction, BreakInstruction, CallInstruction, CommentInstruction, ConditionalJumpInstruction, EndAccessInstruction, formatInstruction, FunctionBlock, GetFieldPointerInstruction, GetGlobalAddress, getInstructionResult, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, MarkInitializedInstruction, PhiInstruction, PhiSource, PointerOffsetInstruction, ReturnInstruction, StoreToAddressInstruction } from "../borrow/defs";
+import { AccessInstruction, AllocInstruction, AssignInstruction, BinaryOperationInstruction, BitCastInstruction, BreakInstruction, CallInstruction, CommentInstruction, ConditionalJumpInstruction, EndAccessInstruction, formatInstruction, FunctionBlock, GetFieldPointerInstruction, GetGlobalAddress, getInstructionResult, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, MarkInitializedInstruction, PhiInstruction, PhiSource, PointerOffsetInstruction, ReturnInstruction, StoreToAddressInstruction } from "../borrow/defs";
 import { BlockRegion, IfRegion, IrFunction, ScopeRegion, SequenceId, WhileRegion } from "./region_codegen";
 
 // Some useful commands
@@ -325,6 +325,13 @@ const instructionWriter = {
     compilerAssert(source, "Register not found", { instr })
     const dest = defineRegister(writer, instr.dest, source.type)
     format(writer, "  $ = bitcast $ $ to $; assign\n", dest, source.type, generateName(writer.writer, source), source.type)
+  },
+
+  bitcast: (writer: LlvmFunctionWriter, instr: BitCastInstruction) => {
+    const source = writer.writer.registers.get(instr.source)
+    compilerAssert(source, "Register not found", { instr })
+    const dest = defineRegister(writer, instr.dest, instr.type)
+    format(writer, "  $ = bitcast $ $ to $*; bitcast\n", dest, source.type, generateName(writer.writer, source), instr.type)
   },
 
   end_access: (writer: LlvmFunctionWriter, instr: EndAccessInstruction) => {

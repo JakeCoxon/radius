@@ -1,3 +1,4 @@
+import { createDefaultConstructorAst } from "../borrow/codegen_ast";
 import { BytecodeDefault, BytecodeSecondOrder, callFunctionFromValueTask, compileClassTask, compileFunctionPrototype, createBytecodeVmAndExecuteTask, pushBytecode, pushGeneratedBytecode, unknownToAst, visitParseNode, visitParseNodeAndError } from "./compiler";
 import { externalBuiltinBindings, getEnumOf } from "./compiler_sugar";
 import { getCommonType, hashValues, isTypeInteger, normalizeNumberType, numberTypeToConcrete, propagateLiteralType, propagatedLiteralAst, typeCheckAssert, typeMatcherEquals, typeCheckFunctionResult, typeArgumentsToType } from "./compiler_types";
@@ -479,10 +480,12 @@ export function createCallAstFromValue(ctx: CompilerFunctionCallContext, value: 
 
   if (value instanceof ExternalTypeConstructor) {
     // TOOD: Do this properly
+    // TODO: This should just be a function that gets atttached to the type
+    // Then proper type checking will be done automatically
     const types = typeArgs.length ? typeArgs : args.map(x => x.type)
     return (
       TaskDef(callFunctionFromValueTask, ctx.compilerState.vm, value, types, [])
-      .chainFn((task, value) => {
+      .chainFn((task, value_) => {
         const type = ctx.compilerState.vm.stack.pop()
         compilerAssert(isType(type), "Expected type got $type", { type })
         if (type.typeInfo.metaobject.isEnumVariant) {
@@ -492,14 +495,19 @@ export function createCallAstFromValue(ctx: CompilerFunctionCallContext, value: 
               const variantIndex = type.typeInfo.metaobject.enumVariantIndex
               compilerAssert(typeof variantIndex === 'number', "Expected number", { type, meta: type.typeInfo.metaobject })
               const num = new NumberAst(IntType, location, variantIndex)
-              args.forEach(x => propagatedLiteralAst(x))
+              const newArgs = args.map(x => propagatedLiteralAst(x))
+              while (newArgs.length < enumVariantOf.typeInfo.fields.length - 1) {
+                const argType = enumVariantOf.typeInfo.fields[newArgs.length].fieldType
+                newArgs.push(createDefaultConstructorAst(argType, location))
+              }
+              // compilerAssert(newArgs.length === enumVariantOf.typeInfo.fields.length - 1, "Expected $expected fields got $got", { expected: enumVariantOf.typeInfo.fields.length - 1, got: newArgs.length })
               // TODO: Properly check arg types
-              const cast = new EnumVariantAst(enumVariantOf, location, type, enumVariantOf, [num, ...args])
+              const cast = new EnumVariantAst(enumVariantOf, location, type, enumVariantOf, [num, ...newArgs])
               return Task.of(cast)
             })
           )
         }
-        compilerAssert(false, "Not implemented", { type })
+        compilerAssert(false, "Not implemented", { type, typeInfo: type.typeInfo, value })
       })
     )
   }

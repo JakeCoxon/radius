@@ -274,6 +274,8 @@ export const runCompilerTest = (
       writer.write('\n\n')
     })
 
+    writeSyntax(testObject.globalCompiler, writer)
+
     const codeGenerator = new CodeGenerator(globalCompiler)
     const mod = new Module()
     mod.functionMap = globalCompiler.compiledFunctions
@@ -284,6 +286,7 @@ export const runCompilerTest = (
     globalCompiler.globalVars.forEach((gv) => {
       gv.register = codeGenerator.newGlobalId()
     })
+
 
     globalCompiler.compiledIr = new Map()
     globalCompiler.compiledFunctions.forEach((func) => {
@@ -430,9 +433,13 @@ export const writeSyntaxFile = async (testObject: TestObject) => {
 const execPromise = (command: string) => {
   console.log(command)
   return new Promise<string>((resolve, reject) => {
-    exec(command, (err, out) => { 
+    exec(command, (err, out, stderr) => { 
       if (err) {
+        console.log("----- OUT ----")
         console.log(out)
+        console.log("----- ERROR -----")
+        console.log(stderr)
+        console.log(err)
         reject(err)
       } else resolve(out)
     })
@@ -452,9 +459,7 @@ export const executeNativeExecutable = async (testObject: TestObject) => {
   if (testObject.fail) return
   const build = new BuildObject(testObject.moduleName, testObject.inputPath, testObject.globalOptions, testObject.globalCompiler!, '', '')
   await executeLlvmCompiler(build)
-  await execPromise(testObject.nativePath).then(out => {
-    console.log(out)
-  })
+  await execPromise(testObject.nativePath)
 }
 
 type TestObject = { 

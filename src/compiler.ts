@@ -883,7 +883,7 @@ const instructions: InstructionMapping = {
     const stmts: Ast[] = []
     const recur = (tuple: Tuple, tupleType: Type, rightSide: Ast) => {
       const newName = new FreshBindingToken("tup")
-      const letAst = letLocalAst(vm, newName.identifier, null, rightSide, LetType.Let)
+      const letAst = letLocalAst(vm, newName.identifier, null, rightSide, LetType.Alias)
       const rightSideBinding = new BindingAst(VoidType, vm.location, letAst.binding)
       stmts.push(letAst)
 

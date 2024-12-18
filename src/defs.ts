@@ -125,7 +125,8 @@ class ParseNodeType {
 export enum LetType {
   Var = 'Var',
   Let = 'Let',
-  VarRef = 'VarRef'
+  VarRef = 'VarRef',
+  Alias = 'Alias',
 } 
 
 export class ParseVoid extends ParseNodeType {         key = 'void' as const;         constructor(public token: Token) { super();} }
@@ -574,6 +575,7 @@ export interface TypeInfo {
   alignment: number // bytes
   variantPadding?: number
   isInvalidSize?: boolean
+  compilingEvent?: Event<Type, CompilerError>
 }
 export class TypeRoot {}
 export class PrimitiveType extends TypeRoot {

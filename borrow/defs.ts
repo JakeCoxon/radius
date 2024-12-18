@@ -44,6 +44,7 @@ export class AccessInstruction extends IRInstruction {              irType = 'ac
 export class EndAccessInstruction extends IRInstruction {           irType = 'end_access';            constructor(public source: string, public capabilities: Capability[]) { super(); } }
 export class ProjectBundleInstruction extends IRInstruction {       irType = 'project_bundle';        constructor(public target: string, public type: Type, public capabilities: Capability[], public source: string, public operands: string[], public funcs: {[key: string]: Binding}) { super(); } }
 export class StoreToAddressInstruction extends IRInstruction {      irType = 'store_to_address';      constructor(public address: string, public type: Type, public source: string) { super(); } }
+export class BitCastInstruction extends IRInstruction {             irType = 'bitcast';               constructor(public dest: string, public type: Type, public source: string, public sourceType: Type) { super(); } }
 export class LoadFromAddressInstruction extends IRInstruction {     irType = 'load_from_address';     constructor(public dest: string, public type: Type, public address: string) { super(); } }
 export class GetGlobalAddress extends IRInstruction {               irType = 'get_global_address';    constructor(public dest: string, public type: Type, public global: string) { super(); } }
 export class MoveInstruction extends IRInstruction {                irType = 'move';                  constructor(public target: string, public source: string, public type: Type) { super(); } }
@@ -65,6 +66,7 @@ export const getInstructionOperands = (instr: IRInstruction): string[] => {
   else if (instr instanceof ReturnInstruction)          { return instr.value ? [instr.value] : []; } 
   else if (instr instanceof BreakInstruction)           { return instr.value ? [instr.value] : []; } 
   else if (instr instanceof MoveInstruction)            { return [instr.target, instr.source]; }
+  else if (instr instanceof BitCastInstruction)         { return [instr.source]; }
   else if (instr instanceof PhiInstruction)             { return instr.sources.map(s => s.value); }
   else if (instr instanceof EndAccessInstruction)       { return [instr.source]; }
   else if (instr instanceof ProjectBundleInstruction)   { return [instr.source, ...instr.operands]; }
@@ -95,6 +97,7 @@ export const getInstructionResult = (instr: IRInstruction): string | null => {
   else if (instr instanceof AccessInstruction)          { return instr.dest; } 
   else if (instr instanceof LoadConstantInstruction)    { return instr.dest; } 
   else if (instr instanceof MoveInstruction)            { return null; }
+  else if (instr instanceof BitCastInstruction)         { return instr.dest; }
   else if (instr instanceof PhiInstruction)             { return instr.dest; }
   else if (instr instanceof DeallocStackInstruction)    { return null; }
   else if (instr instanceof CommentInstruction)         { return null; }
@@ -124,6 +127,7 @@ export const getInstructionIdentifier = (instr: IRInstruction): string | null =>
   else if (instr instanceof AccessInstruction)          { return instr.dest; } 
   else if (instr instanceof LoadConstantInstruction)    { return instr.dest; } 
   else if (instr instanceof MoveInstruction)            { return null; }
+  else if (instr instanceof BitCastInstruction)         { return instr.dest; }
   else if (instr instanceof PhiInstruction)             { return instr.dest; }
   else if (instr instanceof DeallocStackInstruction)    { return null; }
   else if (instr instanceof CommentInstruction)         { return null; }
@@ -233,7 +237,7 @@ export function formatInstruction(instr: IRInstruction): string {
   } else if (instr instanceof ReturnInstruction) {
     return `return ${instr.value}`;
   } else if (instr instanceof BreakInstruction) {
-    return `break ${instr.value} to region ${instr.regionId}`;
+    return `break ${instr.value} at region ${instr.regionId}`;
   } else if (instr instanceof StoreToAddressInstruction) {
     return `into ${instr.address} store ${instr.source}`;
   } else if (instr instanceof LoadFromAddressInstruction) {
@@ -252,8 +256,10 @@ export function formatInstruction(instr: IRInstruction): string {
     return `${instr.dest} = offset address ${instr.address} by ${instr.offsetReg} ${instr.fieldType.shortName}`;
   } else if (instr instanceof MoveInstruction) {
     return `into ${instr.target} move from ${instr.source}`;
+  } else if (instr instanceof BitCastInstruction) {
+    return `${instr.dest} = bitcast ${instr.source} from ${instr.sourceType.shortName} to ${instr.type.shortName}`;
   } else if (instr instanceof MarkInitializedInstruction) {
-    return `mark ${instr.target} as ${instr.initialized ? 'initialized' : 'uninitialized'}`;
+    return `mark ${instr.target} as ${instr.initialized ? 'initialized' : 'uninitialized'} : ${instr.type.shortName}`;
   } else if (instr instanceof ProjectBundleInstruction) {
     return `${instr.target} = project_bundle [${instr.capabilities.join(', ')}] ${instr.source} index (${instr.operands.join(', ')})`;
   } else if (instr instanceof DeallocStackInstruction) {

@@ -1,7 +1,7 @@
 import { Binding, Capability, compilerAssert, ConcreteClassType, PrimitiveType, Type, VoidType } from "../src/defs";
 import { CodeGenerator, FunctionCodeGenerator } from "../borrow/codegen_ir";
 import { ControlFlowGraph, ControlFlowGraphGeneric, buildCFG, buildCFGFromRegions } from "../borrow/controlflow";
-import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, EndAccessInstruction, PhiInstruction, MoveInstruction, CommentInstruction, textColors, MarkInitializedInstruction, formatInstruction, Module, DeallocStackInstruction, PointerOffsetInstruction, printIR, ProjectBundleInstruction, YieldInstruction, BreakInstruction, GetGlobalAddress } from "../borrow/defs";
+import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, EndAccessInstruction, PhiInstruction, MoveInstruction, CommentInstruction, textColors, MarkInitializedInstruction, formatInstruction, Module, DeallocStackInstruction, PointerOffsetInstruction, printIR, ProjectBundleInstruction, YieldInstruction, BreakInstruction, GetGlobalAddress, BitCastInstruction } from "../borrow/defs";
 import { BlockRegion, InsertPosition, InstructionId, IrDiagnostics, IrFunction, printIrFunction, RegionCodegen, RegionId } from "./region_codegen";
 
 type InitializationState = Top | Bottom | Sequence;
@@ -213,6 +213,7 @@ export class RegionInitializationCheckingPass {
     else if (instr instanceof BreakInstruction)           { }
     else if (instr instanceof ConditionalJumpInstruction) this.executeConditionalJump(instr);
     else if (instr instanceof ProjectBundleInstruction)   this.executeProjectBundle(instr);
+    else if (instr instanceof BitCastInstruction)         this.executeBitCast(instr);
     else if (instr instanceof EndAccessInstruction)       { }
     else if (instr instanceof MoveInstruction)            this.executeMove(instr);
     else if (instr instanceof GetGlobalAddress)           this.executeGetGlobalAddress(instr);
@@ -368,6 +369,25 @@ export class RegionInitializationCheckingPass {
     this.state.memory.set(addr, TOP); // The yield must have been initialized elsewhere
   }
 
+  executeBitCast(instr: BitCastInstruction): void {
+    this.ensureRegisterInitialized(instr.source);
+    const value = this.state.locals.get(instr.source)!
+    if (value instanceof InitializationStateObject) {
+      compilerAssert(false, `BitCastInstruction with InitializationStateObject not implemented`, { value, instr })
+    } else {
+      const addr = this.newAddress(instr.type);
+
+      // value.addresses.forEach(addr => {
+      //   const mem = this.state.memory.get(addr)!
+      //   console.log({ mem })
+      // })
+      this.state.memory.set(addr, TOP);
+      this.state.locals.set(instr.dest, new AddressSet([addr]));
+      // compilerAssert(false, `BitCastInstruction not implemented`);
+    }
+    // this.state.locals.set(instr.dest, value!);
+  }
+
   executeMove(instr: MoveInstruction): void {
     const instrId = this.instrId!
     if (this.debugLog) {
@@ -515,9 +535,13 @@ export class RegionInitializationCheckingPass {
   updateMemoryAddressPathState(addr: string, rootType: Type, newState: InitializationState) {
     const ids = addr.split('.')
     const current = this.state.memory.get(ids[0]) ?? BOTTOM;
-    const statePath = createStatePathState(ids.slice(1), rootType)
-    const newSd = meetInitializationStatePath(current, statePath, newState)
-    this.state.memory.set(ids[0], newSd)
+    try {
+      const statePath = createStatePathState(ids.slice(1), rootType)
+      const newSd = meetInitializationStatePath(current, statePath, newState)
+      this.state.memory.set(ids[0], newSd)
+    } catch (e) {
+      compilerAssert(false, `Error updating memory for address ${addr}`, { addr, rootType, newState, current, e });
+    }
   }
 
   initializeFunctionParam(state: InterpreterState, binding: Binding, reg: string, type: Type, capability: Capability) {
@@ -582,7 +606,7 @@ const createStatePathState = (ids: string[], currentType: Type): { id: number, n
   compilerAssert(fields.length, `Type does not have fields`, { currentType })
   compilerAssert(!isNaN(index), `Index is not a number`)
   compilerAssert(index >= 0, `Index is negative`)
-  compilerAssert(index < fields.length, `Index is out of bounds`)
+  compilerAssert(index < fields.length, `Index is out of bounds`, { index, fields, currentType })
   const nextType = fields[index].fieldType
   return [{ id: index, numFields: fields.length }, ...createStatePathState(restAddrs, nextType)]
 }

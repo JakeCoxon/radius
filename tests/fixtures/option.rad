@@ -6,16 +6,16 @@ fn is_some!(T)(x: Option!T) -> bool @inline:
   return false
 
 fn test_various():
-  let a : Option!int
+  var a : Option!int
   a = Some(78)
 
   let b : Option!int = Some(124)
 
-  let x = None!int()
-  let y = Some(10)
+  var x = None!int()
+  var y = Some(10)
   # let g = 10.Some
 
-  let v: Option!int = None()
+  var v: Option!int = None()
   v = None()
   # let v2 = None()
   print(v)
@@ -73,6 +73,7 @@ fn test_or_else():
   let x = None!int()
   let z = x.orelse 69
   assert(z == 69)
+  print("DONE")
 
 fn test_question_or_else():
   let x = None!int()
@@ -80,7 +81,15 @@ fn test_question_or_else():
   let z = { x? + y? }.orelse 3
   assert(z == 3)
 
+fn test_valid_question_or_else():
+  let x = Some(4)
+  let y = Some(9)
+  let z = { x? + y? }
+  assert(z.is_some == true)
+  assert((z.orelse 0) == 13)
+
 fn main():
   test_various()
   test_or_else()
   test_question_or_else()
+  test_valid_question_or_else()

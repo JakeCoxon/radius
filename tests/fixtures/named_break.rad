@@ -1,3 +1,5 @@
+import compiler for assert
+
 fn foo():
 
   block cool_block:
@@ -7,6 +9,7 @@ fn foo():
       break cool_block
 
     print("nope")
+    exit(1)
 
   let foo = block cool_block2:
     let y = 32
@@ -14,8 +17,11 @@ fn foo():
       break cool_block2 with 40
 
     print("Never get here")
+    exit(1)
     2
   print(foo)
+
+  assert(foo == 40)
     
 fn main():
   foo()
