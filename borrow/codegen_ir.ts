@@ -517,8 +517,8 @@ export class FunctionCodeGenerator {
 
     this.newBlock(thenLabel);
     if (isExpression) {
-      const reg = this.toValue(ast.trueBody.type, this.generateExpression(ast.trueBody, { valueCategory: 'rvalue' }))
-      this.generateMovePrimitiveToAddressInstruction(outReg!, reg, ast.type)
+      const ptr = this.generateExpression(ast.trueBody, { valueCategory: 'rvalue' })
+      this.generateMoveToAddressInstruction(outReg!, ptr, ast.type)
     }
     else this.generate(ast.trueBody);
     this.addInstruction(new JumpInstruction(afterLabel));
@@ -528,8 +528,8 @@ export class FunctionCodeGenerator {
     this.newBlock(elseLabel);
     if (ast.falseBody) {
       if (isExpression) {
-        const reg = this.toValue(ast.falseBody.type, this.generateExpression(ast.falseBody, { valueCategory: 'rvalue' }))
-        this.generateMovePrimitiveToAddressInstruction(outReg!, reg, ast.type)
+        const ptr = this.generateExpression(ast.falseBody, { valueCategory: 'rvalue' })
+        this.generateMoveToAddressInstruction(outReg!, ptr, ast.type)
       }
       else this.generate(ast.falseBody);
     }
@@ -905,6 +905,7 @@ export class FunctionCodeGenerator {
     if (value instanceof EnumVariantAst) return [Capability.Sink, true]
     if (value instanceof DefaultConsAst) return [Capability.Sink, true]
     if (value instanceof SubscriptAst)   return [Capability.Sink, false]
+    if (value instanceof IfAst)          return [Capability.Sink, true]
     if (value instanceof BlockAst)       return this.getCapabilityAndOwnership(value.body)
     if (value instanceof StatementsAst)  return this.getCapabilityAndOwnership(value.statements[value.statements.length - 1])
     if (value instanceof CastAst)        return this.getCapabilityAndOwnership(value.expr)
@@ -924,8 +925,6 @@ export class FunctionCodeGenerator {
     if (!owned && (sourceCapability === Capability.Sink || sourceCapability === Capability.Inout)) {
       compilerAssert(hasMutSigil, 'Cannot move a mutable value without a mutation sigil', { sourceCapability, location: valueAst.location.source ? valueAst.location : this.currentLocation, stmt: this.currentStatement, valueAst })
     }
-
-    console.log("generateMovePointerInstructionWithCapabilityCheck", { sourceCapability, owned, hasMutSigil, type, targetPointer, sourcePointer })
 
     if (type instanceof PrimitiveType) {
       compilerAssert(type !== VoidType, 'Cannot move void type');

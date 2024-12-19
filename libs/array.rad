@@ -62,6 +62,10 @@ type Array!(T) @struct:
   const __move_init = move_init_array
   const __move_assign = move_assign_array
   const __destructor = deinit_array
+  const __length = array_length
+
+fn array_length!(T)(arr: Array!T) -> int:
+  arr.length
 
 
 fn array_create!(T)(initial_capacity: int) -> Array!T:

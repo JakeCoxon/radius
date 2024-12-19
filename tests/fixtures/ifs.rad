@@ -21,3 +21,6 @@ fn main():
   let thing123 = ifx 2 == 2: 123 else: 32
 
   print(thing123)
+
+  let thing = ifx 2 == 2: (123, 2) else: (3, 4)
+  print(thing)

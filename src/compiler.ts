@@ -1261,12 +1261,14 @@ const instructions: InstructionMapping = {
   jumpf: (vm, { address }) => {
     if (!vm.stack.pop()) vm.ip = address;
   },
-  letlocal: (vm, { name }) => {
+  letlocal: (vm, { name, t, v }) => {
+    const type = t ? expectType(popStack(vm)) : null
+    const value = v ? popStack(vm) : null
     // Always set on the scope of the current function for now. Not sure if this is the best idea
     compilerAssert(vm.context.subCompilerState.functionCompiler, "Expected function compiler")
     const scope = vm.context.subCompilerState.functionCompiler.scope
     compilerAssert(!Object.hasOwn(scope, name), `$name is already in scope`, { name });
-    setScopeValueAndResolveEvents(scope, name, popStack(vm))
+    setScopeValueAndResolveEvents(scope, name, value)
     vm.stack.push(null) // statement expression
   },
   setlocal: (vm, { name }) => {
@@ -1322,8 +1324,8 @@ const instructions: InstructionMapping = {
   },
   operator: (vm, { name, count }) => {
     const values = popValues(vm, count);
-    compilerAssert(typeof values[0] === 'number', "Expected number got $v", { v: values[0] })
-    compilerAssert(typeof values[1] === 'number', "Expected number got $v", { v: values[1] })
+    compilerAssert(typeof values[0] === 'number', "Expected constant number got $v", { v: values[0], values })
+    compilerAssert(typeof values[1] === 'number', "Expected constant number got $v", { v: values[1], values })
     compilerAssert(operators[name], `Invalid operator $name`, { name });
     const operatorResult = operators[name].comptime(values[0], values[1]);
     vm.stack.push(operatorResult);

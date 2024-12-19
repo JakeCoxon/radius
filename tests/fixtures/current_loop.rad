@@ -10,8 +10,8 @@ fn do_something_else_with_loop(loop: ctobj, x: int) @inline:
 
 fn main():
 
-  let i = 0
-  let iterations = 0
+  var i = 0
+  var iterations = 0
   while i < 100000:
     i += 1
 

@@ -97,6 +97,8 @@ export const defaultMetaFunction = (subCompilerState: SubCompilerState, compiled
   compilerAssert(!moveAssign || moveAssign instanceof Closure)
   const copy = templateScope['__copy']
   compilerAssert(!copy || copy instanceof Closure)
+  const length = templateScope['__length']
+  compilerAssert(!length || length instanceof Closure)
 
   // if (compiledClass.classDefinition.keywords.includes('struct'))
   compiledClass.type.typeInfo.isReferenceType = false // Always false for now
@@ -112,7 +114,7 @@ export const defaultMetaFunction = (subCompilerState: SubCompilerState, compiled
   const funcDef = insertFunctionDefinition(subCompilerState.globalCompiler, decl)
   const constructor = new Closure(funcDef, definitionScope, subCompilerState.lexicalParent!)
 
-  Object.assign(compiledClass.metaobject, { iterate, subscript, subscript_inout, subscript_sink, subscript_set, constructor, destructor, moveInit, moveAssign, copy })
+  Object.assign(compiledClass.metaobject, { iterate, subscript, subscript_inout, subscript_sink, subscript_set, constructor, destructor, moveInit, moveAssign, copy, length })
 
   return (
     compileCustomDestructor(subCompilerState, compiledClass.debugName, destructor as Closure | undefined, compiledClass)

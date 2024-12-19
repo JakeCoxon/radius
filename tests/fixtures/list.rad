@@ -1,12 +1,12 @@
 
 fn main():
-  let lst = [1,2,3]
+  var lst = [1,2,3]
 
   for x in lst:
     print(x)
 
-  lst.append(4)
-  lst.append(5)
+  lst&.append(4)
+  lst&.append(5)
 
   for x in lst:
     print(x)
