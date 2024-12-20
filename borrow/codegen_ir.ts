@@ -1,7 +1,7 @@
-import { IrFunction, printIrFunction, RegionCodegen, RegionId } from "../region/region_codegen";
+import { InstructionId, IrFunction, printIrFunction, RegionCodegen, RegionId, SequenceId } from "../region/region_codegen";
 import { externalBuiltinBindings } from "../src/compiler_sugar";
-import { AliasAst, AndAst, Ast, Binding, BindingAst, BlockAst, BoolAst, BoolType, BreakAst, CallAst, Capability, CastAst, CompiledFunction, compilerAssert, ConstructorAst, DefaultConsAst, EnumVariantAst, FieldAst, FunctionParameter, GlobalCompilerState, IfAst, IntType, LetAst, LetType, MutSigilAst, NeverType, NotAst, NumberAst, OperatorAst, OrAst, ParameterizedType, PrimitiveType, RawPointerType, ReturnAst, SetAst, SetFieldAst, SetSubscriptAst, SetValueFieldAst, SourceLocation, StatementsAst, StringAst, SubscriptAst, Type, UserCallAst, ValueFieldAst, VariantCastAst, VoidAst, VoidType, WhileAst, YieldAst } from "../src/defs";
-import { ASTNode, AllocInstruction, AssignInstruction, AssignmentNode, BasicBlock, BinaryExpressionNode, BinaryOperationInstruction, BlockStatementNode, CallExpressionNode, CallInstruction, AccessInstruction, ConditionalJumpInstruction, CreateStructNode, ExpressionNode, ExpressionStatementNode, FunctionBlock, FunctionDeclarationNode, IRInstruction, IRValue, IdentifierNode, IfStatementNode, JumpInstruction, LetConstNode, LiteralNode, LoadConstantInstruction, LoadFromAddressInstruction, MemberExpressionNode, ProgramNode, Pointer, Value, ReturnInstruction, ReturnNode, StoreToAddressInstruction, Variable, VariableDeclarationNode, WhileStatementNode, GetFieldPointerInstruction, AndNode, OrNode, PhiInstruction, CommentInstruction, MoveInstruction, EndAccessInstruction, printIR, MarkInitializedInstruction, InstructionId, PhiSource, DeallocStackInstruction, PointerOffsetInstruction, ProjectBundleInstruction, YieldInstruction, BreakInstruction, GetGlobalAddress, BitCastInstruction } from "./defs";
+import { AliasAst, AndAst, Ast, Binding, BindingAst, BlockAst, BoolAst, BoolType, BreakAst, CallAst, Capability, CastAst, CompiledFunction, compilerAssert, ConstructorAst, ContinueInterAst, DefaultConsAst, EnumVariantAst, FieldAst, FunctionParameter, GeneratorAst, GlobalCompilerState, IfAst, InterleaveAst, IntType, LetAst, LetType, MutSigilAst, NeverType, NotAst, NumberAst, OperatorAst, OrAst, ParameterizedType, PrimitiveType, RawPointerType, ReturnAst, SetAst, SetFieldAst, SetSubscriptAst, SetValueFieldAst, SourceLocation, StatementsAst, StringAst, SubscriptAst, Type, UserCallAst, ValueFieldAst, VariantCastAst, VoidAst, VoidType, WhileAst, YieldAst, YieldGenerAst } from "../src/defs";
+import { ASTNode, AllocInstruction, AssignInstruction, AssignmentNode, BasicBlock, BinaryExpressionNode, BinaryOperationInstruction, BlockStatementNode, CallExpressionNode, CallInstruction, AccessInstruction, ConditionalJumpInstruction, CreateStructNode, ExpressionNode, ExpressionStatementNode, FunctionBlock, FunctionDeclarationNode, IRInstruction, IRValue, IdentifierNode, IfStatementNode, JumpInstruction, LetConstNode, LiteralNode, LoadConstantInstruction, LoadFromAddressInstruction, MemberExpressionNode, ProgramNode, Pointer, Value, ReturnInstruction, ReturnNode, StoreToAddressInstruction, Variable, VariableDeclarationNode, WhileStatementNode, GetFieldPointerInstruction, AndNode, OrNode, PhiInstruction, CommentInstruction, MoveInstruction, EndAccessInstruction, printIR, MarkInitializedInstruction, PhiSource, DeallocStackInstruction, PointerOffsetInstruction, ProjectBundleInstruction, YieldInstruction, BreakInstruction, GetGlobalAddress, BitCastInstruction, YieldGeneratorInstruction, JumpTableInstruction } from "./defs";
 
 type ExpressionContext = {
   valueCategory: 'rvalue' | 'lvalue';
@@ -15,6 +15,25 @@ class Scope {
     public breakBlockLabel: string | null = null,
     public breakExprReg: string | null = null
   ) {}
+}
+
+type Generator = {
+  regionId: RegionId,
+  ast: GeneratorAst,
+  entryBranch: GeneratorBranch,
+  elseBranch: GeneratorBranch,
+  currentBranch: GeneratorBranch
+}
+
+class GeneratorBranch {
+  regionIds: RegionId[] = []
+  jumpInstrs: InstructionId[] = []
+  constructor(
+    public sequenceId: SequenceId,
+    public writeStateAddress: string,
+    public readStateAddress: string,
+    public writeAddress: string | null,
+    public readAddress: string | null) {}
 }
 
 export class CodeGenerator {
@@ -53,6 +72,7 @@ export class FunctionCodeGenerator {
   currentStatement: Ast
 
   unusedBlocks: Set<string> = new Set();
+  generators: Generator[] = []
 
   regionCodegen: RegionCodegen
   irFunction: IrFunction;
@@ -86,7 +106,7 @@ export class FunctionCodeGenerator {
     this.currentBlock.instructions.push(instr);
 
     this.regionCodegen.ensureBlock()
-    this.regionCodegen.insertInstruction(instr)
+    return this.regionCodegen.insertInstruction(instr)
   }
 
   // TODO: Clean this up because it's not clear exactly why it's needed
@@ -192,6 +212,7 @@ export class FunctionCodeGenerator {
     if (ast instanceof SetValueFieldAst) { return this.generateAssignmentValueField(ast) }
     if (ast instanceof BlockAst)         { return this.generateBlockStatement(ast) }
     if (ast instanceof SetSubscriptAst)  { return this.generateAssignmentSubscript(ast) }
+    if (ast instanceof GeneratorAst)     { return this.generateGeneratorStatement(ast) }
 
     this.generateExpression(ast, { valueCategory: 'rvalue' })
     
@@ -222,6 +243,7 @@ export class FunctionCodeGenerator {
     if (ast instanceof BreakAst)       { return this.generateBreakExpression(ast, context) }
     // if (ast instanceof MutSigilAst)    { return this.generateExpression(ast.expr, context) }
     if (ast instanceof StatementsAst)  { return this.generateStatementsExpression(ast, context) }
+    if (ast instanceof YieldGenerAst)  { return this.generateYieldGenerExpression(ast, context) }
 
     compilerAssert(false, 'Not implemented expression', { ast, fnBody: this.body })
   }
@@ -548,13 +570,13 @@ export class FunctionCodeGenerator {
     const bodyLabel = this.newLabel();
     const afterLabel = this.newLabel();
 
-    const whileRegion = this.regionCodegen.insertNewWhileRegion();
-    this.regionCodegen.insertChildSequenceAndPushState(whileRegion)
+    const whileRegionId = this.regionCodegen.insertNewWhileRegion();
+    this.regionCodegen.insertChildSequenceAndPushState(whileRegionId)
 
     // Jump to condition check
     this.addInstruction(new JumpInstruction(conditionLabel));
 
-    this.regionCodegen.enterRegionSequence(whileRegion, this.regionCodegen.getWhileRegion(whileRegion).conditionSequence)
+    this.regionCodegen.enterRegionSequence(whileRegionId, this.regionCodegen.getWhileRegion(whileRegionId).conditionSequence)
 
     const conditionBlock = new BasicBlock(conditionLabel, []);
     this.blocks.push(conditionBlock);
@@ -562,9 +584,9 @@ export class FunctionCodeGenerator {
     const conditionReg = this.generateExpression(ast.condition, { valueCategory: 'rvalue' });
     compilerAssert(conditionReg instanceof Value, 'While condition must be an RValue');
     this.addInstruction(new ConditionalJumpInstruction(conditionReg.register, bodyLabel, afterLabel));
-    this.regionCodegen.getWhileRegion(whileRegion).conditionRegister = conditionReg.register
+    this.regionCodegen.getWhileRegion(whileRegionId).conditionRegister = conditionReg.register
 
-    this.regionCodegen.enterRegionSequence(whileRegion, this.regionCodegen.getWhileRegion(whileRegion).bodySequence)
+    this.regionCodegen.enterRegionSequence(whileRegionId, this.regionCodegen.getWhileRegion(whileRegionId).bodySequence)
 
     this.newBlock(bodyLabel);
     this.generate(ast.body);
@@ -575,6 +597,115 @@ export class FunctionCodeGenerator {
     this.newBlock(afterLabel);
 
     this.addInstruction(new CommentInstruction('End of while loop'))
+  }
+
+  generateGeneratorStatement(ast: GeneratorAst) {
+    const entryStateAddress = this.generateAlloc(IntType)
+    const entryReadAddress = ast.elseValueType !== VoidType ? this.generateAlloc(RawPointerType) : null
+    const elseStateAddress = this.generateAlloc(IntType)
+    const elseReadAddress = ast.entryValueType !== VoidType ? this.generateAlloc(RawPointerType) : null
+
+    const constant0 = this.generateNumberLiteral(new NumberAst(IntType, SourceLocation.anon, 0), { valueCategory: 'rvalue' })
+    compilerAssert(constant0 instanceof Value, 'Expected value', { constant0 })
+    this.generateMovePrimitiveToAddressInstruction(entryStateAddress, constant0, IntType)
+    this.generateMovePrimitiveToAddressInstruction(elseStateAddress, constant0, IntType)
+    
+    const interleaveRegionId = this.regionCodegen.insertNewGeneratorRegion();
+    this.regionCodegen.insertChildSequenceAndPushState(interleaveRegionId)
+    const region = this.regionCodegen.getGeneratorRegion(interleaveRegionId);
+
+    const entryBranch = new GeneratorBranch(region.entrySequence, elseStateAddress, entryStateAddress, elseReadAddress, entryReadAddress)
+    const elseBranch = new GeneratorBranch(region.elseSequence, entryStateAddress, elseStateAddress, entryReadAddress, elseReadAddress)
+    const generator: Generator = { regionId: interleaveRegionId, ast, entryBranch, elseBranch, currentBranch: entryBranch }
+    this.generators.push(generator)
+
+    {
+      this.regionCodegen.enterRegionSequence(interleaveRegionId, region.entrySequence)
+      const scopeRegionId = this.regionCodegen.insertNewScopeRegion()
+      entryBranch.regionIds.push(scopeRegionId)
+      const scopeRegion = this.regionCodegen.getScopeRegion(scopeRegionId)
+      this.regionCodegen.insertChildSequenceAndPushState(scopeRegionId)
+      this.regionCodegen.enterRegionSequence(scopeRegionId, scopeRegion.bodySequence)
+      this.addInstruction(new CommentInstruction(`Yield segment entry`))
+      this.generate(ast.entryBlock)
+      this.regionCodegen.popRegionState()
+    }
+    
+    generator.currentBranch = elseBranch
+
+    {
+      this.regionCodegen.enterRegionSequence(interleaveRegionId, region.elseSequence)
+      const scopeRegionId = this.regionCodegen.insertNewScopeRegion()
+      elseBranch.regionIds.push(scopeRegionId)
+      const scopeRegion = this.regionCodegen.getScopeRegion(scopeRegionId)
+      this.regionCodegen.insertChildSequenceAndPushState(scopeRegionId)
+      this.regionCodegen.enterRegionSequence(scopeRegionId, scopeRegion.bodySequence)
+      this.addInstruction(new CommentInstruction(`Yield segment else`))
+      this.generate(ast.elseBlock)
+      this.regionCodegen.popRegionState()
+    }
+
+    region.entryRegionIds = entryBranch.regionIds
+    region.elseRegionIds = elseBranch.regionIds
+
+    entryBranch.jumpInstrs.forEach(instrId => {
+      const instr = this.regionCodegen.getInstructionById(instrId)
+      compilerAssert(instr instanceof JumpTableInstruction, 'Expected jump table instruction', { instr })
+      instr.table.push(...elseBranch.regionIds)
+    })
+    elseBranch.jumpInstrs.forEach(instrId => {
+      const instr = this.regionCodegen.getInstructionById(instrId)
+      compilerAssert(instr instanceof JumpTableInstruction, 'Expected jump table instruction', { instr })
+      // TODO: Skip the first one because it cannot be entered, however this will mess with the order of the region ids
+      // Maybe LLVM will optimize this out anyway
+      instr.table.push(...entryBranch.regionIds) 
+    })
+
+    this.generators.pop()
+    this.regionCodegen.popRegionState()
+  }
+
+  generateYieldGenerExpression(ast: YieldGenerAst, context: ExpressionContext): IRValue {
+    const generator = this.generators.find(x => x.ast.binding === ast.generatorBinding)
+    compilerAssert(generator, 'Generator not found', { ast })
+    const currentBranch = generator.currentBranch
+    
+    if (currentBranch.writeAddress) {
+      compilerAssert(ast.expr, 'Expected expression', { ast })
+      const valueAddress = this.storeResult(ast.expr.type, this.generateExpression(ast.expr, { valueCategory: 'lvalue' }))
+      this.addInstruction(new CommentInstruction(`Write pointer ${valueAddress?.address} to ${currentBranch.writeAddress}`))
+      this.generateMovePrimitiveToAddressInstruction(currentBranch.writeAddress, new Value(valueAddress.address), RawPointerType)
+    }
+
+    const nextJumpRegion = currentBranch.regionIds.length
+    this.addInstruction(new CommentInstruction(`Set next jump = ${nextJumpRegion}`))
+    const constant = this.generateNumberLiteral(new NumberAst(IntType, SourceLocation.anon, nextJumpRegion), { valueCategory: 'rvalue' })
+    compilerAssert(constant instanceof Value, 'Expected value', { constant })
+    this.generateMovePrimitiveToAddressInstruction(currentBranch.writeStateAddress, constant, IntType)
+
+    const readStateValue = this.toValue(IntType, new Pointer(currentBranch.readStateAddress), 'yield')
+    const jumpInstr = this.addInstruction(new JumpTableInstruction(IntType, readStateValue.register, []))!
+    currentBranch.jumpInstrs.push(jumpInstr)
+    
+    this.regionCodegen.popRegionState() // Pop the scope region 
+    compilerAssert(this.regionCodegen.regionSequence === currentBranch.sequenceId, 'Generator sequence mismatch. Not implemented yet', { currentBranch, regionSequence: this.regionCodegen.regionSequence })
+    const scopeRegionId = this.regionCodegen.insertNewScopeRegion();
+    currentBranch.regionIds.push(scopeRegionId)
+    const scopeRegion = this.regionCodegen.getScopeRegion(scopeRegionId)
+    this.regionCodegen.insertChildSequenceAndPushState(scopeRegionId)
+    this.regionCodegen.enterRegionSequence(scopeRegionId, scopeRegion.bodySequence)
+
+    const isEntry = currentBranch === generator.entryBranch
+    this.addInstruction(new CommentInstruction(`Yield segment ${isEntry ? 'entry' : 'else'}`))
+
+    if (currentBranch.readAddress) {
+      this.addInstruction(new MarkInitializedInstruction(currentBranch.readAddress, RawPointerType, true))
+      const value = this.toValue(RawPointerType, new Pointer(currentBranch.readAddress), 'yield')
+      return new Pointer(value.register)
+    }
+
+    // TODO: Maybe need to hold access here
+    return new Pointer('')
   }
 
   generateAndExpression(ast: AndAst, context: ExpressionContext): IRValue {
@@ -630,6 +761,7 @@ export class FunctionCodeGenerator {
 
   storeResult(type: Type, value: IRValue) {
     if (value instanceof Pointer) return value
+    if (type === VoidType) return new Pointer('')
     const reg = this.generateAlloc(type);
     this.generateMovePrimitiveToAddressInstruction(reg, value, type)
     return new Pointer(reg)
@@ -1020,7 +1152,6 @@ export class FunctionCodeGenerator {
   }
 
   generateNumberLiteral(ast: NumberAst, context: ExpressionContext): IRValue {
-    compilerAssert(context.valueCategory === 'rvalue', 'Literal must be an RValue');
     const value = ast.value;
     const destReg = this.newRegister();
     this.addInstruction(new LoadConstantInstruction(destReg, ast.type, value));
@@ -1028,7 +1159,6 @@ export class FunctionCodeGenerator {
   }
   
   generateBoolLiteral(ast: BoolAst, context: ExpressionContext): IRValue {
-    compilerAssert(context.valueCategory === 'rvalue', 'Literal must be an RValue');
     const value = ast.value;
     const destReg = this.newRegister();
     this.addInstruction(new LoadConstantInstruction(destReg, ast.type, value ? 1 : 0));
@@ -1130,44 +1260,6 @@ export class FunctionCodeGenerator {
 
   ///////////////////////////
 
-
-  replaceMoveInstruction(block: BasicBlock, instrId: InstructionId, instr: MoveInstruction, capability: Capability) {
-    const sourceAccessReg = this.newRegister();
-    const targetAccessReg = this.newRegister();
-    compilerAssert(capability === Capability.Set || capability === Capability.Inout, 'Invalid capability');
-    const metaobject = instr.type.typeInfo.metaobject;
-    const moveFnBinding = capability === Capability.Set ? metaobject.moveInitBinding : metaobject.moveAssignBinding;
-    compilerAssert(moveFnBinding && moveFnBinding instanceof Binding, `Move function not found for ${instr.type.shortName}`);
-    const moveFn = this.codegen.functions.get(moveFnBinding);
-    compilerAssert(moveFn, `Function not found: ${moveFnBinding.name}`);
-    const instrs = [
-      new CommentInstruction(`Replaced move with ${capability} to ${instr.target} from ${instr.source}`),
-      new AccessInstruction(sourceAccessReg, instr.source, [Capability.Sink], instr.type),
-      new AccessInstruction(targetAccessReg, instr.target, [capability], instr.type),
-      new CallInstruction(null, VoidType, moveFn.binding, [targetAccessReg, sourceAccessReg], moveFn.parameters.map(p => p.type), moveFn.parameters.map(p => p.capability)),
-      new MarkInitializedInstruction(targetAccessReg, instr.type, true),
-      new MarkInitializedInstruction(sourceAccessReg, instr.type, false),
-      new EndAccessInstruction(sourceAccessReg, [Capability.Sink]),
-      new EndAccessInstruction(targetAccessReg, [capability]),
-    ];
-    block.instructions.splice(instrId.instrId, 1, ...instrs);
-  }
-
-  removeInstruction(block: BasicBlock, instrId: InstructionId) {
-    console.log("Remove instruction", block.instructions[instrId.instrId])
-    block.instructions.splice(instrId.instrId, 1);
-  }
-
-  replaceInstruction(block: BasicBlock, instrId: InstructionId, instr: IRInstruction) {
-    console.log("Replacing instruction", block.instructions[instrId.instrId])
-    block.instructions.splice(instrId.instrId, 1, instr);
-  }
-
-  spliceInstructions(block: BasicBlock, instrId: InstructionId, deleteCount: number, instrs: IRInstruction[]) {
-    console.log("Splicing instruction", block.instructions.slice(instrId.instrId, instrId.instrId + deleteCount))
-    block.instructions.splice(instrId.instrId, deleteCount, ...instrs);
-  }
-  
   createDeallocStackInstructions(source: string, type: Type) {
     const destructor = type.typeInfo.metaobject.destructorBinding;
     if (!destructor) {

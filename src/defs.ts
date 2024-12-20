@@ -512,8 +512,8 @@ export class SubscriptAst extends AstRoot {     key = 'subscript' as const;     
 export class SetSubscriptAst extends AstRoot {  key = 'setsubscript' as const;   constructor(public type: Type, public location: SourceLocation, public left: Ast, public right: Ast, public value: Ast) { super() } }
 export class NotAst extends AstRoot {           key = 'not' as const;            constructor(public type: Type, public location: SourceLocation, public expr: Ast) { super() } }
 export class ConstructorAst extends AstRoot {   key = 'constructor' as const;    constructor(public type: Type, public location: SourceLocation, public args: Ast[]) { super() } }
-export class VariantCastAst extends AstRoot   { key = 'variantcast' as const;    constructor(public type: Type, public location: SourceLocation, public enumType: Type, public expr: Ast) { super() } }
-export class EnumVariantAst extends AstRoot   { key = 'enumvariant' as const;    constructor(public type: Type, public location: SourceLocation, public variantType: Type, public enumType: Type, public args: Ast[]) { super() } }
+export class VariantCastAst extends AstRoot {   key = 'variantcast' as const;    constructor(public type: Type, public location: SourceLocation, public enumType: Type, public expr: Ast) { super() } }
+export class EnumVariantAst extends AstRoot {   key = 'enumvariant' as const;    constructor(public type: Type, public location: SourceLocation, public variantType: Type, public enumType: Type, public args: Ast[]) { super() } }
 export class DefaultConsAst extends AstRoot {   key = 'defaultcons' as const;    constructor(public type: Type, public location: SourceLocation) { super() } }
 export class AddressAst extends AstRoot {       key = 'address' as const;        constructor(public type: Type, public location: SourceLocation, public binding: Binding) { super() } }
 export class DerefAst extends AstRoot {         key = 'deref' as const;          constructor(public type: Type, public location: SourceLocation, public left: BindingAst, public fieldPath: TypeField[]) { super() } }
@@ -522,6 +522,8 @@ export class SetDerefAst extends AstRoot {      key = 'setderef' as const;      
 export class CompTimeObjAst extends AstRoot {   key = 'comptimeobj' as const;    constructor(public type: Type, public location: SourceLocation, public value: unknown) { super() } }
 export class InterleaveAst extends AstRoot {    key = 'interleave' as const;     constructor(public type: Type, public location: SourceLocation, public binding: Binding, public entryLabels: Binding[], public elseLabels: Binding[], public entryBlock: Ast, public elseBlock: Ast) { super() } }
 export class ContinueInterAst extends AstRoot { key = 'continueinter' as const;  constructor(public type: Type, public location: SourceLocation, public interleaveBinding: Binding, public labelBinding: Binding) { super() } }
+export class GeneratorAst extends AstRoot {     key = 'generator' as const;      constructor(public type: Type, public location: SourceLocation, public binding: Binding, public entryLabels: Binding[], public elseLabels: Binding[], public entryValueType: Type, public elseValueType: Type, public entryBlock: Ast, public elseBlock: Ast) { super() } }
+export class YieldGenerAst extends AstRoot {    key = 'yieldgener' as const;     constructor(public type: Type, public location: SourceLocation, public generatorBinding: Binding, public labelBinding: Binding, public expr: Ast | null) { super() } }
 export class MutSigilAst extends AstRoot {      key = 'mut' as const;            constructor(public type: Type, public location: SourceLocation, public expr: Ast) { super() } }
 export class YieldAst extends AstRoot {         key = 'yield' as const;          constructor(public type: Type, public location: SourceLocation, public expr: Ast) { super() } }
 
@@ -529,7 +531,7 @@ export type Ast = NumberAst | LetAst | SetAst | OperatorAst | IfAst | ListAst | 
   OrAst | StatementsAst | WhileAst | ReturnAst | SetFieldAst | VoidAst | CastAst | SubscriptAst | ConstructorAst |
   BindingAst | StringAst | NotAst | FieldAst | BlockAst | BreakAst | BoolAst | CastAst | DefaultConsAst | ValueFieldAst |
   SetValueFieldAst | SetSubscriptAst | AddressAst | DerefAst | SetDerefAst | CompTimeObjAst | NamedArgAst | InterleaveAst | 
-  ContinueInterAst | VariantCastAst | EnumVariantAst | MutSigilAst | YieldAst | AliasAst
+  ContinueInterAst | VariantCastAst | EnumVariantAst | MutSigilAst | YieldAst | AliasAst | GeneratorAst | YieldGenerAst
 export const isAst = (value: unknown): value is Ast => value instanceof AstRoot;
 
 export class Tuple {

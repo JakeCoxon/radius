@@ -1,7 +1,7 @@
 import { Binding, Capability, compilerAssert, CompilerError, ConcreteClassType, PrimitiveType, Type, VoidType } from "../src/defs";
 import { CodeGenerator, FunctionCodeGenerator } from "../borrow/codegen_ir";
 import { ControlFlowGraph, ControlFlowGraphGeneric, buildCFG, buildCFGFromRegions, printRegionCFG } from "../borrow/controlflow";
-import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, EndAccessInstruction, PhiInstruction, MoveInstruction, CommentInstruction, textColors, MarkInitializedInstruction, formatInstruction, Module, DeallocStackInstruction, PointerOffsetInstruction, printIR, ProjectBundleInstruction, YieldInstruction, BreakInstruction, GetGlobalAddress, BitCastInstruction } from "../borrow/defs";
+import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, EndAccessInstruction, PhiInstruction, MoveInstruction, CommentInstruction, textColors, MarkInitializedInstruction, formatInstruction, Module, DeallocStackInstruction, PointerOffsetInstruction, printIR, ProjectBundleInstruction, YieldInstruction, BreakInstruction, GetGlobalAddress, BitCastInstruction, YieldGeneratorInstruction, JumpTableInstruction } from "../borrow/defs";
 import { BlockRegion, InsertPosition, InstructionId, IrDiagnostics, IrFunction, printIrFunction, RegionCodegen, RegionId } from "./region_codegen";
 
 type InitializationState = Top | Bottom | Sequence;
@@ -91,6 +91,7 @@ export class RegionInitializationCheckingPass {
   }
 
   printLocalsMemory(regionId: RegionId) {
+    if (!this.state) return
     this.diagnostics.regionNote(regionId, `  Locals: ${Array.from(this.state.locals.entries()).flatMap(([key, val]) => {
       if (val instanceof InitializationStateObject) {
         return `${key} -> ${initializationStateToString(val.state)}`
@@ -106,7 +107,7 @@ export class RegionInitializationCheckingPass {
   interpret() {
     this.cfg = buildCFGFromRegions(this.function);
 
-    if (false) printRegionCFG(this.cfg, x => `${x}`)
+    if (true) printRegionCFG(this.cfg, x => `${x}`)
 
     const entryState = createEmptyState();
 
@@ -245,6 +246,8 @@ export class RegionInitializationCheckingPass {
     else if (instr instanceof MarkInitializedInstruction) this.executeMarkInitialized(instr);
     else if (instr instanceof DeallocStackInstruction)    this.executeDeallocStackInstruction(instr);
     else if (instr instanceof YieldInstruction)           this.executeYield(instr);
+    else if (instr instanceof YieldGeneratorInstruction)  this.executeYieldGeneratorInstructions(instr);
+    else if (instr instanceof JumpTableInstruction)       { }
     else if (instr instanceof PhiInstruction)             this.executePhi(instr);
     else if (instr instanceof CommentInstruction)         { }
     else compilerAssert(false, `Unknown instruction in initialization pass: ${instr.irType}`);
@@ -444,6 +447,13 @@ export class RegionInitializationCheckingPass {
 
   executeYield(instr: YieldInstruction): void {
     if (instr.value) this.ensureRegisterInitialized(instr.value);
+    const addr = this.newAddress(instr.type);
+    this.state.locals.set(instr.dest, new AddressSet([addr]));
+    this.state.memory.set(addr, TOP)
+  }
+
+  executeYieldGeneratorInstructions(instr: YieldGeneratorInstruction): void {
+    if (instr.address) this.ensureRegisterInitialized(instr.address);
     const addr = this.newAddress(instr.type);
     this.state.locals.set(instr.dest, new AddressSet([addr]));
     this.state.memory.set(addr, TOP)

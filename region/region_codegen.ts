@@ -89,6 +89,19 @@ export class ScopeRegion {
   constructor() {}
 }
 
+export class GeneratorRegion {
+  parentSequence: SequenceId
+  prevRegion: RegionId | null = null
+  nextRegion: RegionId | null = null
+  entrySequence: SequenceId
+  elseSequence: SequenceId
+  exitSequence: SequenceId
+  entryRegionIds: RegionId[]
+  elseRegionIds: RegionId[]
+  result: string
+  constructor() {}
+}
+
 export type InsertPosition = { startOfRegion: RegionId } | { endOfRegion: RegionId } | { afterInstruction: InstructionId } | { beforeInstruction: InstructionId };
 export const InsertPosition = {
   startOfRegion: (region: RegionId): InsertPosition => ({ startOfRegion: region }),
@@ -96,7 +109,7 @@ export const InsertPosition = {
   after: (instr: InstructionId): InsertPosition => ({ afterInstruction: instr }),
   before: (instr: InstructionId): InsertPosition => ({ beforeInstruction: instr }),
 }
-export type Region = BlockRegion | IfRegion | WhileRegion | ScopeRegion;
+export type Region = BlockRegion | IfRegion | WhileRegion | ScopeRegion | GeneratorRegion
 
 export class IrDiagnostics {
   instructionNotes: { instrId: InstructionId, note: string }[] = []
@@ -175,6 +188,10 @@ export const printIrFunction = (function_: IrFunction, diagnostics?: IrDiagnosti
       visitSequence(region.exitSequence, "Exit", depth + 1, true, nextPrefix);
     } else if (region instanceof ScopeRegion) {
       visitSequence(region.bodySequence, "Body", depth + 1, false, nextPrefix);
+      visitSequence(region.exitSequence, "Exit", depth + 1, true, nextPrefix);
+    } else if (region instanceof GeneratorRegion) {
+      visitSequence(region.entrySequence, "Entry", depth + 1, false, nextPrefix);
+      visitSequence(region.elseSequence, "Else", depth + 1, false, nextPrefix);
       visitSequence(region.exitSequence, "Exit", depth + 1, true, nextPrefix);
     } else {
       compilerAssert(false, "Unknown region type", { region });
@@ -558,6 +575,7 @@ export class RegionCodegen {
   getWhileRegion(region: RegionId): WhileRegion { return this.irFunction.regions[region] as WhileRegion; }
   getBlockRegion(region: RegionId): BlockRegion { return this.irFunction.regions[region] as BlockRegion; }
   getScopeRegion(region: RegionId): ScopeRegion { return this.irFunction.regions[region] as ScopeRegion; }
+  getGeneratorRegion(region: RegionId): GeneratorRegion { return this.irFunction.regions[region] as GeneratorRegion; }
 
   insertNewBlockRegion(): RegionId {
     const region = new BlockRegion()
@@ -592,6 +610,16 @@ export class RegionCodegen {
     this.irFunction.regions.push(region);
     const regionId = this.irFunction.regions.length - 1 as RegionId
     region.bodySequence = this.insertNewSequenceRegion(regionId);
+    region.exitSequence = this.insertNewSequenceRegion(regionId);
+    return regionId
+  }
+
+  insertNewGeneratorRegion(): RegionId {
+    const region = new GeneratorRegion()
+    this.irFunction.regions.push(region);
+    const regionId = this.irFunction.regions.length - 1 as RegionId
+    region.entrySequence = this.insertNewSequenceRegion(regionId);
+    region.elseSequence = this.insertNewSequenceRegion(regionId);
     region.exitSequence = this.insertNewSequenceRegion(regionId);
     return regionId
   }

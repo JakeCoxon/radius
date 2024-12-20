@@ -51,6 +51,8 @@ export class MoveInstruction extends IRInstruction {                irType = 'mo
 export class MarkInitializedInstruction extends IRInstruction {     irType = 'mark_initialized';      constructor(public target: string, public type: Type, public initialized: boolean) { super(); } }
 export class DeallocStackInstruction extends IRInstruction {        irType = 'dealloc_stack';         constructor(public target: string, public type: Type) { super(); } }
 export class YieldInstruction extends IRInstruction {               irType = 'yield';                 constructor(public dest: string, public type: Type, public value: string | null) { super(); } }
+export class YieldGeneratorInstruction extends IRInstruction {      irType = 'yield_generator';       constructor(public dest: string, public regionId: RegionId, public labelBinding: Binding, public type: Type, public address: string | null) { super(); } }
+export class JumpTableInstruction extends IRInstruction {           irType = 'jump_table';            constructor(public type: Type, public value: string, public table: RegionId[]) { super(); } }
 export class PhiInstruction extends IRInstruction {                 irType = 'phi';                   constructor(public dest: string, public type: Type, public sources: PhiSource[]) { super(); } }
 export class CommentInstruction extends IRInstruction {             irType = 'comment';               constructor(public comment: string) { super(); } }
 
@@ -80,7 +82,9 @@ export const getInstructionOperands = (instr: IRInstruction): string[] => {
   else if (instr instanceof LoadConstantInstruction)    { return []; }
   else if (instr instanceof ConditionalJumpInstruction) { return [instr.condition]; }
   else if (instr instanceof JumpInstruction)            { return []; }
+  else if (instr instanceof JumpTableInstruction)       { return [instr.value]; }
   else if (instr instanceof YieldInstruction)           { return instr.value ? [instr.value] : []; }
+  else if (instr instanceof YieldGeneratorInstruction) { return instr.address ? [instr.address] : []; }
   else { compilerAssert(false, 'Unknown instruction type', { instr }) }
 }
 
@@ -109,8 +113,10 @@ export const getInstructionResult = (instr: IRInstruction): string | null => {
   else if (instr instanceof LoadConstantInstruction)    { return instr.dest; }
   else if (instr instanceof ConditionalJumpInstruction) { return null; }
   else if (instr instanceof JumpInstruction)            { return null; }
+  else if (instr instanceof JumpTableInstruction)       { return null; }
   else if (instr instanceof YieldInstruction)           { return instr.dest; }
   else if (instr instanceof BreakInstruction)           { return null; }
+  else if (instr instanceof YieldGeneratorInstruction) { return instr.dest; }
   else { compilerAssert(false, 'Unknown instruction type', { instr }) }
 }
 
@@ -139,8 +145,10 @@ export const getInstructionIdentifier = (instr: IRInstruction): string | null =>
   else if (instr instanceof LoadConstantInstruction)    { return instr.dest; }
   else if (instr instanceof ConditionalJumpInstruction) { return null; }
   else if (instr instanceof JumpInstruction)            { return null; }
+  else if (instr instanceof JumpTableInstruction)       { return null; }
   else if (instr instanceof YieldInstruction)           { return instr.dest; }
   else if (instr instanceof BreakInstruction)           { return null; }
+  else if (instr instanceof YieldGeneratorInstruction) { return instr.dest; }
   else { compilerAssert(false, 'Unknown instruction type', { instr }) }
 }
 
@@ -232,6 +240,8 @@ export function formatInstruction(instr: IRInstruction): string {
     return `if ${instr.condition} != 0 goto ${instr.targetLabel} else goto ${instr.elseLabel}`;
   } else if (instr instanceof JumpInstruction) {
     return `goto ${instr.target}`;
+  } else if (instr instanceof JumpTableInstruction) {
+    return `goto table ${instr.value} [${instr.table.join(', ')}]`;
   } else if (instr instanceof CallInstruction) {
     return `into ${instr.target} call ${instr.binding.name}(${instr.args.join(', ')})`;
   } else if (instr instanceof ReturnInstruction) {
@@ -266,6 +276,8 @@ export function formatInstruction(instr: IRInstruction): string {
     return `dealloc_stack ${instr.target}: ${instr.type.shortName}`;
   } else if (instr instanceof YieldInstruction) {
     return `${instr.dest} = yield ${instr.value ? instr.value : ''}`;
+  } else if (instr instanceof YieldGeneratorInstruction) {
+    return `${instr.dest} = yield_generator ${instr.address ? instr.address : 'null'} at region ${instr.regionId} `;
   } else if (instr instanceof PhiInstruction) {
     return `${instr.dest} = phi(${instr.sources.map(x => `${x.value} @ ${x.block}`).join(', ')})`;
   } else if (instr instanceof CommentInstruction) {

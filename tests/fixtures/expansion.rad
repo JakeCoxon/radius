@@ -1,9 +1,35 @@
-import compiler for assert
+import compiler for assert, generator
 
-fn main():
+
+  
+fn test_basic():
+
+  meta generator({|consume| 
+    let elem1 = consume()
+    print(elem1)
+    let elem2 = consume()
+    print(elem2)
+    if true:
+      print("Nice")
+    let elem3 = consume()
+    print(elem1 + elem3)
+  }, {|yield|
+    yield(1)
+    yield(2)
+    yield(3)
+  })
+
+fn test_basic_lists():
 
   let lst1 = [1, 2, 3, 4, 5]
   let lst2 = [6, 7, 8, 9]
+
+  print(lst1[:]) ...
+  print(lst2[:]) ...
+
+fn test_zip():
+
+  # Not working yet
 
   print(lst1[:] + lst1[1:]) ...
 
@@ -19,4 +45,11 @@ fn main():
   assert(m == 1)
   
 
-  #let b = (fold(1) + x * x for x in lst1)
+  let b = (fold(1) + x * x for x in lst1)
+
+
+fn main():
+
+  test_basic()
+  test_basic_lists()
+  # test_lists()

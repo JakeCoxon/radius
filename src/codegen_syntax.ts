@@ -8,7 +8,7 @@ const log = (...args: any[]) => {
 const writeExpr = (writer: SyntaxWriter, ast: Ast) => {
   if (ast === null) { format(writer, "null"); return }
   compilerAssert(isAst(ast), "Not an AST", { ast })
-  compilerAssert(!writer.writer.astVisitMap.has(ast), "Already visited AST", { ast }) 
+  // compilerAssert(!writer.writer.astVisitMap.has(ast), "Already visited AST", { ast }) 
   if (!(ast instanceof NumberAst || ast instanceof BindingAst)) {
     writer.writer.astVisitMap.set(ast, true) // Takes up a lot of memory
   }
@@ -132,6 +132,14 @@ const astWriter: SyntaxAstWriterTable = {
   },
   continueinter: (writer, ast) => {
     format(writer, "continueinter '$", ast.interleaveBinding)
+  },
+  generator: (writer, ast) => {
+    format(writer, "generator '$ $ else $", ast.binding, toStmts(ast.entryBlock), toStmts(ast.elseBlock))
+  },
+  yieldgener: (writer, ast) => {
+    format(writer, "yieldgener")
+    if (ast.expr) format(writer, " $", ast.expr)
+    format(writer, " at $", ast.generatorBinding)
   },
 
   block: (writer, ast) => {

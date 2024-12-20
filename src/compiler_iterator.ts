@@ -3,7 +3,7 @@ import { BytecodeSecondOrder, compileFunctionPrototype, getOperatorTable, loadMo
 import { compileExportedFunctionTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, insertFunctionDefinition } from "./compiler_functions"
 import { createDefaultFromType, maxOfType, minOfType, typeOf } from "./compiler_sugar"
 import { getCommonType, propagatedLiteralAst } from "./compiler_types"
-import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, CompileTimeObjectType, StatementsAst, isAst, isType, isTypeCheckError, InterleaveAst, ContinueInterAst, CompTimeObjAst, ParseEvalFunc, SetAst, DefaultConsAst, WhileAst, BoolAst, isArray, ExpansionSelector, ParseNote, ExpansionCompilerState, ParseBoolean, ParseOr, ParseBreak, filterNotNull, ParseTuple, ParseNot, ParseLetConst, ParseConcurrency, ParseCompTime, ParseNil, CompilerCallable, isCompilerCallable, ParseVoid, GlobalCompilerState, ParseIterator, LetType, ParseMutSigil, MutSigilAst, Capability } from "./defs"
+import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, CompileTimeObjectType, StatementsAst, isAst, isType, isTypeCheckError, InterleaveAst, ContinueInterAst, CompTimeObjAst, ParseEvalFunc, SetAst, DefaultConsAst, WhileAst, BoolAst, isArray, ExpansionSelector, ParseNote, ExpansionCompilerState, ParseBoolean, ParseOr, ParseBreak, filterNotNull, ParseTuple, ParseNot, ParseLetConst, ParseConcurrency, ParseCompTime, ParseNil, CompilerCallable, isCompilerCallable, ParseVoid, GlobalCompilerState, ParseIterator, LetType, ParseMutSigil, MutSigilAst, Capability, YieldGenerAst, GeneratorAst } from "./defs"
 import { Event, Task, TaskDef, isTask } from "./tasks"
 
 const createExpansionState = (debugName: string, location: SourceLocation): ExpansionCompilerState => {
@@ -520,6 +520,99 @@ const interleaveHelper = () => {
     getOrCreateParamBinding, createSetter, buildAst
   }
 }
+const generatorInternalHelper = () => {
+  const generatorBinding = new Binding("generator", VoidType)
+  const entryLabels: Binding[] = []
+  const otherLabels: Binding[] = []
+  const createEntryLabel = () => {
+    entryLabels.push(new Binding(`gener_entry${entryLabels.length + 1}`, VoidType))
+    return entryLabels[entryLabels.length - 1]
+  }
+  const createElseLabel = () => {
+    otherLabels.push(new Binding(`gener_else${otherLabels.length + 1}`, VoidType))
+    return otherLabels[otherLabels.length - 1]
+  }
+  // Else block has a label for the entry point of the block
+  // but the Entry block doesn't. This is reflected in the IR output
+  createElseLabel()
+
+  const entryParamEvent = new Event<Binding, CompilerError>()
+  const entryTypeEvent = new Event<Type, CompilerError>()
+  const elseTypeEvent = new Event<Type, CompilerError>()
+  const succeedEntryType = (type: Type) => {
+    if (entryTypeEvent._success) {
+      compilerAssert(entryTypeEvent._success === type, "The producer/consumer types do not match: $type, $type2", { type, type2: entryTypeEvent._success })
+      return
+    }
+    entryTypeEvent.success(type)
+  }
+  const succeedElseType = (type: Type) => {
+    if (elseTypeEvent._success) {
+      compilerAssert(elseTypeEvent._success === type, "The producer/consumer types do not match: $type, $type2", { type, type2: elseTypeEvent._success })
+      return
+    }
+    elseTypeEvent.success(type)
+  }
+  const getOrCreateParamBinding = (type: Type) => {
+    if (entryParamEvent._success) {
+      compilerAssert(entryParamEvent._success.type === type, "The producer/consumer types do not match: $type, $type2", { type, type2: entryParamEvent._success.type, entry: entryParamEvent._success })
+      return entryParamEvent._success
+    }
+    const entryParam = new Binding('prd', type)
+    entryParamEvent.success(entryParam)
+    return entryParam
+  }
+  const yieldEntry = (location: SourceLocation, expr: Ast | null): Task<Ast, CompilerError> => {
+    console.log("Yield entry", expr)
+    expr && propagatedLiteralAst(expr)
+    succeedEntryType(expr?.type ?? VoidType)
+    return (
+      Task.waitFor(elseTypeEvent)
+      .mapRejected(err => { compilerAssert(false, "Binding not resolved in generator", { generatorBinding, entryTypeEvent, elseTypeEvent }) })
+      .chainFn((task, type) => {
+        // compilerAssert(false, "Not implemented", { type })
+        return Task.of(new YieldGenerAst(type, location, generatorBinding, createEntryLabel(), expr))
+      })
+    )
+  }
+  const yieldElse = (location: SourceLocation, expr: Ast) => {
+    console.log("Yield else", expr)
+    propagatedLiteralAst(expr)
+    succeedElseType(expr.type)
+    return new YieldGenerAst(VoidType, location, generatorBinding, createElseLabel(), expr)
+  }
+
+  const waitForEntryBinding = (globalCompiler: GlobalCompilerState) => {
+    globalCompiler.allWaitingEvents.push(entryTypeEvent)
+    globalCompiler.allWaitingEvents.push(elseTypeEvent)
+    return Task.waitFor(entryTypeEvent).chainFn(() => Task.waitFor(elseTypeEvent))
+      .mapRejected(err => { compilerAssert(false, "Binding not resolved in generator", { generatorBinding, entryTypeEvent, elseTypeEvent }) })
+  }
+  const buildAst = (location: SourceLocation, a: Ast, b: Ast): Task<Ast, CompilerError> => {
+    return (
+      Task.waitFor(entryTypeEvent)
+      .mapRejected(err => { compilerAssert(false, "Binding not resolved in generator", { generatorBinding, entryTypeEvent, elseTypeEvent }) })
+      .chainFn((task, entryValueType) => {
+        return (
+          Task.waitFor(elseTypeEvent)
+          .mapRejected(err => { compilerAssert(false, "Binding not resolved in generator", { generatorBinding, entryTypeEvent, elseTypeEvent }) })
+          .chainFn((task, elseValueType) => {
+            return Task.of(new GeneratorAst(VoidType, location, generatorBinding, entryLabels, otherLabels, entryValueType, elseValueType, a, b))
+          })
+        )
+      })
+    )
+  }
+  // const createSetter = (location: SourceLocation, value: Ast) => {
+  //   propagatedLiteralAst(value)
+  //   const entryParam = getOrCreateParamBinding(value.type)
+  //   return new SetAst(VoidType, location, entryParam, value)
+  // }
+  return {
+    createEntryLabel, createElseLabel, yieldEntry, yieldElse, waitForEntryBinding, 
+    getOrCreateParamBinding, buildAst
+  }
+}
 
 const iteratableToCallable = (ctx: CompilerFunctionCallContext, token: Token, iteratable: Ast, selector: ExpansionSelector) => {
   if (iteratable instanceof CompTimeObjAst && isCompilerCallable(iteratable.value)) {
@@ -977,41 +1070,26 @@ const generatorInternal = (
   produceFn: (yieldFn: (value: Ast) => Task<Ast, CompilerError>) => Task<Ast, CompilerError>
 ): Task<Ast, CompilerError> => {
 
-  const interleave = interleaveHelper()
+  const generator = generatorInternalHelper()
 
-  const yieldA = (
-    interleave.waitForEntryBinding(ctx.compilerState.globalCompiler)
-    .chainFn((task, entryParam) => {
-      const stmts = createStatements(ctx.location, [
-        interleave.continueEntry(ctx.location),
-        new BindingAst(entryParam.type, ctx.location, entryParam)
-      ])
-      return consumeFn(stmts)
-    })
-  ); 
+  const yieldA = generator.yieldEntry(ctx.location, null).chainFn((task, ast) => 
+    consumeFn(ast)
+  )
   const yieldFn = (value: Ast): Task<Ast, CompilerError> => {
     compilerAssert(isAst(value))
-    const stmts = createStatements(ctx.location, [
-      interleave.createSetter(ctx.location, value),
-      interleave.continueOther(ctx.location)])
-    return Task.of(stmts)
+    const yield_ = generator.yieldElse(ctx.location, value)
+    return Task.of(yield_)
   }
   const yieldB = produceFn(yieldFn)
 
   return (
-    Task.concurrency<unknown, CompilerError>([yieldA, yieldB, interleave.waitForEntryBinding(ctx.compilerState.globalCompiler)])
+    Task.concurrency<unknown, CompilerError>([yieldA, yieldB])
     .chainFn((task, args) => {
-      const [a, b, entryParam] = args
+      const [a, b] = args
       compilerAssert(isAst(a))
       compilerAssert(isAst(b))
       compilerAssert(ctx.location)
-      compilerAssert(entryParam instanceof Binding)
-      return Task.of(
-        new StatementsAst(VoidType, ctx.location, [
-          new LetAst(VoidType, ctx.location, entryParam, createDefaultConstructorAst(entryParam.type, ctx.location), LetType.VarRef), // TODO: Var ref ??
-          interleave.buildAst(ctx.location, a, b)
-        ])
-      )
+      return generator.buildAst(ctx.location, a, b)
     })
   )
 }

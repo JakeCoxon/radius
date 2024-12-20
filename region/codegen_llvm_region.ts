@@ -1,7 +1,7 @@
 import { externalBuiltinBindings } from "../src/compiler_sugar";
 import { Ast, AstType, AstWriterTable, Binding, BindingAst, BlockAst, BoolType, CallAst, Capability, CompiledFunction, ConcreteClassType, ConstructorAst, DefaultConsAst, DoubleType, FileWriter, FloatType, FunctionType, GlobalCompilerState, IntType, LetAst, ListTypeConstructor, LlvmFunctionWriter, LlvmWriter, NeverType, NumberAst, ParameterizedType, Pointer, PrimitiveType, RawPointerType, Register, SetAst, SourceLocation, StatementsAst, StringType, Type, TypeField, UserCallAst, ValueFieldAst, VoidType, compilerAssert, escapeString, isAst, isType, textColors, u64Type, u8Type } from "../src/defs";
-import { AccessInstruction, AllocInstruction, AssignInstruction, BinaryOperationInstruction, BitCastInstruction, BreakInstruction, CallInstruction, CommentInstruction, ConditionalJumpInstruction, EndAccessInstruction, formatInstruction, FunctionBlock, GetFieldPointerInstruction, GetGlobalAddress, getInstructionResult, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, MarkInitializedInstruction, PhiInstruction, PhiSource, PointerOffsetInstruction, ReturnInstruction, StoreToAddressInstruction } from "../borrow/defs";
-import { BlockRegion, IfRegion, IrFunction, ScopeRegion, SequenceId, WhileRegion } from "./region_codegen";
+import { AccessInstruction, AllocInstruction, AssignInstruction, BinaryOperationInstruction, BitCastInstruction, BreakInstruction, CallInstruction, CommentInstruction, ConditionalJumpInstruction, EndAccessInstruction, formatInstruction, FunctionBlock, GetFieldPointerInstruction, GetGlobalAddress, getInstructionResult, IRInstruction, JumpInstruction, JumpTableInstruction, LoadConstantInstruction, LoadFromAddressInstruction, MarkInitializedInstruction, PhiInstruction, PhiSource, PointerOffsetInstruction, ReturnInstruction, StoreToAddressInstruction, YieldGeneratorInstruction } from "../borrow/defs";
+import { BlockRegion, GeneratorRegion, IfRegion, IrFunction, ScopeRegion, SequenceId, WhileRegion } from "./region_codegen";
 
 // Some useful commands
 //
@@ -310,6 +310,11 @@ const instructionWriter = {
     format(writer, "  $ = alloca $ ; $\n", dest, instr.type, getDataTypeName(writer.writer, instr.type))
   },
 
+  yield_generator: (writer: LlvmFunctionWriter, instr: YieldGeneratorInstruction) => {
+    const dest = defineRegister(writer, instr.dest, RawPointerType)
+    format(writer, "  $ = yield_generator\n", dest)
+  },
+
   comment: (writer: LlvmFunctionWriter, instr: CommentInstruction) => {
     format(writer, "  ; $\n", instr.comment)
   },
@@ -344,15 +349,21 @@ const instructionWriter = {
 }
 
 const formatCJump = (writer: LlvmFunctionWriter, condition: string, target: string, elseTarget: string) => {
-  format(writer, "  br i1 $, label $, label $\n", register(condition), register(target), register(elseTarget))
+  format(writer, "  br i1 $, label %$, label %$\n", register(condition), (target), (elseTarget))
 }
-const formatJump = (writer: LlvmFunctionWriter, target: string) => {
-  format(writer, "  br label $\n", register(target))
+const formatJump = (writer: LlvmFunctionWriter, target: string, comment = "") => {
+  format(writer, "  br label %$", (target))
+  if (comment) format(writer, " ; $", comment)
+  format(writer, "\n")
 }
 
 const writeInstructions = (writer: LlvmFunctionWriter, fnIr: IrFunction) => {
 
-  const labels = fnIr.sequences.map((_, i) => freshLabel(writer))
+  const labels = fnIr.sequences.map((_, i) => {
+    const name = `L${i}`
+    // defineRegister(writer as LlvmFunctionWriter, name, VoidType)
+    return name
+  })
 
   const traverseSequence = (sequenceId: SequenceId) => {
 
@@ -366,10 +377,10 @@ const writeInstructions = (writer: LlvmFunctionWriter, fnIr: IrFunction) => {
       if (region instanceof BlockRegion) {
         format(writer, "\n  ; ### Block Region $\n\n", regionId)
         printBlock(region)
-        format(writer, "  ; End block\n")
+        format(writer, "  ; End block $\n", regionId)
       } else if (region instanceof IfRegion) {
         format(writer, "\n  ; ### If Region $\n\n", regionId)
-        formatJump(writer, labels[region.conditionSequence])
+        formatJump(writer, labels[region.conditionSequence], "If condition")
         traverseSequence(region.conditionSequence)
         compilerAssert(region.conditionRegister !== null && region.conditionRegister !== undefined, "No result found", { region, regionId: fnIr.sequences[region.conditionSequence].lastChildRegion })
         formatCJump(writer, region.conditionRegister, labels[region.thenSequence], labels[region.elseSequence])
@@ -378,7 +389,7 @@ const writeInstructions = (writer: LlvmFunctionWriter, fnIr: IrFunction) => {
         traverseSequence(region.elseSequence)
         formatJump(writer, labels[region.exitSequence])
         traverseSequence(region.exitSequence)
-        format(writer, "  ; End if\n")
+        format(writer, "  ; End if $\n", regionId)
       } else if (region instanceof WhileRegion) {
         format(writer, "\n  ; ### While Region $\n\n", regionId)
         formatJump(writer, labels[region.conditionSequence])
@@ -388,14 +399,25 @@ const writeInstructions = (writer: LlvmFunctionWriter, fnIr: IrFunction) => {
         traverseSequence(region.bodySequence)
         formatJump(writer, labels[region.conditionSequence])
         traverseSequence(region.exitSequence)
-        format(writer, "  ; End loop\n")
+        format(writer, "  ; End loop $\n", regionId)
       } else if (region instanceof ScopeRegion) {
         format(writer, "\n  ; ### Scope Region $\n\n", regionId)
-        formatJump(writer, labels[region.bodySequence])
+        formatJump(writer, labels[region.bodySequence], "Scope body")
         traverseSequence(region.bodySequence)
-        formatJump(writer, labels[region.exitSequence])
+        formatJump(writer, labels[region.exitSequence], "Scope exit")
         traverseSequence(region.exitSequence)
-        format(writer, "  ; End scope\n")
+        format(writer, "  ; End scope $\n", regionId)
+      } else if (region instanceof GeneratorRegion) {
+        format(writer, "\n  ; ### Generator Region $\n\n", regionId)
+        formatJump(writer, labels[region.entrySequence], "Generator entry")
+        traverseSequence(region.entrySequence)
+        formatJump(writer, labels[region.exitSequence], "Generator exit")
+        format(writer, "\n  ; ### Generator Else $\n\n", regionId)
+        traverseSequence(region.elseSequence)
+        formatJump(writer, labels[region.exitSequence], "Generator exit")
+        format(writer, "\n  ; ### Generator Exit $\n\n", regionId)
+        traverseSequence(region.exitSequence)
+        format(writer, "  ; End generator $\n", regionId)
       } else compilerAssert(false, "Unknown region", { region })
     }
   }
@@ -409,6 +431,16 @@ const writeInstructions = (writer: LlvmFunctionWriter, fnIr: IrFunction) => {
       if (instr instanceof BreakInstruction) {
         const region = fnIr.regions[instr.regionId] as ScopeRegion
         formatJump(writer, labels[region.exitSequence])
+        continue
+      }
+      if (instr instanceof JumpTableInstruction) {
+        const dests = instr.table.map(regionId => {
+          const region = fnIr.regions[regionId] as ScopeRegion
+          const sequenceId = region.bodySequence
+          return `%${labels[sequenceId]}`
+        })
+        const table = dests.map((dest, i) => `i32 ${i}, label ${dest}`).join("  ")
+        format(writer, "  switch i32 $, label $ [ $ ]\n", register(instr.value), dests[0], table)
         continue
       }
       const func = (instructionWriter as any)[instr.irType]

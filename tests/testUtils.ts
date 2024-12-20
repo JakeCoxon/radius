@@ -441,7 +441,11 @@ const execPromise = (command: string) => {
         console.log(stderr)
         console.log(err)
         reject(err)
-      } else resolve(out)
+      } else {
+        console.log("----- OUT ----")
+        console.log(out)
+        resolve(out)
+      }
     })
   })
 }
