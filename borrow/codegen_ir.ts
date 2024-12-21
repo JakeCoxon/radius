@@ -567,9 +567,10 @@ export class FunctionCodeGenerator {
     this.blocks.push(conditionBlock);
     this.currentBlock = conditionBlock;
     const conditionReg = this.generateExpression(ast.condition, { valueCategory: 'rvalue' });
-    compilerAssert(conditionReg instanceof Value, 'While condition must be an RValue');
-    this.addInstruction(new ConditionalJumpInstruction(conditionReg.register, bodyLabel, afterLabel));
-    this.regionCodegen.getWhileRegion(whileRegionId).conditionRegister = conditionReg.register
+    const conditionValue = this.toValue(ast.condition.type, conditionReg, 'while cond')
+    // compilerAssert(conditionReg instanceof Value, 'While condition must be an RValue');
+    this.addInstruction(new ConditionalJumpInstruction(conditionValue.register, bodyLabel, afterLabel));
+    this.regionCodegen.getWhileRegion(whileRegionId).conditionRegister = conditionValue.register
 
     this.regionCodegen.enterRegionSequence(whileRegionId, this.regionCodegen.getWhileRegion(whileRegionId).bodySequence)
 
@@ -916,6 +917,7 @@ export class FunctionCodeGenerator {
     if (value instanceof CallAst)        return [Capability.Sink, true]
     if (value instanceof NumberAst)      return [Capability.Let,  false]
     if (value instanceof OperatorAst)    return [Capability.Let,  false]
+    if (value instanceof BoolAst)        return [Capability.Let,  false]
     if (value instanceof StringAst)      return [Capability.Sink, true]
     if (value instanceof ConstructorAst) return [Capability.Sink, true]
     if (value instanceof EnumVariantAst) return [Capability.Sink, true]
@@ -1015,8 +1017,7 @@ export class FunctionCodeGenerator {
   }
 
   generateNotExpression(ast: NotAst, context: ExpressionContext): IRValue {
-    const value = this.generateExpression(ast.expr, context);
-    compilerAssert(value instanceof Value, 'Not expression must be an RValue');
+    const value = this.toValue(ast.expr.type, this.generateExpression(ast.expr, context))
     const resultReg = this.newRegister();
     this.addInstruction(new BinaryOperationInstruction(resultReg, ast.type, '!', value.register, '', ast.expr.type));
     return new Value(resultReg);
