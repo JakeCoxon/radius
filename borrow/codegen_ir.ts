@@ -453,6 +453,9 @@ export class FunctionCodeGenerator {
   }
 
   generateAliasDeclaration(ast: AliasAst) {
+    // TODO: Choose either AliasAst or LetType.Alias but not both
+    // TODO: Is Alias stupid anyway? Maybe just Let/Var
+
     compilerAssert(ast.type !== NeverType, 'Cannot alias never type', { ast });
     // Like let but with lower capabilities
     this.addInstruction(new CommentInstruction(`Alias ${ast.binding.name}`))
@@ -462,8 +465,7 @@ export class FunctionCodeGenerator {
     const ptr = this.storeResult(type, value)
     const reg = this.newRegister();
     this.variableMap.set(ast.binding, new Variable(ast.binding.name, type, reg, Capability.Sink, true));
-    // this.addInstruction(new AccessInstruction(reg, ptr.address, [Capability.Sink], type));
-    this.addInstruction(new AssignInstruction(reg, type, ptr.address));
+    this.addInstruction(new AccessInstruction(reg, ptr.address, [Capability.Let, Capability.Inout, Capability.Set, Capability.Sink], type));
   }
 
   generateProjection(ast: LetAst, value: IRValue | null) {

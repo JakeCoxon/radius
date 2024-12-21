@@ -120,8 +120,8 @@ const runMandatoryPasses = (fnGenerator: FunctionCodeGenerator, mod: Module, fn:
 
   const irFunction = fnGenerator.regionCodegen.irFunction
 
-  let closeAccessPass = new CloseRegionAccessPass(fnGenerator.regionCodegen)
   let initPass = new RegionInitializationCheckingPass(fnGenerator.regionCodegen, irFunction)
+  let closeAccessPass = new CloseRegionAccessPass(fnGenerator.regionCodegen)
   let exclPass = new RegionExclusivityCheckingPass(irFunction)
   
   try {

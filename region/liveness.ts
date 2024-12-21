@@ -1,6 +1,6 @@
 import { compilerAssert, CompilerError } from "../src/defs";
 import { buildCFGFromRegions, ControlFlowGraph, ControlFlowGraphGeneric } from "../borrow/controlflow";
-import { AccessInstruction, BasicBlock, CommentInstruction, EndAccessInstruction, FunctionBlock, GetFieldPointerInstruction, IRInstruction, LoadFromAddressInstruction, PointerOffsetInstruction, ProjectBundleInstruction, formatInstruction, getInstructionOperands, getInstructionResult } from "../borrow/defs";
+import { AccessInstruction, AssignInstruction, BasicBlock, CommentInstruction, EndAccessInstruction, FunctionBlock, GetFieldPointerInstruction, IRInstruction, LoadFromAddressInstruction, PointerOffsetInstruction, ProjectBundleInstruction, formatInstruction, getInstructionOperands, getInstructionResult } from "../borrow/defs";
 import { BlockRegion, createRegionUsageMap, type InstructionId, IrDiagnostics, IrFunction, printIrFunction, Region, RegionCodegen, RegionId, Usage, UsageMap } from "./region_codegen";
 import { inspect } from "bun";
 
@@ -161,6 +161,7 @@ const extendLiveness = (pass: CloseRegionAccessPass, register: string) => {
       instr instanceof PointerOffsetInstruction || 
       instr instanceof GetFieldPointerInstruction ||
       instr instanceof ProjectBundleInstruction
+      
     if (!toExtend) continue
     extendLiveness(pass, dest)
     if (liveness[dest]) {

@@ -1,6 +1,6 @@
 import { Capability, CapabilityRanking, compilerAssert } from "../src/defs";
 import { ControlFlowGraph } from "../borrow/controlflow";
-import { AccessInstruction, FunctionBlock, IRInstruction, LoadFromAddressInstruction, MoveInstruction, ProjectBundleInstruction, StoreToAddressInstruction, getInstructionResult } from "../borrow/defs";
+import { AccessInstruction, FunctionBlock, GetFieldPointerInstruction, IRInstruction, LoadFromAddressInstruction, MoveInstruction, PointerOffsetInstruction, ProjectBundleInstruction, StoreToAddressInstruction, getInstructionResult } from "../borrow/defs";
 import { BlockRegion, createRegionUsageMap, InstructionId, IrDiagnostics, IrFunction, printIrFunction } from "./region_codegen";
 
 export class RegionReifyAccessPass {
@@ -28,6 +28,29 @@ export class RegionReifyAccessPass {
     const worklist: InstructionId[] = []
 
     const usages = createRegionUsageMap(this.irFunction)
+
+    // We have to extend usages to include all transitive usages of cetain instructions
+    // that access the same memory locations as the instruction we're analyzing.
+    const extendUsages = (instrId: InstructionId) => {
+
+      const instrUsages = usages.get(instrId)
+      if (!instrUsages) return
+
+      const extend = (usageInstrId: InstructionId) => {
+        const usageInstr = this.irFunction.getInstruction(usageInstrId)!
+        const extendable = usageInstr instanceof PointerOffsetInstruction ||
+          usageInstr instanceof GetFieldPointerInstruction
+        if (extendable) {
+          const transitiveUsages = usages.get(usageInstrId);
+          if (!transitiveUsages) return
+          instrUsages.push(...transitiveUsages)
+          transitiveUsages.forEach(usage => extend(usage.instrId))
+        }
+      }
+
+      instrUsages.forEach(usage => { extend(usage.instrId) })
+    }
+
     let iterationIndex = 0
 
     for (const region of this.irFunction.regions) {
@@ -35,8 +58,10 @@ export class RegionReifyAccessPass {
         for (let instrId = region.firstInstruction; instrId !== null; instrId = this.irFunction.getInstructionNode(instrId)!.next) {
           const instr = this.irFunction.getInstruction(instrId)
           if (instr instanceof AccessInstruction) {
+            extendUsages(instrId)
             worklist.push(instrId)
           } else if (instr instanceof ProjectBundleInstruction) {
+            extendUsages(instrId)
             worklist.push(instrId)
           }
         }

@@ -289,15 +289,15 @@ const createArrayIterator = (token: Token, subCompilerState: SubCompilerState, s
   compilerAssert(indexIdentifier)
   const fnParams: ParserFunctionParameter[] = [{ name: yieldParam, storage: null, type: null, capability: Capability.Let }]
 
-  const letNodeNode = new ParseLet(token, LetType.Alias, new ParseFreshIden(token, new FreshBindingToken('node')), null, selector.node)
+  const letNodeNode = new ParseLet(token, LetType.Let, new ParseFreshIden(token, new FreshBindingToken('node')), null, selector.node)
   let lengthNode: ParseNode = getLength(token, letNodeNode.left)
   if (selector.end) {
     const offsetNode = new ParseOperator(createAnonymousToken("+"), [lengthNode, selector.end])
     const lenCond = new ParseOperator(createAnonymousToken("<"), [selector.end, new ParseNumber(createAnonymousToken('0'))])
     lengthNode = new ParseIf(token, true, lenCond, offsetNode, new ParseElse(token, selector.end))
   }
-  let letLengthNode: ParseNode = new ParseLet(token, LetType.Alias, new ParseFreshIden(token, new FreshBindingToken('length')), null, lengthNode)
-  const letIndexNode = new ParseLet(token, LetType.Alias, indexIdentifier, null, selector.start ?? new ParseNumber(createAnonymousToken('0')))
+  let letLengthNode: ParseNode = new ParseLet(token, LetType.Let, new ParseFreshIden(token, new FreshBindingToken('length')), null, lengthNode)
+  const letIndexNode = new ParseLet(token, LetType.Var, indexIdentifier, null, selector.start ?? new ParseNumber(createAnonymousToken('0')))
   const incNode = new ParseOpEq(createAnonymousToken("+="), letIndexNode.left, selector.step ?? new ParseNumber(createAnonymousToken('1')))
   const condNode = new ParseOperator(createAnonymousToken("<"), [letIndexNode.left, letLengthNode.left])
   const subscriptIterator = new ParseSubscript(token, letNodeNode.left, indexIdentifier, false)
@@ -326,12 +326,12 @@ const createArraySetterIterator2 = (token: Token, selector: { node: ParseNode, s
     const lenCond = new ParseOperator(createAnonymousToken("<"), [selector.end, new ParseNumber(createAnonymousToken('0'))])
     lengthNode = new ParseIf(token, true, lenCond, offsetNode, new ParseElse(token, selector.end))
   }
-  let letLengthNode: ParseNode = new ParseLet(token, LetType.Alias, new ParseFreshIden(token, new FreshBindingToken('length')), null, lengthNode)
-  const letIndexNode = new ParseLet(token, LetType.Alias, indexIdentifier, null, selector.start ?? new ParseNumber(createAnonymousToken('0')))
+  let letLengthNode: ParseNode = new ParseLet(token, LetType.Let, new ParseFreshIden(token, new FreshBindingToken('length')), null, lengthNode)
+  const letIndexNode = new ParseLet(token, LetType.Var, indexIdentifier, null, selector.start ?? new ParseNumber(createAnonymousToken('0')))
   const incNode = new ParseOpEq(createAnonymousToken("+="), letIndexNode.left, selector.step ?? new ParseNumber(createAnonymousToken('1')))
   const condNode = new ParseOperator(createAnonymousToken("<"), [letIndexNode.left, letLengthNode.left])
   const subscriptIterator = new ParseSubscript(token, selector.node, indexIdentifier, false)
-  const loopBody = new ParseLet(token, LetType.Alias, valueIdentifier, null, new ParseCall(createAnonymousToken(''), yieldParam, [], []))
+  const loopBody = new ParseLet(token, LetType.Let, valueIdentifier, null, new ParseCall(createAnonymousToken(''), yieldParam, [], []))
   const setNode = new ParseSet(token, subscriptIterator, valueIdentifier)
   const whileStmts = new ParseStatements(token, [loopBody, setNode, incNode])
   const loop = new ParseWhile(token, condNode, whileStmts)
