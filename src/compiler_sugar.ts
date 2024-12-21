@@ -1249,9 +1249,9 @@ fn sqrt_float(t: float) -> float:
 const sqrt = overloaded([sqrt_double, sqrt_float])
 
 fn min!(T)(a: T, b: T) -> T @inline:
-  ifx a <= b: a else: b
+  ifx a <= b: a.copy else: b.copy
 fn max!(T)(a: T, b: T) -> T @inline:
-  ifx a >= b: a else: b
+  ifx a >= b: a.copy else: b.copy
 
 fn exit(status: int) -> never @external
 fn unreachable() -> never @inline:

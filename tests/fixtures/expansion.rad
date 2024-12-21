@@ -19,37 +19,148 @@ fn test_basic():
     yield(3)
   })
 
-fn test_basic_lists():
+  
+fn test_deep():
 
-  let lst1 = [1, 2, 3, 4, 5]
-  let lst2 = [6, 7, 8, 9]
+  meta generator({|consume| 
+    let elem1 = consume()
+    print(elem1)
+    let elem2 = consume()
+    print(elem2)
+    if true:
+      let elem3 = consume()
+      print("Nice", elem3)
+    let elem4 = consume()
+    print(elem1 + elem4)
+  }, {|yield|
+    yield(1)
+    yield(2)
+    yield(3)
+    yield(4)
+  })
 
-  print(lst1[:]) ...
-  print(lst2[:]) ...
+fn test_loop():
+
+  meta generator({|consume| 
+    while true:
+      let elem = consume()
+      print(elem + 2)
+  }, {|yield|
+  
+    let list = [1, 2, 3, 4, 5]
+    for x in list:
+      yield(x)
+  })
+
+
+fn test_nested_advanced():
+
+  meta generator({|consume_1| 
+    meta generator({|consume_2|
+      while true:
+        let elem_1 = consume_1()
+        let elem_2 = consume_2()
+        print(elem_1 + elem_2)
+    }, {|yield|
+      yield(1)
+      yield(2)
+      yield(3)
+    })
+  }, {|yield|
+    yield(6)
+    yield(7)
+    yield(8)
+  })
+
+
+fn test_loop_2():
+
+  meta generator({|consume_1| 
+    meta generator({|consume| 
+      while true:
+        let elem = consume()
+        let elem2 = consume_1()
+        print(elem + 2)
+    }, {|yield|
+    
+      let list = [1, 2, 3, 4, 5]
+      for x in list:
+        yield(x)
+    })
+
+    consume_1()
+  }, {|yield|
+    print("Hello")
+    var i = 0
+    while i < 1000:
+      yield(1)
+      i = i + 1
+    
+  })
+
+
+fn test_nested_loop():
+
+  meta generator({|consume_1| 
+
+    meta generator({|consume_2| 
+      while true:
+        let elem_1 = consume_1()
+        let elem_2 = consume_2()
+        print(elem_1 + elem_2)
+    }, {|yield|
+    
+      let list = [1, 2, 3, 4, 5]
+      for x in list:
+        yield(x)
+    })
+    
+  }, {|yield|
+  
+    let list = [1, 2, 3, 4, 5]
+    for x in list:
+      yield(x)
+  })
+
 
 fn test_zip():
 
   # Not working yet
 
+  let lst1 = [1, 2, 3, 4, 5]
+  let lst2 = [6, 7, 8, 9]
+
   print(lst1[:] + lst1[1:]) ...
 
-  print(lst1[1:-2] + lst2[:100:2]) ...
+  var x1 = 0
+  x1 += lst1[:] + lst1[1:] ...
+  assert(x1 == 24)
+
+  print(lst1[1:-2] * lst2[:100:2]) ... # Something broke here
+
+  var x2 = 0
+  x2 += lst1[1:4] * lst2[:3] ...
+  assert(x2 == 65)
+
 
   let x = (fold(0) + lst1[:] * 2 ...)
   assert(x == 30)
 
   let t = (fold(true) and lst1[:] > 4 ...)
-  # assert(t)
+  assert(t == false)
 
   let m = (min(fold(1000), lst1[:]) ...)
   assert(m == 1)
-  
 
-  let b = (fold(1) + x * x for x in lst1)
+  # let b = (fold(1) + x *Z x for x in lst1)
 
 
 fn main():
 
   test_basic()
-  test_basic_lists()
-  # test_lists()
+  test_loop()
+  test_loop_2()
+  test_nested_advanced()
+  test_nested_loop()
+  test_deep()
+  test_zip()

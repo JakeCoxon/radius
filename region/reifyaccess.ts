@@ -56,6 +56,7 @@ export class RegionReifyAccessPass {
         continue
       }
 
+
       const { min, max } = usageList.reduce((acc, usage) => {
         const usageInstr = this.irFunction.getInstruction(usage.instrId)!
         const reqs = capabilitiesOfInstr(usageInstr, usage.operandIndex)
@@ -67,6 +68,7 @@ export class RegionReifyAccessPass {
 
         return { min: Math.max(acc.min, minReqs), max: Math.max(acc.max, ...reqRanks) }
       }, { min: 0, max: 0 })
+
 
 
       if (min !== max) {
@@ -123,6 +125,11 @@ const capabilitiesOfInstr = (instr: IRInstruction, operandIndex: number) => {
     // will actually sink a value
     return [Capability.Sink]
   } else if (instr instanceof StoreToAddressInstruction) {
-    return [Capability.Set]
+    // This is a bit of a hack. I think it should use an access instruction
+    // instead of the store instruction referring to the register directly.
+    // I think I made a mistake somewhere. Needs some test cases.
+    return operandIndex === 0 ?
+      /* target */ [Capability.Set] :
+      /* source */ [Capability.Let]
   } else return []
 }

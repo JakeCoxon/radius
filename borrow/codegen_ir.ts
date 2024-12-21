@@ -17,24 +17,6 @@ class Scope {
   ) {}
 }
 
-type Generator = {
-  regionId: RegionId,
-  ast: GeneratorAst,
-  entryBranch: GeneratorBranch,
-  elseBranch: GeneratorBranch,
-  currentBranch: GeneratorBranch
-}
-
-class GeneratorBranch {
-  regionIds: RegionId[] = []
-  jumpInstrs: InstructionId[] = []
-  constructor(
-    public sequenceId: SequenceId,
-    public writeStateAddress: string,
-    public readStateAddress: string,
-    public writeAddress: string | null,
-    public readAddress: string | null) {}
-}
 
 export class CodeGenerator {
   functionBlocks: FunctionBlock[] = [];
@@ -72,7 +54,8 @@ export class FunctionCodeGenerator {
   currentStatement: Ast
 
   unusedBlocks: Set<string> = new Set();
-  generators: Generator[] = []
+
+  generatorCodegen: GeneratorCodegen
 
   regionCodegen: RegionCodegen
   irFunction: IrFunction;
@@ -82,7 +65,9 @@ export class FunctionCodeGenerator {
     public codegen: CodeGenerator,
     public compiledFunction: CompiledFunction,
     public globalCompiler: GlobalCompilerState
-  ) {}
+  ) {
+    this.generatorCodegen = new GeneratorCodegen(this)
+  }
 
   newLabel(): string {
     return this.codegen.newLabel();
@@ -600,112 +585,11 @@ export class FunctionCodeGenerator {
   }
 
   generateGeneratorStatement(ast: GeneratorAst) {
-    const entryStateAddress = this.generateAlloc(IntType)
-    const entryReadAddress = ast.elseValueType !== VoidType ? this.generateAlloc(RawPointerType) : null
-    const elseStateAddress = this.generateAlloc(IntType)
-    const elseReadAddress = ast.entryValueType !== VoidType ? this.generateAlloc(RawPointerType) : null
-
-    const constant0 = this.generateNumberLiteral(new NumberAst(IntType, SourceLocation.anon, 0), { valueCategory: 'rvalue' })
-    compilerAssert(constant0 instanceof Value, 'Expected value', { constant0 })
-    this.generateMovePrimitiveToAddressInstruction(entryStateAddress, constant0, IntType)
-    this.generateMovePrimitiveToAddressInstruction(elseStateAddress, constant0, IntType)
-    
-    const interleaveRegionId = this.regionCodegen.insertNewGeneratorRegion();
-    this.regionCodegen.insertChildSequenceAndPushState(interleaveRegionId)
-    const region = this.regionCodegen.getGeneratorRegion(interleaveRegionId);
-
-    const entryBranch = new GeneratorBranch(region.entrySequence, elseStateAddress, entryStateAddress, elseReadAddress, entryReadAddress)
-    const elseBranch = new GeneratorBranch(region.elseSequence, entryStateAddress, elseStateAddress, entryReadAddress, elseReadAddress)
-    const generator: Generator = { regionId: interleaveRegionId, ast, entryBranch, elseBranch, currentBranch: entryBranch }
-    this.generators.push(generator)
-
-    {
-      this.regionCodegen.enterRegionSequence(interleaveRegionId, region.entrySequence)
-      const scopeRegionId = this.regionCodegen.insertNewScopeRegion()
-      entryBranch.regionIds.push(scopeRegionId)
-      const scopeRegion = this.regionCodegen.getScopeRegion(scopeRegionId)
-      this.regionCodegen.insertChildSequenceAndPushState(scopeRegionId)
-      this.regionCodegen.enterRegionSequence(scopeRegionId, scopeRegion.bodySequence)
-      this.addInstruction(new CommentInstruction(`Yield segment entry`))
-      this.generate(ast.entryBlock)
-      this.regionCodegen.popRegionState()
-    }
-    
-    generator.currentBranch = elseBranch
-
-    {
-      this.regionCodegen.enterRegionSequence(interleaveRegionId, region.elseSequence)
-      const scopeRegionId = this.regionCodegen.insertNewScopeRegion()
-      elseBranch.regionIds.push(scopeRegionId)
-      const scopeRegion = this.regionCodegen.getScopeRegion(scopeRegionId)
-      this.regionCodegen.insertChildSequenceAndPushState(scopeRegionId)
-      this.regionCodegen.enterRegionSequence(scopeRegionId, scopeRegion.bodySequence)
-      this.addInstruction(new CommentInstruction(`Yield segment else`))
-      this.generate(ast.elseBlock)
-      this.regionCodegen.popRegionState()
-    }
-
-    region.entryRegionIds = entryBranch.regionIds
-    region.elseRegionIds = elseBranch.regionIds
-
-    entryBranch.jumpInstrs.forEach(instrId => {
-      const instr = this.regionCodegen.getInstructionById(instrId)
-      compilerAssert(instr instanceof JumpTableInstruction, 'Expected jump table instruction', { instr })
-      instr.table.push(...elseBranch.regionIds)
-    })
-    elseBranch.jumpInstrs.forEach(instrId => {
-      const instr = this.regionCodegen.getInstructionById(instrId)
-      compilerAssert(instr instanceof JumpTableInstruction, 'Expected jump table instruction', { instr })
-      // TODO: Skip the first one because it cannot be entered, however this will mess with the order of the region ids
-      // Maybe LLVM will optimize this out anyway
-      instr.table.push(...entryBranch.regionIds) 
-    })
-
-    this.generators.pop()
-    this.regionCodegen.popRegionState()
+    this.generatorCodegen.generateGeneratorStatement(ast)
   }
 
   generateYieldGenerExpression(ast: YieldGenerAst, context: ExpressionContext): IRValue {
-    const generator = this.generators.find(x => x.ast.binding === ast.generatorBinding)
-    compilerAssert(generator, 'Generator not found', { ast })
-    const currentBranch = generator.currentBranch
-    
-    if (currentBranch.writeAddress) {
-      compilerAssert(ast.expr, 'Expected expression', { ast })
-      const valueAddress = this.storeResult(ast.expr.type, this.generateExpression(ast.expr, { valueCategory: 'lvalue' }))
-      this.addInstruction(new CommentInstruction(`Write pointer ${valueAddress?.address} to ${currentBranch.writeAddress}`))
-      this.generateMovePrimitiveToAddressInstruction(currentBranch.writeAddress, new Value(valueAddress.address), RawPointerType)
-    }
-
-    const nextJumpRegion = currentBranch.regionIds.length
-    this.addInstruction(new CommentInstruction(`Set next jump = ${nextJumpRegion}`))
-    const constant = this.generateNumberLiteral(new NumberAst(IntType, SourceLocation.anon, nextJumpRegion), { valueCategory: 'rvalue' })
-    compilerAssert(constant instanceof Value, 'Expected value', { constant })
-    this.generateMovePrimitiveToAddressInstruction(currentBranch.writeStateAddress, constant, IntType)
-
-    const readStateValue = this.toValue(IntType, new Pointer(currentBranch.readStateAddress), 'yield')
-    const jumpInstr = this.addInstruction(new JumpTableInstruction(IntType, readStateValue.register, []))!
-    currentBranch.jumpInstrs.push(jumpInstr)
-    
-    this.regionCodegen.popRegionState() // Pop the scope region 
-    compilerAssert(this.regionCodegen.regionSequence === currentBranch.sequenceId, 'Generator sequence mismatch. Not implemented yet', { currentBranch, regionSequence: this.regionCodegen.regionSequence })
-    const scopeRegionId = this.regionCodegen.insertNewScopeRegion();
-    currentBranch.regionIds.push(scopeRegionId)
-    const scopeRegion = this.regionCodegen.getScopeRegion(scopeRegionId)
-    this.regionCodegen.insertChildSequenceAndPushState(scopeRegionId)
-    this.regionCodegen.enterRegionSequence(scopeRegionId, scopeRegion.bodySequence)
-
-    const isEntry = currentBranch === generator.entryBranch
-    this.addInstruction(new CommentInstruction(`Yield segment ${isEntry ? 'entry' : 'else'}`))
-
-    if (currentBranch.readAddress) {
-      this.addInstruction(new MarkInitializedInstruction(currentBranch.readAddress, RawPointerType, true))
-      const value = this.toValue(RawPointerType, new Pointer(currentBranch.readAddress), 'yield')
-      return new Pointer(value.register)
-    }
-
-    // TODO: Maybe need to hold access here
-    return new Pointer('')
+    return this.generatorCodegen.generateYieldGenerExpression(ast, context)
   }
 
   generateAndExpression(ast: AndAst, context: ExpressionContext): IRValue {
@@ -1038,6 +922,8 @@ export class FunctionCodeGenerator {
     if (value instanceof DefaultConsAst) return [Capability.Sink, true]
     if (value instanceof SubscriptAst)   return [Capability.Sink, false]
     if (value instanceof IfAst)          return [Capability.Sink, true]
+    if (value instanceof AndAst)         return [Capability.Sink, true]
+    if (value instanceof OrAst)          return [Capability.Sink, true]
     if (value instanceof BlockAst)       return this.getCapabilityAndOwnership(value.body)
     if (value instanceof StatementsAst)  return this.getCapabilityAndOwnership(value.statements[value.statements.length - 1])
     if (value instanceof CastAst)        return this.getCapabilityAndOwnership(value.expr)
@@ -1310,4 +1196,144 @@ export class FunctionCodeGenerator {
     ]
   }
 
+}
+
+
+
+type Generator = {
+  regionId: RegionId,
+  ast: GeneratorAst,
+  entryBranch: GeneratorBranch,
+  elseBranch: GeneratorBranch,
+  currentBranch: GeneratorBranch
+}
+
+class GeneratorBranch {
+  regionIds: RegionId[] = []
+  jumpInstrs: InstructionId[] = []
+  constructor(
+    public sequenceId: SequenceId,
+    public writeStateAddress: string,
+    public readStateAddress: string,
+    public writeAddress: string | null,
+    public readAddress: string | null) {}
+}
+
+class GeneratorCodegen {
+
+  // Split out the generator codegen into a separate class
+  // because it has its own state and is a bit more complex
+
+  generators: Generator[] = []
+
+  constructor(public fnCodegen: FunctionCodeGenerator) {}
+
+  insertNewJumpPoint(generator: Generator) {
+    const fnCodegen = this.fnCodegen
+    const { regionCodegen } = fnCodegen
+    const currentBranch = generator.currentBranch
+    const isEntry = currentBranch === generator.entryBranch
+
+    // Currently just insert an empty scope region for the yield
+    // to jump to, which will be emitted as LLVM labels later.
+    // I also tried to wrap the rest of the instructions inside the
+    // scope region, but that only works at the top level, not inside
+    // if statements or loops.
+
+    const scopeRegionId = regionCodegen.insertNewScopeRegion()
+    currentBranch.regionIds.push(scopeRegionId)
+    regionCodegen.insertChildSequence(scopeRegionId)
+    regionCodegen.blockRegion = null
+    fnCodegen.addInstruction(new CommentInstruction(`Yield segment ${isEntry ? 'entry' : 'else'}`))
+  }
+
+  generateGeneratorStatement(ast: GeneratorAst) {
+    const fnCodegen = this.fnCodegen
+    const { regionCodegen } = fnCodegen
+    const entryStateAddress = fnCodegen.generateAlloc(IntType)
+    const entryReadAddress = ast.elseValueType !== VoidType ? fnCodegen.generateAlloc(RawPointerType) : null
+    const elseStateAddress = fnCodegen.generateAlloc(IntType)
+    const elseReadAddress = ast.entryValueType !== VoidType ? fnCodegen.generateAlloc(RawPointerType) : null
+
+    const constant0 = fnCodegen.generateNumberLiteral(new NumberAst(IntType, SourceLocation.anon, 0), { valueCategory: 'rvalue' })
+    compilerAssert(constant0 instanceof Value, 'Expected value', { constant0 })
+    fnCodegen.generateMovePrimitiveToAddressInstruction(entryStateAddress, constant0, IntType)
+    fnCodegen.generateMovePrimitiveToAddressInstruction(elseStateAddress, constant0, IntType)
+    
+    const interleaveRegionId = regionCodegen.insertNewGeneratorRegion();
+    regionCodegen.insertChildSequenceAndPushState(interleaveRegionId)
+    const region = regionCodegen.getGeneratorRegion(interleaveRegionId);
+
+    const entryBranch = new GeneratorBranch(region.entrySequence, elseStateAddress, entryStateAddress, elseReadAddress, entryReadAddress)
+    const elseBranch = new GeneratorBranch(region.elseSequence, entryStateAddress, elseStateAddress, entryReadAddress, elseReadAddress)
+    const generator: Generator = { regionId: interleaveRegionId, ast, entryBranch, elseBranch, currentBranch: entryBranch }
+    this.generators.push(generator)
+
+    regionCodegen.enterRegionSequence(interleaveRegionId, region.entrySequence)
+    this.insertNewJumpPoint(generator)
+    fnCodegen.generate(ast.entryBlock)
+    
+    generator.currentBranch = elseBranch
+
+    regionCodegen.enterRegionSequence(interleaveRegionId, region.elseSequence)
+    this.insertNewJumpPoint(generator)
+    fnCodegen.generate(ast.elseBlock)
+
+    region.entryRegionIds = entryBranch.regionIds
+    region.elseRegionIds = elseBranch.regionIds
+
+    entryBranch.jumpInstrs.forEach(instrId => {
+      const instr = regionCodegen.getInstructionById(instrId)
+      compilerAssert(instr instanceof JumpTableInstruction, 'Expected jump table instruction', { instr })
+      instr.table.push(...elseBranch.regionIds)
+    })
+    elseBranch.jumpInstrs.forEach(instrId => {
+      const instr = regionCodegen.getInstructionById(instrId)
+      compilerAssert(instr instanceof JumpTableInstruction, 'Expected jump table instruction', { instr })
+      // TODO: Skip the first one because it cannot be entered, however this will mess with the order of the region ids
+      // Maybe LLVM will optimize this out anyway
+      instr.table.push(...entryBranch.regionIds) 
+    })
+
+    this.generators.pop()
+    regionCodegen.popRegionState()
+  }
+
+  generateYieldGenerExpression(ast: YieldGenerAst, context: ExpressionContext): IRValue {
+    const fnCodegen = this.fnCodegen
+    const { regionCodegen } = fnCodegen
+
+    const generator = this.generators.find(x => x.ast.binding === ast.generatorBinding)
+    compilerAssert(generator, 'Generator not found', { ast })
+    const currentBranch = generator.currentBranch
+    
+    if (currentBranch.writeAddress) {
+      compilerAssert(ast.expr, 'Expected expression', { ast })
+      const valueAddress = fnCodegen.storeResult(ast.expr.type, fnCodegen.generateExpression(ast.expr, { valueCategory: 'lvalue' }))
+      fnCodegen.addInstruction(new CommentInstruction(`Write pointer ${valueAddress?.address} to ${currentBranch.writeAddress}`))
+      fnCodegen.generateMovePrimitiveToAddressInstruction(currentBranch.writeAddress, new Value(valueAddress.address), RawPointerType)
+    }
+
+    const nextJumpRegion = currentBranch.regionIds.length
+    fnCodegen.addInstruction(new CommentInstruction(`Set next jump = ${nextJumpRegion}`))
+    const constant = fnCodegen.generateNumberLiteral(new NumberAst(IntType, SourceLocation.anon, nextJumpRegion), { valueCategory: 'rvalue' })
+    compilerAssert(constant instanceof Value, 'Expected value', { constant })
+    fnCodegen.generateMovePrimitiveToAddressInstruction(currentBranch.writeStateAddress, constant, IntType)
+
+    const readStateValue = fnCodegen.toValue(IntType, new Pointer(currentBranch.readStateAddress), 'yield')
+    const jumpInstr = fnCodegen.addInstruction(new JumpTableInstruction(IntType, readStateValue.register, []))!
+    currentBranch.jumpInstrs.push(jumpInstr)
+    
+    this.insertNewJumpPoint(generator)
+
+    if (currentBranch.readAddress) {
+      fnCodegen.addInstruction(new MarkInitializedInstruction(currentBranch.readAddress, RawPointerType, true))
+      const value = fnCodegen.toValue(RawPointerType, new Pointer(currentBranch.readAddress), 'yield')
+      return new Pointer(value.register)
+    }
+
+    // TODO: Maybe need to hold access here
+    return new Pointer('')
+  }
+  
 }
