@@ -36,6 +36,7 @@ export class RegionExclusivityCheckingPass {
   instrId: InstructionId | null = null
   iterationIndex = 0
   diagnostics = new IrDiagnostics()
+  globalsMap = new Map<string, string>()
 
   constructor(fn: IrFunction) {
     this.function = fn;
@@ -259,9 +260,15 @@ export class RegionExclusivityCheckingPass {
   }
 
   handleGetGlobalAddress(instr: GetGlobalAddress): void {
-    const addr = this.newAddress(instr.type);
-    this.state.locals.set(instr.dest, new Set([addr]));
-    this.state.memory.set(addr, new BorrowSet());
+    const addr = this.globalsMap.get(instr.global)
+    if (addr) {
+      this.state.locals.set(instr.dest, new Set([addr]));
+      return
+    }
+    const newAddr = this.newAddress(instr.type);
+    this.globalsMap.set(instr.global, newAddr)
+    this.state.locals.set(instr.dest, new Set([newAddr]));
+    this.state.memory.set(newAddr, new BorrowSet());
   }
 
   newAddress(type: Type): string {

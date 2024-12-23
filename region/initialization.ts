@@ -61,6 +61,7 @@ export class RegionInitializationCheckingPass {
   instrId: InstructionId | null
   diagnostics = new IrDiagnostics()
   visitRegionNum = 0
+  globalsMap = new Map<string, string>()
 
   constructor(public regionCodegen: RegionCodegen, fn: IrFunction) {
     this.function = fn;
@@ -431,9 +432,15 @@ export class RegionInitializationCheckingPass {
   }
 
   executeGetGlobalAddress(instr: GetGlobalAddress): void {
-    const addr = this.newAddress(instr.type);
-    this.state.locals.set(instr.dest, new AddressSet([addr]));
-    this.state.memory.set(addr, TOP);
+    const addr = this.globalsMap.get(instr.global)
+    if (addr) {
+      this.state.locals.set(instr.dest, new AddressSet([addr]));
+      return
+    }
+    const newAddr = this.newAddress(instr.type);
+    this.globalsMap.set(instr.global, newAddr)
+    this.state.locals.set(instr.dest, new AddressSet([newAddr]));
+    this.state.memory.set(newAddr, TOP);
   }
 
   executeMarkInitialized(instr: MarkInitializedInstruction): void {

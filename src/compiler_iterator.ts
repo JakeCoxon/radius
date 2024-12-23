@@ -3,7 +3,7 @@ import { BytecodeSecondOrder, compileFunctionPrototype, getOperatorTable, loadMo
 import { compileExportedFunctionTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, insertFunctionDefinition } from "./compiler_functions"
 import { createDefaultFromType, maxOfType, minOfType, typeOf } from "./compiler_sugar"
 import { getCommonType, propagatedLiteralAst } from "./compiler_types"
-import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, CompileTimeObjectType, StatementsAst, isAst, isType, isTypeCheckError, InterleaveAst, ContinueInterAst, CompTimeObjAst, ParseEvalFunc, SetAst, DefaultConsAst, WhileAst, BoolAst, isArray, ExpansionSelector, ParseNote, ExpansionCompilerState, ParseBoolean, ParseOr, ParseBreak, filterNotNull, ParseTuple, ParseNot, ParseLetConst, ParseConcurrency, ParseCompTime, ParseNil, CompilerCallable, isCompilerCallable, ParseVoid, GlobalCompilerState, ParseIterator, LetType, ParseMutSigil, MutSigilAst, Capability, YieldGenerAst, GeneratorAst } from "./defs"
+import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, CompileTimeObjectType, StatementsAst, isAst, isType, isTypeCheckError, InterleaveAst, ContinueInterAst, CompTimeObjAst, ParseEvalFunc, SetAst, DefaultConsAst, WhileAst, BoolAst, isArray, ExpansionSelector, ParseNote, ExpansionCompilerState, ParseBoolean, ParseOr, ParseBreak, filterNotNull, ParseTuple, ParseNot, ParseLetConst, ParseConcurrency, ParseCompTime, ParseNil, CompilerCallable, isCompilerCallable, ParseVoid, GlobalCompilerState, ParseIterator, LetType, ParseMutSigil, MutSigilAst, Capability, YieldGenerAst, GeneratorAst, ParseField } from "./defs"
 import { Event, Task, TaskDef, isTask } from "./tasks"
 
 const createExpansionState = (debugName: string, location: SourceLocation): ExpansionCompilerState => {
@@ -853,9 +853,8 @@ export const expandFuncAllSugar = (out: BytecodeWriter, noteNode: ParseNote, arg
 
   expansion.fold = { iden: new ParseFreshIden(node.token, new FreshBindingToken('fold_iden')), initial: new ParseBoolean((createAnonymousToken('true'))) }
   const cond = new ParseNot(node.token, result)
-  const set_ = new ParseSet(node.token, expansion.fold.iden, new ParseBoolean(createAnonymousToken('false')))
-  const break_ = new ParseBreak(node.token, expansion.breakIden, null)
-  expansion.loopBodyNode = new ParseIf(node.token, false, cond, new ParseStatements(noteNode.token, [set_, break_]), null)
+  const break_ = new ParseBreak(node.token, expansion.breakIden, new ParseBoolean(createAnonymousToken('false')))
+  expansion.loopBodyNode = new ParseIf(node.token, false, cond, new ParseStatements(noteNode.token, [break_]), null)
 
   visitParseNode(out, compileExpansionToParseNode(out, expansion, node))
 }
@@ -870,9 +869,8 @@ export const expandFuncAnySugar = (out: BytecodeWriter, noteNode: ParseNote, arg
   compilerAssert(!expansion.fold, "Fold not supported in this context")
 
   expansion.fold = { iden: new ParseFreshIden(node.token, new FreshBindingToken('fold_iden')), initial: new ParseBoolean((createAnonymousToken('false'))) }
-  const set_ = new ParseSet(node.token, expansion.fold.iden, new ParseBoolean(createAnonymousToken('true')))
-  const break_ = new ParseBreak(node.token, expansion.breakIden, null)
-  expansion.loopBodyNode = new ParseIf(node.token, false, cond, new ParseStatements(noteNode.token, [set_, break_]), null)
+  const break_ = new ParseBreak(node.token, expansion.breakIden, new ParseBoolean(createAnonymousToken('true')))
+  expansion.loopBodyNode = new ParseIf(node.token, false, cond, new ParseStatements(noteNode.token, [break_]), null)
 
   visitParseNode(out, compileExpansionToParseNode(out, expansion, node))
 }
@@ -901,7 +899,7 @@ export const expandFuncFirstSugar = (out: BytecodeWriter, noteNode: ParseNote, a
 
   const iden = createDeferTypeCheckingIden(expansion, createDefaultOf(node.token, result))
   const break_ = new ParseBreak(node.token, expansion.breakIden, null)
-  const set_ = new ParseSet(node.token, iden, result)
+  const set_ = new ParseSet(node.token, iden, makeCopy(result))
   expansion.loopBodyNode = new ParseStatements(node.token, [set_, break_])
   visitParseNode(out, compileExpansionToParseNode(out, expansion, node))
 }
@@ -916,8 +914,12 @@ export const expandFuncLastSugar = (out: BytecodeWriter, noteNode: ParseNote, ar
   compilerAssert(!expansion.fold, "Fold not supported in this context")
 
   const iden = createDeferTypeCheckingIden(expansion, createDefaultOf(node.token, result))
-  expansion.loopBodyNode = new ParseSet(node.token, iden, result)
+  expansion.loopBodyNode = new ParseSet(node.token, iden, makeCopy(result))
   visitParseNode(out, compileExpansionToParseNode(out, expansion, node))
+}
+
+const makeCopy = (node: ParseNode) => {
+  return new ParseField(node.token, node, new ParseIdentifier(createAnonymousToken('copy')))
 }
 
 export const expandFuncMinSugar = (out: BytecodeWriter, noteNode: ParseNote, args: ParseNode[]) => {
@@ -932,7 +934,7 @@ export const expandFuncMinSugar = (out: BytecodeWriter, noteNode: ParseNote, arg
   const initial = callV(node.token, maxOfType, [createTypeOf(node.token, result)], [])
   const iden = createDeferTypeCheckingIden(expansion, initial)
   const comp = new ParseOperator(createAnonymousToken('<'), [result, iden])
-  const set_ = new ParseSet(node.token, iden, result)
+  const set_ = new ParseSet(node.token, iden, makeCopy(result))
   expansion.loopBodyNode = new ParseIf(node.token, false, comp, set_, null)
   visitParseNode(out, compileExpansionToParseNode(out, expansion, node))
 }
@@ -949,7 +951,7 @@ export const expandFuncMaxSugar = (out: BytecodeWriter, noteNode: ParseNote, arg
   const initial = callV(node.token, minOfType, [createTypeOf(node.token, result)], [])
   const iden = createDeferTypeCheckingIden(expansion, initial)
   const comp = new ParseOperator(createAnonymousToken('>'), [result, iden])
-  const set_ = new ParseSet(node.token, iden, result)
+  const set_ = new ParseSet(node.token, iden, makeCopy(result))
   expansion.loopBodyNode = new ParseIf(node.token, false, comp, set_, null)
   visitParseNode(out, compileExpansionToParseNode(out, expansion, node))
 }

@@ -4,7 +4,7 @@ type Range @struct:
   const __iterate = range_iterate
 
 fn range_iterate!(f)(range: Range) -> void @inline:
-  var i = range.start
+  var i = range.start.copy
   while i < range.end:
     f(i)
     i += 1
