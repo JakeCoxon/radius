@@ -1,13 +1,16 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync } from "fs";
 import { CompilerError, ModuleLoader, compilerAssert, createDefaultGlobalCompiler, createScope, BuiltinTypes, Scope, GlobalExternalCompilerOptions, outputSourceLocation, SourceLocation, GlobalCompilerState, SubCompilerState, TaskContext, TokenRoot, BuildObject } from "./src/defs";
 import { makeParser } from "./src/parser";
-import { VecTypeMetaClass, preloadModuleText, print } from "./src/compiler_sugar";
+import { VecTypeMetaClass, externalBuiltinBindings, preloadModuleText, print } from "./src/compiler_sugar";
 import { extname, basename, normalize, dirname } from "path";
 import { Queue, TaskDef, stepQueue, withContext } from "./src/tasks";
 import { generateCompileCommands, programEntryTask } from "./src/compiler";
-import { writeLlvmBytecode } from "./src/codegen_llvm";
 import { exec } from "child_process";
 import { FileSink } from "bun";
+import { writeSyntax } from "./src/codegen_syntax";
+import { runCodegenPasses } from "./tests/testUtils";
+import { createDefaultTypeFunctions } from "./src/compiler_types";
+import { writeLlvmBytecodeBorrowRegion } from "./region/codegen_llvm_region";
 
 const globalOptions: GlobalExternalCompilerOptions = {
   libraryDirs: [`${import.meta.dir}/libs/`, `/opt/homebrew/lib/`],
@@ -45,6 +48,7 @@ const loadBuildObject = (inputPath: string, globalOptions: GlobalExternalCompile
   const globalCompiler = createDefaultGlobalCompiler()
   globalCompiler.logger = logger
   globalCompiler.moduleLoader = createModuleLoader(globalOptions.importPaths)
+  globalCompiler.initializerFunctionBinding = externalBuiltinBindings.initializer // TODO: Fix this
 
   const moduleName = basename(inputPath, '.rad')
 
@@ -95,6 +99,8 @@ const runCompiler = async (inputPath: string) => {
 
   const queue = new Queue()
 
+  createDefaultTypeFunctions(build.globalCompiler)
+
   try {
     runModuleInner(queue, build.input, `${build.moduleName}.rad`, build.globalCompiler)
   } catch (ex) {
@@ -102,8 +108,14 @@ const runCompiler = async (inputPath: string) => {
     handleError(build, ex)
   }
 
+  if (logger.debugWriter) 
+    writeSyntax(build.globalCompiler, logger.debugWriter);
+
+  runCodegenPasses(build.globalCompiler)
+
   writeLlvmBytecodeFile(build)
   await executeLlvmCompiler(build)
+  await executeNativeExecutable(build)
 
   if (logger.debugWriter) logger.debugWriter.end()
 }
@@ -213,7 +225,7 @@ const writeLlvmBytecodeFile = (build: BuildObject) => {
   const file = Bun.file(path)
   const bytecodeWriter = file.writer()
   try {
-    writeLlvmBytecode(build.globalCompiler, bytecodeWriter)
+    writeLlvmBytecodeBorrowRegion(build.globalCompiler, bytecodeWriter)
   } catch(ex) {
     handleError(build, ex)
     throw ex
@@ -224,12 +236,24 @@ const writeLlvmBytecodeFile = (build: BuildObject) => {
 
 const execPromise = (command: string) => {
   console.log('\n' + command)
-  return new Promise((resolve, reject) => {
-    exec(command, (err, out) => { 
-      if (err) reject(err); else resolve(out)
+  return new Promise<string>((resolve, reject) => {
+    exec(command, (err, out, stderr) => { 
+      if (err) {
+        console.log("----- OUT ----")
+        console.log(out)
+        console.log("----- ERROR -----")
+        console.log(stderr)
+        console.log(err)
+        reject(err)
+      } else {
+        console.log("----- OUT ----")
+        console.log(out)
+        resolve(out)
+      }
     })
   })
 }
+
 
 const executeLlvmCompiler = async (build: BuildObject) => {
   compilerAssert(build.globalCompiler, "Not compiled")
@@ -238,8 +262,16 @@ const executeLlvmCompiler = async (build: BuildObject) => {
   console.log(`\nBuilt native executable\n${build.globalCompiler.externalCompilerOptions.nativePath}`)
 }
 
+const executeNativeExecutable = async (build: BuildObject) => {
+  const cmds = generateCompileCommands(build.globalCompiler!)
+  await execPromise(cmds.nativePath)
+}
+
 const args = [...process.argv]
 args.shift()
 args.shift()
-compilerAssert(args.length === 1)
+if (args.length !== 1) {
+  console.log("Expected single argument input file")
+  process.exit(1)
+}
 runCompiler(args[0])

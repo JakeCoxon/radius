@@ -1,6 +1,6 @@
 import { existsSync, unlinkSync, readFileSync, readdirSync } from 'node:fs'
 import { generateCompileCommands, programEntryTask } from '../src/compiler'
-import { BoolType, Closure, CompilerError, DoubleType, ExternalFunction, FloatType, GlobalCompilerState, IntType, Scope, StringType, SubCompilerState, TaskContext, VoidType, compilerAssert, createDefaultGlobalCompiler, createScope, expectMap, BuiltinTypes, ModuleLoader, SourceLocation, textColors, outputSourceLocation, TokenRoot, ParseImport, createAnonymousToken, Logger, Binding, FunctionType, GlobalExternalCompilerOptions, BuildObject, Type, Capability, CompiledFunction, FunctionParameter, Ast, RawPointerType } from "../src/defs"; // prettier-ignore
+import { BoolType, Closure, CompilerError, DoubleType, ExternalFunction, FloatType, GlobalCompilerState, IntType, Scope, StringType, SubCompilerState, TaskContext, VoidType, compilerAssert, createDefaultGlobalCompiler, createScope, expectMap, BuiltinTypes, ModuleLoader, SourceLocation, textColors, outputSourceLocation, TokenRoot, ParseImport, createAnonymousToken, Logger, Binding, FunctionType, GlobalExternalCompilerOptions, BuildObject, Type, Capability, CompiledFunction, FunctionParameter, Ast, RawPointerType, FileWriter } from "../src/defs"; // prettier-ignore
 import { makeParser } from '../src/parser'
 import { Queue, TaskDef, stepQueue, withContext } from '../src//tasks'
 import { expect } from 'bun:test'
@@ -210,7 +210,7 @@ export const runCompilerTest = (
   const queue = new Queue()
 
   const globalCompiler = createDefaultGlobalCompiler()
-  globalCompiler.initializerFunctionBinding = externalBuiltinBindings.initializer
+  globalCompiler.initializerFunctionBinding = externalBuiltinBindings.initializer // TODO: Fix this
   globalCompiler.logger = logger
   globalCompiler.moduleLoader = moduleLoader || createModuleLoader(testObject.globalOptions.importPaths)
   globalCompiler.rootScope = rootScope
@@ -274,44 +274,8 @@ export const runCompilerTest = (
       writer.write('\n\n')
     })
 
-    writeSyntax(testObject.globalCompiler, writer)
-
-    const codeGenerator = new CodeGenerator(globalCompiler)
-    const mod = new Module()
-    mod.functionMap = globalCompiler.compiledFunctions
-    codeGenerator.functions = globalCompiler.compiledFunctions
-
-    const compiledRegionIr = new Map<Binding, IrFunction>()
-
-    globalCompiler.globalVars.forEach((gv) => {
-      gv.register = codeGenerator.newGlobalId()
-    })
-
-
-    globalCompiler.compiledIr = new Map()
-    globalCompiler.compiledFunctions.forEach((func) => {
-      if (!func.body) return
-      const fnGenerator = codeGenerator.functionGenerator(func)
-      let fn
-      try {
-        fn = fnGenerator.generateFunction(func.binding, func.parameters, func.returnType, func.body)
-        runMandatoryPasses(fnGenerator, mod, fn, func.body)
-      } catch (ex) {
-        if (ex instanceof CompilerError) {
-          Object.assign(ex.info, { functionName: func.binding.name })
-        }
-        throw ex
-      }
-
-      globalCompiler.compiledIr.set(func.binding, fn)
-      codeGenerator.irFunctions.set(func.binding, fnGenerator.regionCodegen.irFunction)
-      compiledRegionIr.set(func.binding, fnGenerator.regionCodegen.irFunction)
-    })
-
-
-    const inline = new InlineRegionProjectBundlesPass(globalCompiler, codeGenerator, compiledRegionIr)
-    inline.inlineRegionProjectBundlesPass()
-    globalCompiler.compiledRegionIr = compiledRegionIr
+    writeSyntax(globalCompiler, writer);
+    runCodegenPasses(globalCompiler);
 
   } catch (ex) {
     gotError = true
@@ -566,4 +530,43 @@ export const runVm = async ({ testObject}: { testObject: TestObject }) => {
     expect(error).toBe('')
   }
   // console.log(text)
+}
+
+export function runCodegenPasses(globalCompiler: GlobalCompilerState) {
+
+  const codeGenerator = new CodeGenerator(globalCompiler);
+  const mod = new Module();
+  mod.functionMap = globalCompiler.compiledFunctions;
+  codeGenerator.functions = globalCompiler.compiledFunctions;
+
+  const compiledRegionIr = new Map<Binding, IrFunction>();
+
+  globalCompiler.globalVars.forEach((gv) => {
+    gv.register = codeGenerator.newGlobalId();
+  });
+
+  globalCompiler.compiledIr = new Map();
+  globalCompiler.compiledFunctions.forEach((func) => {
+    if (!func.body) return;
+    const fnGenerator = codeGenerator.functionGenerator(func);
+    let fn;
+    try {
+      fn = fnGenerator.generateFunction(func.binding, func.parameters, func.returnType, func.body);
+      runMandatoryPasses(fnGenerator, mod, fn, func.body);
+    } catch (ex) {
+      if (ex instanceof CompilerError) {
+        Object.assign(ex.info, { functionName: func.binding.name });
+      }
+      throw ex;
+    }
+
+    globalCompiler.compiledIr.set(func.binding, fn);
+    codeGenerator.irFunctions.set(func.binding, fnGenerator.regionCodegen.irFunction);
+    compiledRegionIr.set(func.binding, fnGenerator.regionCodegen.irFunction);
+  });
+
+
+  const inline = new InlineRegionProjectBundlesPass(globalCompiler, codeGenerator, compiledRegionIr);
+  inline.inlineRegionProjectBundlesPass();
+  globalCompiler.compiledRegionIr = compiledRegionIr;
 }
