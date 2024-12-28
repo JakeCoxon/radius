@@ -103,19 +103,19 @@ const runCompiler = async (inputPath: string) => {
 
   try {
     runModuleInner(queue, build.input, `${build.moduleName}.rad`, build.globalCompiler)
+
+    if (logger.debugWriter) 
+      writeSyntax(build.globalCompiler, logger.debugWriter);
+
+    runCodegenPasses(build.globalCompiler)
+
+    writeLlvmBytecodeFile(build)
+    await executeLlvmCompiler(build)
+    await executeNativeExecutable(build)
   } catch (ex) {
     logger.print = true
     handleError(build, ex)
   }
-
-  if (logger.debugWriter) 
-    writeSyntax(build.globalCompiler, logger.debugWriter);
-
-  runCodegenPasses(build.globalCompiler)
-
-  writeLlvmBytecodeFile(build)
-  await executeLlvmCompiler(build)
-  await executeNativeExecutable(build)
 
   if (logger.debugWriter) logger.debugWriter.end()
 }
@@ -256,6 +256,7 @@ const execPromise = (command: string) => {
 
 
 const executeLlvmCompiler = async (build: BuildObject) => {
+  if (build.gotError) return
   compilerAssert(build.globalCompiler, "Not compiled")
   const cmds = generateCompileCommands(build.globalCompiler!)
   await execPromise(cmds.compileAndLink)
@@ -263,6 +264,7 @@ const executeLlvmCompiler = async (build: BuildObject) => {
 }
 
 const executeNativeExecutable = async (build: BuildObject) => {
+  if (build.gotError) return
   const cmds = generateCompileCommands(build.globalCompiler!)
   await execPromise(cmds.nativePath)
 }

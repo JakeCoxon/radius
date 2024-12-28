@@ -102,7 +102,11 @@ const operatorMapAll: {[key: string]: (writer: Writable, typeName: string, left:
   "int_float_cast": (w, t, l, r) => `fptosi float ${l} to i32`,
   "float_int_cast": (w, t, l, r) => `sitofp i32 ${l} to float`,
   "int_double_cast": (w, t, l, r) => `fptosi double ${l} to i32`,
-  // "int_float_cast": (w, t, l, r) => `sitofp i32 ${l} to float`,
+  "double_float_cast": (w, t, l, r) => `fpext float ${l} to double`,
+  "float_double_cast": (w, t, l, r) => `fptrunc double ${l} to float`,
+
+  "u8_int_cast": (w, t, l, r) => `trunc i32 ${l} to i8`,
+  
 }
   
 const log = (...args: any[]) => {

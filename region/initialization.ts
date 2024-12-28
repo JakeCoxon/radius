@@ -62,6 +62,7 @@ export class RegionInitializationCheckingPass {
   diagnostics = new IrDiagnostics()
   visitRegionNum = 0
   globalsMap = new Map<string, string>()
+  iterationIndex = 0
 
   constructor(public regionCodegen: RegionCodegen, fn: IrFunction) {
     this.function = fn;
@@ -81,7 +82,7 @@ export class RegionInitializationCheckingPass {
       console.log("Current block", this.currentRegion);
       console.log("Current instr", this.currentInstr);
       this.diagnostics.regionNote(this.currentRegion, `Error in block ${this.currentRegion} at instruction ${this.instrId}`);
-      this.printLocalsMemory(this.currentRegion);
+      this.printLocalsMemory(this.instrId);
       this.printDebug()
       if (e instanceof CompilerError) {
         Object.assign((e.info as any), { regionId: this.currentRegion, instrId: this.instrId });
@@ -91,35 +92,46 @@ export class RegionInitializationCheckingPass {
     }
   }
 
-  printLocalsMemory(regionId: RegionId) {
+  printLocalsMemory(instrId: InstructionId | null) {
     if (!this.state) return
-    this.diagnostics.regionNote(regionId, `  Locals: ${Array.from(this.state.locals.entries()).flatMap(([key, val]) => {
+    if (!instrId) return
+    this.diagnostics.instructionNote(instrId, `  (${this.iterationIndex}) Locals: ${Array.from(this.state.locals.entries()).flatMap(([key, val]) => {
       if (val instanceof InitializationStateObject) {
         return `${key} -> ${initializationStateToString(val.state)}`
       }
       return `${key} -> ${Array.from(val.addresses).join(', ')}`
     }).join(' | ')}`)
-    this.diagnostics.regionNote(regionId, `  Memory: ${Array.from(this.state.memory.entries()).flatMap(([key, val]) => {
+    this.diagnostics.instructionNote(instrId, `  (${this.iterationIndex}) Memory: ${Array.from(this.state.memory.entries()).flatMap(([key, val]) => {
       return `${key} -> ${initializationStateToString(val)}`
     }).join(' | ')}`)
   }
 
+  createInitialState() {
+    const state = createEmptyState();
+    let i = 0
+    for (const param of this.function.params) {
+      const paramIndex = i++;
+      this.initializeFunctionParam(state, param.binding, this.function.parameterRegisters[paramIndex], param.type, param.capability);
+    }
+    if (this.function.returnParameter) {
+      this.initializeFunctionParam(state, this.function.returnParameter.binding, this.function.returnRegister, this.function.returnParameter.type, this.function.returnParameter.capability);
+    }
+
+    // Assume globals are all initialized at beginning of function
+    for (const global of this.function.globalRegisters) {
+      const newAddr = this.newAddress(global.type);
+      this.globalsMap.set(global.register, newAddr)
+      state.memory.set(newAddr, TOP);
+    }
+    return state;
+  }
 
   interpret() {
     this.cfg = buildCFGFromRegions(this.function);
 
     if (true) printRegionCFG(this.cfg, x => `${x}`)
 
-    const entryState = createEmptyState();
-
-    let i = 0
-    for (const param of this.function.params) {
-      const argIndex = i++;
-      this.initializeFunctionParam(entryState, param.binding, this.function.parameterRegisters[argIndex], param.type, param.capability);
-    }
-    if (this.function.returnParameter) {
-      this.initializeFunctionParam(entryState, this.function.returnParameter.binding, this.function.returnRegister, this.function.returnParameter.type, this.function.returnParameter.capability);
-    }
+    const entryState = this.createInitialState();
 
     const worklist = new RegionWorklist(this.cfg);
 
@@ -159,7 +171,7 @@ export class RegionInitializationCheckingPass {
       if (false) {
         const diff = state ? statesDiff(state.input, mergedInputState) : ''
         this.diagnostics.regionNote(regionId, ` ${this.visitRegionNum}. Merging input states for ${regionId}: ${predecessors.join(', ')} - ${diff}`);
-        this.printLocalsMemory(regionId)
+        this.printLocalsMemory(this.instrId)
       }
 
       try {
@@ -196,7 +208,6 @@ export class RegionInitializationCheckingPass {
     this.instrId = region.firstInstruction
     this.nextVisitInstruction = null!
 
-    let i = 0
     while (this.instrId) {
       const node = this.function.getInstructionNode(this.instrId)!
       this.currentInstr = node.instruction
@@ -204,7 +215,7 @@ export class RegionInitializationCheckingPass {
       this.executeInstruction(node.instruction);
 
       this.instrId = this.nextVisitInstruction
-      if (i++ > 10000) {
+      if (this.iterationIndex++ > 10000) {
         compilerAssert(false, "Infinite loop");
       }
     }
@@ -252,6 +263,7 @@ export class RegionInitializationCheckingPass {
     else if (instr instanceof PhiInstruction)             this.executePhi(instr);
     else if (instr instanceof CommentInstruction)         { }
     else compilerAssert(false, `Unknown instruction in initialization pass: ${instr.irType}`);
+    this.printLocalsMemory(this.instrId)
   }
 
   executeAssign(instr: AssignInstruction): void {
@@ -432,15 +444,16 @@ export class RegionInitializationCheckingPass {
   }
 
   executeGetGlobalAddress(instr: GetGlobalAddress): void {
+    // const state = new InitializationStateObject(TOP);
+    // this.state.locals.set(instr.dest, state);
     const addr = this.globalsMap.get(instr.global)
-    if (addr) {
-      this.state.locals.set(instr.dest, new AddressSet([addr]));
-      return
-    }
-    const newAddr = this.newAddress(instr.type);
-    this.globalsMap.set(instr.global, newAddr)
-    this.state.locals.set(instr.dest, new AddressSet([newAddr]));
-    this.state.memory.set(newAddr, TOP);
+    compilerAssert(addr, `Global address not found for ${instr.global}`);
+    this.state.locals.set(instr.dest, new AddressSet([addr]));
+    // const newAddr = this.newAddress(instr.type);
+    // this.globalsMap.set(instr.global, newAddr)
+    // this.state.locals.set(instr.dest, new AddressSet([newAddr]));
+    // this.state.memory.set(newAddr, TOP);
+    // this.printLocalsMemory(this.instrId)
   }
 
   executeMarkInitialized(instr: MarkInitializedInstruction): void {

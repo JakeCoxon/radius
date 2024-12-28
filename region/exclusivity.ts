@@ -74,21 +74,34 @@ export class RegionExclusivityCheckingPass {
     }).join(' | ')}`)
   }
 
-  interpret() {
-    this.cfg = buildCFGFromRegions(this.function);
-
-    const entryState = createEmptyState();
-
-    console.log(textColors.green("\n\n#### Begin exclusivity check ####"))
+  createInitialState() {
+    const state = createEmptyState();
 
     let i = 0
     for (const param of this.function.params) {
       const argIndex = i++;
-      this.initializeFunctionParam(entryState, param, this.function.parameterRegisters[argIndex]);
+      this.initializeFunctionParam(state, param, this.function.parameterRegisters[argIndex]);
     }
     if (this.function.returnParameter) {
-      this.initializeFunctionParam(entryState, this.function.returnParameter, this.function.returnRegister)
+      this.initializeFunctionParam(state, this.function.returnParameter, this.function.returnRegister)
     }
+
+    for (const global of this.function.globalRegisters) {
+      const newAddr = this.newAddress(global.type);
+      this.globalsMap.set(global.register, newAddr)
+      state.memory.set(newAddr, new BorrowSet());
+    }
+    return state;
+    
+  }
+
+  interpret() {
+    this.cfg = buildCFGFromRegions(this.function);
+
+
+    console.log(textColors.green("\n\n#### Begin exclusivity check ####"))
+
+    const entryState = this.createInitialState();
 
     const worklist = new RegionWorklist(this.cfg);
 
@@ -261,14 +274,12 @@ export class RegionExclusivityCheckingPass {
 
   handleGetGlobalAddress(instr: GetGlobalAddress): void {
     const addr = this.globalsMap.get(instr.global)
-    if (addr) {
-      this.state.locals.set(instr.dest, new Set([addr]));
-      return
-    }
-    const newAddr = this.newAddress(instr.type);
-    this.globalsMap.set(instr.global, newAddr)
-    this.state.locals.set(instr.dest, new Set([newAddr]));
-    this.state.memory.set(newAddr, new BorrowSet());
+    compilerAssert(addr, `Global ${instr.global} is not found`);
+    this.state.locals.set(instr.dest, new Set([addr]));
+    // const newAddr = this.newAddress(instr.type);
+    // this.globalsMap.set(instr.global, newAddr)
+    // this.state.locals.set(instr.dest, new Set([newAddr]));
+    // this.state.memory.set(newAddr, new BorrowSet());
   }
 
   newAddress(type: Type): string {

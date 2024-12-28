@@ -7,10 +7,10 @@ import matrix for mat4, mat4_identity, create_perspective_projection, mul_mat4_v
 import array for Array, array_create
 import graphics for frame_ticks, get_mouse_down, put_float_image_data, get_mouse_x, get_mouse_y, set_fill_color, move_to, line_to, stroke, set_stroke_color_rgba, begin_path, set_line_width, fill_rectangle, draw_defaults, begin_triangles, vertex, end_draw, translate3d, push_matrix, pop_matrix, rotate3d
 
-window_width :: 320
-window_height :: 240
+const window_width = 320
+const window_height = 240
 
-t := 0.0
+var t = 0.0
 
 fn init() @export:
   0

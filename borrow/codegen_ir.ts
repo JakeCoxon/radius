@@ -1,6 +1,6 @@
 import { InstructionId, IrFunction, printIrFunction, RegionCodegen, RegionId, SequenceId } from "../region/region_codegen";
 import { externalBuiltinBindings } from "../src/compiler_sugar";
-import { AliasAst, AndAst, Ast, Binding, BindingAst, BlockAst, BoolAst, BoolType, BreakAst, CallAst, Capability, CastAst, CompiledFunction, compilerAssert, ConstructorAst, ContinueInterAst, DefaultConsAst, EnumVariantAst, FieldAst, FunctionParameter, GeneratorAst, GlobalCompilerState, IfAst, InterleaveAst, IntType, LetAst, LetType, MutSigilAst, NeverType, NotAst, NumberAst, OperatorAst, OrAst, ParameterizedType, PrimitiveType, RawPointerType, ReturnAst, SetAst, SetFieldAst, SetSubscriptAst, SetValueFieldAst, SourceLocation, StatementsAst, StringAst, SubscriptAst, Type, UserCallAst, ValueFieldAst, VariantCastAst, VoidAst, VoidType, WhileAst, YieldAst, YieldGenerAst } from "../src/defs";
+import { AliasAst, AndAst, Ast, Binding, BindingAst, BlockAst, BoolAst, BoolType, BreakAst, CallAst, Capability, CastAst, CompiledFunction, compilerAssert, ConstructorAst, ContinueInterAst, DefaultConsAst, EnumVariantAst, ExternalDefinition, ExternalFunction, FieldAst, FunctionParameter, GeneratorAst, GlobalCompilerState, IfAst, InterleaveAst, IntType, LetAst, LetType, MutSigilAst, NeverType, NotAst, NumberAst, OperatorAst, OrAst, ParameterizedType, PrimitiveType, RawPointerType, ReturnAst, SetAst, SetFieldAst, SetSubscriptAst, SetValueFieldAst, SourceLocation, StatementsAst, StringAst, SubscriptAst, Type, UserCallAst, ValueFieldAst, VariantCastAst, VoidAst, VoidType, WhileAst, YieldAst, YieldGenerAst } from "../src/defs";
 import { ASTNode, AllocInstruction, AssignInstruction, AssignmentNode, BasicBlock, BinaryExpressionNode, BinaryOperationInstruction, BlockStatementNode, CallExpressionNode, CallInstruction, AccessInstruction, ConditionalJumpInstruction, CreateStructNode, ExpressionNode, ExpressionStatementNode, FunctionBlock, FunctionDeclarationNode, IRInstruction, IRValue, IdentifierNode, IfStatementNode, JumpInstruction, LetConstNode, LiteralNode, LoadConstantInstruction, LoadFromAddressInstruction, MemberExpressionNode, ProgramNode, Pointer, Value, ReturnInstruction, ReturnNode, StoreToAddressInstruction, Variable, VariableDeclarationNode, WhileStatementNode, GetFieldPointerInstruction, AndNode, OrNode, PhiInstruction, CommentInstruction, MoveInstruction, EndAccessInstruction, printIR, MarkInitializedInstruction, PhiSource, DeallocStackInstruction, PointerOffsetInstruction, ProjectBundleInstruction, YieldInstruction, BreakInstruction, GetGlobalAddress, BitCastInstruction, YieldGeneratorInstruction, JumpTableInstruction } from "./defs";
 
 type ExpressionContext = {
@@ -650,6 +650,7 @@ export class FunctionCodeGenerator {
     if (value instanceof Pointer) return value
     if (type === VoidType) return new Pointer('')
     const reg = this.generateAlloc(type);
+    compilerAssert(type instanceof PrimitiveType, 'storeResult not implemented for non-primitive types', { type, value, currentStatement: this.currentStatement });
     this.generateMovePrimitiveToAddressInstruction(reg, value, type)
     return new Pointer(reg)
   }
@@ -759,6 +760,39 @@ export class FunctionCodeGenerator {
     return new Pointer('')
   }
 
+  generateExternalCall(ast: CallAst, fn: ExternalDefinition) {
+    // TODO: Merge this with call expression and make it cleaner
+
+    compilerAssert(ast.args.length === fn.paramTypes.length, 'Argument count mismatch', { binding: ast.binding, got: ast.args.length, expected: fn.paramTypes.length });
+    
+    const argRegs: string[] = [];
+    const capabilities = fn.paramTypes.map(p => Capability.Let)
+    const argTypes = fn.paramTypes
+
+    let i = 0
+    for (const givenArg of ast.args) {
+      const argIndex = i++;
+      const paramType = fn.paramTypes[argIndex]
+      const capability = Capability.Let
+      // compilerAssert(param.capability, `Capability not found for ${param.binding.name}`);
+      const argReg = this.generateFunctionArgument(givenArg, false, paramType, capability);
+      argRegs.push(argReg);
+    }
+
+    // Call the function
+    const returnType = fn.returnType
+    if (returnType === VoidType) {
+      this.addInstruction(new CallInstruction(null, returnType, ast.binding, argRegs, argTypes, capabilities))
+      return new Pointer('') // hack. Make sure this is not used
+    }
+    const accessReg = this.newRegister()
+    const resultReg = this.generateAlloc(fn.returnType);
+    this.addInstruction(new AccessInstruction(accessReg, resultReg, [Capability.Set], fn.returnType));
+    this.addInstruction(new CallInstruction(accessReg, fn.returnType, ast.binding, argRegs, argTypes, capabilities))
+    return new Pointer(resultReg)
+
+  }
+
   generateCallExpression(ast: CallAst, context: ExpressionContext): IRValue {
     if (ast.binding === externalBuiltinBindings.copy) {
       if (ast.args[0].type instanceof PrimitiveType) return this.generatePrimitiveCopy(ast.args[0]);
@@ -775,8 +809,13 @@ export class FunctionCodeGenerator {
     }
     compilerAssert(ast.binding instanceof Binding, 'Expected binding', { ast });
 
+
     // Generate code for arguments
     const fn = this.codegen.functions.get(ast.binding)
+    if (!fn) {
+      const ex = this.globalCompiler.externalDefinitions.find(x => x.binding === ast.binding)
+      if (ex) return this.generateExternalCall(ast, ex)
+    }
     compilerAssert(fn, `Function ${ast.binding.name} not found`, {
       c: this.codegen.functions
     });
@@ -836,6 +875,10 @@ export class FunctionCodeGenerator {
       const value = this.generateExpression(astWithoutMutSigil, { valueCategory: 'rvalue' });
       const lvalue = this.storeResult(global.type, value)
       const targetReg = this.newRegister();
+      this.irFunction.globalRegisters.push({
+        register: global.register,
+        type: global.type,
+      })
       this.addInstruction(new GetGlobalAddress(targetReg, global.type, global.register));
       this.generateMovePointerInstructionWithCapabilityCheck(targetReg, lvalue, ast.value)
       return
@@ -964,7 +1007,7 @@ export class FunctionCodeGenerator {
 
     } else {
       if (sourceCapability === Capability.Let) {
-        compilerAssert(false, 'Not implemented. probably an error', { sourceCapability })
+        compilerAssert(false, 'Not implemented. probably an error', { type, sourceCapability, currentStatement: this.currentStatement })
       }
       this.addInstruction(new MoveInstruction(targetPointer, sourcePointer.address, type));
     }
@@ -991,7 +1034,7 @@ export class FunctionCodeGenerator {
   }
 
   generateMovePrimitiveToAddressInstruction(destReg: string, value: Value, type: Type) {
-    compilerAssert(type instanceof PrimitiveType, 'Not implemented for non-primitive types');
+    compilerAssert(type instanceof PrimitiveType, 'generateMovePrimitiveToAddressInstruction not implemented for non-primitive types', { type, currentStatement: this.currentStatement });
     const destAccessReg = this.newRegister();
     this.addInstruction(new AccessInstruction(destAccessReg, destReg, [Capability.Set], type));
     this.addInstruction(new StoreToAddressInstruction(destAccessReg, type, value.register));
@@ -1007,6 +1050,7 @@ export class FunctionCodeGenerator {
   }
 
   generateBinaryExpression(ast: OperatorAst, context: ExpressionContext): IRValue {
+    compilerAssert(ast.type instanceof PrimitiveType, "Expected primitive type", { ast })
     const leftReg = this.toValue(ast.args[0].type, this.generateExpression(ast.args[0], context))
     const rightReg = this.toValue(ast.args[1].type, this.generateExpression(ast.args[1], context))
 
@@ -1031,6 +1075,10 @@ export class FunctionCodeGenerator {
       if (this.globalCompiler.globalVars.has(ast.binding)) {
         const global = this.globalCompiler.globalVars.get(ast.binding)
         compilerAssert(global, `Undefined variable: ${ast.binding.name}`);
+        this.irFunction.globalRegisters.push({
+          register: global.register,
+          type: global.type,
+        })
         const reg = this.newRegister();
         this.addInstruction(new GetGlobalAddress(reg, global.type, global.register));
         return new Pointer(reg)

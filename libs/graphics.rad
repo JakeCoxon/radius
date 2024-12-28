@@ -43,6 +43,8 @@ fn fill() @external
 fn stroke() @external
 fn put_float_image_data(image: rawptr, width: int, height: int, stride: int, x: int, y: int) @external
 
+fn draw_canvas_to_screen() @external
+
 fn rotate_at_origin(angle_radians: float, x: float, y: float):
   translate(x, y)
   rotate(angle_radians)
@@ -52,39 +54,39 @@ fn rotate_at_origin(angle_radians: float, x: float, y: float):
 fn translate_xy(x: float, y: float) @external
 fn translate_vec2(pos: vec2):
   translate_xy(pos.x, pos.y)
-translate :: overloaded([translate_xy, translate_vec2])
+const translate = overloaded([translate_xy, translate_vec2])
 
 @@external("fill_rectangle")
 fn fill_rectangle_xywh(x: float, y: float, w: float, h: float) @external
 fn fill_rectangle_vec2_vec2(pos: vec2, size: vec2):
   fill_rectangle_xywh(pos.x, pos.y, size.x, size.y)
-fill_rectangle :: overloaded([
+const fill_rectangle = overloaded([
   fill_rectangle_xywh, fill_rectangle_vec2_vec2])
 
 @@external("move_to")
 fn move_to_xy(x: float, y: float)
 fn move_to_vec2(vec: vec2): move_to_xy(vec.x, vec.y)
-move_to :: overloaded([
+const move_to = overloaded([
   move_to_xy, move_to_vec2])
 
 @@external("line_to")
 fn line_to_xy(x: float, y: float) @external
 fn line_to_vec2(vec: vec2): line_to_xy(vec.x, vec.y)
-line_to :: overloaded([
+const line_to = overloaded([
   line_to_xy, line_to_vec2])
 
 @@external("set_fill_color")
 fn set_fill_color_rgba(r: float, g: float, b: float, a: float) @external
 fn set_fill_color_vec4(color: vec4):
   set_fill_color_rgba(color.r, color.g, color.b, color.a)
-set_fill_color :: overloaded([
+const set_fill_color = overloaded([
   set_fill_color_rgba, set_fill_color_vec4])
 
 @@external("set_stroke_color")
 fn set_stroke_color_rgba(r: float, g: float, b: float, a: float) @external
 fn set_stroke_color_vec4(color: vec4):
   set_stroke_color_rgba(color.r, color.g, color.b, color.a)
-set_stroke_color :: overloaded([
+const set_stroke_color = overloaded([
   set_stroke_color_rgba, set_stroke_color_vec4])
 
 @@external("sgl_defaults")
@@ -112,7 +114,7 @@ fn vertex_v2f_color(x: float, y: float, color: rgb):
 fn vertex_vec2_color(pos: vec2, color: rgb):
   sgl_v2f_floats(pos.x, pos.y, color.r, color.g, color.b)
 
-vertex :: overloaded([sgl_v2f_c3b, sgl_v2f_floats, vertex_v2f_color, vertex_vec2_color])
+const vertex = overloaded([sgl_v2f_c3b, sgl_v2f_floats, vertex_v2f_color, vertex_vec2_color])
 
 @@external("sgl_translate")
 fn translate3d(x: float, y: float, z: float)

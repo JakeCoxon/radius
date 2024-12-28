@@ -18,7 +18,23 @@ fn foo() -> int:
   thing += 1
   thing * 10
 
-fn main():
+var state = 0
+
+fn test_mutable_state():
+
+  # Make sure to test a bug where the state object
+  # is initialized inside the while loop, but after
+  # exiting the loop the state is deleted and it's
+  # a compile error
+
+  var i = 0
+  while i < 10:
+    i += 1
+    state += 1
+  
+  print(state)
+
+fn test_various():
   compiler.assert(thing == 101)
 
   foo()
@@ -31,5 +47,11 @@ fn main():
   compiler.assert(global1 == 123)
   compiler.assert(foo1.x == 2.0)
   compiler.assert(foo1.y == 1010)
+
+
+fn main():
+  test_various()
+
+  test_mutable_state()
 
   print("Passed")

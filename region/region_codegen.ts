@@ -18,6 +18,11 @@ export class IrFunction {
   returnRegister: string;
   returnType: Type // May be converted to VoidType if returnRegister is used
 
+  globalRegisters: {
+    register: string,
+    type: Type
+  }[] = [] // Global registers referenced inside the function
+
   constructor(
     public debugName: string,
     public params: FunctionParameter[],
