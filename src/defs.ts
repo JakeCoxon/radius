@@ -1,3 +1,4 @@
+import { FileSink } from "bun";
 import { FunctionBlock, IRInstruction } from "../borrow/defs";
 import { IrFunction } from "../region/region_codegen";
 import { Event, Task } from "./tasks";
@@ -883,7 +884,9 @@ export const findLabelByBinding = (labelBlock: LabelBlock | null, binding: Bindi
   compilerAssert(false, `No block with the give name found`, { labelBlock })
 }
 
-export type Logger = { log: (...args: any[]) => void }
+export type Logger = { 
+  log: (...args: any[]) => void
+}
 
 export type GlobalCompilerState = {
   compiledFunctions: Map<Binding, CompiledFunction>;
@@ -1188,6 +1191,11 @@ export type LlvmWriter = {
 }
 
 export class BuildObject {
+
+  logger: Logger
+  debugWriter: FileSink | null
+  runExecutable = true
+  
   constructor(
     public moduleName: string,
     public inputPath: string,
@@ -1195,7 +1203,7 @@ export class BuildObject {
     public globalCompiler: GlobalCompilerState,
     public input: string,
     public debugOutputPath: string,
-    public gotError = false
+    public gotError: any = null
   ) {}
 }
 

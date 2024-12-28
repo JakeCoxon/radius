@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'bun:test'
-import { createModuleLoader, createTest, executeNativeExecutable, logError, printCompileCommands, runCompilerTest, runVm, writeLlvmBytecodeFile, writeSyntaxFile } from './testUtils'
+import { createModuleLoader, createTest } from './testUtils'
 import { GlobalExternalCompilerOptions } from '../src/defs'
 import { makeParser } from '../src/parser'
 
@@ -20,14 +20,8 @@ test('superbasic', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/superbasic.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-    await executeNativeExecutable(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('match', async () => {
@@ -36,15 +30,8 @@ test('match', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/match.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeSyntaxFile(testObject)
-    await writeLlvmBytecodeFile(testObject)
-    await executeNativeExecutable(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('option', async () => {
@@ -53,15 +40,8 @@ test('option', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/option.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeSyntaxFile(testObject)
-    await writeLlvmBytecodeFile(testObject)
-    await executeNativeExecutable(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('guard', async () => {
@@ -70,15 +50,8 @@ test('guard', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/guard.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeSyntaxFile(testObject)
-    await writeLlvmBytecodeFile(testObject)
-    await executeNativeExecutable(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('option_expansion', async () => {
@@ -87,15 +60,8 @@ test('option_expansion', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/option_expansion.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeSyntaxFile(testObject)
-    await writeLlvmBytecodeFile(testObject)
-    await executeNativeExecutable(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('basicasdf', async () => {
@@ -104,14 +70,8 @@ test('basicasdf', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/basic.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-    await executeNativeExecutable(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('new_array', async () => {
@@ -120,13 +80,8 @@ test('new_array', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/new_array.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('subscript', async () => {
@@ -135,13 +90,8 @@ test('subscript', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/subscript.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 
@@ -151,13 +101,8 @@ test('closure', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/closure.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('closure2', async () => {
@@ -166,13 +111,8 @@ test('closure2', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/closure2.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('closure_binding', async () => {
@@ -181,13 +121,8 @@ test('closure_binding', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/closure_binding.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('closure_closed_binding', async () => {
@@ -196,13 +131,8 @@ test('closure_closed_binding', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/closure_closed_binding.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('closure_closed_inline_binding', async () => {
@@ -211,13 +141,8 @@ test('closure_closed_inline_binding', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/closure_closed_inline_binding.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('closure_compose', async () => {
@@ -226,13 +151,8 @@ test('closure_compose', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/closure_compose.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('closure_escape', async () => {
@@ -241,13 +161,8 @@ test('closure_escape', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/closure_escape.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('inline', async () => {
@@ -256,13 +171,8 @@ test('inline', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/inline.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('inline_return', async () => {
@@ -271,15 +181,8 @@ test('inline_return', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/inline_return.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeSyntaxFile(testObject)
-    await writeLlvmBytecodeFile(testObject)
-    await executeNativeExecutable(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('inline_shadow', async () => {
@@ -288,13 +191,8 @@ test('inline_shadow', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/inline_shadow.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('comptime', async () => {
@@ -303,14 +201,8 @@ test('comptime', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/comptime.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-    expect(testObject.prints).toEqual([5, 'thing', 12, 44, 1850, 'thing', 12, 44, 44, 'thing', 12, 44])
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test.todo('expressions', async () => {
@@ -319,13 +211,8 @@ test.todo('expressions', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/expressions.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('identifier_error', async () => {
@@ -334,12 +221,8 @@ test('identifier_error', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/identifier_error.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject, expectError: true })
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('identifier_error2', async () => {
@@ -348,12 +231,8 @@ test('identifier_error2', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/identifier_error2.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject, expectError: true })
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('list_iterator', async () => {
@@ -362,13 +241,8 @@ test('list_iterator', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/list_iterator.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('custom_iterator', async () => {
@@ -377,13 +251,8 @@ test('custom_iterator', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/custom_iterator.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('noclosure', async () => {
@@ -392,12 +261,8 @@ test('noclosure', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/noclosure.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject, expectError: true })
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test.todo('noshadow', async () => {
@@ -406,14 +271,8 @@ test.todo('noshadow', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/noshadow.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-    expect(testObject.prints).toEqual([100, 100])
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('struct', async () => {
@@ -422,13 +281,8 @@ test('struct', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/struct.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('random', async () => {
@@ -437,13 +291,8 @@ test('random', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/random.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('module', async () => {
@@ -452,13 +301,8 @@ test('module', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/module.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('methods', async () => {
@@ -467,13 +311,8 @@ test('methods', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/methods.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('methods2', async () => {
@@ -482,13 +321,8 @@ test('methods2', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/methods2.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('nomethod', async () => {
@@ -497,12 +331,8 @@ test('nomethod', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/nomethod.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject, expectError: true })
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('template_basic', async () => {
@@ -511,13 +341,8 @@ test('template_basic', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/template_basic.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('template_advanced', async () => {
@@ -526,13 +351,8 @@ test('template_advanced', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/template_advanced.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('list_struct', async () => {
@@ -541,13 +361,8 @@ test('list_struct', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/list_struct.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('generic', async () => {
@@ -556,13 +371,8 @@ test('generic', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/generic.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('generic2', async () => {
@@ -571,13 +381,8 @@ test('generic2', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/generic2.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('tuple', async () => {
@@ -586,13 +391,8 @@ test('tuple', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/tuple.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('tuple_extract', async () => {
@@ -601,15 +401,8 @@ test('tuple_extract', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/tuple_extract.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeSyntaxFile(testObject)
-    await writeLlvmBytecodeFile(testObject)
-    await executeNativeExecutable(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('tuple_return_type', async () => {
@@ -618,13 +411,8 @@ test('tuple_return_type', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/tuple_return_type.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('dict', async () => {
@@ -633,13 +421,8 @@ test('dict', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/dict.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('dict2', async () => {
@@ -648,13 +431,8 @@ test('dict2', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/dict2.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('transduce', async () => {
@@ -663,14 +441,8 @@ test('transduce', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/transduce.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-    await executeNativeExecutable(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('list', async () => {
@@ -679,13 +451,8 @@ test('list', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/list.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('range2d', async () => {
@@ -694,13 +461,8 @@ test('range2d', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/range2d.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('vec', async () => {
@@ -709,14 +471,8 @@ test('vec', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/vec.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-    await executeNativeExecutable(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 test('named_break', async () => {
   const testObject = createTest({ 
@@ -724,14 +480,8 @@ test('named_break', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/named_break.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-    await executeNativeExecutable(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('ifs', async () => {
@@ -740,13 +490,8 @@ test('ifs', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/ifs.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 test('expansion', async () => {
   const testObject = createTest({ 
@@ -754,14 +499,8 @@ test('expansion', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/expansion.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-    await executeNativeExecutable(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('meta', async () => {
@@ -770,13 +509,8 @@ test('meta', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/meta.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('advanced', async () => {
@@ -785,14 +519,8 @@ test('advanced', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/advanced.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-    await executeNativeExecutable(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('reftype', async () => {
@@ -801,13 +529,8 @@ test('reftype', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/reftype.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 test('valtype', async () => {
   const testObject = createTest({ 
@@ -815,13 +538,8 @@ test('valtype', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/valtype.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('returns', async () => {
@@ -830,13 +548,8 @@ test('returns', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/returns.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('global', async () => {
@@ -845,13 +558,8 @@ test('global', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/global.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('compiler_module', async () => {
@@ -860,13 +568,8 @@ test('compiler_module', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/compiler_module.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('numbers', async () => {
@@ -875,13 +578,8 @@ test('numbers', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/numbers.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('array', async () => {
@@ -890,14 +588,8 @@ test('array', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/array.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-    await executeNativeExecutable(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('ops', async () => {
@@ -906,13 +598,8 @@ test('ops', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/ops.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('parser', async () => {
@@ -938,13 +625,8 @@ test('binding_bug', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/binding_bug.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('current_loop', async () => {
@@ -953,14 +635,8 @@ test('current_loop', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/current_loop.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-    await executeNativeExecutable(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('add_operator_bug', async () => {
@@ -969,14 +645,8 @@ test('add_operator_bug', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/add_operator_bug.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-    await executeNativeExecutable(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('overload', async () => {
@@ -985,14 +655,8 @@ test('overload', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/overload.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-    await executeNativeExecutable(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('named_args', async () => {
@@ -1001,14 +665,8 @@ test('named_args', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/named_args.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-    await executeNativeExecutable(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('overload_error', async () => {
@@ -1017,14 +675,8 @@ test('overload_error', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/overload_error.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeLlvmBytecodeFile(testObject)
-    await executeNativeExecutable(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('generator', async () => {
@@ -1033,15 +685,8 @@ test('generator', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/generator.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeSyntaxFile(testObject)
-    await writeLlvmBytecodeFile(testObject)
-    await executeNativeExecutable(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
 
 test('iterator_expansion', async () => {
@@ -1050,13 +695,6 @@ test('iterator_expansion', async () => {
     globalOptions,
     inputPath: `${import.meta.dir}/fixtures/iterator_expansion.rad`,
   })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    runCompilerTest(input, { testObject })
-    await writeSyntaxFile(testObject)
-    await writeLlvmBytecodeFile(testObject)
-    await executeNativeExecutable(testObject)
-  } finally {
-    testObject.close()
-  }
+  await testObject.run()
+  testObject.close()
 })
