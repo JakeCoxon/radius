@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync, unlinkSync } from 'node:fs';
 import { basename, extname, normalize } from 'node:path';
 import { runCompiler } from '../src/compiler_interface';
-import { VecTypeMetaClass, externalBuiltinBindings, preloadModuleText, print } from '../src/compiler_sugar';
+import { VecTypeMetaClass, externalBuiltinBindings, print } from '../src/compiler_sugar';
 import { BuildObject, BuiltinTypes, ExternalFunction, GlobalExternalCompilerOptions, ModuleLoader, Scope, VoidType, compilerAssert, createDefaultGlobalCompiler, createScope } from "../src/defs"; // prettier-ignore
 import { makeParser } from '../src/parser';
 
@@ -17,11 +17,14 @@ export const createModuleLoader = (importPaths: string[]) => {
       filesByName[name] = normalize(`${importPath}${file}`)
     })
   })
+
+  const preload = readFileSync(`${importPaths[0]}/preload.rad`, 'utf-8')
+  compilerAssert(preload, "No preload module found")
   
   return <ModuleLoader>{
     cache: {},
     loadModule: (module) => {
-      if (module === '_preload') return makeParser(preloadModuleText(), '_preload')
+      if (module === '_preload') return makeParser(preload, '_preload')
       compilerAssert(filesByName[module], "No module found $module", { module, importPaths })
       const input = readFileSync(filesByName[module], 'utf-8')
       return makeParser(input, filesByName[module])

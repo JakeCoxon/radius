@@ -526,8 +526,8 @@ export class FunctionCodeGenerator {
 
     this.newBlock(thenLabel);
     if (isExpression) {
-      const ptr = this.generateExpression(ast.trueBody, { valueCategory: 'rvalue' })
-      this.generateMoveToAddressInstruction(outReg!, ptr, ast.type)
+      const ptr = this.generateExpression(ast.trueBody, { valueCategory: 'lvalue' })
+      this.generateMovePointerInstructionWithCapabilityCheck(outReg!, ptr, ast.trueBody)
     }
     else this.generate(ast.trueBody);
     this.addInstruction(new JumpInstruction(afterLabel));
@@ -537,8 +537,8 @@ export class FunctionCodeGenerator {
     this.newBlock(elseLabel);
     if (ast.falseBody) {
       if (isExpression) {
-        const ptr = this.generateExpression(ast.falseBody, { valueCategory: 'rvalue' })
-        this.generateMoveToAddressInstruction(outReg!, ptr, ast.type)
+        const ptr = this.generateExpression(ast.falseBody, { valueCategory: 'lvalue' })
+        this.generateMovePointerInstructionWithCapabilityCheck(outReg!, ptr, ast.falseBody)
       }
       else this.generate(ast.falseBody);
     }
@@ -611,7 +611,8 @@ export class FunctionCodeGenerator {
     // compilerAssert(context.valueCategory === 'rvalue', 'Struct creation must be an RValue');
     const structType = ast.type
     compilerAssert(structType, `Struct type not found`);
-    compilerAssert(ast.args.length === structType.typeInfo.fields.length, 'Field count mismatch', { ast });
+    compilerAssert(!(structType instanceof PrimitiveType), 'Cannot create a struct from a primitive type', { structType, currentStatement: this.currentStatement });
+    compilerAssert(ast.args.length === structType.typeInfo.fields.length, 'Field count mismatch', { ast, currentStatement: this.currentStatement });
     const fnBinding = structType.typeInfo.metaobject.constructorBinding
     compilerAssert(fnBinding && fnBinding instanceof Binding, `Constructor not found for ${structType.shortName}`);
 
@@ -980,7 +981,12 @@ export class FunctionCodeGenerator {
     compilerAssert(false, 'Not implemented', { value, currentStatement: this.currentStatement })
   }
 
-  generateMovePointerInstructionWithCapabilityCheck(targetPointer: string, sourcePointer: Pointer, valueAst: Ast) {
+  generateMovePointerInstructionWithCapabilityCheck(targetPointer: string, sourcePointer: IRValue, valueAst: Ast) {
+    if (sourcePointer instanceof Value) {
+      this.generateMovePrimitiveToAddressInstruction(targetPointer, sourcePointer, valueAst.type)
+      return
+    }
+
     let hasMutSigil = false
     if (valueAst instanceof MutSigilAst) {
       hasMutSigil = true
@@ -1009,9 +1015,7 @@ export class FunctionCodeGenerator {
       this.addInstruction(new EndAccessInstruction(targetAccessReg, [Capability.Set]));
 
     } else {
-      if (sourceCapability === Capability.Let) {
-        compilerAssert(false, 'Not implemented. probably an error', { type, sourceCapability, currentStatement: this.currentStatement })
-      }
+      compilerAssert(sourceCapability !== Capability.Let, 'Cannot move a let value', { sourceCapability, location: valueAst.location.source ? valueAst.location : this.currentLocation, stmt: this.currentStatement, valueAst })
       this.addInstruction(new MoveInstruction(targetPointer, sourcePointer.address, type));
     }
   }

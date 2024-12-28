@@ -33,7 +33,7 @@ fn frame() @export:
   let mouse_velocity = mouse - prev_mouse
   prev_mouse = mouse.copy
 
-  let mouse_size = 4 + abs(mouse_velocity.x) / 4
+  let mouse_size = 4 + mouse_velocity.x.abs / 4
 
   if pressed_left:
     current_color += 0.1
@@ -77,10 +77,9 @@ fn frame() @export:
     for x in Range(0, cells_width):
 
       let cell = next_cells[x + y * cells_width]
-      let color = (ifx cell > 0:
-          hsva_to_rgba(float(cell), 0.7, 0.7, 1)
-        else:
-          rgba(0, 0, 0, 0))
+      var color = rgba(0, 0, 0, 0)
+      if cell > 0:
+        color = hsva_to_rgba(float(cell), 0.7, 0.7, 1)
 
       rgba_image[x + y * cells_width] = color.copy
     

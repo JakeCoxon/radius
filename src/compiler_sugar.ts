@@ -375,11 +375,11 @@ export const print = new CompilerFunction('print', (ctx, typeArgs: unknown[], ar
     const getter = fieldHelper(binding, field.name)
     return printf(rawstr(fmt), getter)
   }
-  const printStringAst = (ast: Ast) => {
+  const printStringAst = (format: string, ast: Ast) => {
     const let_ = new LetAst(VoidType, location, new Binding("", StringType), ast, LetType.Let)
     const lengthGetter = fieldHelper(let_.binding, 'length')
     const dataGetter = fieldHelper(let_.binding, 'data')
-    return createStatements(location, [let_, printf(rawstr(textColors.yellow("\"%.*s\"")), lengthGetter, dataGetter)])
+    return createStatements(location, [let_, printf(rawstr(format), lengthGetter, dataGetter)])
   }
 
   args.forEach((arg, i) => {
@@ -396,8 +396,9 @@ export const print = new CompilerFunction('print', (ctx, typeArgs: unknown[], ar
         const call_ = printf(rawstr("%.*s"), lengthGetter, dataGetter)
         return createStatements(location, [let_, call_])
       } else if (arg.type === BoolType) {
-        const num = new IfAst(IntType, location, arg, new NumberAst(IntType, location, 1), new NumberAst(IntType, location, 0))
-        return printf(rawstr("%i"), num)
+        const bool = new IfAst(StringType, location, arg, new StringAst(StringType, location, "true"), new StringAst(StringType, location, "false"))
+        return printStringAst(textColors.yellow("%.*s"), bool)
+        // return printf(rawstr("%i"), num)
       } else if (formats.has(arg.type)) {
         return printf(rawstr(formats.get(arg.type)), arg)
         // printfArgs.push(arg)
@@ -412,7 +413,7 @@ export const print = new CompilerFunction('print', (ctx, typeArgs: unknown[], ar
           
           if (j !== 0) localStmts.push(printf(rawstr(", ")))
           if (field.fieldType === StringType) {
-            return localStmts.push(printStringAst(fieldHelper(binding, field.name)))
+            return localStmts.push(printStringAst(textColors.yellow("\"%.*s\""), fieldHelper(binding, field.name)))
           }
           if (!formats.has(field.fieldType)) {
             localStmts.push(printf(rawstr(`${textColors.green(field.fieldType.shortName)}(...)`)))
@@ -433,7 +434,7 @@ export const print = new CompilerFunction('print', (ctx, typeArgs: unknown[], ar
           
           if (j !== 0) localStmts.push(printf(rawstr(", ")))
           if (field.fieldType === StringType) {
-            return localStmts.push(printStringAst(fieldHelper(binding, field.name)))
+            return localStmts.push(printStringAst(textColors.yellow("\"%.*s\""), fieldHelper(binding, field.name)))
           }
           if (!formats.has(field.fieldType)) {
             return localStmts.push(printf(rawstr(`${field.name}=${textColors.green(field.fieldType.shortName)}(...)`)))
@@ -1190,81 +1191,4 @@ export const createCompilerModuleTask = (ctx: TaskContext): Task<Module, Compile
   const subCompilerState = pushSubCompilerState(ctx, { debugName: `compiler module`, lexicalParent: undefined, scope: moduleScope })
   const module = new Module('compiler', subCompilerState, null!)
   return Task.of(module)
-}
-
-export const preloadModuleText = () => {
-  return `
-import compiler for rawptr, overloaded, never
-
-fn iterate!(f, T)(list: List!T) @inline @method:
-  let i = 0
-  while i < list.length:
-    f(list[i])
-    i += 1
-
-# This is needed for expansion operator
-fn length!(T)(list: List!T) @inline @method:
-  list.length
-
-fn malloc(size: int) -> rawptr @external
-fn realloc(ptr: rawptr, new_size: int) -> rawptr @external
-fn free(ptr: rawptr) @external
-fn sizeof!(T)() @external
-fn printInt(v: int) @external
-fn printFloat(v: float) @external
-
-@@external("fmod")
-fn fmod_double(t: double, b: double) -> double 
-@@external("fmodf")
-fn fmod_float(t: float, b: float) -> float
-const fmod = overloaded([fmod_double, fmod_float])
-
-fn abs_int(v: int) -> int:
-  ifx v < 0: -1 * v else: v.copy
-fn abs_float(v: float) -> float:
-  ifx v < 0.0: -1.0 * v else: v.copy
-const abs = overloaded([abs_int, abs_float])
-
-@@external("sin")
-fn sin_double(t: double) -> double
-fn sin_float(t: float) -> float:
-  float(sin_double(double(t)))
-const sin = overloaded([sin_double, sin_float])
-
-@@external("cos")
-fn cos_double(t: double) -> double
-fn cos_float(t: float) -> float:
-  float(cos_double(double(t)))
-const cos = overloaded([cos_double, cos_float])
-
-@@external("tan")
-fn tan_double(t: double) -> double
-fn tan_float(t: float) -> float:
-  float(tan_double(double(t)))
-const tan = overloaded([tan_double, tan_float])
-
-@@external("sqrt")
-fn sqrt_double(t: double) -> double 
-fn sqrt_float(t: float) -> float:
-  float(sqrt_double(double(t)))
-const sqrt = overloaded([sqrt_double, sqrt_float])
-
-fn min!(T)(a: T, b: T) -> T @inline:
-  ifx a <= b: a.copy else: b.copy
-fn max!(T)(a: T, b: T) -> T @inline:
-  ifx a >= b: a.copy else: b.copy
-
-fn exit(status: int) -> never @external
-fn unreachable() -> never @inline:
-  print("Unreachable code")
-  exit(1)
-
-fn swap!(T)(a: inout T, b: inout T) @inline:
-  var tmp = a&
-  a = b&
-  b = tmp&
-
-const PI = 3.14159265359
-
-`
 }

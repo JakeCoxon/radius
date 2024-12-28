@@ -1,0 +1,21 @@
+import compiler for assert, assert_compile_error
+
+fn test_fail_result():
+  var a = 1
+  var b = 2
+  var x = ifx a <= b: a else: b
+  print(x)
+
+fn main():
+  # Cannot assert on IR code errors yet
+  # assert_compile_error!(test_fail_result, "Not enough params")
+
+  var a = 1
+  var b = 2
+  var x = ifx a <= b: a.copy else: b.copy
+  print(x)
+  assert(x == 1)
+  var c = true
+  var y = a == 1 and c.copy
+  print(y)
+  assert(y == true)

@@ -2,9 +2,8 @@ import { FileSink } from "bun";
 import { existsSync, readFileSync, readdirSync, unlinkSync } from "fs";
 import { basename, extname, normalize } from "path";
 import { createModuleLoaderFromFileSystem, runCompiler } from "./src/compiler_interface";
-import { VecTypeMetaClass, externalBuiltinBindings, preloadModuleText, print } from "./src/compiler_sugar";
+import { VecTypeMetaClass, externalBuiltinBindings, print } from "./src/compiler_sugar";
 import { BuildObject, BuiltinTypes, GlobalExternalCompilerOptions, ModuleLoader, Scope, compilerAssert, createDefaultGlobalCompiler, createScope } from "./src/defs";
-import { makeParser } from "./src/parser";
 
 // TODO: Fix these
 const globalOptions: GlobalExternalCompilerOptions = {

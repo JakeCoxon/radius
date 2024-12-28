@@ -8,7 +8,6 @@ import { Queue, TaskDef, stepQueue, withContext } from "./tasks";
 import { basename, dirname, extname, normalize } from "path";
 import { writeLlvmBytecodeBorrowRegion } from "../region/codegen_llvm_region";
 import { exec } from "child_process";
-import { preloadModuleText } from "./compiler_sugar";
 import { programEntryTask } from "./compiler";
 
 export const generateCompileCommands = (globalCompiler: GlobalCompilerState) => {
@@ -170,11 +169,14 @@ export const createModuleLoaderFromFileSystem = (importPaths: string[]) => {
       filesByName[name] = normalize(`${importPath}${file}`)
     })
   })
+
+  const preload = readFileSync(`${importPaths[0]}/preload.rad`, 'utf-8')
+  compilerAssert(preload, "No preload module found")
   
   return <ModuleLoader>{
     cache: {},
     loadModule: (module) => {
-      if (module === '_preload') return makeParser(preloadModuleText(), '_preload')
+      if (module === '_preload') return makeParser(preload, '_preload')
       compilerAssert(filesByName[module], "No module found $module", { module, importPaths })
       const input = readFileSync(filesByName[module], 'utf-8')
       return makeParser(input, filesByName[module])

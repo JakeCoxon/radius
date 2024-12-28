@@ -649,6 +649,16 @@ test('add_operator_bug', async () => {
   testObject.close()
 })
 
+test('move_result', async () => {
+  const testObject = createTest({ 
+    moduleName: 'move_result',
+    globalOptions,
+    inputPath: `${import.meta.dir}/fixtures/move_result.rad`,
+  })
+  await testObject.run()
+  testObject.close()
+})
+
 test('overload', async () => {
   const testObject = createTest({ 
     moduleName: 'overload',
