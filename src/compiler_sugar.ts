@@ -1220,9 +1220,9 @@ fn fmod_float(t: float, b: float) -> float
 const fmod = overloaded([fmod_double, fmod_float])
 
 fn abs_int(v: int) -> int:
-  ifx v < 0: -1 * v else: v
+  ifx v < 0: -1 * v else: v.copy
 fn abs_float(v: float) -> float:
-  ifx v < 0.0: -1.0 * v else: v
+  ifx v < 0.0: -1.0 * v else: v.copy
 const abs = overloaded([abs_int, abs_float])
 
 @@external("sin")
@@ -1258,6 +1258,11 @@ fn exit(status: int) -> never @external
 fn unreachable() -> never @inline:
   print("Unreachable code")
   exit(1)
+
+fn swap!(T)(a: inout T, b: inout T) @inline:
+  var tmp = a&
+  a = b&
+  b = tmp&
 
 const PI = 3.14159265359
 

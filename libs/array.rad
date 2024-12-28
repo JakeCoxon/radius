@@ -68,12 +68,15 @@ fn array_length!(T)(arr: Array!T) -> int:
   arr.length
 
 
-fn array_create!(T)(initial_capacity: int) -> Array!T:
+# This will zero initialize the array. TOOD: Make this better
+fn array_create!(T)(initial_length: int) -> Array!T:
   var buffer = Buffer(0, rawptr(0))
   var array = Array!T(0, buffer&)
-  array&.reserve_array(initial_capacity)
-  array
+  array&.reserve_array(initial_length)
+  array.length = initial_length
 
+  memset(array.data.data&, u8(0), initial_length)
+  array
 
 
 fn append!(T)(array: inout Array!T, element: sink T) @method:

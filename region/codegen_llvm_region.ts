@@ -106,6 +106,15 @@ const operatorMapAll: {[key: string]: (writer: Writable, typeName: string, left:
   "float_double_cast": (w, t, l, r) => `fptrunc double ${l} to float`,
 
   "u8_int_cast": (w, t, l, r) => `trunc i32 ${l} to i8`,
+  "double_u64_cast": (w, t, l, r) => `uitofp i64 ${l} to double`,
+
+  // TODO: Make this nicer
+  "u64_u64_*": (w, t, l, r) => `mul ${t} ${l}, ${r}`,
+  "u64_u64_+": (w, t, l, r) => `add ${t} ${l}, ${r}`,
+  "u64_u64_-": (w, t, l, r) => `sub ${t} ${l}, ${r}`,
+  "u64_u64_/": (w, t, l, r) => `udiv ${t} ${l}, ${r}`,
+  "u64_u64_mod": (w, t, l, r) => `urem ${t} ${l}, ${r}`,
+
   
 }
   

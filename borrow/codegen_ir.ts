@@ -952,6 +952,9 @@ export class FunctionCodeGenerator {
     // Not sure about this.
     if (value instanceof BindingAst) {
       const variable = this.variableMap.get(value.binding)
+      if (!variable && this.globalCompiler.globalVars.has(value.binding)) {
+        return [Capability.Set, true]
+      }
       compilerAssert(variable, 'Variable not found', { value })
       if (variable.alias) return [variable.capability, true]
       return [variable.capability, false]

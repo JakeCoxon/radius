@@ -85,6 +85,7 @@ const loadBuildObject = (inputPath: string, globalOptions: GlobalExternalCompile
 
   const build = new BuildObject(moduleName, inputPath, globalOptions, globalCompiler, input, debugOutputPath)
   build.logger = logger
+  logger.print = true
   build.debugWriter = writer
 
   return build
@@ -92,17 +93,17 @@ const loadBuildObject = (inputPath: string, globalOptions: GlobalExternalCompile
 }
 
 
-const args = [...process.argv]
-args.shift()
-args.shift()
-if (args.length !== 1) {
-  console.log("Expected single argument input file")
-  process.exit(1)
-}
-const build = loadBuildObject(args[0], globalOptions)
-runCompiler(build)
+const main = async () => {
+  const args = [...process.argv]
+  args.shift()
+  args.shift()
+  if (args.length !== 1) {
+    console.log("Expected single argument input file")
+    process.exit(1)
+  }
+  const build = loadBuildObject(args[0], globalOptions)
+  await runCompiler(build)
 
-if (build.gotError) {
-  console.log("Error")
-  process.exit(1)
+  if (build.gotError) process.exit(1)
 }
+main()

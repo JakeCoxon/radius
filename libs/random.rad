@@ -1,7 +1,7 @@
 import compiler
 
 const mod = compiler.operator_mod
-let random_seed: u64 = 12345
+var random_seed: u64 = 12345
 
 # Really basic linear congruential generator
 fn simple_random_u64() -> u64:

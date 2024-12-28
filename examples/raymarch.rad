@@ -81,23 +81,22 @@ fn frame() @export:
 
   for y in Range(0, window_height):
     for x in Range(0, window_width):
-      # var uv = vec2(
-      #   (float(x) / float(window_width)) * 2 - 1, 
-      #   (float(y) / float(window_height)) * 2 - 1)
-      # uv.x *= window_ratio
-      # uv.y = - (uv.y)  # Parsing WTF
+      var uv = vec2(
+        (float(x) / float(window_width)) * 2 - 1, 
+        (float(y) / float(window_height)) * 2 - 1)
+      uv.x *= window_ratio
+      uv.y = - (uv.y)  # Parsing WTF
 
-      # let ray_origin = cam_pos
-      # var ray_dir = (vec3(0,0,0) - ray_origin) / ray_origin.length
-      # ray_dir /= ray_dir.length
-      # let right = cross(ray_dir, global_up)
-      # ray_dir += uv.x * right
-      # ray_dir.y += uv.y
+      let ray_origin = cam_pos
+      var ray_dir = (vec3(0,0,0) - ray_origin) / ray_origin.length
+      ray_dir /= ray_dir.length
+      let right = cross(ray_dir, global_up)
+      ray_dir += uv.x * right
+      ray_dir.y += uv.y
       
-      # var color_rgb = ray_march!sdf_scene(ray_origin, ray_dir)
+      var color_rgb = ray_march!sdf_scene(ray_origin, ray_dir)
 
-      # let color = rgba(color_rgb.r, color_rgb.g, color_rgb.b, 1)
-      let color = rgba(1, 0, 0, 1)
+      let color = rgba(color_rgb.r, color_rgb.g, color_rgb.b, 1)
       rgba_image[x + y * window_width] = color.copy
     
   put_float_image_data(rgba_image.data.data, window_width, window_height, window_width * 4, 0, 0)
