@@ -568,7 +568,7 @@ export const createMethodCall = (vm: Vm, receiver: Ast, name: string, typeArgs: 
   }
 
   compilerAssert(closure, "No method $name found for type $type", { name, type: receiver.type, receiver })
-  compilerAssert(isCompilerCallable(closure), "Expected callable closure", { name, type: receiver.type, closure })
+  // compilerAssert(isCompilerCallable(closure), "Expected callable closure", { name, type: receiver.type, closure })
   return createCallAstFromValueAndPushValue(vm, closure, typeArgs, [receiver, ...args])
 
 }

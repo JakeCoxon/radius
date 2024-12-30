@@ -66,7 +66,7 @@ fn frame() @export:
         else:
           next_cells[cell] = cell_value
 
-      let in_circle = (mouse.x - x) * (mouse.x - x) + (mouse.y - y) * (mouse.y - y) < mouse_size * mouse_size
+      let in_circle = (mouse - vec2i(x, y)).length_squared < mouse_size * mouse_size
       if in_circle:
         if pressed_left:
           next_cells[cell] = int(current_color + simple_random_float() * 10)

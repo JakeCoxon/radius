@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync } from "fs
 import { runCodegenPasses } from "../region/passes";
 import { writeSyntax } from "./codegen_syntax";
 import { createDefaultTypeFunctions } from "./compiler_types";
-import { BuildObject, CompilerError, GlobalCompilerState, ModuleLoader, ParsedModule, SourceLocation, SubCompilerState, TaskContext, TokenRoot, compilerAssert, createScope, outputSourceLocation } from "./defs";
+import { BuildObject, CompilerError, DiagnosticLocation, GlobalCompilerState, ModuleLoader, ParsedModule, SourceLocation, SubCompilerState, TaskContext, TokenRoot, compilerAssert, createScope, outputSourceLocation } from "./defs";
 import { makeParser } from "./parser";
 import { Queue, TaskDef, stepQueue, withContext } from "./tasks";
 import { basename, dirname, extname, normalize } from "path";
@@ -98,15 +98,23 @@ const handleError = (build: BuildObject, ex: Error) => {
     // logger.log("\nCompiler stack")
     const location = (ex.info as any).location as SourceLocation
     if (location) {
-      const text = outputSourceLocation(location)
+      const text = outputSourceLocation(new DiagnosticLocation(location, "here"))
       logger.log(text)
+    }
+
+    const diagnosticLocations = (ex.info as any).diagnosticLocations as DiagnosticLocation[]
+    if (diagnosticLocations) {
+      diagnosticLocations.forEach((location) => {
+        const text = outputSourceLocation(location)
+        logger.log(text)
+      })
     }
 
     if ((ex.info as any)._userinfo) {
       ;(ex.info as any)._userinfo.forEach((name: string) => {
         const item = (ex.info as any)[name]
         if (item && Object.getPrototypeOf(item) === TokenRoot) {
-          const text = outputSourceLocation(item.location)
+          const text = outputSourceLocation(new DiagnosticLocation(location, "here"))
           logger.log(text)
         }
       })
@@ -211,5 +219,4 @@ export const runCompiler = async (build: BuildObject) => {
     handleError(build, ex)
   }
 
-  if (build.debugWriter) build.debugWriter.end()
 }

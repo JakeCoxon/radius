@@ -1,4 +1,4 @@
-import { capabilitiesLargerOrEqualTo, Capability, CapabilityRanking, compilerAssert, FunctionParameter, Type } from "../src/defs";
+import { capabilitiesLargerOrEqualTo, Capability, CapabilityRanking, compilerAssert, DiagnosticLocation, FunctionParameter, Type } from "../src/defs";
 import { ControlFlowGraph, ControlFlowGraphGeneric, buildCFG, buildCFGFromRegions } from "../borrow/controlflow";
 import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, EndAccessInstruction, PhiInstruction, textColors, CommentInstruction, getInstructionResult, DeallocStackInstruction, CallExpressionNode, MarkInitializedInstruction, PointerOffsetInstruction, formatInstruction, ProjectBundleInstruction, YieldInstruction, BreakInstruction, GetGlobalAddress, BitCastInstruction, YieldGeneratorInstruction, JumpTableInstruction } from "../borrow/defs";
 import { RegionWorklist } from "./initialization";
@@ -358,7 +358,9 @@ export class RegionExclusivityCheckingPass {
       
       if (exclusiveBorrows.length > 0) {
         const str = capability === Capability.Let ? "already mutably borrowed" : "already borrowed"
-        compilerAssert(false, `Cannot access with ${capability} (${str})`, { addr, dest, source, exclusiveBorrows })
+        const location = this.function.locations[dest]
+        const diagnosticLocations = exclusiveBorrows.map(b => new DiagnosticLocation(this.function.locations[b.instructionId!], `Borrowed here`))
+        compilerAssert(false, `Cannot access with ${capability} (${str})`, { addr, dest, source, exclusiveBorrows, location, diagnosticLocations })
       }
 
       borrowSet.insert(addr, capability, instrId, dest)

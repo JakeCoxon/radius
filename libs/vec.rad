@@ -28,6 +28,21 @@ fn xyz(vec: vec4) -> vec3 @method: vec3(vec.x, vec.y, vec.z)
 fn length(vec: vec3) -> float @method:
   sqrt(vec.x * vec.x + vec.y * vec.y + vec.z * vec.z)
 
+fn length_squared(vec: vec3) -> float @method:
+  vec.x * vec.x + vec.y * vec.y + vec.z * vec.z
+
+fn length(vec: vec2) -> float @method:
+  sqrt(vec.x * vec.x + vec.y * vec.y)
+
+fn length_squared(vec: vec2) -> float @method:
+  vec.x * vec.x + vec.y * vec.y
+
+fn length(vec: vec2i) -> float @method:
+  sqrt(float(vec.x * vec.x + vec.y * vec.y))
+
+fn length_squared(vec: vec2i) -> int @method:
+  vec.x * vec.x + vec.y * vec.y
+
 fn dot(v1: vec3, v2: vec3) -> float:
   v1.x * v2.x + v1.y * v2.y + v1.z * v2.z
 

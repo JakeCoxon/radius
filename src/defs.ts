@@ -1,5 +1,5 @@
 import { FileSink } from "bun";
-import { FunctionBlock, IRInstruction } from "../borrow/defs";
+import { FunctionBlock } from "../borrow/defs";
 import { IrFunction } from "../region/region_codegen";
 import { Event, Task } from "./tasks";
 
@@ -13,6 +13,9 @@ export const Inspect = globalThis.Bun ? Bun.inspect : (() => {
 
 export class CompilerError extends Error {
   constructor(message: string, public info: object) { super(message) }
+}
+export class DiagnosticLocation {
+  constructor(public location: SourceLocation, public message: string) {}
 }
 export const createCompilerError = (message: string, info: object) => {
   const userinfo: string[] = []
@@ -1081,8 +1084,9 @@ export const textColors = {
   gray: (string: string) => `\x1b[38;5;242m${string}\x1b[39m`,
 }
 
-export const outputSourceLocation = (location: SourceLocation) => {
-  if (!location?.source) return '<generated code>'
+export const outputSourceLocation = (diagnosticLocation: DiagnosticLocation) => {
+  const { location, message } = diagnosticLocation
+  if (!location?.source) return `<generated code>${message}`
   let out = `${location.source.debugName}:${location.line}:${location.column}`;
   out += '\n'
   const lines = location.source.input.split('\n')
@@ -1094,7 +1098,7 @@ export const outputSourceLocation = (location: SourceLocation) => {
       out += `${lines[line - 1]}\n`
       if (i === 0) {
         const repeat = " ".repeat(location.column + lineGutter.length);
-        out += textColors.red(`${repeat}^-- here\n`)
+        out += textColors.red(`${repeat}^-- ${message}\n`)
       }
     }
   }

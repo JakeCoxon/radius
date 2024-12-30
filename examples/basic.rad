@@ -1,2 +1,3 @@
 fn main():
-  print("Hello")
+  let x = 23.float
+  print(x)

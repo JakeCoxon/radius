@@ -1,6 +1,6 @@
 import { inspect } from "bun";
 import { AccessInstruction, CallInstruction, CommentInstruction, EndAccessInstruction, formatInstruction, GetFieldPointerInstruction, getInstructionIdentifier, getInstructionOperands, getInstructionResult, IRInstruction, MarkInitializedInstruction, MoveInstruction } from "../borrow/defs";
-import { Binding, Capability, CompiledFunction, compilerAssert, FunctionParameter, textColors, Type, VoidType } from "../src/defs";
+import { Binding, Capability, CompiledFunction, compilerAssert, FunctionParameter, SourceLocation, textColors, Type, VoidType } from "../src/defs";
 import { CodeGenerator } from "../borrow/codegen_ir";
 
 export type Regions = Region[];
@@ -17,6 +17,7 @@ export class IrFunction {
   returnParameter: FunctionParameter | null = null
   returnRegister: string;
   returnType: Type // May be converted to VoidType if returnRegister is used
+  locations: { [key: string]: SourceLocation } = {}
 
   globalRegisters: {
     register: string,
@@ -293,9 +294,9 @@ export class RegionCodegen {
     this.blockRegion = regionId;
   }
 
-  insertInstruction(instr: IRInstruction) {
+  insertInstruction(instr: IRInstruction, location: SourceLocation) {
     compilerAssert(this.blockRegion !== null, 'No blockRegion. Call ensureBlock()', { blockRegion: this.blockRegion });
-    return this.insertBlockInstruction(this.blockRegion, instr);
+    return this.insertBlockInstruction(this.blockRegion, instr, location);
   }
 
   enterRegionSequence(region: RegionId, sequenceId: SequenceId) {
@@ -451,11 +452,12 @@ export class RegionCodegen {
     return instrNode;
   }
 
-  insertBlockInstruction(parent: RegionId, instruction: IRInstruction) {
+  insertBlockInstruction(parent: RegionId, instruction: IRInstruction, location: SourceLocation) {
     const instrId = this.createInstructionId(parent, instruction);
     compilerAssert(!this.irFunction.getInstruction(instrId), "Instruction already exists", { instrId, instruction, instructions: this.irFunction.instructions });
     const region = this.irFunction.regions[parent] as BlockRegion;
     const newNode = new InstructionNode(instruction, region.lastInstruction, null, parent)
+    this.irFunction.locations[instrId] = location;
     this.irFunction.instructions[instrId] = newNode;
     if (region.lastInstruction === null) {
       region.firstInstruction = instrId;
@@ -468,11 +470,12 @@ export class RegionCodegen {
     return instrId;
   }
 
-  insertInstructionAtBeginning(parent: RegionId, instruction: IRInstruction) {
+  insertInstructionAtBeginning(parent: RegionId, instruction: IRInstruction, location: SourceLocation) {
     const instrId = this.createInstructionId(parent, instruction);
     compilerAssert(!this.irFunction.getInstruction(instrId), "Instruction already exists", { instrId, instruction, instructions: this.irFunction.instructions });
     const region = this.irFunction.regions[parent] as BlockRegion;
     const newNode = new InstructionNode(instruction, null, region.firstInstruction, parent)
+    this.irFunction.locations[instrId] = location;
     this.irFunction.instructions[instrId] = newNode;
     if (region.firstInstruction === null) {
       region.firstInstruction = instrId;
@@ -485,11 +488,12 @@ export class RegionCodegen {
     return instrId;
   }
 
-  insertInstructionAfter(prevId: InstructionId, instruction: IRInstruction) {
+  insertInstructionAfter(prevId: InstructionId, instruction: IRInstruction, location: SourceLocation) {
     const regionId = this.irFunction.instructions[prevId].region;
     const instrId = this.createInstructionId(regionId, instruction);
     compilerAssert(!this.irFunction.getInstruction(instrId), "Instruction already exists", { instrId, instruction, instructions: this.irFunction.instructions });
     const region = this.irFunction.regions[regionId] as BlockRegion;
+    this.irFunction.locations[instrId] = location;
     const prevNode = this.irFunction.instructions[prevId];
     const nextId = prevNode.next;
     const nextNode = this.irFunction.instructions[nextId!];
@@ -504,11 +508,12 @@ export class RegionCodegen {
     return instrId;
   }
 
-  insertInstructionBefore(nextId: InstructionId, instruction: IRInstruction) {
+  insertInstructionBefore(nextId: InstructionId, instruction: IRInstruction, location: SourceLocation) {
     const regionId = this.irFunction.instructions[nextId].region;
     const instrId = this.createInstructionId(regionId, instruction);
     compilerAssert(!this.irFunction.getInstruction(instrId), "Instruction already exists", { instrId, instruction, instructions: this.irFunction.instructions });
     const region = this.irFunction.regions[regionId] as BlockRegion;
+    this.irFunction.locations[instrId] = location;
     const nextNode = this.irFunction.instructions[nextId];
     const prevId = nextNode.prev;
     const prevNode = this.irFunction.instructions[prevId!];
@@ -523,23 +528,23 @@ export class RegionCodegen {
     return instrId;
   }
 
-  insertInstructionAtPosition(insertPosition: InsertPosition, instruction: IRInstruction) {
+  insertInstructionAtPosition(insertPosition: InsertPosition, instruction: IRInstruction, location: SourceLocation) {
     if ('startOfRegion' in insertPosition) {
-      return this.insertInstructionAtBeginning(insertPosition.startOfRegion, instruction);
+      return this.insertInstructionAtBeginning(insertPosition.startOfRegion, instruction, location);
     } else if ('endOfRegion' in insertPosition) {
-      return this.insertBlockInstruction(insertPosition.endOfRegion, instruction);
+      return this.insertBlockInstruction(insertPosition.endOfRegion, instruction, location);
     } else if ('afterInstruction' in insertPosition) {
-      return this.insertInstructionAfter(insertPosition.afterInstruction, instruction);
+      return this.insertInstructionAfter(insertPosition.afterInstruction, instruction, location);
     } else if ('beforeInstruction' in insertPosition) {
-      return this.insertInstructionBefore(insertPosition.beforeInstruction, instruction);
+      return this.insertInstructionBefore(insertPosition.beforeInstruction, instruction, location);
     }
     compilerAssert(false, "Invalid insertPosition", { insertPosition });
   }
 
-  insertInstructionsAtPosition(insertPosition: InsertPosition, instructions: IRInstruction[]) {
+  insertInstructionsAtPosition(insertPosition: InsertPosition, instructions: IRInstruction[], location: SourceLocation) {
     const ids = { firstId: null as InstructionId | null, lastId: null as InstructionId | null }
     instructions.forEach(instr => {
-      const newId = this.insertInstructionAtPosition(insertPosition, instr)
+      const newId = this.insertInstructionAtPosition(insertPosition, instr, location)
       if (ids.firstId === null) ids.firstId = newId
       ids.lastId = newId
       insertPosition = { afterInstruction: newId }
@@ -571,9 +576,9 @@ export class RegionCodegen {
     return replacingPosition;
   }
 
-  replaceInstruction(instrId: InstructionId, instruction: IRInstruction) {
+  replaceInstruction(instrId: InstructionId, instruction: IRInstruction, location: SourceLocation) {
     const replacingPosition = this.deleteInstruction(instrId);
-    return this.insertInstructionAtPosition(replacingPosition, instruction);
+    return this.insertInstructionAtPosition(replacingPosition, instruction, location);
   }
 
   getIfRegion(region: RegionId): IfRegion { return this.irFunction.regions[region] as IfRegion; }
