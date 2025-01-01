@@ -659,6 +659,16 @@ test('move_result', async () => {
   testObject.close()
 })
 
+test('block_projection', async () => {
+  const testObject = createTest({ 
+    moduleName: 'block_projection',
+    globalOptions,
+    inputPath: `${import.meta.dir}/fixtures/block_projection.rad`,
+  })
+  await testObject.run()
+  testObject.close()
+})
+
 test('overload', async () => {
   const testObject = createTest({ 
     moduleName: 'overload',

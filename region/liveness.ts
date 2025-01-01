@@ -1,8 +1,7 @@
 import { compilerAssert, CompilerError } from "../src/defs";
 import { buildCFGFromRegions, ControlFlowGraph, ControlFlowGraphGeneric } from "../borrow/controlflow";
-import { AccessInstruction, AssignInstruction, BasicBlock, CommentInstruction, EndAccessInstruction, FunctionBlock, GetFieldPointerInstruction, IRInstruction, LoadFromAddressInstruction, PointerOffsetInstruction, ProjectBundleInstruction, formatInstruction, getInstructionOperands, getInstructionResult } from "../borrow/defs";
+import { AccessInstruction, AssignInstruction, BasicBlock, CommentInstruction, EndAccessInstruction, FunctionBlock, GetFieldPointerInstruction, IRInstruction, LoadFromAddressInstruction, PointerOffsetInstruction, ProjectAccessInstruction, ProjectBundleInstruction, formatInstruction, getInstructionOperands, getInstructionResult } from "../borrow/defs";
 import { BlockRegion, createRegionUsageMap, type InstructionId, IrDiagnostics, IrFunction, printIrFunction, Region, RegionCodegen, RegionId, Usage, UsageMap } from "./region_codegen";
-import { inspect } from "bun";
 
 type InsertMap = {[key: string]: (
   { regionId: RegionId, after: InstructionId, newInstr: IRInstruction } | 
@@ -160,7 +159,8 @@ const extendLiveness = (pass: CloseRegionAccessPass, register: string) => {
       instr instanceof LoadFromAddressInstruction || 
       instr instanceof PointerOffsetInstruction || 
       instr instanceof GetFieldPointerInstruction ||
-      instr instanceof ProjectBundleInstruction
+      instr instanceof ProjectBundleInstruction ||
+      instr instanceof ProjectAccessInstruction
       
     if (!toExtend) continue
     extendLiveness(pass, dest)
@@ -205,7 +205,7 @@ const mergeLivenessBlocks = (irFunction: IrFunction, liveness: Record<string, Li
     const a = liveness[blockId].lastUse
     const b = other[blockId].lastUse
     if (!a && !b) return null
-
+    if (!a) return b
     let n = irFunction.getInstructionNode(a)!
     while (n.next) {
       if (n.next === b) return b // b is the last use
@@ -223,7 +223,9 @@ export const insertRegionCloseAccesses = (pass: CloseRegionAccessPass) => {
     if (region instanceof BlockRegion) {
       for (let instrId = region.firstInstruction; instrId !== null; instrId = irFunction.getInstructionNode(instrId)!.next) {
         const instr = irFunction.getInstruction(instrId)
-        const toClose = instr instanceof AccessInstruction || instr instanceof ProjectBundleInstruction
+        const toClose = instr instanceof AccessInstruction || 
+          instr instanceof ProjectBundleInstruction ||
+          instr instanceof ProjectAccessInstruction
         if (toClose) closeAccess(pass, instr)
       }
     }
@@ -266,7 +268,7 @@ export class CloseRegionAccessPass {
   
 }
 
-const closeAccess = (pass: CloseRegionAccessPass, sourceInstr: AccessInstruction | ProjectBundleInstruction) => {
+const closeAccess = (pass: CloseRegionAccessPass, sourceInstr: AccessInstruction | ProjectBundleInstruction | ProjectAccessInstruction) => {
   const dest = getInstructionResult(sourceInstr)! as InstructionId
   extendLiveness(pass, dest)
   const boundaries = pass.liveness[dest]
@@ -289,9 +291,10 @@ const closeAccess = (pass: CloseRegionAccessPass, sourceInstr: AccessInstruction
     if (liveness.livenessType === LivenessType.Closed || liveness.livenessType === LivenessType.LiveIn) {
       if (alreadyClosed(liveness.lastUse)) continue
       const newInstr = new EndAccessInstruction(dest, sourceInstr.capabilities)
+      const location = pass.irFunction.locations[dest]
       const newId = liveness.lastUse ?
-        pass.codegen.insertInstructionAfter(liveness.lastUse, newInstr)
-        : pass.codegen.insertInstructionAtBeginning(regionId, newInstr)
+        pass.codegen.insertInstructionAfter(liveness.lastUse, newInstr, location)
+        : pass.codegen.insertInstructionAtBeginning(regionId, newInstr, location)
       pass.diagnostics.instructionNote(newId, `Inserted end access for ${dest} (${liveness.livenessType}) last = ${liveness.lastUse}`)
       
     }

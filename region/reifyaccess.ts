@@ -1,6 +1,5 @@
 import { Capability, CapabilityRanking, compilerAssert } from "../src/defs";
-import { ControlFlowGraph } from "../borrow/controlflow";
-import { AccessInstruction, FunctionBlock, GetFieldPointerInstruction, IRInstruction, LoadFromAddressInstruction, MoveInstruction, PointerOffsetInstruction, ProjectBundleInstruction, StoreToAddressInstruction, getInstructionResult } from "../borrow/defs";
+import { AccessInstruction, FunctionBlock, GetFieldPointerInstruction, IRInstruction, LoadFromAddressInstruction, MoveInstruction, PointerOffsetInstruction, ProjectAccessInstruction, ProjectBundleInstruction, StoreToAddressInstruction, getInstructionResult } from "../borrow/defs";
 import { BlockRegion, createRegionUsageMap, InstructionId, IrDiagnostics, IrFunction, printIrFunction } from "./region_codegen";
 
 export class RegionReifyAccessPass {
@@ -57,13 +56,12 @@ export class RegionReifyAccessPass {
       if (region instanceof BlockRegion) {
         for (let instrId = region.firstInstruction; instrId !== null; instrId = this.irFunction.getInstructionNode(instrId)!.next) {
           const instr = this.irFunction.getInstruction(instrId)
-          if (instr instanceof AccessInstruction) {
-            extendUsages(instrId)
-            worklist.push(instrId)
-          } else if (instr instanceof ProjectBundleInstruction) {
-            extendUsages(instrId)
-            worklist.push(instrId)
-          }
+          const reifyInstr = instr instanceof AccessInstruction || 
+            instr instanceof ProjectBundleInstruction ||
+            instr instanceof ProjectAccessInstruction
+          if (!reifyInstr) continue
+          extendUsages(instrId)
+          worklist.push(instrId)
         }
       }
     }
@@ -72,7 +70,7 @@ export class RegionReifyAccessPass {
       if (iterationIndex++ > 10000) compilerAssert(false, `Potential infinite loop. Shouldn't ever happen`)
 
       const instrId = worklist.shift()!
-      const instr = this.irFunction.getInstruction(instrId) as AccessInstruction | ProjectBundleInstruction
+      const instr = this.irFunction.getInstruction(instrId) as AccessInstruction | ProjectBundleInstruction | ProjectAccessInstruction
       const usageList = usages.get(getInstructionResult(instr)!) || []
       
       if (usageList.length === 0) {
@@ -93,7 +91,6 @@ export class RegionReifyAccessPass {
 
         return { min: Math.max(acc.min, minReqs), max: Math.max(acc.max, ...reqRanks) }
       }, { min: 0, max: 0 })
-
 
 
       if (min !== max) {
@@ -134,6 +131,8 @@ const capabilitiesOfInstr = (instr: IRInstruction, operandIndex: number) => {
   if (instr instanceof AccessInstruction) {
     return instr.capabilities
   } else if (instr instanceof ProjectBundleInstruction) {
+    return instr.capabilities
+  } else if (instr instanceof ProjectAccessInstruction) {
     return instr.capabilities
   } else if (instr instanceof MoveInstruction) {
     return operandIndex === 0 ? 

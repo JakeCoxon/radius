@@ -1,7 +1,7 @@
 import { Binding, Capability, compilerAssert, CompilerError, ConcreteClassType, PrimitiveType, Type, VoidType } from "../src/defs";
 import { CodeGenerator, FunctionCodeGenerator } from "../borrow/codegen_ir";
 import { ControlFlowGraph, ControlFlowGraphGeneric, buildCFG, buildCFGFromRegions, printRegionCFG } from "../borrow/controlflow";
-import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, EndAccessInstruction, PhiInstruction, MoveInstruction, CommentInstruction, textColors, MarkInitializedInstruction, formatInstruction, Module, DeallocStackInstruction, PointerOffsetInstruction, printIR, ProjectBundleInstruction, YieldInstruction, BreakInstruction, GetGlobalAddress, BitCastInstruction, YieldGeneratorInstruction, JumpTableInstruction } from "../borrow/defs";
+import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, EndAccessInstruction, PhiInstruction, MoveInstruction, CommentInstruction, textColors, MarkInitializedInstruction, formatInstruction, Module, DeallocStackInstruction, PointerOffsetInstruction, printIR, ProjectBundleInstruction, YieldInstruction, BreakInstruction, GetGlobalAddress, BitCastInstruction, YieldGeneratorInstruction, JumpTableInstruction, ProjectAccessInstruction, PointerToAddressInstruction } from "../borrow/defs";
 import { BlockRegion, InsertPosition, InstructionId, IrDiagnostics, IrFunction, printIrFunction, RegionCodegen, RegionId } from "./region_codegen";
 
 type InitializationState = Top | Bottom | Sequence;
@@ -247,10 +247,12 @@ export class RegionInitializationCheckingPass {
     else if (instr instanceof ReturnInstruction)          this.executeReturn(instr);
     else if (instr instanceof GetFieldPointerInstruction) this.executeGetFieldPointer(instr);
     else if (instr instanceof PointerOffsetInstruction)   this.executePointerOffset(instr);
+    else if (instr instanceof PointerToAddressInstruction)this.executePointerToAddress(instr);
     else if (instr instanceof JumpInstruction)            { }
     else if (instr instanceof BreakInstruction)           { }
     else if (instr instanceof ConditionalJumpInstruction) this.executeConditionalJump(instr);
     else if (instr instanceof ProjectBundleInstruction)   this.executeProjectBundle(instr);
+    else if (instr instanceof ProjectAccessInstruction)   this.executeProjectAccess(instr);
     else if (instr instanceof BitCastInstruction)         this.executeBitCast(instr);
     else if (instr instanceof EndAccessInstruction)       { }
     else if (instr instanceof MoveInstruction)            this.executeMove(instr);
@@ -304,7 +306,9 @@ export class RegionInitializationCheckingPass {
         // fine
       } else if (this.isDefinitelyInitialized(instr.source)) {
         const instrs = this.regionCodegen.createDestructorInstructions(instr.source, instr.type)
-        const inserted = this.regionCodegen.insertInstructionsAtPosition(InsertPosition.before(this.instrId!), instrs)
+        instrs.unshift(new CommentInstruction(`Dealloc ${instr.source} to uninitialize for Set access`))
+        const location = this.regionCodegen.irFunction.locations[this.instrId!]
+        const inserted = this.regionCodegen.insertInstructionsAtPosition(InsertPosition.before(this.instrId!), instrs, location)
         this.diagnostics.instructionNote(inserted.lastId!, `Inserted dealloc stack for ${instr.source} for Set access`);
         this.nextVisitInstruction = inserted.firstId // Include the inserted instructions 
       } else compilerAssert(false, `Source is not definitely initialized or uninitialized`, { instr });
@@ -360,7 +364,8 @@ export class RegionInitializationCheckingPass {
             // Do nothing for now
           } else {
             const instrs = this.regionCodegen.createParamDeallocStackInstructions(argIndex, param.type);
-            const inserts = this.regionCodegen.insertInstructionsAtPosition(InsertPosition.before(instrId), instrs);
+            const location = this.regionCodegen.irFunction.locations[instrId];
+            const inserts = this.regionCodegen.insertInstructionsAtPosition(InsertPosition.before(instrId), instrs, location);
             this.diagnostics.instructionNote(inserts.lastId!, `Inserted dealloc stack for ${this.function.parameterRegisters[argIndex]} for Sink param`);
           }
         } else if (this.isDefinitelyUninitialized(this.function.parameterRegisters[argIndex])) {
@@ -399,6 +404,13 @@ export class RegionInitializationCheckingPass {
     this.state.locals.set(instr.dest, new InitializationStateObject(TOP));
   }
 
+  executePointerToAddress(instr: PointerToAddressInstruction): void {
+    this.ensureRegisterInitialized(instr.source);
+    const addr = this.newAddress(instr.type);
+    this.state.locals.set(instr.dest, new AddressSet([addr]));
+    this.state.memory.set(addr, TOP);
+  }
+
   executeConditionalJump(instr: ConditionalJumpInstruction): void {
     this.ensureRegisterInitialized(instr.condition);
   }
@@ -408,6 +420,11 @@ export class RegionInitializationCheckingPass {
     const addr = this.newAddress(instr.type);
     this.state.locals.set(instr.target, new AddressSet([addr]));
     this.state.memory.set(addr, TOP); // The yield must have been initialized elsewhere
+  }
+
+  executeProjectAccess(instr: ProjectAccessInstruction): void {
+    this.ensureRegisterInitialized(instr.source);
+    this.state.locals.set(instr.dest, this.state.locals.get(instr.source)!);
   }
 
   executeBitCast(instr: BitCastInstruction): void {
@@ -482,21 +499,22 @@ export class RegionInitializationCheckingPass {
   executeDeallocStackInstruction(instr: DeallocStackInstruction): void {
     const instrId = this.instrId!;
     // compilerAssert(false, `DeallocStackInstruction not implemented`);
+    const location = this.regionCodegen.irFunction.locations[instrId]
     if (instr.type instanceof PrimitiveType) {
-      const newId = this.regionCodegen.replaceInstruction(instrId, new MarkInitializedInstruction(instr.target, instr.type, false));
+      const newId = this.regionCodegen.replaceInstruction(instrId, new MarkInitializedInstruction(instr.target, instr.type, false), location);
       this.diagnostics.instructionNote(newId, `Replaced a dealloc instruction for ${instr.target} ${instr.type.shortName}`);
       this.nextVisitInstruction = newId
       return
     } else {
       if (this.isDefinitelyUninitialized(instr.target)) {
-        const newId = this.regionCodegen.replaceInstruction(instrId, new MarkInitializedInstruction(instr.target, instr.type, false));
+        const newId = this.regionCodegen.replaceInstruction(instrId, new MarkInitializedInstruction(instr.target, instr.type, false), location);
         this.diagnostics.instructionNote(newId, `Replaced a dealloc instruction for ${instr.target} ${instr.type.shortName} because it was already uninitialized`);
         this.nextVisitInstruction = newId
         return
       } else if (this.isDefinitelyInitialized(instr.target)) {
         const instrs = this.regionCodegen.createDestructorInstructions(instr.target, instr.type);
         const replacingPosition = this.regionCodegen.deleteInstruction(instrId);
-        const inserts = this.regionCodegen.insertInstructionsAtPosition(replacingPosition, instrs);
+        const inserts = this.regionCodegen.insertInstructionsAtPosition(replacingPosition, instrs, location);
         this.diagnostics.instructionNote(inserts.lastId!, `Inserted destructor instructions for ${instr.target}`);
         this.nextVisitInstruction = inserts.firstId // Include the inserted instructions 
         return // Dont update memory yet
@@ -525,7 +543,8 @@ export class RegionInitializationCheckingPass {
   replaceMove(instrId: InstructionId, instr: MoveInstruction, capability: Capability) {
     const instrs = this.regionCodegen.createMoveInstructions(instr, capability);
     const replacingPosition = this.regionCodegen.deleteInstruction(instrId);
-    const inserts = this.regionCodegen.insertInstructionsAtPosition(replacingPosition, instrs);
+    const location = this.regionCodegen.irFunction.locations[instrId]
+    const inserts = this.regionCodegen.insertInstructionsAtPosition(replacingPosition, instrs, location);
     this.diagnostics.instructionNote(inserts.firstId!, `Begin move instructions for ${instr.source} -> ${instr.target}`);
     this.diagnostics.instructionNote(inserts.lastId!,  `Inserted move instructions for ${instr.source} -> ${instr.target}`);
     this.nextVisitInstruction = inserts.firstId // Include the inserted instructions
@@ -572,7 +591,8 @@ export class RegionInitializationCheckingPass {
 
   ensureRegisterInitialized(register: string) {
     const isInitialized = this.isDefinitelyInitialized(register);
-    compilerAssert(isInitialized, `Register ${register} is not definitely initialized`, { instr: this.instrId });
+    const location = this.function.locations[register]
+    compilerAssert(isInitialized, `Register ${register} is not definitely initialized`, { instr: this.instrId, location });
   }
 
   ensureRegisterUninitialized(register: string) {

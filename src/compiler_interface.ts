@@ -16,15 +16,12 @@ export const generateCompileCommands = (globalCompiler: GlobalCompilerState) => 
   const libs = opts.libraries.map(x => `-l${x}`).join(" ")
   const frameworks = opts.macosFrameworks.map(x => `-framework ${x}`).join(" ")
   const addLibraryDirs = globalOptions.libraryDirs.map(x => `-L${x}`).join(" ")
-  const llcPath = globalOptions.llcPath
-  const llPath = opts.llPath
-  const nativePath = opts.nativePath
-  const assemblyPath = opts.assemblyPath
-  const clang = globalOptions.clangPath
+  const { llPath, nativePath, assemblyPath } = opts
+  const { llcPath, clangPath } = globalOptions
   const optimizeLevel = 3
   return {
     compile: `${llcPath} ${llPath} -O${optimizeLevel} -o ${assemblyPath}`,
-    compileAndLink: `${clang} ${llPath} -O${optimizeLevel} -o ${nativePath} ${addLibraryDirs} ${libs} ${frameworks}`,
+    compileAndLink: `${clangPath} ${llPath} -O${optimizeLevel} -o ${nativePath} ${addLibraryDirs} ${libs} ${frameworks}`,
     nativePath
   }
 }
@@ -75,8 +72,9 @@ export const writeLlvmBytecodeFile = (build: BuildObject) => {
   const bytecodeWriter = file.writer()
   try {
     writeLlvmBytecodeBorrowRegion(build.globalCompiler, bytecodeWriter)
+    if (build.debugWriter) writeLlvmBytecodeBorrowRegion(build.globalCompiler, build.debugWriter)
   } catch(ex) {
-    handleError(build, ex)
+    // handleError(build, ex)
     throw ex
   } finally {
     bytecodeWriter.end()

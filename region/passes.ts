@@ -1,6 +1,6 @@
 import { CodeGenerator, FunctionCodeGenerator } from "../borrow/codegen_ir";
 import { FunctionBlock, Module } from "../borrow/defs";
-import { Ast, Binding, CompilerError, GlobalCompilerState, textColors } from "../src/defs";
+import { Ast, Binding, compilerAssert, CompilerError, GlobalCompilerState, textColors } from "../src/defs";
 import { RegionExclusivityCheckingPass } from "./exclusivity";
 import { RegionInitializationCheckingPass } from "./initialization";
 import { InlineRegionProjectBundlesPass } from "./inlining";
@@ -97,6 +97,10 @@ const runMandatoryPasses = (fnGenerator: FunctionCodeGenerator, mod: Module, fn:
 
     initPass.checkedInterpret()
     closeAccessPass.insertRegionCloseAccesses()
+
+    // Print after inserting close accesses
+    printIrFunction(irFunction)
+
     exclPass.checkedInterpret()
 
   } catch (ex) {

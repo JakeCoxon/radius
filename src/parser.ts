@@ -545,11 +545,12 @@ export const makeParser = (input: string, debugName: string) => {
   };
 
   const parseLetExpr = (letType: LetType) => {
+    const token = previous;
     const left = parseLeftSideMatch();
     const type = match(":") ? parseExpr() : null;
     const value = match("=") ? parseAssignExpr() : null;
-    let let_ = new ParseLet(previous, letType, left, type, value)
-    if (match("as?")) return new ParseLetAs(previous, let_, parseExpr())
+    let let_ = new ParseLet(token, letType, left, type, value)
+    if (match("as?")) return new ParseLetAs(token, let_, parseExpr())
     return let_
   }
   const parseLetStatement = (letType: LetType) => trailingStatement(parseLetExpr(letType))

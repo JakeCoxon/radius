@@ -1,6 +1,6 @@
 import { inspect } from "bun";
 import { AccessInstruction, CallInstruction, CommentInstruction, EndAccessInstruction, formatInstruction, GetFieldPointerInstruction, getInstructionIdentifier, getInstructionOperands, getInstructionResult, IRInstruction, MarkInitializedInstruction, MoveInstruction } from "../borrow/defs";
-import { Binding, Capability, CompiledFunction, compilerAssert, FunctionParameter, SourceLocation, textColors, Type, VoidType } from "../src/defs";
+import { Binding, Capability, CompiledFunction, compilerAssert, FunctionParameter, PrimitiveType, SourceLocation, textColors, Type, VoidType } from "../src/defs";
 import { CodeGenerator } from "../borrow/codegen_ir";
 
 export type Regions = Region[];
@@ -90,6 +90,7 @@ export class ScopeRegion {
   prevRegion: RegionId | null = null
   nextRegion: RegionId | null = null
   bodySequence: SequenceId
+  continuationSequence: SequenceId // The sequence following the scope and before the exit sequence
   exitSequence: SequenceId
   result: string
   constructor() {}
@@ -194,6 +195,7 @@ export const printIrFunction = (function_: IrFunction, diagnostics?: IrDiagnosti
       visitSequence(region.exitSequence, "Exit", depth + 1, true, nextPrefix);
     } else if (region instanceof ScopeRegion) {
       visitSequence(region.bodySequence, "Body", depth + 1, false, nextPrefix);
+      visitSequence(region.continuationSequence, "Continuation", depth + 1, false, nextPrefix);
       visitSequence(region.exitSequence, "Exit", depth + 1, true, nextPrefix);
     } else if (region instanceof GeneratorRegion) {
       visitSequence(region.entrySequence, "Entry", depth + 1, false, nextPrefix);
@@ -302,7 +304,11 @@ export class RegionCodegen {
   enterRegionSequence(region: RegionId, sequenceId: SequenceId) {
     this.currentRegion = region
     this.regionSequence = sequenceId
-    this.blockRegion = null
+
+    // Point the current block to the last block in the sequence if it's a block
+    const childRegion = this.irFunction.sequences[sequenceId].lastChildRegion
+    const childRegionIsBlock = childRegion && this.irFunction.regions[childRegion] instanceof BlockRegion;
+    this.blockRegion = childRegionIsBlock ? childRegion : null
   }
 
   insertChildSequence(region: RegionId) {
@@ -620,6 +626,7 @@ export class RegionCodegen {
     this.irFunction.regions.push(region);
     const regionId = this.irFunction.regions.length - 1 as RegionId
     region.bodySequence = this.insertNewSequenceRegion(regionId);
+    region.continuationSequence = this.insertNewSequenceRegion(regionId);
     region.exitSequence = this.insertNewSequenceRegion(regionId);
     return regionId
   }
@@ -670,7 +677,11 @@ export class RegionCodegen {
   // These are higher level APIs for generating IR so maybe it should be in a different class
   //
 
-  createDestructorInstructions(source: string, type: Type) {
+  createDestructorInstructions(source: string, type: Type): IRInstruction[] {
+    if (type instanceof PrimitiveType) {
+      return [new MarkInitializedInstruction(source, type, false)]
+    }
+
     const destructor = type.typeInfo.metaobject.destructorBinding;
     if (!destructor) {
       return [
@@ -689,6 +700,7 @@ export class RegionCodegen {
   }
 
   createParamDeallocStackInstructions(argIndex: number, type: Type) {
+    compilerAssert(!(type instanceof PrimitiveType), "Primitive type has no destructor", { type });
     const target = this.irFunction.parameterRegisters[argIndex];
 
     if (this.compiledFunction.isDestructor) {

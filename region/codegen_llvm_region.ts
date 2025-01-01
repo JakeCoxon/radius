@@ -338,6 +338,18 @@ const instructionWriter = {
     writer.writer.registers.set(instr.dest, reg)
   },
 
+  project_access: (writer: LlvmFunctionWriter, instr: AccessInstruction) => {
+    const reg = writer.writer.registers.get(instr.source)
+    compilerAssert(reg, "Register not found", { reg, instr })
+    writer.writer.registers.set(instr.dest, reg)
+  },
+
+  pointer_to_address: (writer: LlvmFunctionWriter, instr: AccessInstruction) => {
+    const reg = writer.writer.registers.get(instr.source)
+    compilerAssert(reg, "Register not found", { reg, instr })
+    writer.writer.registers.set(instr.dest, reg)
+  },
+
   assign: (writer: LlvmFunctionWriter, instr: AssignInstruction) => {
     const source = writer.writer.registers.get(instr.source)
     compilerAssert(source, "Register not found", { instr })
@@ -417,6 +429,8 @@ const writeInstructions = (writer: LlvmFunctionWriter, fnIr: IrFunction) => {
         format(writer, "\n  ; ### Scope Region $\n\n", regionId)
         formatJump(writer, labels[region.bodySequence], "Scope body")
         traverseSequence(region.bodySequence)
+        formatJump(writer, labels[region.continuationSequence], "Scope outer")
+        traverseSequence(region.continuationSequence)
         formatJump(writer, labels[region.exitSequence], "Scope exit")
         traverseSequence(region.exitSequence)
         format(writer, "  ; End scope $\n", regionId)
@@ -443,7 +457,7 @@ const writeInstructions = (writer: LlvmFunctionWriter, fnIr: IrFunction) => {
       const instr = fnIr.instructions[instrId].instruction
       if (instr instanceof BreakInstruction) {
         const region = fnIr.regions[instr.regionId] as ScopeRegion
-        formatJump(writer, labels[region.exitSequence])
+        formatJump(writer, labels[region.continuationSequence]) // Note: Break to outer sequence
         continue
       }
       if (instr instanceof JumpTableInstruction) {

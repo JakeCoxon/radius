@@ -43,6 +43,7 @@ export class BreakInstruction extends IRInstruction {               irType = 'br
 export class AccessInstruction extends IRInstruction {              irType = 'access';                constructor(public dest: string, public source: string, public capabilities: Capability[], public type: Type) { super(); } }
 export class EndAccessInstruction extends IRInstruction {           irType = 'end_access';            constructor(public source: string, public capabilities: Capability[]) { super(); } }
 export class ProjectBundleInstruction extends IRInstruction {       irType = 'project_bundle';        constructor(public target: string, public type: Type, public capabilities: Capability[], public source: string, public operands: string[], public funcs: {[key: string]: Binding}) { super(); } }
+export class ProjectAccessInstruction extends IRInstruction {       irType = 'project_access';        constructor(public dest: string, public type: Type, public capabilities: Capability[], public accessSource: string, public source: string) { super(); } }
 export class StoreToAddressInstruction extends IRInstruction {      irType = 'store_to_address';      constructor(public address: string, public type: Type, public source: string) { super(); } }
 export class BitCastInstruction extends IRInstruction {             irType = 'bitcast';               constructor(public dest: string, public type: Type, public source: string, public sourceType: Type) { super(); } }
 export class LoadFromAddressInstruction extends IRInstruction {     irType = 'load_from_address';     constructor(public dest: string, public type: Type, public address: string) { super(); } }
@@ -52,6 +53,7 @@ export class MarkInitializedInstruction extends IRInstruction {     irType = 'ma
 export class DeallocStackInstruction extends IRInstruction {        irType = 'dealloc_stack';         constructor(public target: string, public type: Type) { super(); } }
 export class YieldInstruction extends IRInstruction {               irType = 'yield';                 constructor(public dest: string, public type: Type, public value: string | null) { super(); } }
 export class YieldGeneratorInstruction extends IRInstruction {      irType = 'yield_generator';       constructor(public dest: string, public regionId: RegionId, public labelBinding: Binding, public type: Type, public address: string | null) { super(); } }
+export class PointerToAddressInstruction extends IRInstruction {    irType = 'pointer_to_address';    constructor(public dest: string, public type: Type, public source: string) { super(); } }
 export class JumpTableInstruction extends IRInstruction {           irType = 'jump_table';            constructor(public type: Type, public value: string, public table: RegionId[]) { super(); } }
 export class PhiInstruction extends IRInstruction {                 irType = 'phi';                   constructor(public dest: string, public type: Type, public sources: PhiSource[]) { super(); } }
 export class CommentInstruction extends IRInstruction {             irType = 'comment';               constructor(public comment: string) { super(); } }
@@ -72,6 +74,7 @@ export const getInstructionOperands = (instr: IRInstruction): string[] => {
   else if (instr instanceof PhiInstruction)             { return instr.sources.map(s => s.value); }
   else if (instr instanceof EndAccessInstruction)       { return [instr.source]; }
   else if (instr instanceof ProjectBundleInstruction)   { return [instr.source, ...instr.operands]; }
+  else if (instr instanceof ProjectAccessInstruction)   { return [instr.accessSource, instr.source]; }
   else if (instr instanceof MarkInitializedInstruction) { return [instr.target]; }
   else if (instr instanceof DeallocStackInstruction)    { return [instr.target]; }
   else if (instr instanceof CommentInstruction)         { return []; }
@@ -83,6 +86,7 @@ export const getInstructionOperands = (instr: IRInstruction): string[] => {
   else if (instr instanceof ConditionalJumpInstruction) { return [instr.condition]; }
   else if (instr instanceof JumpInstruction)            { return []; }
   else if (instr instanceof JumpTableInstruction)       { return [instr.value]; }
+  else if (instr instanceof PointerToAddressInstruction)           { return [instr.source]; }
   else if (instr instanceof YieldInstruction)           { return instr.value ? [instr.value] : []; }
   else if (instr instanceof YieldGeneratorInstruction) { return instr.address ? [instr.address] : []; }
   else { compilerAssert(false, 'Unknown instruction type', { instr }) }
@@ -109,12 +113,14 @@ export const getInstructionResult = (instr: IRInstruction): string | null => {
   else if (instr instanceof EndAccessInstruction)       { return null; }
   else if (instr instanceof GetGlobalAddress)           { return instr.dest; }
   else if (instr instanceof ProjectBundleInstruction)   { return instr.target; }
+  else if (instr instanceof ProjectAccessInstruction)   { return instr.dest; }
   else if (instr instanceof AllocInstruction)           { return instr.dest; }
   else if (instr instanceof LoadConstantInstruction)    { return instr.dest; }
   else if (instr instanceof ConditionalJumpInstruction) { return null; }
   else if (instr instanceof JumpInstruction)            { return null; }
   else if (instr instanceof JumpTableInstruction)       { return null; }
   else if (instr instanceof YieldInstruction)           { return instr.dest; }
+  else if (instr instanceof PointerToAddressInstruction)           { return instr.dest; }
   else if (instr instanceof BreakInstruction)           { return null; }
   else if (instr instanceof YieldGeneratorInstruction) { return instr.dest; }
   else { compilerAssert(false, 'Unknown instruction type', { instr }) }
@@ -141,14 +147,16 @@ export const getInstructionIdentifier = (instr: IRInstruction): string | null =>
   else if (instr instanceof EndAccessInstruction)       { return null; }
   else if (instr instanceof GetGlobalAddress)           { return instr.dest; }
   else if (instr instanceof ProjectBundleInstruction)   { return instr.target; }
+  else if (instr instanceof ProjectAccessInstruction)   { return instr.dest; }
   else if (instr instanceof AllocInstruction)           { return instr.dest; }
   else if (instr instanceof LoadConstantInstruction)    { return instr.dest; }
   else if (instr instanceof ConditionalJumpInstruction) { return null; }
   else if (instr instanceof JumpInstruction)            { return null; }
   else if (instr instanceof JumpTableInstruction)       { return null; }
   else if (instr instanceof YieldInstruction)           { return instr.dest; }
+  else if (instr instanceof PointerToAddressInstruction)           { return instr.dest; }
   else if (instr instanceof BreakInstruction)           { return null; }
-  else if (instr instanceof YieldGeneratorInstruction) { return instr.dest; }
+  else if (instr instanceof YieldGeneratorInstruction)  { return instr.dest; }
   else { compilerAssert(false, 'Unknown instruction type', { instr }) }
 }
 
@@ -272,6 +280,10 @@ export function formatInstruction(instr: IRInstruction): string {
     return `mark ${instr.target} as ${instr.initialized ? 'initialized' : 'uninitialized'} : ${instr.type.shortName}`;
   } else if (instr instanceof ProjectBundleInstruction) {
     return `${instr.target} = project_bundle [${instr.capabilities.join(', ')}] ${instr.source} index (${instr.operands.join(', ')})`;
+  } else if (instr instanceof ProjectAccessInstruction) {
+    return `${instr.dest} = project_access [${instr.capabilities.join(', ')}] ${instr.accessSource} from address ${instr.source}`;
+  } else if (instr instanceof PointerToAddressInstruction) {
+    return `${instr.dest} = pointer_to_address ${instr.source} : ${instr.type.shortName}`;
   } else if (instr instanceof DeallocStackInstruction) {
     return `dealloc_stack ${instr.target}: ${instr.type.shortName}`;
   } else if (instr instanceof YieldInstruction) {

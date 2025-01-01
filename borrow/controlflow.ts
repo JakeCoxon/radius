@@ -320,11 +320,11 @@ export const buildCFGFromRegions = (irFunction: IrFunction): ControlFlowGraphGen
       compilerAssert(exit, "No exit block found", { region })
       const body = visitSequence(prevRegionId, region.bodySequence);
       compilerAssert(body, "No body block found", { region })
-      cfg.addEdge(body, exit);
-      return visitSequence(null, region.exitSequence);
+      const outer = visitSequence(body, region.continuationSequence)
+      compilerAssert(outer, "No outer block found", { region })
+      return visitSequence(outer, region.exitSequence);
     } else if (region instanceof GeneratorRegion) {
       const first = firstBlockRegion(region.entrySequence);
-      const firstElse = firstBlockRegion(region.elseSequence);
       const exit = firstBlockRegion(region.exitSequence);
       compilerAssert(first, "No entry block found", { region })
       compilerAssert(exit, "No exit block found", { region })

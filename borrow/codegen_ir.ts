@@ -1,7 +1,7 @@
 import { InstructionId, IrFunction, printIrFunction, RegionCodegen, RegionId, SequenceId } from "../region/region_codegen";
 import { externalBuiltinBindings } from "../src/compiler_sugar";
 import { AliasAst, AndAst, Ast, Binding, BindingAst, BlockAst, BoolAst, BoolType, BreakAst, CallAst, Capability, CastAst, CompiledFunction, compilerAssert, ConstructorAst, ContinueInterAst, DefaultConsAst, EnumVariantAst, ExternalDefinition, ExternalFunction, FieldAst, FunctionParameter, GeneratorAst, GlobalCompilerState, IfAst, InterleaveAst, IntType, LetAst, LetType, MutSigilAst, NeverType, NotAst, NumberAst, OperatorAst, OrAst, ParameterizedType, PrimitiveType, RawPointerType, ReturnAst, SetAst, SetFieldAst, SetSubscriptAst, SetValueFieldAst, SourceLocation, StatementsAst, StringAst, SubscriptAst, Type, UserCallAst, ValueFieldAst, VariantCastAst, VoidAst, VoidType, WhileAst, YieldAst, YieldGenerAst } from "../src/defs";
-import { ASTNode, AllocInstruction, AssignInstruction, AssignmentNode, BasicBlock, BinaryExpressionNode, BinaryOperationInstruction, BlockStatementNode, CallExpressionNode, CallInstruction, AccessInstruction, ConditionalJumpInstruction, CreateStructNode, ExpressionNode, ExpressionStatementNode, FunctionBlock, FunctionDeclarationNode, IRInstruction, IRValue, IdentifierNode, IfStatementNode, JumpInstruction, LetConstNode, LiteralNode, LoadConstantInstruction, LoadFromAddressInstruction, MemberExpressionNode, ProgramNode, Pointer, Value, ReturnInstruction, ReturnNode, StoreToAddressInstruction, Variable, VariableDeclarationNode, WhileStatementNode, GetFieldPointerInstruction, AndNode, OrNode, PhiInstruction, CommentInstruction, MoveInstruction, EndAccessInstruction, printIR, MarkInitializedInstruction, PhiSource, DeallocStackInstruction, PointerOffsetInstruction, ProjectBundleInstruction, YieldInstruction, BreakInstruction, GetGlobalAddress, BitCastInstruction, YieldGeneratorInstruction, JumpTableInstruction } from "./defs";
+import { ASTNode, AllocInstruction, AssignInstruction, AssignmentNode, BasicBlock, BinaryExpressionNode, BinaryOperationInstruction, BlockStatementNode, CallExpressionNode, CallInstruction, AccessInstruction, ConditionalJumpInstruction, CreateStructNode, ExpressionNode, ExpressionStatementNode, FunctionBlock, FunctionDeclarationNode, IRInstruction, IRValue, IdentifierNode, IfStatementNode, JumpInstruction, LetConstNode, LiteralNode, LoadConstantInstruction, LoadFromAddressInstruction, MemberExpressionNode, ProgramNode, Pointer, Value, ReturnInstruction, ReturnNode, StoreToAddressInstruction, Variable, VariableDeclarationNode, WhileStatementNode, GetFieldPointerInstruction, AndNode, OrNode, PhiInstruction, CommentInstruction, MoveInstruction, EndAccessInstruction, printIR, MarkInitializedInstruction, PhiSource, DeallocStackInstruction, PointerOffsetInstruction, ProjectBundleInstruction, YieldInstruction, BreakInstruction, GetGlobalAddress, BitCastInstruction, YieldGeneratorInstruction, JumpTableInstruction, ProjectAccessInstruction, PointerToAddressInstruction } from "./defs";
 
 type ExpressionContext = {
   valueCategory: 'rvalue' | 'lvalue';
@@ -10,6 +10,9 @@ type ExpressionContext = {
 class Scope {
   allocs: [string, Type][] = []
   regionId: RegionId | null = null
+  projectInstructions: [ProjectAccessInstruction, SourceLocation][] = []
+  toPopRegionStateBecauseOfContinuation = false
+  currentBreakExprAccessReg: string | null = null
   constructor(
     public debugName: string,
     public breakBlockLabel: string | null = null,
@@ -142,7 +145,8 @@ export class FunctionCodeGenerator {
     this.blocks.push(entryBlock);
     this.currentBlock = entryBlock;
 
-    this.scopes.push(new Scope("Function scope"));
+    const fnScope = new Scope("Function scope");
+    this.scopes.push(fnScope);
 
 
     this.currentFunction = new FunctionBlock(binding.name, binding, params, paramRegs, this.blocks);
@@ -151,11 +155,14 @@ export class FunctionCodeGenerator {
     if (returnType !== VoidType && returnType !== NeverType && body.type !== NeverType) {
       this.body = new ReturnAst(body.type, SourceLocation.anon, body)
       this.generate(this.body)
+      this.popAndFinalizeScopeUntil(fnScope);
     } else {
       this.generate(body);
-      this.finalizeScope();
+      this.popAndFinalizeScopeUntil(fnScope);
       this.addInstruction(new ReturnInstruction(VoidType, null), body.location);
     }
+
+    compilerAssert(this.scopes.length === 0, 'Function scope not popped correctly', { fnScope, scopes: this.scopes });
 
     this.blocks[0].instructions.unshift(...this.functionInstructions);
 
@@ -267,6 +274,19 @@ export class FunctionCodeGenerator {
     return reg
   }
 
+  popAndFinalizeScopeUntil(givenScope: Scope) {
+    while (this.scopes.length > 0) {
+      const scope = this.scopes[this.scopes.length - 1]
+      this.finalizeScope()
+      if (scope.toPopRegionStateBecauseOfContinuation) {
+        this.regionCodegen.popRegionState()
+      }
+      this.scopes.pop()
+      if (scope === givenScope) return
+    }
+    compilerAssert(false, 'Scope not found')
+  }
+
   finalizeScope() {
     compilerAssert(this.scopes.length > 0, 'No scopes to close');
     const scope = this.scopes[this.scopes.length - 1]
@@ -277,7 +297,6 @@ export class FunctionCodeGenerator {
     }
   }
 
-  // TODO: Fold these together
   generateBlockStatement(ast: BlockAst) {
 
     const scopeRegionId = this.regionCodegen.insertNewScopeRegion()
@@ -298,22 +317,22 @@ export class FunctionCodeGenerator {
     this.scopes.push(scope);
     this.blockScopeDepth.set(ast.binding, this.scopes.length - 1)
     this.generate(ast.body)
-    this.finalizeScope()
+    this.popAndFinalizeScopeUntil(scope);
 
     this.regionCodegen.popRegionState()
 
-    this.scopes.pop()
     this.newBlock(label)
   }
 
   generateBlockExpression(ast: BlockAst, context: ExpressionContext): IRValue {
-    // Don't generate scope for now
-    // return this.generateExpression(ast.body, context)
+    
     const label = this.newLabel()
     const scope = new Scope("Block expr", label)
+    scope.toPopRegionStateBecauseOfContinuation = true
 
-    if (ast.breakExprBinding) scope.breakExprReg = this.generateAlloc(ast.breakExprBinding.type, ast.location)
-    const resultPtr = scope.breakExprReg ?? this.generateAlloc(ast.type, ast.location)
+    scope.breakExprReg = this.generateAlloc(RawPointerType, ast.location)
+    const addrReg = this.newRegister()
+    scope.currentBreakExprAccessReg = addrReg
   
     this.scopes.push(scope)
     this.blockScopeDepth.set(ast.binding, this.scopes.length - 1)
@@ -324,24 +343,59 @@ export class FunctionCodeGenerator {
     scope.regionId = scopeRegionId
     
     this.regionCodegen.enterRegionSequence(scopeRegionId, scopeRegion.bodySequence)
-    const blockRegion = this.regionCodegen.insertNewBlockRegion();
 
+    const blockRegion = this.regionCodegen.insertNewBlockRegion();
     this.regionCodegen.insertChildSequence(blockRegion)
     this.regionCodegen.blockRegion = blockRegion
 
     this.addInstruction(new CommentInstruction(`Block ${ast.binding.name}`), ast.location)
 
-    const value = this.generateExpression(ast.body, context)
-    if (ast.body.type !== NeverType) 
-      this.generateMovePointerInstructionWithCapabilityCheck(resultPtr, value, ast.body)
-      // this.generateMoveToAddressInstruction(resultPtr, value, ast.type, ast.location)
+    const value = this.generateExpression(ast.body, context);
+
+    if (ast.body.type !== NeverType) {
+      this.generateBlockBreakValueAndProject(scope, value, ast.body)
+    }
+
+    this.regionCodegen.enterRegionSequence(scopeRegionId, scopeRegion.exitSequence)
+
+    // TODO: This scope gets finalized twice
     this.finalizeScope()
 
-    this.regionCodegen.popRegionState()
+    this.regionCodegen.enterRegionSequence(scopeRegionId, scopeRegion.continuationSequence)
 
-    this.scopes.pop()
-    this.newBlock(label)
-    return new Pointer(resultPtr)
+    const loaded = this.toValue(RawPointerType, new Pointer(scope.breakExprReg), ast.location, 'load block expr ptr ptr')
+    this.addInstruction(new PointerToAddressInstruction(addrReg, ast.type, loaded.register), ast.location)
+
+    scope.projectInstructions.forEach(([instr, location]) => {
+      this.addInstruction(instr, ast.location)
+    })
+    
+    return new Pointer(scope.currentBreakExprAccessReg)
+  }
+
+  generateBlockBreakValueAndProject(scope: Scope, value: IRValue, ast: Ast) {
+    
+    const resultReg = scope.currentBreakExprAccessReg
+    compilerAssert(resultReg, 'Block expression must have a break expression', { ast, scope })
+    compilerAssert(scope.breakExprReg, 'Break expression access register not found', { scope })
+
+    const valueLocation = value instanceof Value ? this.irFunction.locations[value.register] : ast.location
+
+    // Here we support Let and Sink capabiltiies because we allo the user to
+    // move the value out. If that happens then it has consequences and we can't
+    // allow any more access to the value. This is handled in exclusivity.ts
+    // with a special case for Sink capability ProjectAccessInstruction
+    const capabilities: Capability[] = [Capability.Let, Capability.Sink]
+
+    const valuePtr = this.storeResult(ast.type, value, ast.location)
+    const accessReg = this.newRegister()
+    this.addInstruction(new AccessInstruction(accessReg, valuePtr.address, capabilities, ast.type), valueLocation)
+    this.generateCopyPrimitiveToAddressInstruction(scope.breakExprReg, new Value(accessReg), RawPointerType, valueLocation)
+
+    const newResultReg = this.newRegister()
+    const projectInstr = new ProjectAccessInstruction(newResultReg, ast.type, capabilities, valuePtr.address, resultReg)
+    scope.projectInstructions.push([projectInstr, valueLocation])
+    scope.currentBreakExprAccessReg = newResultReg
   }
 
   generateBreakExpression(ast: BreakAst, context: ExpressionContext): IRValue {
@@ -356,18 +410,16 @@ export class FunctionCodeGenerator {
     compilerAssert(scope.regionId, `Region id not found: ${ast.binding.name}`)
     this.addInstruction(new CommentInstruction(`Break ${ast.binding.name} ${scope.regionId}`), ast.location)
     
-    // compilerAssert(ast.expr === null, 'Break statement must not have an expression', { ast })
     ;(() => {
       if (!ast.expr) return
       const value = this.generateExpression(ast.expr, { valueCategory: 'rvalue' })
       if (ast.expr.type === VoidType || ast.expr.type === NeverType) return
-      const dest = scope.breakExprReg
-      if (!dest) return // Block was not an expression
-      // compilerAssert(dest, 'Break expression register not found', { ast, blockAst: scope.ast })
-      this.generateMoveToAddressInstruction(dest, value, ast.expr.type, ast.location)
+      if (!scope.breakExprReg) return // Block was not an expression
+
+      this.generateBlockBreakValueAndProject(scope, value, ast.expr)
     })()  
+    
     this.addInstruction(new BreakInstruction(scope.regionId, VoidType, null), ast.location)
-    // this.addInstruction(new JumpInstruction(label))
     this._createUnusedBlock()
     return new Pointer('')
   }
@@ -451,6 +503,7 @@ export class FunctionCodeGenerator {
       return this.generateProjection(ast, value);
     }
 
+    this.addInstruction(new CommentInstruction(`let ${ast.letType} ${ast.binding.name} line=${ast.location.line}`), ast.location)
     this.generateMutableVariableDeclaration(ast, value);
   }
 
@@ -495,21 +548,35 @@ export class FunctionCodeGenerator {
   }
 
 
-  // TODO: Fold these together
-  generateIfStatement(ast: IfAst) {
-    this.generateIf(ast, false)
-  }
-
   generateIfExpression(ast: IfAst, context: ExpressionContext): IRValue {
     const isExpr = ast.type !== VoidType && ast.type !== NeverType
-    return this.generateIf(ast, isExpr)
+    
+    if (!isExpr) {
+      this.generateIfStatement(ast)
+      return new Pointer('')
+    }
+
+    // Rewrite it to a a block that returns the result
+
+    const binding = new Binding('if_result', ast.type)
+    const breakExprBinding = new Binding('if_break', RawPointerType)
+
+    const trueBody = ast.trueBody instanceof BlockAst ? ast.trueBody.body : ast.trueBody
+    const falseBody = !ast.falseBody ? null : ast.falseBody instanceof BlockAst ? ast.falseBody.body : ast.falseBody
+    
+    const newAst = new BlockAst(ast.type, ast.location, binding, breakExprBinding, 
+      new IfAst(NeverType, ast.location, ast.expr, 
+        new BreakAst(NeverType, ast.location, binding, trueBody),
+        falseBody ? new BreakAst(NeverType, ast.location, binding, falseBody) : null)
+    )
+    return this.generateBlockExpression(newAst, { valueCategory: 'rvalue' })
   }
 
-  generateIf(ast: IfAst, isExpression: boolean): IRValue {
+  generateIfStatement(ast: IfAst) {
+
     const thenLabel = this.newLabel();
     const elseLabel = this.newLabel();
     const afterLabel = this.newLabel()
-    const outReg = isExpression ? this.generateAlloc(ast.type, ast.location) : null
 
     const ifRegionId = this.regionCodegen.insertNewIfRegion()
     this.regionCodegen.insertChildSequenceAndPushState(ifRegionId)
@@ -526,31 +593,19 @@ export class FunctionCodeGenerator {
     this.regionCodegen.enterRegionSequence(ifRegionId, ifRegion.thenSequence)
 
     this.newBlock(thenLabel);
-    if (isExpression) {
-      const ptr = this.generateExpression(ast.trueBody, { valueCategory: 'lvalue' })
-      this.generateMovePointerInstructionWithCapabilityCheck(outReg!, ptr, ast.trueBody)
-    }
-    else this.generate(ast.trueBody);
+
+    this.generate(ast.trueBody);
     this.addInstruction(new JumpInstruction(afterLabel), ast.location);
 
     this.regionCodegen.enterRegionSequence(ifRegionId, ifRegion.elseSequence)
 
     this.newBlock(elseLabel);
-    if (ast.falseBody) {
-      if (isExpression) {
-        const ptr = this.generateExpression(ast.falseBody, { valueCategory: 'lvalue' })
-        this.generateMovePointerInstructionWithCapabilityCheck(outReg!, ptr, ast.falseBody)
-      }
-      else this.generate(ast.falseBody);
-    }
+    if (ast.falseBody) this.generate(ast.falseBody);
     this.addInstruction(new JumpInstruction(afterLabel), ast.location);
     this.newBlock(afterLabel);
 
     this.regionCodegen.popRegionState()
 
-    if (isExpression) return new Pointer(outReg!);
-
-    return new Pointer('')
   }
 
   generateWhileStatement(ast: WhileAst) {
@@ -599,13 +654,19 @@ export class FunctionCodeGenerator {
   generateAndExpression(ast: AndAst, context: ExpressionContext): IRValue {
     // Before we had a cleaner way to do this, but for now we can just use an if expression
     compilerAssert(ast.type === BoolType, 'And expression must be a boolean', { ast });
-    return this.generateIfExpression(new IfAst(BoolType, ast.location, ast.args[0], ast.args[1], new BoolAst(BoolType, SourceLocation.anon, false)), context)
+    const location = ast.location
+    const if_ = new IfAst(BoolType, location, ast.args[0], ast.args[1], new BoolAst(BoolType, location, false));
+    const copy = new CallAst(BoolType, location, externalBuiltinBindings.copy, [if_], [])
+    return this.generateExpression(copy, context)
   }
 
   generateOrExpression(ast: OrAst, context: ExpressionContext): IRValue {
     // Before we had a cleaner way to do this, but for now we can just use an if expression
     compilerAssert(ast.type === BoolType, 'Or expression must be a boolean', { ast });
-    return this.generateIfExpression(new IfAst(BoolType, ast.location, ast.args[0], new BoolAst(BoolType, SourceLocation.anon, true), ast.args[1]), context)
+    const location = ast.location
+    const if_ = new IfAst(BoolType, location, ast.args[0], new BoolAst(BoolType, location, true), ast.args[1]);
+    const copy = new CallAst(BoolType, location, externalBuiltinBindings.copy, [if_], [])
+    return this.generateExpression(copy, context)
   }
 
   generateCreateStructExpression(ast: ConstructorAst, context: ExpressionContext): IRValue {
@@ -653,7 +714,7 @@ export class FunctionCodeGenerator {
     if (type === VoidType) return new Pointer('')
     const reg = this.generateAlloc(type, location);
     compilerAssert(type instanceof PrimitiveType, 'storeResult not implemented for non-primitive types', { type, value, currentStatement: this.currentStatement });
-    this.generateMovePrimitiveToAddressInstruction(reg, value, type, location)
+    this.generateCopyPrimitiveToAddressInstruction(reg, value, type, location)
     return new Pointer(reg)
   }
 
@@ -986,7 +1047,7 @@ export class FunctionCodeGenerator {
     const location = valueAst.location.source ? valueAst.location : this.currentLocation
 
     if (sourcePointer instanceof Value) {
-      this.generateMovePrimitiveToAddressInstruction(targetPointer, sourcePointer, valueAst.type, location)
+      this.generateCopyPrimitiveToAddressInstruction(targetPointer, sourcePointer, valueAst.type, location)
       return
     }
 
@@ -1044,8 +1105,8 @@ export class FunctionCodeGenerator {
     }
   }
 
-  generateMovePrimitiveToAddressInstruction(destReg: string, value: Value, type: Type, location: SourceLocation) {
-    compilerAssert(type instanceof PrimitiveType, 'generateMovePrimitiveToAddressInstruction not implemented for non-primitive types', { type, currentStatement: this.currentStatement });
+  generateCopyPrimitiveToAddressInstruction(destReg: string, value: Value, type: Type, location: SourceLocation) {
+    compilerAssert(type instanceof PrimitiveType, 'Unexpected non-primitive types', { type, currentStatement: this.currentStatement });
     const destAccessReg = this.newRegister();
     this.addInstruction(new AccessInstruction(destAccessReg, destReg, [Capability.Set], type), location);
     this.addInstruction(new StoreToAddressInstruction(destAccessReg, type, value.register), location);
@@ -1054,7 +1115,7 @@ export class FunctionCodeGenerator {
 
   generateMoveToAddressInstruction(destReg: string, value: IRValue, type: Type, location: SourceLocation) {
     if (value instanceof Value) {
-      this.generateMovePrimitiveToAddressInstruction(destReg, value, type, location)
+      this.generateCopyPrimitiveToAddressInstruction(destReg, value, type, location)
     } else {
       this.generateMovePointerInstruction(destReg, value, type, location)
     }
@@ -1320,8 +1381,8 @@ class GeneratorCodegen {
 
     const constant0 = fnCodegen.generateNumberLiteral(new NumberAst(IntType, SourceLocation.anon, 0), { valueCategory: 'rvalue' })
     compilerAssert(constant0 instanceof Value, 'Expected value', { constant0 })
-    fnCodegen.generateMovePrimitiveToAddressInstruction(entryStateAddress, constant0, IntType, ast.location)
-    fnCodegen.generateMovePrimitiveToAddressInstruction(elseStateAddress, constant0, IntType, ast.location)
+    fnCodegen.generateCopyPrimitiveToAddressInstruction(entryStateAddress, constant0, IntType, ast.location)
+    fnCodegen.generateCopyPrimitiveToAddressInstruction(elseStateAddress, constant0, IntType, ast.location)
     
     const interleaveRegionId = regionCodegen.insertNewGeneratorRegion();
     regionCodegen.insertChildSequenceAndPushState(interleaveRegionId)
@@ -1374,14 +1435,14 @@ class GeneratorCodegen {
       compilerAssert(ast.expr, 'Expected expression', { ast })
       const valueAddress = fnCodegen.storeResult(ast.expr.type, fnCodegen.generateExpression(ast.expr, { valueCategory: 'lvalue' }), ast.location)
       fnCodegen.addInstruction(new CommentInstruction(`Write pointer ${valueAddress?.address} to ${currentBranch.writeAddress}`), ast.location)
-      fnCodegen.generateMovePrimitiveToAddressInstruction(currentBranch.writeAddress, new Value(valueAddress.address), RawPointerType, ast.location)
+      fnCodegen.generateCopyPrimitiveToAddressInstruction(currentBranch.writeAddress, new Value(valueAddress.address), RawPointerType, ast.location)
     }
 
     const nextJumpRegion = currentBranch.regionIds.length
     fnCodegen.addInstruction(new CommentInstruction(`Set next jump = ${nextJumpRegion}`), ast.location)
     const constant = fnCodegen.generateNumberLiteral(new NumberAst(IntType, SourceLocation.anon, nextJumpRegion), { valueCategory: 'rvalue' })
     compilerAssert(constant instanceof Value, 'Expected value', { constant })
-    fnCodegen.generateMovePrimitiveToAddressInstruction(currentBranch.writeStateAddress, constant, IntType, ast.location)
+    fnCodegen.generateCopyPrimitiveToAddressInstruction(currentBranch.writeStateAddress, constant, IntType, ast.location)
 
     const readStateValue = fnCodegen.toValue(IntType, new Pointer(currentBranch.readStateAddress), ast.location, 'yield')
     const jumpInstr = fnCodegen.addInstruction(new JumpTableInstruction(IntType, readStateValue.register, []), ast.location)!

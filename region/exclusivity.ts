@@ -1,6 +1,6 @@
 import { capabilitiesLargerOrEqualTo, Capability, CapabilityRanking, compilerAssert, DiagnosticLocation, FunctionParameter, Type } from "../src/defs";
 import { ControlFlowGraph, ControlFlowGraphGeneric, buildCFG, buildCFGFromRegions } from "../borrow/controlflow";
-import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, EndAccessInstruction, PhiInstruction, textColors, CommentInstruction, getInstructionResult, DeallocStackInstruction, CallExpressionNode, MarkInitializedInstruction, PointerOffsetInstruction, formatInstruction, ProjectBundleInstruction, YieldInstruction, BreakInstruction, GetGlobalAddress, BitCastInstruction, YieldGeneratorInstruction, JumpTableInstruction } from "../borrow/defs";
+import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, EndAccessInstruction, PhiInstruction, textColors, CommentInstruction, getInstructionResult, DeallocStackInstruction, CallExpressionNode, MarkInitializedInstruction, PointerOffsetInstruction, formatInstruction, ProjectBundleInstruction, YieldInstruction, BreakInstruction, GetGlobalAddress, BitCastInstruction, YieldGeneratorInstruction, JumpTableInstruction, ProjectAccessInstruction, PointerToAddressInstruction } from "../borrow/defs";
 import { RegionWorklist } from "./initialization";
 import { BlockRegion, InstructionId, IrDiagnostics, IrFunction, printIrFunction, RegionId } from "./region_codegen";
 
@@ -31,7 +31,7 @@ export class RegionExclusivityCheckingPass {
   function: IrFunction;
   freshAddressCounter = 0;
   addressTypes = new Map<string, Type>(); // Quick lookup for address types
-  debugLog = true
+  debugLog = false
   runs = 0
   instrId: InstructionId | null = null
   iterationIndex = 0
@@ -194,9 +194,11 @@ export class RegionExclusivityCheckingPass {
     else if (instr instanceof LoadFromAddressInstruction) this.handleLoadFromAddressInstruction(instr);
     else if (instr instanceof GetFieldPointerInstruction) this.handleGetFieldPointerInstruction(instr);
     else if (instr instanceof PointerOffsetInstruction)   this.handlePointerOffsetInstruction(instr);
+    else if (instr instanceof PointerToAddressInstruction)this.handlePointerToAddressInstruction(instr);
     else if (instr instanceof BinaryOperationInstruction) this.handleBinaryOperationInstruction(instr);
     else if (instr instanceof EndAccessInstruction)       this.endAccess(instrId, instr);
     else if (instr instanceof ProjectBundleInstruction)   this.handleProjectBundleInstruction(instrId, instr);
+    else if (instr instanceof ProjectAccessInstruction)   this.handleProjectAccessInstruction(instrId, instr);
     else if (instr instanceof DeallocStackInstruction)    this.handleDeallocStackInstruction(instr);
     else if (instr instanceof YieldInstruction)           this.handleYieldInstruction(instr);
     else if (instr instanceof PhiInstruction)             this.handlePhiInstruction(instr);
@@ -230,8 +232,11 @@ export class RegionExclusivityCheckingPass {
   }
 
   handleLoadFromAddressInstruction(instr: LoadFromAddressInstruction): void {
-    const addresses = this.state.locals.get(instr.address);
-    this.state.locals.set(instr.dest, new Set(addresses));
+    // const addresses = this.state.locals.get(instr.address);
+    // this.state.locals.set(instr.dest, new Set(addresses));
+    const newAddress = this.newAddress(instr.type);
+    this.state.locals.set(instr.dest, new Set([newAddress]));
+    this.state.memory.set(newAddress, new BorrowSet());
   }
 
   handleGetFieldPointerInstruction(instr: GetFieldPointerInstruction): void {
@@ -253,6 +258,12 @@ export class RegionExclusivityCheckingPass {
     compilerAssert(this.state.locals.get(instr.dest) === undefined, `Register ${instr.dest} is already initialized`);
     // const fields = [...addresses].map(addr => `${addr}.pointer`);
     this.state.locals.set(instr.dest, new Set([]));
+  }
+
+  handlePointerToAddressInstruction(instr: PointerToAddressInstruction): void {
+    const address = this.newAddress(instr.type);
+    this.state.memory.set(address, new BorrowSet());
+    this.state.locals.set(instr.dest, new Set([address]));
   }
 
   handleBitCastInstruction(instr: BitCastInstruction): void {
@@ -313,6 +324,11 @@ export class RegionExclusivityCheckingPass {
     this.beginAccess(instr.target, instr.source, instr.capabilities[0], instrId);
   }
 
+  handleProjectAccessInstruction(instrId: InstructionId, instr: ProjectAccessInstruction) {
+    compilerAssert(instr.capabilities.length === 1, "Capability must have been reified by now")
+    this.beginAccess(instr.dest, instr.accessSource, instr.capabilities[0], instrId);
+  }
+
   beginAccess(dest: string, source: string, capability: Capability, instrId: InstructionId) {
     const addrs = this.state.locals.get(source);
     compilerAssert(addrs, `No address found for ${source}`);
@@ -359,7 +375,7 @@ export class RegionExclusivityCheckingPass {
       if (exclusiveBorrows.length > 0) {
         const str = capability === Capability.Let ? "already mutably borrowed" : "already borrowed"
         const location = this.function.locations[dest]
-        const diagnosticLocations = exclusiveBorrows.map(b => new DiagnosticLocation(this.function.locations[b.instructionId!], `Borrowed here`))
+        const diagnosticLocations = exclusiveBorrows.map(b => new DiagnosticLocation(this.function.locations[b.instructionId!], `Borrowed here with ${b.capability} capability`))
         compilerAssert(false, `Cannot access with ${capability} (${str})`, { addr, dest, source, exclusiveBorrows, location, diagnosticLocations })
       }
 
@@ -379,17 +395,22 @@ export class RegionExclusivityCheckingPass {
   getReborrowSource(source: InstructionId) {
     // const sid = this.findInstructionIdByDest(source)!
     const s = this.function.getInstruction(source)
-    compilerAssert(s instanceof AccessInstruction || s instanceof ProjectBundleInstruction, "Expected access instruction")
+    const isAccess = s instanceof AccessInstruction ||
+      s instanceof ProjectBundleInstruction ||
+      s instanceof ProjectAccessInstruction
+    compilerAssert(isAccess, "Expected access instruction")
 
     const getSource = (source2: InstructionId) => {
       const s2 = this.function.getInstruction(source2)
       if (s2 instanceof AccessInstruction) return source2
       if (s2 instanceof ProjectBundleInstruction) return source2
+      if (s2 instanceof ProjectAccessInstruction) return source2
       if (s2 instanceof GetFieldPointerInstruction) return getSource(s2.address as InstructionId)
       return null
     }
 
-    return getSource(s.source as InstructionId)
+    const s2 = s instanceof ProjectAccessInstruction ? s.accessSource : s.source
+    return getSource(s2 as InstructionId)
   }
 
   endAccess(instrId: InstructionId, instr: EndAccessInstruction) {
@@ -402,7 +423,23 @@ export class RegionExclusivityCheckingPass {
 
 
     const originalId = instr.source as InstructionId
+    const originalInstr = this.function.getInstruction(originalId)
     const reborrowId = this.getReborrowSource(originalId)
+
+    if (originalInstr instanceof ProjectAccessInstruction) {
+      if (originalInstr.capabilities[0] === Capability.Sink) {
+        // This is a bit of a workaround to handle moving out of a block AST
+        // If it's a Sink capability then we don't know whether the value is moved
+        // so we will hang on to the borrow indefinitely which prevents the user
+        // from accessing the value again. Dealloc should still work although I
+        // haven't confirmed this yet.
+        // Check block_projection.rad and generateBlockExpression in codegen_ir.ts
+        // We might want to formalize this better later in the actual IR representation
+        // instead of putting this here - or maybe renaming the ProjectAccessInstruction
+        // to better describe what it does
+        return
+      }
+    }
     
     for (const addr of addrs) {
       const ids = addr.split('.')
