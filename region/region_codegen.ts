@@ -149,7 +149,12 @@ export const printIrFunction = (function_: IrFunction, diagnostics?: IrDiagnosti
   const visitRegion = (region: Region, label: string, depth = 0, isLast = true, prefix = "", regionId: number) => {
     const branch = isLast ? "└─ " : "├─ ";
     const connection = depth > 0 ? prefix + branch : "";
-    const typeLabel = region ? textColors.blue(`[${region.constructor.name.replace("Region", "")} ${regionId}]`) : textColors.gray("undefined");
+    let typeLabel = region ? textColors.blue(`[${region.constructor.name.replace("Region", "")} ${regionId}]`) : textColors.gray("undefined");
+
+    if (region instanceof IfRegion || region instanceof WhileRegion) {
+      typeLabel += ` (cond=${region.conditionRegister})`;
+    }
+    
     console.log(`${connection}${typeLabel}`, region?.result ?? "");
     compilerAssert(regionsSet.has(regionId), "Region already visited", { regionId, regionsSet });
     regionsSet.delete(regionId);
@@ -199,7 +204,7 @@ export const printIrFunction = (function_: IrFunction, diagnostics?: IrDiagnosti
       visitSequence(region.exitSequence, "Exit", depth + 1, true, nextPrefix);
     } else if (region instanceof GeneratorRegion) {
       visitSequence(region.entrySequence, "Entry", depth + 1, false, nextPrefix);
-      visitSequence(region.elseSequence, "Else", depth + 1, false, nextPrefix);
+      visitSequence(region.elseSequence, "Generator Else", depth + 1, false, nextPrefix);
       visitSequence(region.exitSequence, "Exit", depth + 1, true, nextPrefix);
     } else {
       compilerAssert(false, "Unknown region type", { region });
@@ -228,6 +233,10 @@ export const printIrFunction = (function_: IrFunction, diagnostics?: IrDiagnosti
   }
 
   console.log(textColors.green(`Function: ${function_.debugName}`));
+  
+  let str = `Param registers: ${function_.parameterRegisters.join(", ")}`
+  if (function_.returnRegister) str += ` -> ${function_.returnRegister}`
+  console.log(textColors.yellow(str));
   visitSequence(function_.root, "Root");
   if (regionsSet.size > 0) {
     console.log("Unvisited regions", regionsSet);

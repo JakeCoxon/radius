@@ -1,5 +1,5 @@
 import { externalBuiltinBindings } from "./compiler_sugar";
-import { Ast, AstRoot, AstType, AstWriterTable, Binding, BindingAst, BlockAst, BoolType, CallAst, CompiledFunction, ConcreteClassType, ConstructorAst, DefaultConsAst, DoubleType, FileWriter, FloatType, FunctionType, GlobalCompilerState, IntType, LetAst, LetType, ListTypeConstructor, LlvmFunctionWriter, LlvmWriter, NeverType, NumberAst, ParameterizedType, Pointer, PrimitiveType, RawPointerType, Register, SourceLocation, StatementsAst, StringType, Type, TypeField, UserCallAst, ValueFieldAst, VoidAst, VoidType, compilerAssert, isAst, isType, textColors, u64Type, u8Type } from "./defs";
+import { Ast, AstRoot, AstType, AstWriterTable, Binding, BindingAst, BlockAst, BoolType, CallAst, Capability, CompiledFunction, ConcreteClassType, ConstructorAst, DefaultConsAst, DoubleType, FileWriter, FloatType, FunctionType, GlobalCompilerState, IntType, LetAst, LetType, ListTypeConstructor, LlvmFunctionWriter, LlvmWriter, NeverType, NumberAst, ParameterizedType, Pointer, PrimitiveType, RawPointerType, Register, SourceLocation, StatementsAst, StringType, Type, TypeField, UserCallAst, ValueFieldAst, VoidAst, VoidType, compilerAssert, isAst, isType, textColors, u64Type, u8Type } from "./defs";
 
 const log = (...args: any[]) => {
   if ((globalThis as any).logger) (globalThis as any).logger.log(...args)
@@ -464,8 +464,11 @@ const writeSyntaxFunction = (bytecodeWriter: LlvmWriter, func: CompiledFunction)
     if (i !== 0) format(funcWriter, ", ")
     const storageType = binding.storage === 'ref' ? RawPointerType : binding.type
     generateName(bytecodeWriter, binding)
+
+    const cap = func.parameters[i].capability
+    const capString = cap === Capability.Let ? '' : `${cap.toLocaleLowerCase()} `
   
-    format(funcWriter, `$: $`, binding, storageType)
+    format(funcWriter, `$: $$`, binding, capString, storageType)
     
     // allocaHelper(funcWriter, binding as Pointer)
     funcWriter.currentOutput = funcWriter.outputFunctionHeaders

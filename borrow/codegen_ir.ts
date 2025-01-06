@@ -1,10 +1,27 @@
 import { InstructionId, IrFunction, printIrFunction, RegionCodegen, RegionId, SequenceId } from "../region/region_codegen";
 import { externalBuiltinBindings } from "../src/compiler_sugar";
-import { AliasAst, AndAst, Ast, Binding, BindingAst, BlockAst, BoolAst, BoolType, BreakAst, CallAst, Capability, CastAst, CompiledFunction, compilerAssert, ConstructorAst, ContinueInterAst, DefaultConsAst, EnumVariantAst, ExternalDefinition, ExternalFunction, FieldAst, FunctionParameter, GeneratorAst, GlobalCompilerState, IfAst, InterleaveAst, IntType, LetAst, LetType, MutSigilAst, NeverType, NotAst, NumberAst, OperatorAst, OrAst, ParameterizedType, PrimitiveType, RawPointerType, ReturnAst, SetAst, SetFieldAst, SetSubscriptAst, SetValueFieldAst, SourceLocation, StatementsAst, StringAst, SubscriptAst, Type, UserCallAst, ValueFieldAst, VariantCastAst, VoidAst, VoidType, WhileAst, YieldAst, YieldGenerAst } from "../src/defs";
+import { AliasAst, AndAst, Ast, Binding, BindingAst, BlockAst, BoolAst, BoolType, BreakAst, CallAst, Capability, CastAst, CompiledFunction, compilerAssert, ConstructorAst, ContinueInterAst, createStatements, DefaultConsAst, DiagnosticLocation, EnumVariantAst, ExternalDefinition, ExternalFunction, FieldAst, FunctionParameter, GeneratorAst, GlobalCompilerState, IfAst, InterleaveAst, IntType, LetAst, LetType, MutSigilAst, NeverType, NotAst, NumberAst, OperatorAst, OrAst, ParameterizedType, PrimitiveType, RawPointerType, ReturnAst, SetAst, SetFieldAst, SetSubscriptAst, SetValueFieldAst, SourceLocation, StatementsAst, StringAst, SubscriptAst, Type, UserCallAst, ValueFieldAst, VariantCastAst, VoidAst, VoidType, WhileAst, YieldAst, YieldGenerAst } from "../src/defs";
 import { ASTNode, AllocInstruction, AssignInstruction, AssignmentNode, BasicBlock, BinaryExpressionNode, BinaryOperationInstruction, BlockStatementNode, CallExpressionNode, CallInstruction, AccessInstruction, ConditionalJumpInstruction, CreateStructNode, ExpressionNode, ExpressionStatementNode, FunctionBlock, FunctionDeclarationNode, IRInstruction, IRValue, IdentifierNode, IfStatementNode, JumpInstruction, LetConstNode, LiteralNode, LoadConstantInstruction, LoadFromAddressInstruction, MemberExpressionNode, ProgramNode, Pointer, Value, ReturnInstruction, ReturnNode, StoreToAddressInstruction, Variable, VariableDeclarationNode, WhileStatementNode, GetFieldPointerInstruction, AndNode, OrNode, PhiInstruction, CommentInstruction, MoveInstruction, EndAccessInstruction, printIR, MarkInitializedInstruction, PhiSource, DeallocStackInstruction, PointerOffsetInstruction, ProjectBundleInstruction, YieldInstruction, BreakInstruction, GetGlobalAddress, BitCastInstruction, YieldGeneratorInstruction, JumpTableInstruction, ProjectAccessInstruction, PointerToAddressInstruction } from "./defs";
 
+
+class ValueRegister {
+  constructor(public register: string) {}
+}
+class PointerRegister {
+  constructor(public address: string) {}
+}
+class ConstructRegister {
+  constructor(public address: string) {}
+}
+type IrTarget = ValueRegister | PointerRegister | ConstructRegister
+
 type ExpressionContext = {
-  valueCategory: 'rvalue' | 'lvalue';
+  target: IrTarget;
+  expectMutable?: ExpectMutable
+}
+
+class ExpectMutable {
+  constructor(public definitionLocation: SourceLocation) {}
 }
 
 class Scope {
@@ -13,6 +30,7 @@ class Scope {
   projectInstructions: [ProjectAccessInstruction, SourceLocation][] = []
   toPopRegionStateBecauseOfContinuation = false
   currentBreakExprAccessReg: string | null = null
+  target: IrTarget | null = null
   constructor(
     public debugName: string,
     public breakBlockLabel: string | null = null,
@@ -97,13 +115,12 @@ export class FunctionCodeGenerator {
     return this.regionCodegen.insertInstruction(instr, location)
   }
 
-  // TODO: Clean this up because it's not clear exactly why it's needed
-  // Is it only primitive types? If it's copying a value, make it explicit
-  toValue(type: Type, value: IRValue, location: SourceLocation, msg: string = ''): Value {
+  // TODO: Change value from IRValue to register type
+  toValueRegister(register: string, type: Type, value: IRValue, location: SourceLocation, msg: string = ''): Value {
     if (value instanceof Value) { return value; }
     // compilerAssert(type instanceof PrimitiveType, 'Only allowed on primitive types', { type });
     compilerAssert(type !== VoidType, 'Cannot convert to void type', { type, value, msg });
-    const reg = this.newRegister();
+    const reg = register
     const accessReg = this.newRegister();
     compilerAssert(value.address, 'Value must have an address', { type, value });
     this.addInstruction(new CommentInstruction(`Convert to value ${value.address} ${msg}`), location);
@@ -120,7 +137,7 @@ export class FunctionCodeGenerator {
 
     const paramRegs = params.map((param) => {
       const paramReg = this.newRegister()
-      const variable = new Variable(param.binding.name, param.type, paramReg, param.capability);
+      const variable = new Variable(param.binding.name, param.type, paramReg, param.capability, SourceLocation.anon);
       this.variableMap.set(param.binding, variable);
       return paramReg
     });
@@ -132,7 +149,7 @@ export class FunctionCodeGenerator {
     if (!(returnType instanceof PrimitiveType)) {
       fn.returnParameter = new FunctionParameter(new Binding('return', returnType), returnType, false, RawPointerType, Capability.Set);
       const returnReg = this.newRegister();
-      const variable = new Variable('return', RawPointerType, returnReg, Capability.Set);
+      const variable = new Variable('return', RawPointerType, returnReg, Capability.Set, SourceLocation.anon);
       this.variableMap.set(fn.returnParameter.binding, variable)
       fn.returnRegister = returnReg
       fn.returnType = VoidType
@@ -159,7 +176,10 @@ export class FunctionCodeGenerator {
     } else {
       this.generate(body);
       this.popAndFinalizeScopeUntil(fnScope);
-      this.addInstruction(new ReturnInstruction(VoidType, null), body.location);
+
+      const needsReturn = (returnType === VoidType || returnType === NeverType)
+      if (needsReturn)
+        this.addInstruction(new ReturnInstruction(VoidType, null), body.location);
     }
 
     compilerAssert(this.scopes.length === 0, 'Function scope not popped correctly', { fnScope, scopes: this.scopes });
@@ -206,41 +226,46 @@ export class FunctionCodeGenerator {
     if (ast instanceof SetSubscriptAst)  { return this.generateAssignmentSubscript(ast) }
     if (ast instanceof GeneratorAst)     { return this.generateGeneratorStatement(ast) }
 
-    this.generateExpression(ast, { valueCategory: 'rvalue' })
+    this.generateExpression(ast, { target: new ValueRegister(this.newRegister()) })
     
   }
 
-  generateExpression(ast: Ast, context: ExpressionContext): IRValue {
-    if (ast instanceof StringAst)      { return this.generateStringLiteral(ast, context) }
-    if (ast instanceof NumberAst)      { return this.generateNumberLiteral(ast, context) }
-    if (ast instanceof BoolAst)        { return this.generateBoolLiteral(ast, context) }
-    if (ast instanceof CallAst)        { return this.generateCallExpression(ast, context) }
-    if (ast instanceof UserCallAst)    { return this.generateUserCallExpression(ast, context) }
+  extractMutableSigil(ast: Ast): Ast {
+    while (ast instanceof MutSigilAst) { ast = ast.expr }
+    return ast
+  }
+
+  generateExpression(ast: Ast, context: ExpressionContext): void {
+    if (ast instanceof MutSigilAst)    { return this.generateMutSigilExpression(ast, context) }
     if (ast instanceof ConstructorAst) { return this.generateCreateStructExpression(ast, context) }
-    if (ast instanceof EnumVariantAst) { return this.generateEnumVariantExpression(ast, context) }
-    if (ast instanceof DefaultConsAst) { return this.generateDefaultConstructorExpression(ast, context) }
     if (ast instanceof BindingAst)     { return this.generateBinding(ast, context) }
-    if (ast instanceof FieldAst)       { return this.generateMemberExpression(ast, context) }
+    if (ast instanceof BlockAst)       { return this.generateBlockExpression(ast, context) }
+    if (ast instanceof IfAst)          { return this.generateIfExpression(ast, context) }
+    if (ast instanceof StatementsAst)  { return this.generateStatementsExpression(ast, context) }
+    if (ast instanceof UserCallAst)    { return this.generateUserCallExpression(ast, context) }
+    if (ast instanceof CallAst)        { return this.generateCallExpression(ast, context) }
+    if (ast instanceof NumberAst)      { return this.generateNumberLiteral(ast, context) }
+    if (ast instanceof OperatorAst)    { return this.generateOperatorExpression(ast, context) }
     if (ast instanceof ValueFieldAst)  { return this.generateValueFieldExpression(ast, context) }
+    if (ast instanceof FieldAst)       { return this.generateFieldExpression(ast, context) }
+    if (ast instanceof StringAst)      { return this.generateStringLiteral(ast, context) }
     if (ast instanceof SubscriptAst)   { return this.generateSubscriptExpression(ast, context) }
     if (ast instanceof AndAst)         { return this.generateAndExpression(ast, context) }
     if (ast instanceof OrAst)          { return this.generateOrExpression(ast, context) }
-    if (ast instanceof OperatorAst)    { return this.generateBinaryExpression(ast, context) }
-    if (ast instanceof IfAst)          { return this.generateIfExpression(ast, context) }
-    if (ast instanceof NotAst)         { return this.generateNotExpression(ast, context) }
-    if (ast instanceof BlockAst)       { return this.generateBlockExpression(ast, context) }
-    if (ast instanceof CastAst)        { return this.generateCastExpression(ast, context) }
-    if (ast instanceof VariantCastAst) { return this.generateVariantCastExpression(ast, context) }
-    if (ast instanceof YieldAst)       { return this.generateYieldExpression(ast, context) }
+    if (ast instanceof BoolAst)        { return this.generateBoolLiteral(ast, context) }
     if (ast instanceof BreakAst)       { return this.generateBreakExpression(ast, context) }
-    // if (ast instanceof MutSigilAst)    { return this.generateExpression(ast.expr, context) }
-    if (ast instanceof StatementsAst)  { return this.generateStatementsExpression(ast, context) }
+    if (ast instanceof NotAst)         { return this.generateNotExpression(ast, context) }
+    if (ast instanceof DefaultConsAst) { return this.generateDefaultConstructorExpression(ast, context) }
+    if (ast instanceof CastAst)        { return this.generateCastExpression(ast, context) }
+    if (ast instanceof YieldAst)       { return this.generateYieldExpression(ast, context) }
+    if (ast instanceof EnumVariantAst) { return this.generateEnumVariantExpression(ast, context) }
+    if (ast instanceof VariantCastAst) { return this.generateVariantCastExpression(ast, context) }
     if (ast instanceof YieldGenerAst)  { return this.generateYieldGenerExpression(ast, context) }
 
     compilerAssert(false, 'Not implemented expression', { ast, fnBody: this.body })
   }
 
-  generateStatementsExpression(ast: StatementsAst, context: ExpressionContext): IRValue {
+  generateStatementsExpression(ast: StatementsAst, context: ExpressionContext) {
     for (const stmt of ast.statements.slice(0, -1)) {
       this.generate(stmt);
     }
@@ -248,7 +273,7 @@ export class FunctionCodeGenerator {
       return this.generateExpression(ast.statements[ast.statements.length - 1], context);
     } else {
       this.generate(ast.statements[ast.statements.length - 1])
-      return new Pointer('')
+      return
     }
   }
 
@@ -274,6 +299,17 @@ export class FunctionCodeGenerator {
     return reg
   }
 
+  generateAllocToRegister(register: string, type: Type, location: SourceLocation) {
+    compilerAssert(type !== VoidType, 'Cannot allocate void type');
+    compilerAssert(type !== NeverType, 'Cannot allocate never type');
+    compilerAssert(!type.typeInfo.isReferenceType, "Not implemented reference type", { type })
+    this.functionInstructions.push(new AllocInstruction(register, type))
+    this.scopes[this.scopes.length - 1].allocs.push([register, type])
+
+    this.regionCodegen.insertBlockInstruction(this.regionCodegen.allocBlock!, new AllocInstruction(register, type), location);
+    return register
+  }
+
   popAndFinalizeScopeUntil(givenScope: Scope) {
     while (this.scopes.length > 0) {
       const scope = this.scopes[this.scopes.length - 1]
@@ -297,6 +333,13 @@ export class FunctionCodeGenerator {
     }
   }
 
+  generateMutSigilExpression(ast: MutSigilAst, context: ExpressionContext) {
+    if (context.expectMutable) {
+      return this.generateExpression(this.extractMutableSigil(ast.expr), { target: context.target })
+    }
+    compilerAssert(false, 'Unexpected mutable sigil (&)', { ast, context })
+  }
+
   generateBlockStatement(ast: BlockAst) {
 
     const scopeRegionId = this.regionCodegen.insertNewScopeRegion()
@@ -317,6 +360,8 @@ export class FunctionCodeGenerator {
     this.scopes.push(scope);
     this.blockScopeDepth.set(ast.binding, this.scopes.length - 1)
     this.generate(ast.body)
+
+    this.regionCodegen.enterRegionSequence(scopeRegionId, scopeRegion.exitSequence)
     this.popAndFinalizeScopeUntil(scope);
 
     this.regionCodegen.popRegionState()
@@ -324,13 +369,15 @@ export class FunctionCodeGenerator {
     this.newBlock(label)
   }
 
-  generateBlockExpression(ast: BlockAst, context: ExpressionContext): IRValue {
+  generateBlockExpression(ast: BlockAst, context: ExpressionContext): void {
     
     const label = this.newLabel()
     const scope = new Scope("Block expr", label)
     scope.toPopRegionStateBecauseOfContinuation = true
+    scope.target = context.target ?? null
+    // scope.targetType = context.target!
 
-    scope.breakExprReg = this.generateAlloc(RawPointerType, ast.location)
+    scope.breakExprReg = context.target instanceof ConstructRegister ? null : this.generateAlloc(RawPointerType, ast.location)
     const addrReg = this.newRegister()
     scope.currentBreakExprAccessReg = addrReg
   
@@ -350,55 +397,77 @@ export class FunctionCodeGenerator {
 
     this.addInstruction(new CommentInstruction(`Block ${ast.binding.name}`), ast.location)
 
-    const value = this.generateExpression(ast.body, context);
-
     if (ast.body.type !== NeverType) {
-      this.generateBlockBreakValueAndProject(scope, value, ast.body)
-    }
 
+      if (scope.target instanceof ConstructRegister) {
+        const reg = this.generateAlloc(ast.type, ast.location)
+        this.generateExpression(ast.body, { target: new ConstructRegister(reg) })
+        this.generateMovePointerInstruction(scope.target.address, new Pointer(reg), ast.type, ast.location)
+      } else {
+        this.generateBlockBreakValueAndProject(scope, ast.body)
+      }
+
+    } else {
+      const outReg = this.newRegister()
+      this.addInstruction(new CommentInstruction(`Block expr ${ast.binding.name} ${scope.currentBreakExprAccessReg}`), ast.location)
+      this.generateExpression(ast.body, { target: new ValueRegister(outReg) })
+    }
+    
     this.regionCodegen.enterRegionSequence(scopeRegionId, scopeRegion.exitSequence)
 
-    // TODO: This scope gets finalized twice
-    this.finalizeScope()
+    if (context.target instanceof ValueRegister) {
+      this.addInstruction(new CommentInstruction(`Block expr ${ast.binding.name} ${scope.currentBreakExprAccessReg} reg = ${context.target.register}`), ast.location)
+      const ptrReg = this.newRegister()
+      this.addInstruction(new LoadFromAddressInstruction(ptrReg, RawPointerType, scope.breakExprReg!), ast.location)
+      this.addInstruction(new LoadFromAddressInstruction(context.target.register, ast.type, ptrReg), ast.location)
 
-    this.regionCodegen.enterRegionSequence(scopeRegionId, scopeRegion.continuationSequence)
+      this.popAndFinalizeScopeUntil(scope)
 
-    const loaded = this.toValue(RawPointerType, new Pointer(scope.breakExprReg), ast.location, 'load block expr ptr ptr')
-    this.addInstruction(new PointerToAddressInstruction(addrReg, ast.type, loaded.register), ast.location)
+    } else if (context.target instanceof ConstructRegister) {
+      // Values should already have been sinked by now - just cleanup
+      this.popAndFinalizeScopeUntil(scope)
+    } else if (context.target instanceof PointerRegister) {
 
-    scope.projectInstructions.forEach(([instr, location]) => {
-      this.addInstruction(instr, ast.location)
-    })
-    
-    return new Pointer(scope.currentBreakExprAccessReg)
+      // TODO: This scope gets finalized twice
+      this.finalizeScope()
+
+      this.regionCodegen.enterRegionSequence(scopeRegionId, scopeRegion.continuationSequence)
+
+      this.addInstruction(new CommentInstruction(`Block expr ${ast.binding.name} ${scope.currentBreakExprAccessReg} addr = ${context.target.address}`), ast.location)
+      this.addInstruction(new LoadFromAddressInstruction(context.target.address, RawPointerType, scope.breakExprReg!), ast.location)
+
+    } else {
+      compilerAssert(false, 'Block expression must have a target', { ast, context })
+    }
+
   }
 
-  generateBlockBreakValueAndProject(scope: Scope, value: IRValue, ast: Ast) {
-    
+  generateBlockBreakValueAndProject(scope: Scope, ast: Ast) {
+
+    compilerAssert(!(scope.target instanceof ConstructRegister), 'Block expression must have a target', { ast, scope })
+
     const resultReg = scope.currentBreakExprAccessReg
     compilerAssert(resultReg, 'Block expression must have a break expression', { ast, scope })
+
+    const reg = this.newRegister()
+    this.generateExpression(ast, { target: new PointerRegister(reg) })
+
     compilerAssert(scope.breakExprReg, 'Break expression access register not found', { scope })
 
-    const valueLocation = value instanceof Value ? this.irFunction.locations[value.register] : ast.location
-
-    // Here we support Let and Sink capabiltiies because we allo the user to
+    // Here we support Let and Sink capabiltiies because we allow the user to
     // move the value out. If that happens then it has consequences and we can't
     // allow any more access to the value. This is handled in exclusivity.ts
     // with a special case for Sink capability ProjectAccessInstruction
     const capabilities: Capability[] = [Capability.Let, Capability.Sink]
 
-    const valuePtr = this.storeResult(ast.type, value, ast.location)
+    // const valuePtr = this.storeResult(ast.type, reg, ast.location)
+    const valueLocation = ast.location
     const accessReg = this.newRegister()
-    this.addInstruction(new AccessInstruction(accessReg, valuePtr.address, capabilities, ast.type), valueLocation)
+    this.addInstruction(new AccessInstruction(accessReg, reg, capabilities, ast.type), valueLocation)
     this.generateCopyPrimitiveToAddressInstruction(scope.breakExprReg, new Value(accessReg), RawPointerType, valueLocation)
-
-    const newResultReg = this.newRegister()
-    const projectInstr = new ProjectAccessInstruction(newResultReg, ast.type, capabilities, valuePtr.address, resultReg)
-    scope.projectInstructions.push([projectInstr, valueLocation])
-    scope.currentBreakExprAccessReg = newResultReg
   }
 
-  generateBreakExpression(ast: BreakAst, context: ExpressionContext): IRValue {
+  generateBreakExpression(ast: BreakAst, context: ExpressionContext) {
     // Break can be an expression that returns NeverType
     compilerAssert(ast.type === NeverType, 'Break expression must be of type never', { ast })
     const depth = this.blockScopeDepth.get(ast.binding)
@@ -412,16 +481,19 @@ export class FunctionCodeGenerator {
     
     ;(() => {
       if (!ast.expr) return
-      const value = this.generateExpression(ast.expr, { valueCategory: 'rvalue' })
+      // const value = this.generateExpression(ast.expr, { valueCategory: 'rvalue' })
       if (ast.expr.type === VoidType || ast.expr.type === NeverType) return
-      if (!scope.breakExprReg) return // Block was not an expression
+      // if (!scope.breakExprReg) return // Block was not an expression // Not used with new implementation
+      if (scope.target instanceof ConstructRegister) {
+        this.generateExpression(ast.expr, { target: new ConstructRegister(scope.target.address) })
+        return
+      }
 
-      this.generateBlockBreakValueAndProject(scope, value, ast.expr)
-    })()  
+      this.generateBlockBreakValueAndProject(scope, ast.expr)
+    })() 
     
     this.addInstruction(new BreakInstruction(scope.regionId, VoidType, null), ast.location)
     this._createUnusedBlock()
-    return new Pointer('')
   }
 
   generateReturnStatement(ast: ReturnAst) {
@@ -429,217 +501,204 @@ export class FunctionCodeGenerator {
     if (!ast.expr || ast.expr.type === NeverType) {
       this.finalizeScope()
       this.addInstruction(new ReturnInstruction(VoidType, null), ast.location);
-    } else {
-      compilerAssert(ast.type !== VoidType, 'Return type must not be void', { ast })
-      const returnReg = this.generateExpression(ast.expr, { valueCategory: 'rvalue' });
-      if (ast.expr.type instanceof PrimitiveType) {
-        const value = this.toValue(ast.type, returnReg, ast.location, 'return')
-        this.finalizeScope()
-        this.addInstruction(new ReturnInstruction(ast.expr.type, value.register), ast.location);
-      } else {
-        // Perform a move to the return variable
-        compilerAssert(returnReg instanceof Pointer, 'Return value must be a pointer', { ast })
-        const returnParameter = this.irFunction.returnParameter;
-        compilerAssert(returnParameter, 'Return parameter not found', { ast })
-        const variable = this.variableMap.get(returnParameter.binding)
-        compilerAssert(variable, 'Return variable not found', { ast })
-        this.generateMovePointerInstruction(variable.register, returnReg, ast.expr.type, ast.location)
-        this.finalizeScope()
-        this.addInstruction(new ReturnInstruction(VoidType, null), ast.location);
-      }
+      this._createUnusedBlock();
+      return
     }
+
+    compilerAssert(ast.type !== VoidType, 'Return type must not be void', { ast })
+    
+    if (ast.expr.type instanceof PrimitiveType) {
+      const returnReg = this.newRegister()
+      this.generateExpression(ast.expr, { target: new ValueRegister(returnReg) });
+      // const value = this.toValue(ast.type, returnReg, ast.location, 'return')
+      this.finalizeScope()
+      this.addInstruction(new ReturnInstruction(ast.expr.type, returnReg), ast.location);
+      this._createUnusedBlock();
+      return
+    }
+
+    // Perform a move to the return variable
+    // compilerAssert(returnReg instanceof Pointer, 'Return value must be a pointer', { ast })
+    const returnParameter = this.irFunction.returnParameter;
+    compilerAssert(returnParameter, 'Return parameter not found', { ast })
+    const variable = this.variableMap.get(returnParameter.binding)
+    compilerAssert(variable, 'Return variable not found', { ast })
+    const returnReg = this.newRegister()
+    this.generateExpression(ast.expr, { target: new PointerRegister(returnReg) });
+    this.generateMovePointerInstruction(variable.register, new Pointer(returnReg), ast.expr.type, ast.location)
+    this.finalizeScope()
+    this.addInstruction(new ReturnInstruction(VoidType, null), ast.location);
+    
     this._createUnusedBlock();
   }
 
-  generateCastExpression(ast: CastAst, context: ExpressionContext): IRValue {
-    const value = this.generateExpression(ast.expr, { valueCategory: 'rvalue' });
-    const reg = this.newRegister();
+  generateCastExpression(ast: CastAst, context: ExpressionContext) {
+    const resultReg = context.target instanceof ValueRegister ? context.target.register : this.newRegister();
+
     this.addInstruction(new CommentInstruction(`Cast ${ast.expr.type.shortName} to ${ast.type.shortName}`), ast.location)
     if (ast.type === RawPointerType) {
-      // Ugly weird stuff. Come back to this later
-      if (!(ast.expr instanceof BindingAst)) {
-        const v = this.toValue(ast.expr.type, value, ast.location, 'cast')
-        return new Value(v.register)
-      } 
-      compilerAssert(value instanceof Pointer, 'Expected pointer')
-      // TODO: Temporary hack
-      this.addInstruction(new MarkInitializedInstruction(value.address, ast.type, true), ast.location);
-      return new Value(value.address)
+      // compilerAssert(false, 'Not implemented cast expression', { ast, context })
+
+      if (ast.expr instanceof BindingAst) {
+        const addressReg = this.variableMap.get(ast.expr.binding);
+        compilerAssert(addressReg, 'Variable not found', { ast, context })
+        const valueReg = context.target instanceof ValueRegister ? context.target.register : this.newRegister();
+        this.addInstruction(new AssignInstruction(valueReg, RawPointerType, addressReg.register), ast.location)
+        this.addInstruction(new MarkInitializedInstruction(valueReg, ast.type, true), ast.location)
+        this.generateStorePrimitiveIfNeccessary(context, valueReg, ast.type, ast.location)
+      } else {
+        compilerAssert(false, 'Not implemented cast expression', { ast, context })
+      }
+      return
     }
-    const v = this.toValue(ast.expr.type, value, ast.location, 'cast')
-    this.addInstruction(new BinaryOperationInstruction(reg, ast.type, 'cast', v.register, '', ast.expr.type), ast.location);
-    return new Value(reg);
+    const valueReg = this.newRegister()
+    this.generateExpression(ast.expr, { target: new ValueRegister(valueReg) })
+    this.addInstruction(new BinaryOperationInstruction(resultReg, ast.type, 'cast', valueReg, '', ast.expr.type), ast.location);
+    this.generateStorePrimitiveIfNeccessary(context, resultReg, ast.type, ast.location)
   }
 
-  generateVariantCastExpression(ast: VariantCastAst, context: ExpressionContext): IRValue {
-    const value = this.generateExpression(ast.expr, { valueCategory: 'rvalue' });
-    const reg = this.newRegister();
+  generateVariantCastExpression(ast: VariantCastAst, context: ExpressionContext) {
+    const reg = context.target instanceof ValueRegister ? context.target.register : this.newRegister();
     this.addInstruction(new CommentInstruction(`Variant cast ${ast.expr.type.shortName} to ${ast.type.shortName}`), ast.location)
-    const v = this.storeResult(ast.expr.type, value, ast.location)
-    this.addInstruction(new BitCastInstruction(reg, ast.type, v.address, ast.expr.type), ast.location);
-    return new Pointer(reg);
+    const valueReg = this.newRegister()
+    this.generateExpression(ast.expr, { target: new PointerRegister(valueReg) })
+    this.addInstruction(new BitCastInstruction(reg, ast.type, valueReg, ast.expr.type), ast.location);
+    this.generateMoveOrLoadPointerUsingContext(context, reg, ast.type, ast.location)
   }
 
-  generateYieldExpression(ast: YieldAst, context: ExpressionContext): IRValue {
-    const expr = this.generateExpression(ast.expr, { valueCategory: 'rvalue' });
-    const pointer = this.storeResult(ast.expr.type, expr, ast.location);
-    const reg = this.newRegister();
+  generateYieldExpression(ast: YieldAst, context: ExpressionContext) {
+    // compilerAssert(false, 'Not implemented yield expression', { ast, context })
     compilerAssert(ast.expr.type !== VoidType, 'Cannot yield void type', { ast });
-    this.addInstruction(new YieldInstruction(reg, ast.expr.type, pointer.address), ast.location);
-    return new Value(reg);
+
+    // const resultReg = context.target instanceof ValueRegister ? context.target.register : this.newRegister();
+    const resultReg = context.target instanceof ValueRegister ? context.target.register : this.newRegister();
+    const valueReg = this.newRegister()
+    this.generateExpression(ast.expr, { target: new PointerRegister(valueReg) })
+    this.addInstruction(new CommentInstruction(`Yield ${ast.expr.type.shortName}`), ast.location)
+    this.addInstruction(new YieldInstruction(resultReg, RawPointerType, valueReg), ast.location);
+
+    this.generateStorePrimitiveIfNeccessary(context, resultReg, ast.expr.type, ast.location)
   }
 
   generateVariableDeclaration(ast: LetAst) {
     if (ast.letType === LetType.Alias) return this.generateAliasDeclaration(new AliasAst(ast.type, ast.location, ast.binding, ast.value!))
 
     this.addInstruction(new CommentInstruction(`let ${ast.letType} ${ast.binding.name}`), ast.location)
-    const value = (() => {
-      if (!ast.value) return null
-      const astWithoutMutSigil = ast.value instanceof MutSigilAst ? ast.value.expr : ast.value
-      return this.generateExpression(astWithoutMutSigil, { valueCategory: 'rvalue' }) 
-    })()
-
     if (ast.letType === LetType.VarRef || ast.letType === LetType.Let) {
-      return this.generateProjection(ast, value);
+      return this.generateProjection(ast);
     }
 
     this.addInstruction(new CommentInstruction(`let ${ast.letType} ${ast.binding.name} line=${ast.location.line}`), ast.location)
-    this.generateMutableVariableDeclaration(ast, value);
+    this.generateMutableVariableDeclaration(ast);
   }
 
-  generateAliasDeclaration(ast: AliasAst) {
+  generateAliasDeclaration(ast: AliasAst): void {
     // TODO: Choose either AliasAst or LetType.Alias but not both
     // TODO: Is Alias stupid anyway? Maybe just Let/Var
+    // compilerAssert(false, 'Not implemented alias declaration', { ast })
 
     compilerAssert(ast.type !== NeverType, 'Cannot alias never type', { ast });
     // Like let but with lower capabilities
     this.addInstruction(new CommentInstruction(`Alias ${ast.binding.name}`), ast.location)
-    const astWithoutMutSigil = ast.value instanceof MutSigilAst ? ast.value.expr : ast.value
-    const value = this.generateExpression(astWithoutMutSigil, { valueCategory: 'rvalue' }) 
+    const astWithoutMutSigil = this.extractMutableSigil(ast.value)
+    const value = this.newRegister()
+    this.generateExpression(astWithoutMutSigil, { target: new PointerRegister(value) }) 
     const type = ast.value.type;
-    const ptr = this.storeResult(type, value, ast.location);
-    const reg = this.newRegister();
-    this.variableMap.set(ast.binding, new Variable(ast.binding.name, type, reg, Capability.Sink, true));
-    this.addInstruction(new AccessInstruction(reg, ptr.address, [Capability.Let, Capability.Inout, Capability.Set, Capability.Sink], type), ast.location);
+    // const ptr = this.storeResult(type, value, ast.location)
+    const reg = this.newRegister()
+    this.variableMap.set(ast.binding, new Variable(ast.binding.name, type, reg, Capability.Sink, ast.location, true));
+    this.addInstruction(new AccessInstruction(reg, value, [Capability.Let, Capability.Inout, Capability.Set, Capability.Sink], type), ast.location);
   }
 
-  generateProjection(ast: LetAst, value: IRValue | null) {
+  generateProjection(ast: LetAst) {
+
     const type = ast.binding.type
-    const reg = this.newRegister();
     const letType = ast.letType
     compilerAssert(letType, 'Let type not found');
     const capability = letType === LetType.VarRef ? Capability.Inout : Capability.Let
-    this.variableMap.set(ast.binding, new Variable(ast.binding.name, type, reg, capability));
-    compilerAssert(value, 'Let binding must have an initializer');
-    const ptr = this.storeResult(type, value, ast.location);
+    const reg = this.newRegister();
+    // const pointer = this.generateAlloc(type, ast.location);
+    const storageReg = this.newRegister();
+    this.variableMap.set(ast.binding, new Variable(ast.binding.name, type, reg, capability, ast.location));
+    // compilerAssert(value, 'Let binding must have an initializer');
+
+    const value = (() => {
+      if (!ast.value) return null
+      const astWithoutMutSigil = ast.value instanceof MutSigilAst ? ast.value.expr : ast.value
+      return this.generateExpression(astWithoutMutSigil, { target: new PointerRegister(storageReg) }) 
+    })()
+    
+    // const ptr = this.storeResult(type, value, ast.location);
     // compilerAssert(value instanceof Pointer, 'Let binding must have an lvalue initializer');
     this.addInstruction(new CommentInstruction(`Projection ${ast.binding.name}`), ast.location)
-    this.addInstruction(new AccessInstruction(reg, ptr.address, [capability], type), ast.location);
+    this.addInstruction(new AccessInstruction(reg, storageReg, [capability], type), ast.location);
   }
 
-  generateMutableVariableDeclaration(ast: LetAst, value: IRValue | null) {
+  generateMutableVariableDeclaration(ast: LetAst) {
     const type = ast.binding.type
-    const reg = this.generateAlloc(type, ast.location);
-    
-    this.variableMap.set(ast.binding, new Variable(ast.binding.name, type, reg, Capability.Sink));
-    
-    if (!value) return
-    this.generateMoveToAddressInstruction(reg, value, type, ast.location)
+    const storageReg = this.generateAlloc(type, ast.location)
+
+    this.variableMap.set(ast.binding, new Variable(ast.binding.name, type, storageReg, Capability.Sink, ast.location));
+
+    if (!ast.value) return null
+
+    this.generateExpression(ast.value, { target: new ConstructRegister(storageReg), expectMutable: new ExpectMutable(ast.location) })
   }
 
 
-  generateIfExpression(ast: IfAst, context: ExpressionContext): IRValue {
+  generateIfExpression(ast: IfAst, context: ExpressionContext): void {
     const isExpr = ast.type !== VoidType && ast.type !== NeverType
     
     if (!isExpr) {
       this.generateIfStatement(ast)
-      return new Pointer('')
+      return
     }
-
-    // Rewrite it to a a block that returns the result
-
-    const binding = new Binding('if_result', ast.type)
-    const breakExprBinding = new Binding('if_break', RawPointerType)
 
     const trueBody = ast.trueBody instanceof BlockAst ? ast.trueBody.body : ast.trueBody
     const falseBody = !ast.falseBody ? null : ast.falseBody instanceof BlockAst ? ast.falseBody.body : ast.falseBody
-    
+    const binding = new Binding('if_result', ast.type)
+    const breakExprBinding = new Binding('if_break_expr', RawPointerType)
+    const block = (stmt: Ast) => new BlockAst(VoidType, ast.location, new Binding('', VoidType), null, stmt)
+
     const newAst = new BlockAst(ast.type, ast.location, binding, breakExprBinding, 
       new IfAst(NeverType, ast.location, ast.expr, 
-        new BreakAst(NeverType, ast.location, binding, trueBody),
-        falseBody ? new BreakAst(NeverType, ast.location, binding, falseBody) : null)
+        block(new BreakAst(NeverType, ast.location, binding, trueBody)),
+        falseBody ? block(new BreakAst(NeverType, ast.location, binding, falseBody)) : null)
     )
-    return this.generateBlockExpression(newAst, { valueCategory: 'rvalue' })
+    // compilerAssert(false, 'Not implemented if expression', { ast, newAst, context })
+    this.generateBlockExpression(newAst, context)
   }
 
   generateIfStatement(ast: IfAst) {
-
-    const thenLabel = this.newLabel();
-    const elseLabel = this.newLabel();
-    const afterLabel = this.newLabel()
+    const target = this.newRegister()
+    this.generateExpression(ast.expr, { target: new ValueRegister(target) });
 
     const ifRegionId = this.regionCodegen.insertNewIfRegion()
     this.regionCodegen.insertChildSequenceAndPushState(ifRegionId)
 
     const ifRegion = this.regionCodegen.getIfRegion(ifRegionId);
-    this.regionCodegen.enterRegionSequence(ifRegionId, ifRegion.conditionSequence)
-    
-    const conditionValue = this.generateExpression(ast.expr, { valueCategory: 'rvalue' });
-    const conditionReg = this.toValue(ast.expr.type, conditionValue, ast.location, 'if cond')
-    ifRegion.conditionRegister = conditionReg.register
-
-    this.addInstruction(new ConditionalJumpInstruction(conditionReg.register, thenLabel, elseLabel), ast.location);
+    ifRegion.conditionRegister = target
 
     this.regionCodegen.enterRegionSequence(ifRegionId, ifRegion.thenSequence)
-
-    this.newBlock(thenLabel);
-
     this.generate(ast.trueBody);
-    this.addInstruction(new JumpInstruction(afterLabel), ast.location);
-
     this.regionCodegen.enterRegionSequence(ifRegionId, ifRegion.elseSequence)
-
-    this.newBlock(elseLabel);
     if (ast.falseBody) this.generate(ast.falseBody);
-    this.addInstruction(new JumpInstruction(afterLabel), ast.location);
-    this.newBlock(afterLabel);
-
     this.regionCodegen.popRegionState()
-
   }
 
   generateWhileStatement(ast: WhileAst) {
-    const conditionLabel = this.newLabel();
-    const bodyLabel = this.newLabel();
-    const afterLabel = this.newLabel();
-
     const whileRegionId = this.regionCodegen.insertNewWhileRegion();
     this.regionCodegen.insertChildSequenceAndPushState(whileRegionId)
 
-    // Jump to condition check
-    this.addInstruction(new JumpInstruction(conditionLabel), ast.location);
-
     this.regionCodegen.enterRegionSequence(whileRegionId, this.regionCodegen.getWhileRegion(whileRegionId).conditionSequence)
 
-    const conditionBlock = new BasicBlock(conditionLabel, []);
-    this.blocks.push(conditionBlock);
-    this.currentBlock = conditionBlock;
-    const conditionReg = this.generateExpression(ast.condition, { valueCategory: 'rvalue' });
-    const conditionValue = this.toValue(ast.condition.type, conditionReg, ast.location, 'while cond')
-    // compilerAssert(conditionReg instanceof Value, 'While condition must be an RValue');
-    this.addInstruction(new ConditionalJumpInstruction(conditionValue.register, bodyLabel, afterLabel), ast.location);
-    this.regionCodegen.getWhileRegion(whileRegionId).conditionRegister = conditionValue.register
+    const conditionReg = this.newRegister()
+    this.generateExpression(ast.condition, { target: new ValueRegister(conditionReg) });
+    this.regionCodegen.getWhileRegion(whileRegionId).conditionRegister = conditionReg
 
     this.regionCodegen.enterRegionSequence(whileRegionId, this.regionCodegen.getWhileRegion(whileRegionId).bodySequence)
-
-    this.newBlock(bodyLabel);
     this.generate(ast.body);
-
     this.regionCodegen.popRegionState()
-
-    this.addInstruction(new JumpInstruction(conditionLabel), ast.location);
-    this.newBlock(afterLabel);
-
     this.addInstruction(new CommentInstruction('End of while loop'), ast.location)
   }
 
@@ -647,11 +706,11 @@ export class FunctionCodeGenerator {
     this.generatorCodegen.generateGeneratorStatement(ast)
   }
 
-  generateYieldGenerExpression(ast: YieldGenerAst, context: ExpressionContext): IRValue {
+  generateYieldGenerExpression(ast: YieldGenerAst, context: ExpressionContext) {
     return this.generatorCodegen.generateYieldGenerExpression(ast, context)
   }
 
-  generateAndExpression(ast: AndAst, context: ExpressionContext): IRValue {
+  generateAndExpression(ast: AndAst, context: ExpressionContext) {
     // Before we had a cleaner way to do this, but for now we can just use an if expression
     compilerAssert(ast.type === BoolType, 'And expression must be a boolean', { ast });
     const location = ast.location
@@ -660,7 +719,7 @@ export class FunctionCodeGenerator {
     return this.generateExpression(copy, context)
   }
 
-  generateOrExpression(ast: OrAst, context: ExpressionContext): IRValue {
+  generateOrExpression(ast: OrAst, context: ExpressionContext) {
     // Before we had a cleaner way to do this, but for now we can just use an if expression
     compilerAssert(ast.type === BoolType, 'Or expression must be a boolean', { ast });
     const location = ast.location
@@ -669,8 +728,7 @@ export class FunctionCodeGenerator {
     return this.generateExpression(copy, context)
   }
 
-  generateCreateStructExpression(ast: ConstructorAst, context: ExpressionContext): IRValue {
-    // compilerAssert(context.valueCategory === 'rvalue', 'Struct creation must be an RValue');
+  generateCreateStructExpression(ast: ConstructorAst, context: ExpressionContext) {
     const structType = ast.type
     compilerAssert(structType, `Struct type not found`);
     compilerAssert(!(structType instanceof PrimitiveType), 'Cannot create a struct from a primitive type', { structType, currentStatement: this.currentStatement });
@@ -678,7 +736,7 @@ export class FunctionCodeGenerator {
     const fnBinding = structType.typeInfo.metaobject.constructorBinding
     compilerAssert(fnBinding && fnBinding instanceof Binding, `Constructor not found for ${structType.shortName}`);
 
-    const structReg = this.generateAlloc(structType, ast.location)
+    const storageReg = this.createAllocTargetFromContext(context, structType, ast.location)
     
     const fn = this.codegen.functions.get(fnBinding)
     compilerAssert(fn, `Function ${fnBinding.name} not found`);
@@ -687,7 +745,7 @@ export class FunctionCodeGenerator {
     const argRegs: string[] = [];
 
     const structAccessReg = this.newRegister();
-    this.addInstruction(new AccessInstruction(structAccessReg, structReg, [Capability.Set], structType), ast.location);
+    this.addInstruction(new AccessInstruction(structAccessReg, storageReg, [Capability.Set], structType), ast.location);
     argRegs.push(structAccessReg)
 
     for (let i = 0; i < fields.length; i++) {
@@ -696,16 +754,15 @@ export class FunctionCodeGenerator {
       argRegs.push(reg)
     }
     this.addInstruction(new CallInstruction(null, VoidType, fnBinding, argRegs, fn.parameters.map(b => b.type), fn.parameters.map(b => b.capability)), ast.location)
-    return new Pointer(structReg)
+    this.createLoadFromContextIfNeccessary(context, structAccessReg, structType, ast.location)
   }
 
-  generateEnumVariantExpression(ast: EnumVariantAst, context: ExpressionContext): IRValue {
+  generateEnumVariantExpression(ast: EnumVariantAst, context: ExpressionContext) {
     const constr = new ConstructorAst(ast.variantType, ast.location, ast.args)
-    // compilerAssert(false, "Not implemented", { ast, constr })
     return this.generateCreateStructExpression(constr, context)
   }
 
-  generateDefaultConstructorExpression(ast: DefaultConsAst, context: ExpressionContext): IRValue {
+  generateDefaultConstructorExpression(ast: DefaultConsAst, context: ExpressionContext) {
     compilerAssert(false, `Don't use default constructor AST, use createDefaultConstructorAst instead`, { ast })
   }
 
@@ -719,53 +776,27 @@ export class FunctionCodeGenerator {
   }
 
   generateFunctionArgument(ast: Ast, reference: boolean, passingType: Type, capability: Capability): string {
-    let hasMutSigil = false
-    if (ast instanceof MutSigilAst) {
-      hasMutSigil = true
-      ast = ast.expr
-    }
-
     // @ParameterPassing
     const newReg = this.newRegister();
-    if (reference) {
-      if (capability === Capability.Sink || capability === Capability.Set || capability === Capability.Inout) {
-        const [expectedCapability, owned] = this.getCapabilityAndOwnership(ast)
-        compilerAssert(expectedCapability !== Capability.Let, 'Cannot mutate or sink an immutable variable', { ast, stmt: this.currentStatement, location: ast.location.source ? ast.location : this.currentLocation });
-        if (!owned) compilerAssert(hasMutSigil, 'Expected mutation sigil on mutable argument', { ast, stmt: this.currentStatement, location: ast.location.source ? ast.location : this.currentLocation });
-      }
 
-      const argReg = this.generateExpression(ast, { valueCategory: 'lvalue' });
-      compilerAssert(argReg instanceof Pointer, 'Function argument must be an pointer', { ast, capability, passingType });
-      this.addInstruction(new AccessInstruction(newReg, argReg.address, [capability], passingType), ast.location);
+    const expectMutable = capability === Capability.Sink || capability === Capability.Set || capability === Capability.Inout ?
+      new ExpectMutable(ast.location) : undefined
+      
+    if (reference) {
+      const argReg = this.newRegister();
+      this.generateExpression(ast, { target: new PointerRegister(argReg), expectMutable });
+      this.addInstruction(new AccessInstruction(newReg, argReg, [capability], passingType), ast.location);
       return newReg
     }
 
-    // Primitive types are allow to be passed without a
-    // mutation sigil and they will be copied instead.
-    if (!hasMutSigil) capability = Capability.Let
-
-    const argReg = this.generateExpression(ast, { valueCategory: 'rvalue' });
-    
-    // if (ast.type instanceof PrimitiveType) {
-      const value = this.toValue(ast.type, argReg, ast.location, 'function arg')
-      this.addInstruction(new AccessInstruction(newReg, value.register, [capability], passingType), ast.location);
-    // } else {
-      // compilerAssert(argReg instanceof Pointer, "Expected pointer")
-      // this.addInstruction(new AccessInstruction(newReg, argReg.address, [Capability.Let]));
-    // }
-
-    if (hasMutSigil) {
-      compilerAssert(capability !== Capability.Let, 'Unexpected mutation sigil', { ast, stmt: this.currentStatement, location: ast.location.source ? ast.location : this.currentLocation });
-      // compilerAssert(argReg instanceof Pointer, 'Function argument must be an pointer', { ast, capability, passingType });
-      const ptr = this.storeResult(ast.type, argReg, ast.location)
-      this.addInstruction(new MarkInitializedInstruction(ptr.address, ast.type, false), ast.location);
-    }
+    const argReg = this.newRegister();
+    this.generateExpression(ast, { target: new ValueRegister(argReg), expectMutable });
+    this.addInstruction(new AccessInstruction(newReg, argReg, [capability], passingType), ast.location);
 
     return newReg
-
   }
 
-  generateCopyCall(ast: Ast, context: ExpressionContext, location: SourceLocation): IRValue {
+  generateCopyCall(ast: Ast, context: ExpressionContext, location: SourceLocation) {
     const binding = new Binding('copy', ast.type)
     
     this.generate(new LetAst(VoidType, SourceLocation.anon, binding, null, LetType.Var))
@@ -774,56 +805,57 @@ export class FunctionCodeGenerator {
     compilerAssert(copyConstructor && copyConstructor instanceof Binding, `Copy constructor not found for ${ast.type.shortName}`);
     const dest = new MutSigilAst(bindingAst.type, SourceLocation.anon, bindingAst);
     this.generateCallExpression(new CallAst(ast.type, SourceLocation.anon, copyConstructor, [dest, ast], []), context)
-    return this.generateBinding(new BindingAst(binding.type, SourceLocation.anon, binding), context)
+    const resultAst = new BindingAst(binding.type, SourceLocation.anon, binding);
+    this.generateExpression(resultAst, { target: context.target })
   }
 
-  generatePrimitiveCopy(ast: Ast, location: SourceLocation) {
-    const targetAccessReg = this.newRegister();
+  generatePrimitiveCopy(ast: Ast, context: ExpressionContext, location: SourceLocation) {
+    if (context.target instanceof ValueRegister) {
+      this.generateExpression(ast, { target: context.target });
+      return
+    }
+    
+    const targetAccessReg = this.newRegister()
+    const targetPointer = context.target.address
     const type = ast.type;
     compilerAssert(type !== VoidType, 'Cannot copy void type');
-    const source = this.generateExpression(ast, { valueCategory: 'rvalue' });
-    let valueReg = source instanceof Value ? source.register : this.newRegister();
-    if (source instanceof Pointer) {
-      const sourceAccessReg = this.newRegister();
-      // Load from pointer, using a let capability because it is a primitive type and a copy is safe
-      this.addInstruction(new AccessInstruction(sourceAccessReg, source.address, [Capability.Let], type), location);
-      this.addInstruction(new LoadFromAddressInstruction(valueReg, type, sourceAccessReg), location);
-    }
-    const targetPointer = this.generateAlloc(type, location);
+    const valueReg = this.newRegister();
+    this.generateExpression(ast, { target: new ValueRegister(valueReg) });
+
+    if (context.target instanceof PointerRegister) this.generateAllocToRegister(targetPointer, type, location)
     this.addInstruction(new AccessInstruction(targetAccessReg, targetPointer, [Capability.Set], type), location);
     this.addInstruction(new StoreToAddressInstruction(targetAccessReg, type, valueReg), location);
     this.addInstruction(new EndAccessInstruction(targetAccessReg, [Capability.Set]), location);
-    return new Pointer(targetPointer);
   }
 
-  generatePrint(ast: Ast, context: ExpressionContext, location: SourceLocation): IRValue {
-    const value = this.generateExpression(ast, { valueCategory: 'rvalue' });
-    const valueReg = this.toValue(ast.type, value, ast.location, 'print')
-    this.addInstruction(new CallInstruction(null, VoidType, externalBuiltinBindings.print, [valueReg.register], [ast.type], [Capability.Let]), location);
-    return new Pointer('')
+  generatePrint(ast: Ast, context: ExpressionContext, location: SourceLocation) {
+    compilerAssert(false, 'Not implemented', { ast, context, location })
+    // const value = this.generateExpression(ast, { valueCategory: 'rvalue' });
+    // const valueReg = this.toValue(ast.type, value, ast.location, 'print')
+    // this.addInstruction(new CallInstruction(null, VoidType, externalBuiltinBindings.print, [valueReg.register], [ast.type], [Capability.Let]), location);
+    // return new Pointer('')
   }
 
-  generatePrintf(args: Ast[], context: ExpressionContext, location: SourceLocation): IRValue {
-    const format = this.generateExpression(args[0], { valueCategory: 'rvalue' });
-    const formatReg = this.toValue(args[0].type, format, location, 'printf')
+  generatePrintf(args: Ast[], context: ExpressionContext, location: SourceLocation) {
+    const format = this.newRegister()
+    this.generateExpression(args[0], { target: new ValueRegister(format) });
     const argRegs: string[] = [];
     for (let i = 1; i < args.length; i++) {
-      const arg = this.generateExpression(args[i], { valueCategory: 'rvalue' });
-      const argReg = this.toValue(args[i].type, arg, location, 'printf')
-      argRegs.push(argReg.register)
+      const arg = this.newRegister()
+      this.generateExpression(args[i], { target: new ValueRegister(arg) });
+      argRegs.push(arg)
     }
-    this.addInstruction(new CallInstruction(null, VoidType, externalBuiltinBindings.printf, [formatReg.register, ...argRegs], args.map(a => a.type), args.map(a => Capability.Let)), location);
-    return new Pointer('')
+    this.addInstruction(new CallInstruction(null, VoidType, externalBuiltinBindings.printf, [format, ...argRegs], args.map(a => a.type), args.map(a => Capability.Let)), location);
   }
 
-  generateExit(args: Ast[], context: ExpressionContext, location: SourceLocation): IRValue {
-    const arg = this.generateExpression(args[0], { valueCategory: 'rvalue' });
-    const argReg = this.toValue(args[0].type, arg, location, 'exit')
-    this.addInstruction(new CallInstruction(null, VoidType, externalBuiltinBindings.exit, [argReg.register], [args[0].type], [Capability.Let]), location);
-    return new Pointer('')
+  generateExit(args: Ast[], context: ExpressionContext, location: SourceLocation) {
+    const arg = this.newRegister()
+    this.generateExpression(args[0], { target: new ValueRegister(arg) });
+    // const argReg = this.toValue(args[0].type, arg, location, 'exit')
+    this.addInstruction(new CallInstruction(null, VoidType, externalBuiltinBindings.exit, [arg], [args[0].type], [Capability.Let]), location);
   }
 
-  generateExternalCall(ast: CallAst, fn: ExternalDefinition) {
+  generateExternalCall(ast: CallAst, context: ExpressionContext, fn: ExternalDefinition) {
     // TODO: Merge this with call expression and make it cleaner
 
     compilerAssert(ast.args.length === fn.paramTypes.length, 'Argument count mismatch', { binding: ast.binding, got: ast.args.length, expected: fn.paramTypes.length });
@@ -837,7 +869,6 @@ export class FunctionCodeGenerator {
       const argIndex = i++;
       const paramType = fn.paramTypes[argIndex]
       const capability = Capability.Let
-      // compilerAssert(param.capability, `Capability not found for ${param.binding.name}`);
       const argReg = this.generateFunctionArgument(givenArg, false, paramType, capability);
       argRegs.push(argReg);
     }
@@ -846,19 +877,18 @@ export class FunctionCodeGenerator {
     const returnType = fn.returnType
     if (returnType === VoidType) {
       this.addInstruction(new CallInstruction(null, returnType, ast.binding, argRegs, argTypes, capabilities), ast.location)
-      return new Pointer('') // hack. Make sure this is not used
+      return
     }
+    const resultReg = this.createAllocTargetFromContext(context, returnType, ast.location)
     const accessReg = this.newRegister()
-    const resultReg = this.generateAlloc(fn.returnType, ast.location);
     this.addInstruction(new AccessInstruction(accessReg, resultReg, [Capability.Set], fn.returnType), ast.location);
     this.addInstruction(new CallInstruction(accessReg, fn.returnType, ast.binding, argRegs, argTypes, capabilities), ast.location)
-    return new Pointer(resultReg)
-
+    this.createLoadFromContextIfNeccessary(context, accessReg, returnType, ast.location)
   }
 
-  generateCallExpression(ast: CallAst, context: ExpressionContext): IRValue {
+  generateCallExpression(ast: CallAst, context: ExpressionContext) {
     if (ast.binding === externalBuiltinBindings.copy) {
-      if (ast.args[0].type instanceof PrimitiveType) return this.generatePrimitiveCopy(ast.args[0], ast.location);
+      if (ast.args[0].type instanceof PrimitiveType) return this.generatePrimitiveCopy(ast.args[0], context, ast.location);
       return this.generateCopyCall(ast.args[0], context, ast.location)
     } else if (ast.binding === externalBuiltinBindings.print) {
       return this.generatePrint(ast.args[0], context, ast.location)
@@ -868,7 +898,7 @@ export class FunctionCodeGenerator {
       return this.generateExit(ast.args, context, ast.location)
     } else if (ast.binding === externalBuiltinBindings.initializer) {
       this.addInstruction(new CallInstruction(null, VoidType, ast.binding, [], [], []), ast.location)
-      return new Pointer('')
+      return
     }
     compilerAssert(ast.binding instanceof Binding, 'Expected binding', { ast });
 
@@ -877,11 +907,9 @@ export class FunctionCodeGenerator {
     const fn = this.codegen.functions.get(ast.binding)
     if (!fn) {
       const ex = this.globalCompiler.externalDefinitions.find(x => x.binding === ast.binding)
-      if (ex) return this.generateExternalCall(ast, ex)
+      if (ex) return this.generateExternalCall(ast, context, ex)
     }
-    compilerAssert(fn, `Function ${ast.binding.name} not found`, {
-      c: this.codegen.functions
-    });
+    compilerAssert(fn, `Function ${ast.binding.name} not found`, { c: this.codegen.functions });
     this.addInstruction(new CommentInstruction(`Call ${ast.binding.name}`), ast.location)
     const fnIr = this.codegen.irFunctions.get(ast.binding)
     if (fn.body) compilerAssert(fnIr, `Function ${ast.binding.name} not found`, { ast });
@@ -901,200 +929,71 @@ export class FunctionCodeGenerator {
       argRegs.push(argReg);
     }
 
+    const returnType = fnIr?.returnType ?? fn.returnType
+    // Call the function
+
     let resultReg: string | null = null
     if (fnIr?.returnParameter) {
-      resultReg = this.generateAlloc(fn.returnType, ast.location);
-      argRegs.unshift(resultReg)
+      compilerAssert(!(context.target instanceof ValueRegister), 'Unexpected target', { context, ast })
+      const originalReturnType = fn.returnType;
+      resultReg = this.createAllocTargetFromContext(context, originalReturnType, ast.location)
+      const access = this.newRegister()
+      this.addInstruction(new AccessInstruction(access, resultReg, [Capability.Set], fn.returnType), ast.location)
+      argRegs.unshift(access)
       capabilities.unshift(Capability.Set)
       argTypes.unshift(RawPointerType)
-    }
-
-    // Call the function
-    const returnType = fnIr?.returnType || fn.returnType
-    if (returnType === VoidType) {
       this.addInstruction(new CallInstruction(null, returnType, ast.binding, argRegs, argTypes, capabilities), ast.location)
-      if (fnIr?.returnParameter) return new Pointer(resultReg!)
-      return new Pointer('') // hack. Make sure this is not used
+      return
     }
+
+    if (returnType === VoidType) {
+      this.addInstruction(new CallInstruction(null, fn.returnType, ast.binding, argRegs, argTypes, capabilities), ast.location)
+      return
+    }
+
     const accessReg = this.newRegister()
-    resultReg = this.generateAlloc(fn.returnType, ast.location);
-    this.addInstruction(new AccessInstruction(accessReg, resultReg, [Capability.Set], fn.returnType), ast.location);
+    const resultReg2 = this.createAllocTargetFromContext(context, returnType, ast.location)
+    compilerAssert(resultReg2, 'Unexpected target', { context, ast, returnType })
+    this.addInstruction(new AccessInstruction(accessReg, resultReg2, [Capability.Set], fn.returnType), ast.location);
     this.addInstruction(new CallInstruction(accessReg, fn.returnType, ast.binding, argRegs, argTypes, capabilities), ast.location)
-    return new Pointer(resultReg)
+    this.createLoadFromContextIfNeccessary(context, accessReg, returnType, ast.location)
+
   }
 
-  generateUserCallExpression(ast: UserCallAst, context: ExpressionContext): IRValue {
+  createAllocTargetFromContext(context: ExpressionContext, type: Type, location: SourceLocation) {
+    if (context.target instanceof ConstructRegister) {
+      return context.target.address
+    } else if (context.target instanceof PointerRegister) {
+      this.generateAllocToRegister(context.target.address, type, location)
+      return context.target.address
+    } else if (context.target instanceof ValueRegister) {
+      return this.generateAlloc(type, location)
+    }
+    compilerAssert(false, 'Unexpected target', { context, type, location })
+  }
+
+  createLoadFromContextIfNeccessary(context: ExpressionContext, sourceReg: string, type: Type, location: SourceLocation) {
+    if (context.target instanceof ValueRegister) {
+      this.toValueRegister(context.target.register, type, new Pointer(sourceReg), location)
+    }
+  }
+
+  generateUserCallExpression(ast: UserCallAst, context: ExpressionContext) {
     return this.generateCallExpression(new CallAst(ast.type, SourceLocation.anon, ast.binding, ast.args, []), context)
-  }
-
-  generateAssignmentStatement(ast: SetAst) {
-    let variable = this.variableMap.get(ast.binding)
-    if (!variable) {
-      const isInitializer = this.compiledFunction.binding === this.globalCompiler.initializerFunction?.binding
-      const global = this.globalCompiler.globalVars.get(ast.binding)
-      compilerAssert(global, `Undefined variable: ${ast.binding.name}`);
-      compilerAssert(global.letType === LetType.Var || isInitializer, 'Cannot assign to a let variable', { location: ast.location, global, ast })
-      const astWithoutMutSigil = ast.value instanceof MutSigilAst ? ast.value.expr : ast.value
-      const value = this.generateExpression(astWithoutMutSigil, { valueCategory: 'rvalue' });
-      const lvalue = this.storeResult(global.type, value, ast.location)
-      const targetReg = this.newRegister();
-      this.irFunction.globalRegisters.push({
-        register: global.register,
-        type: global.type,
-      })
-      this.addInstruction(new GetGlobalAddress(targetReg, global.type, global.register), ast.location);
-      this.generateMovePointerInstructionWithCapabilityCheck(targetReg, lvalue, ast.value)
-      return
-    }
-    compilerAssert(variable, `Undefined variable: ${ast.binding.name}`);
-    const type = variable.type
-
-    const astWithoutMutSigil = ast.value instanceof MutSigilAst ? ast.value.expr : ast.value
-    const value = this.generateExpression(astWithoutMutSigil, { valueCategory: 'rvalue' });
-    const lvalue = this.storeResult(type, value, ast.location)
-
-    compilerAssert(variable.capability === Capability.Inout || variable.capability === Capability.Set || variable.capability === Capability.Sink, 'Cannot assign to a let variable', { location: ast.location, variable, ast })
-    this.generateMovePointerInstructionWithCapabilityCheck(variable.register, lvalue, ast.value)
-  }
-
-  ensureMutable(ast: Ast): boolean {
-    if (ast instanceof BindingAst) {
-      const variable = this.variableMap.get(ast.binding);
-      compilerAssert(variable, `Undefined variable: ${ast.binding.name}`);
-      const mutable = variable.capability === Capability.Inout || variable.capability === Capability.Set || variable.capability === Capability.Sink
-      compilerAssert(mutable, 'Cannot assign to a member of an immutable struct', { location: ast.location, variable, body: this.body  });
-      return mutable
-    } else if (ast instanceof FieldAst) {
-      return this.ensureMutable(ast.left)
-    } else if (ast instanceof ValueFieldAst) {
-      return this.ensureMutable(ast.left)
-    } else if (ast instanceof MutSigilAst) {
-      return this.ensureMutable(ast.expr)
-    } else if (ast instanceof SubscriptAst) {
-      return this.ensureMutable(ast.left)
-    }
-    compilerAssert(false, 'Not implemented mutable check', { ast })
-  }
-
-  generateAssignmentField(ast: SetFieldAst) {
-    this.ensureMutable(ast.left)
-    const objReg = this.generateExpression(ast.left, { valueCategory: 'lvalue' });
-    compilerAssert(objReg instanceof Pointer, 'Object must be an pointer');
-    
-    const fieldType = ast.field.fieldType
-    const reg = this.newRegister();
-
-    const astWithoutMutSigil = ast.value instanceof MutSigilAst ? ast.value.expr : ast.value
-    const newValue = this.generateExpression(astWithoutMutSigil, { valueCategory: 'rvalue' });
-    const rightReg = this.storeResult(fieldType, newValue, ast.location)
-    this.addInstruction(new GetFieldPointerInstruction(reg, objReg.address, ast.field), ast.location);
-    this.generateMovePointerInstructionWithCapabilityCheck(reg, rightReg, ast.value)
-  }
-
-  generateAssignmentValueField(ast: SetValueFieldAst) {
-    this.ensureMutable(ast.left)
-    this.addInstruction(new CommentInstruction(`Set value field ${ast.fieldPath.map(x => x.name).join(", ")}`), ast.location)
-    const objReg = this.generateExpression(ast.left, { valueCategory: 'lvalue' });
-    compilerAssert(objReg instanceof Pointer, 'Object must be an pointer');
-    
-    let destReg: string = objReg.address
-    ast.fieldPath.forEach(field => {
-      const source = destReg
-      destReg = this.newRegister();
-      this.addInstruction(new GetFieldPointerInstruction(destReg, source, field), ast.location);
-    })
-    const astWithoutMutSigil = ast.value instanceof MutSigilAst ? ast.value.expr : ast.value
-    const newValue = this.generateExpression(astWithoutMutSigil, { valueCategory: 'rvalue' });
-    const rightReg = this.storeResult(ast.value.type, newValue, ast.location)
-    this.generateMovePointerInstructionWithCapabilityCheck(destReg, rightReg, ast.value)
-  }
-
-  getCapabilityAndOwnership(value: Ast): [Capability, boolean] {
-    // Try to get the capability and whether the value needs
-    // to be owned, by visiting the AST a bit.
-    // Not sure about this.
-    if (value instanceof BindingAst) {
-      const variable = this.variableMap.get(value.binding)
-      if (!variable && this.globalCompiler.globalVars.has(value.binding)) {
-        return [Capability.Set, true]
-      }
-      compilerAssert(variable, 'Variable not found', { value })
-      if (variable.alias) return [variable.capability, true]
-      return [variable.capability, false]
-    }
-    if (value instanceof ValueFieldAst)  return this.getCapabilityAndOwnership(value.left)
-    if (value instanceof FieldAst)       return this.getCapabilityAndOwnership(value.left)
-    if (value instanceof UserCallAst)    return [Capability.Sink, true]
-    if (value instanceof CallAst)        return [Capability.Sink, true]
-    if (value instanceof NumberAst)      return [Capability.Let,  false]
-    if (value instanceof OperatorAst)    return [Capability.Let,  false]
-    if (value instanceof BoolAst)        return [Capability.Let,  false]
-    if (value instanceof StringAst)      return [Capability.Sink, true]
-    if (value instanceof ConstructorAst) return [Capability.Sink, true]
-    if (value instanceof EnumVariantAst) return [Capability.Sink, true]
-    if (value instanceof DefaultConsAst) return [Capability.Sink, true]
-    if (value instanceof SubscriptAst)   return [Capability.Sink, false]
-    if (value instanceof IfAst)          return [Capability.Sink, true]
-    if (value instanceof AndAst)         return [Capability.Sink, true]
-    if (value instanceof OrAst)          return [Capability.Sink, true]
-    if (value instanceof BlockAst)       return this.getCapabilityAndOwnership(value.body)
-    if (value instanceof StatementsAst)  return this.getCapabilityAndOwnership(value.statements[value.statements.length - 1])
-    if (value instanceof CastAst)        return this.getCapabilityAndOwnership(value.expr)
-    compilerAssert(false, 'Not implemented', { value, currentStatement: this.currentStatement })
-  }
-
-  generateMovePointerInstructionWithCapabilityCheck(targetPointer: string, sourcePointer: IRValue, valueAst: Ast) {
-    const location = valueAst.location.source ? valueAst.location : this.currentLocation
-
-    if (sourcePointer instanceof Value) {
-      this.generateCopyPrimitiveToAddressInstruction(targetPointer, sourcePointer, valueAst.type, location)
-      return
-    }
-
-    let hasMutSigil = false
-    if (valueAst instanceof MutSigilAst) {
-      hasMutSigil = true
-      valueAst = valueAst.expr
-    }
-
-    const [sourceCapability, owned] = this.getCapabilityAndOwnership(valueAst)
-    const type = valueAst.type
-
-    if (!owned && (sourceCapability === Capability.Sink || sourceCapability === Capability.Inout)) {
-      compilerAssert(hasMutSigil, 'Cannot move a mutable value without a mutation sigil', { sourceCapability, location: valueAst.location.source ? valueAst.location : this.currentLocation, stmt: this.currentStatement, valueAst })
-    }
-
-
-    if (type instanceof PrimitiveType) {
-      compilerAssert(type !== VoidType, 'Cannot move void type');
-      const targetAccessReg = this.newRegister();
-      const sourceAccessReg = this.newRegister();
-      const valueReg = this.newRegister();
-      this.addInstruction(new AccessInstruction(sourceAccessReg, sourcePointer.address, [sourceCapability], type), location);
-      this.addInstruction(new LoadFromAddressInstruction(valueReg, type, sourceAccessReg), location);
-      this.addInstruction(new CommentInstruction("Maybe mark"), location)
-      if (sourceCapability === Capability.Sink)
-        this.addInstruction(new MarkInitializedInstruction(sourceAccessReg, type, false), location);
-      this.addInstruction(new AccessInstruction(targetAccessReg, targetPointer, [Capability.Set], type), location);
-      this.addInstruction(new StoreToAddressInstruction(targetAccessReg, type, valueReg), location);
-      this.addInstruction(new EndAccessInstruction(targetAccessReg, [Capability.Set]), location);
-
-    } else {
-      compilerAssert(sourceCapability !== Capability.Let, 'Cannot move a let value', { sourceCapability, location: valueAst.location.source ? valueAst.location : this.currentLocation, stmt: this.currentStatement, valueAst })
-      this.addInstruction(new MoveInstruction(targetPointer, sourcePointer.address, type), location);
-    }
   }
 
   generateMovePointerInstruction(targetPointer: string, sourcePointer: Pointer, type: Type, location: SourceLocation) {
     compilerAssert(targetPointer, 'Target pointer must be defined', { targetPointer, sourcePointer, type })
     compilerAssert(sourcePointer.address, 'Source pointer must be defined', { targetPointer, sourcePointer, type })
     if (type instanceof PrimitiveType) {
+      // compilerAssert(false, 'Cannot move primitive type', { location, sourcePointer, targetPointer, type })
       compilerAssert(type !== VoidType, 'Cannot move void type');
       const targetAccessReg = this.newRegister();
       const sourceAccessReg = this.newRegister();
       const valueReg = this.newRegister();
       this.addInstruction(new AccessInstruction(sourceAccessReg, sourcePointer.address, [Capability.Sink, Capability.Let], type), location);
       this.addInstruction(new LoadFromAddressInstruction(valueReg, type, sourceAccessReg), location);
+      // compilerAssert(false, "Marking not implemented", { location, sourcePointer, targetPointer, type })
       this.addInstruction(new CommentInstruction("Mark"), location)
       this.addInstruction(new MarkInitializedInstruction(sourceAccessReg, type, false), location);
       this.addInstruction(new AccessInstruction(targetAccessReg, targetPointer, [Capability.Set], type), location);
@@ -1113,157 +1012,234 @@ export class FunctionCodeGenerator {
     this.addInstruction(new EndAccessInstruction(destAccessReg, [Capability.Set]), location);
   }
 
-  generateMoveToAddressInstruction(destReg: string, value: IRValue, type: Type, location: SourceLocation) {
-    if (value instanceof Value) {
-      this.generateCopyPrimitiveToAddressInstruction(destReg, value, type, location)
-    } else {
-      this.generateMovePointerInstruction(destReg, value, type, location)
-    }
-  }
-
-  generateBinaryExpression(ast: OperatorAst, context: ExpressionContext): IRValue {
+  generateOperatorExpression(ast: OperatorAst, context: ExpressionContext) {
     compilerAssert(ast.type instanceof PrimitiveType, "Expected primitive type", { ast })
-    const leftReg = this.toValue(ast.args[0].type, this.generateExpression(ast.args[0], context), ast.location)
-    const rightReg = this.toValue(ast.args[1].type, this.generateExpression(ast.args[1], context), ast.location)
 
-    const resultReg = this.newRegister();
-    this.addInstruction(new BinaryOperationInstruction(resultReg, ast.type, ast.operator, leftReg.register, rightReg.register, ast.args[0].type), ast.location);
-    if (context.valueCategory === 'lvalue') {
-      return this.storeResult(ast.type, new Value(resultReg), ast.location)
+    const leftReg = this.newRegister();
+    const rightReg = this.newRegister();
+    this.generateExpression(ast.args[0], { target: new ValueRegister(leftReg) });
+    this.generateExpression(ast.args[1], { target: new ValueRegister(rightReg) });
+    
+    const resultReg = context.target instanceof ValueRegister ? context.target.register : this.newRegister();
+    this.addInstruction(new BinaryOperationInstruction(resultReg, ast.type, ast.operator, leftReg, rightReg, ast.args[0].type), ast.location);
+    this.generateStorePrimitiveIfNeccessary(context, resultReg, ast.type, ast.location)
+  }
+
+  generateNotExpression(ast: NotAst, context: ExpressionContext) {
+    const valueReg = this.newRegister();
+    this.generateExpression(ast.expr, { target: new ValueRegister(valueReg) });
+
+    const resultReg = context.target instanceof ValueRegister ? context.target.register : this.newRegister();
+    this.addInstruction(new BinaryOperationInstruction(resultReg, ast.type, '!', valueReg, '', ast.expr.type), ast.location);
+    this.generateStorePrimitiveIfNeccessary(context, resultReg, ast.type, ast.location)
+  }
+
+  /** Generates move, load, copy or alias depending on context requirements */
+  generateMoveOrLoadPointerUsingContext(context: ExpressionContext, sourceReg: string, type: Type, location: SourceLocation) {
+    if (context.expectMutable) {
+      if (!(type instanceof PrimitiveType)) {
+        const diagnosticLocations = [new DiagnosticLocation(context.expectMutable.definitionLocation, 'Mutation happens here')]
+        compilerAssert(false, 'Expected mutable sigil', { type, context, diagnosticLocations, location })
+      }
     }
-    return new Value(resultReg)
+    const isPrimitiveCopy = context.target instanceof ConstructRegister && 
+      context.expectMutable && type instanceof PrimitiveType
+
+    if (isPrimitiveCopy) {
+      // Implicit primtive copying - Convert the move to a copy if the conditions are right
+      // This relies on the mutation sigil being present at the point of the move which may
+      // not be exactly where one would expect it to be
+      // E.G valid: var z = ifx true { x& } else { y& }
+      // Not valid: var z = ifx true { x } else { y }&
+      // This seems like the best option for now, but can revisit later
+      const loadedReg = this.newRegister();
+      this.toValueRegister(loadedReg, type, new Pointer(sourceReg), location)  
+      this.generateCopyPrimitiveToAddressInstruction((context.target as ConstructRegister).address, new Value(loadedReg), type, location)
+    } else if (context.target instanceof ConstructRegister) {
+      this.generateMovePointerInstruction(context.target.address, new Pointer(sourceReg), type, location)
+    } else if (context.target instanceof ValueRegister) {
+      this.toValueRegister(context.target.register, type, new Pointer(sourceReg), location)
+    } else if (context.target instanceof PointerRegister) {
+      this.addInstruction(new AssignInstruction(context.target.address, RawPointerType, sourceReg), location)
+    }
   }
 
-  generateNotExpression(ast: NotAst, context: ExpressionContext): IRValue {
-    const value = this.toValue(ast.expr.type, this.generateExpression(ast.expr, context), ast.location)
-    const resultReg = this.newRegister();
-    this.addInstruction(new BinaryOperationInstruction(resultReg, ast.type, '!', value.register, '', ast.expr.type), ast.location);
-    return new Value(resultReg);
-  }
+  generateBinding(ast: BindingAst, context: ExpressionContext): void {
 
-  generateBinding(ast: BindingAst, context: ExpressionContext): IRValue {
     const addressReg = this.variableMap.get(ast.binding);
     if (!addressReg) {
       if (this.globalCompiler.globalVars.has(ast.binding)) {
+        // TODO: Seperate AST for global bindings?
         const global = this.globalCompiler.globalVars.get(ast.binding)
         compilerAssert(global, `Undefined variable: ${ast.binding.name}`);
-        this.irFunction.globalRegisters.push({
-          register: global.register,
-          type: global.type,
-        })
+        this.irFunction.globalRegisters.push({ register: global.register, type: global.type })
         const reg = this.newRegister();
         this.addInstruction(new GetGlobalAddress(reg, global.type, global.register), ast.location);
-        return new Pointer(reg)
+        this.generateMoveOrLoadPointerUsingContext(context, reg, global.type, ast.location)
+        return
       }
     }
     compilerAssert(addressReg, `Undefined variable: ${ast.binding.name}`);
-    return new Pointer(addressReg.register);
+    this.generateMoveOrLoadPointerUsingContext(context, addressReg.register, ast.type, ast.location)
   }
 
-  generateNumberLiteral(ast: NumberAst, context: ExpressionContext): IRValue {
-    const value = ast.value;
-    const destReg = this.newRegister();
-    this.addInstruction(new LoadConstantInstruction(destReg, ast.type, value), ast.location);
-    return new Value(destReg);
+  generateStorePrimitiveIfNeccessary(context: ExpressionContext, valueReg: string, type: Type, location: SourceLocation) {
+    if (context.target instanceof ConstructRegister) {
+      this.generateCopyPrimitiveToAddressInstruction(context.target.address, new Value(valueReg), type, location)
+    } else if (context.target instanceof PointerRegister) {
+      this.generateAllocToRegister(context.target.address, type, location)
+      this.generateCopyPrimitiveToAddressInstruction(context.target.address, new Value(valueReg), type, location)
+    }
+  }
+
+  generateNumberLiteral(ast: NumberAst, context: ExpressionContext) {
+    const resultReg = context.target instanceof ValueRegister ? context.target.register : this.newRegister();
+    this.addInstruction(new LoadConstantInstruction(resultReg, ast.type, ast.value), ast.location);
+    this.generateStorePrimitiveIfNeccessary(context, resultReg, ast.type, ast.location)
   }
   
-  generateBoolLiteral(ast: BoolAst, context: ExpressionContext): IRValue {
-    const value = ast.value;
-    const destReg = this.newRegister();
-    this.addInstruction(new LoadConstantInstruction(destReg, ast.type, value ? 1 : 0), ast.location);
-    return new Value(destReg);
+  generateBoolLiteral(ast: BoolAst, context: ExpressionContext) {
+    const value = ast.value ? 1 : 0
+    const resultReg = context.target instanceof ValueRegister ? context.target.register : this.newRegister()
+    this.addInstruction(new LoadConstantInstruction(resultReg, ast.type, value), ast.location);
+    this.generateStorePrimitiveIfNeccessary(context, resultReg, ast.type, ast.location)
   }
 
-  generateStringLiteral(ast: StringAst, context: ExpressionContext): IRValue {
-    // compilerAssert(context.valueCategory === 'rvalue', 'Literal must be an RValue');
+  generateStringLiteral(ast: StringAst, context: ExpressionContext) {
     if (ast.type === RawPointerType) {
-      const resultPtr = this.newRegister();
-      this.addInstruction(new LoadConstantInstruction(resultPtr, ast.type, ast.value), ast.location);
-      return new Value(resultPtr)
+      const resultReg = context.target instanceof ValueRegister ? context.target.register : this.newRegister();
+      this.addInstruction(new LoadConstantInstruction(resultReg, ast.type, ast.value), ast.location);
+      this.generateStorePrimitiveIfNeccessary(context, resultReg, ast.type, ast.location)
+      return
     }
     
     const args = [
       new NumberAst(IntType, SourceLocation.anon, ast.value.length),
       new StringAst(RawPointerType, SourceLocation.anon, ast.value),
     ]
-    return this.generateCreateStructExpression(new ConstructorAst(ast.type, SourceLocation.anon, args), context)
-    // compilerAssert(context.valueCategory === 'rvalue', 'Literal must be an RValue');
-    // const value = ast.value;
-    // const destReg = this.newRegister();
-    // this.addInstruction(new LoadConstantInstruction(destReg, ast.type, value));
-    // return new Value(destReg);
+    this.generateCreateStructExpression(new ConstructorAst(ast.type, SourceLocation.anon, args), context)
   }
 
-  generateMemberExpression(ast: FieldAst, context: ExpressionContext): IRValue {
-    const objReg = this.generateExpression(ast.left, { valueCategory: 'lvalue' });
-    compilerAssert(objReg instanceof Pointer, 'Object must be an pointer');
+  generateFieldExpression(ast: FieldAst, context: ExpressionContext) {
+    const reg = this.newRegister();
+    this.generateExpression(ast.left, { target: new PointerRegister(reg) });
+
     const destReg = this.newRegister();
     this.addInstruction(new CommentInstruction(`Get field ${ast.field.name}`), ast.location)
-    this.addInstruction(new GetFieldPointerInstruction(destReg, objReg.address, ast.field), ast.location);
-    return new Pointer(destReg);
+    this.addInstruction(new GetFieldPointerInstruction(destReg, reg, ast.field), ast.location);
+    this.generateMoveOrLoadPointerUsingContext(context, destReg, ast.type, ast.location)
   }
 
-  generateValueFieldExpression(ast: ValueFieldAst, context: ExpressionContext): IRValue {
-    const objReg = this.generateExpression(ast.left, { valueCategory: 'lvalue' });
-    compilerAssert(objReg instanceof Pointer, 'Object must be an pointer');
-    
+  generateValueFieldExpression(ast: ValueFieldAst, context: ExpressionContext) {
+    const objReg = this.newRegister();
+    this.generateExpression(ast.left, { target: new PointerRegister(objReg) });
+
     this.addInstruction(new CommentInstruction(`Get field ${ast.fieldPath.map(x => x.name).join(", ")}`), ast.location)
-    let destReg: string = objReg.address
+    let destReg: string = objReg
     ast.fieldPath.forEach(field => {
       const source = destReg
       destReg = this.newRegister();
       this.addInstruction(new GetFieldPointerInstruction(destReg, source, field), ast.location);
     })
-    return new Pointer(destReg);
+
+    this.generateMoveOrLoadPointerUsingContext(context, destReg, ast.type, ast.location)
   }
 
-  generateSubscriptExpression(ast: SubscriptAst, context: ExpressionContext): IRValue {
-
+  generateSubscriptExpression(ast: SubscriptAst, context: ExpressionContext) {
     // This is a low level operation, probably should just have a different AST node for it
     if (ast.left.type === RawPointerType) {
       const destReg = this.newRegister();
     
-      const objReg = this.generateExpression(ast.left, { valueCategory: 'lvalue' })
-      const objRegValue = this.toValue(ast.left.type, objReg, ast.location, 'subscript object')
-      // compilerAssert(objReg instanceof Pointer, 'Object must be an pointer');
+      const objReg = this.newRegister();
+      this.generateExpression(ast.left, { target: new ValueRegister(objReg) });
       
-      const offset = this.toValue(ast.right.type,
-        this.generateExpression(ast.right, { valueCategory: 'rvalue' }), ast.location)
-      this.addInstruction(new PointerOffsetInstruction(destReg, objRegValue.register, ast.type, offset.register), ast.location);
-      return new Pointer(destReg);
+      const offset = this.newRegister();
+      this.generateExpression(ast.right, { target: new ValueRegister(offset) });
+      this.addInstruction(new PointerOffsetInstruction(destReg, objReg, ast.type, offset), ast.location);
+      this.generateMoveOrLoadPointerUsingContext(context, destReg, ast.type, ast.location)
+      return
     }
     const destReg = this.newRegister();
     
-    const objReg = this.generateExpression(ast.left, { valueCategory: 'lvalue' })
-    compilerAssert(objReg instanceof Pointer, 'Object must be an pointer');
+    const objReg = this.newRegister()
+    this.generateExpression(ast.left, { target: new PointerRegister(objReg) });
 
-    const offset = this.toValue(ast.right.type,
-      this.generateExpression(ast.right, { valueCategory: 'rvalue' }), ast.location)
+    const offset = this.newRegister()
+    this.generateExpression(ast.right, { target: new ValueRegister(offset) });
   
     compilerAssert(ast.funcs, 'Subscript must have funcs', { ast })
     const caps = [Capability.Let, Capability.Inout, Capability.Set, Capability.Sink]
-    this.addInstruction(new ProjectBundleInstruction(destReg, ast.type, caps, objReg.address, [offset.register], ast.funcs as any), ast.location);
-    return new Pointer(destReg);
+    this.addInstruction(new ProjectBundleInstruction(destReg, ast.type, caps, objReg, [offset], ast.funcs as any), ast.location);
+    this.generateMoveOrLoadPointerUsingContext(context, destReg, ast.type, ast.location)
+  }
 
+
+  generateSinkIntoPointer(destPointer: string, ast: Ast, location: SourceLocation) {
+    if (ast.type instanceof PrimitiveType) {
+      const valueReg = this.newRegister()
+      this.generateExpression(ast, { target: new ValueRegister(valueReg), expectMutable: new ExpectMutable(location) });
+      this.generateCopyPrimitiveToAddressInstruction(destPointer, new Value(valueReg), ast.type, location)
+    } else {
+      const rightReg = this.generateAlloc(ast.type, location)
+      this.generateExpression(ast, { target: new ConstructRegister(rightReg), expectMutable: new ExpectMutable(location) })
+      this.generateMovePointerInstruction(destPointer, new Pointer(rightReg), ast.type, location)
+    }
+  }
+
+  generateAssignmentStatement(ast: SetAst) {
+    let variable = this.variableMap.get(ast.binding)
+    if (!variable) {
+      const isInitializer = this.compiledFunction.binding === this.globalCompiler.initializerFunction?.binding
+      const global = this.globalCompiler.globalVars.get(ast.binding)
+      compilerAssert(global, `Undefined variable: ${ast.binding.name}`);
+      compilerAssert(global.letType === LetType.Var || isInitializer, 'Cannot assign to a let variable', { location: ast.location, global, ast })
+      const targetReg = this.newRegister();
+      this.addInstruction(new GetGlobalAddress(targetReg, global.type, global.register), ast.location);
+      this.generateExpression(ast.value, { target: new ConstructRegister(targetReg), expectMutable: new ExpectMutable(ast.location) })
+      this.irFunction.globalRegisters.push({ register: global.register, type: global.type, })
+      return
+    }
+    compilerAssert(variable, `Undefined variable: ${ast.binding.name}`);
+    compilerAssert(variable.capability === Capability.Inout || variable.capability === Capability.Set || variable.capability === Capability.Sink, 'Cannot assign to a let variable', { location: ast.location, variable, ast })
+    this.generateSinkIntoPointer(variable.register, ast.value, ast.location)
+  }
+
+  generateAssignmentField(ast: SetFieldAst) {
+    const leftReg = this.newRegister()
+    const reg = this.newRegister();
+    this.generateExpression(ast.left, { target: new PointerRegister(leftReg) });
+    this.addInstruction(new GetFieldPointerInstruction(reg, leftReg, ast.field), ast.location);
+    this.generateSinkIntoPointer(reg, ast.value, ast.location)
+  }
+
+  generateAssignmentValueField(ast: SetValueFieldAst) {
+    this.addInstruction(new CommentInstruction(`Set value field ${ast.fieldPath.map(x => x.name).join(", ")}`), ast.location)
+    const objReg = this.newRegister();
+    this.generateExpression(ast.left, { target: new PointerRegister(objReg) });
+    
+    let destReg: string = objReg
+    ast.fieldPath.forEach(field => {
+      const source = destReg
+      destReg = this.newRegister();
+      this.addInstruction(new GetFieldPointerInstruction(destReg, source, field), ast.location);
+    })
+
+    this.generateSinkIntoPointer(destReg, ast.value, ast.location)
   }
 
   generateAssignmentSubscript(ast: SetSubscriptAst) {
     compilerAssert(ast.left.type === RawPointerType, 'Subscript assignment only supported for raw pointers');
-    this.ensureMutable(ast.left)
-    const objReg = this.toValue(ast.left.type,
-      this.generateExpression(ast.left, { valueCategory: 'lvalue' }), ast.location,
-      'subscript object')
+    const objReg = this.newRegister()
+    this.generateExpression(ast.left, { target: new ValueRegister(objReg) })
     
     const elementType = ast.value.type
     const reg = this.newRegister();
 
-    const offset = this.toValue(ast.right.type, this.generateExpression(ast.right, { valueCategory: 'rvalue' }), ast.location, 'subscript offset')
-    const astWithoutMutSigil = ast.value instanceof MutSigilAst ? ast.value.expr : ast.value
-    const newValue = this.generateExpression(astWithoutMutSigil, { valueCategory: 'rvalue' });
-    const valueReg = this.storeResult(elementType, newValue, ast.location)
-    this.addInstruction(new PointerOffsetInstruction(reg, objReg.register, elementType, offset.register), ast.location);
+    const offset = this.newRegister()
+    this.generateExpression(ast.right, { target: new ValueRegister(offset) })
 
-    this.generateMovePointerInstructionWithCapabilityCheck(reg, valueReg, ast.value)
+    this.addInstruction(new PointerOffsetInstruction(reg, objReg, elementType, offset), ast.location);
+    this.generateSinkIntoPointer(reg, ast.value, ast.location)
   }
 
 
@@ -1379,10 +1355,11 @@ class GeneratorCodegen {
     const elseStateAddress = fnCodegen.generateAlloc(IntType, ast.location)
     const elseReadAddress = ast.entryValueType !== VoidType ? fnCodegen.generateAlloc(RawPointerType, ast.location) : null
 
-    const constant0 = fnCodegen.generateNumberLiteral(new NumberAst(IntType, SourceLocation.anon, 0), { valueCategory: 'rvalue' })
-    compilerAssert(constant0 instanceof Value, 'Expected value', { constant0 })
-    fnCodegen.generateCopyPrimitiveToAddressInstruction(entryStateAddress, constant0, IntType, ast.location)
-    fnCodegen.generateCopyPrimitiveToAddressInstruction(elseStateAddress, constant0, IntType, ast.location)
+    const constant0 = fnCodegen.newRegister()
+    fnCodegen.generateNumberLiteral(new NumberAst(IntType, SourceLocation.anon, 0), { target: new ValueRegister(constant0) })
+    // compilerAssert(constant0 instanceof Value, 'Expected value', { constant0 })
+    fnCodegen.generateCopyPrimitiveToAddressInstruction(entryStateAddress, new Value(constant0), IntType, ast.location)
+    fnCodegen.generateCopyPrimitiveToAddressInstruction(elseStateAddress, new Value(constant0), IntType, ast.location)
     
     const interleaveRegionId = regionCodegen.insertNewGeneratorRegion();
     regionCodegen.insertChildSequenceAndPushState(interleaveRegionId)
@@ -1421,11 +1398,11 @@ class GeneratorCodegen {
 
     this.generators.pop()
     regionCodegen.popRegionState()
+    fnCodegen.addInstruction(new CommentInstruction(`End generator`), ast.location)
   }
 
-  generateYieldGenerExpression(ast: YieldGenerAst, context: ExpressionContext): IRValue {
+  generateYieldGenerExpression(ast: YieldGenerAst, context: ExpressionContext) {
     const fnCodegen = this.fnCodegen
-    const { regionCodegen } = fnCodegen
 
     const generator = this.generators.find(x => x.ast.binding === ast.generatorBinding)
     compilerAssert(generator, 'Generator not found', { ast })
@@ -1433,31 +1410,33 @@ class GeneratorCodegen {
     
     if (currentBranch.writeAddress) {
       compilerAssert(ast.expr, 'Expected expression', { ast })
-      const valueAddress = fnCodegen.storeResult(ast.expr.type, fnCodegen.generateExpression(ast.expr, { valueCategory: 'lvalue' }), ast.location)
-      fnCodegen.addInstruction(new CommentInstruction(`Write pointer ${valueAddress?.address} to ${currentBranch.writeAddress}`), ast.location)
-      fnCodegen.generateCopyPrimitiveToAddressInstruction(currentBranch.writeAddress, new Value(valueAddress.address), RawPointerType, ast.location)
+      const valueAddress = fnCodegen.newRegister()
+      fnCodegen.generateExpression(ast.expr, { target: new PointerRegister(valueAddress) })
+      fnCodegen.addInstruction(new CommentInstruction(`Write pointer ${valueAddress} to ${currentBranch.writeAddress}`), ast.location)
+      fnCodegen.generateCopyPrimitiveToAddressInstruction(currentBranch.writeAddress, new Value(valueAddress), RawPointerType, ast.location)
     }
 
     const nextJumpRegion = currentBranch.regionIds.length
     fnCodegen.addInstruction(new CommentInstruction(`Set next jump = ${nextJumpRegion}`), ast.location)
-    const constant = fnCodegen.generateNumberLiteral(new NumberAst(IntType, SourceLocation.anon, nextJumpRegion), { valueCategory: 'rvalue' })
-    compilerAssert(constant instanceof Value, 'Expected value', { constant })
-    fnCodegen.generateCopyPrimitiveToAddressInstruction(currentBranch.writeStateAddress, constant, IntType, ast.location)
+    const constant = fnCodegen.newRegister()
+    fnCodegen.generateNumberLiteral(new NumberAst(IntType, SourceLocation.anon, nextJumpRegion), { target: new ValueRegister(constant) })
+    fnCodegen.generateCopyPrimitiveToAddressInstruction(currentBranch.writeStateAddress, new Value(constant), IntType, ast.location)
 
-    const readStateValue = fnCodegen.toValue(IntType, new Pointer(currentBranch.readStateAddress), ast.location, 'yield')
-    const jumpInstr = fnCodegen.addInstruction(new JumpTableInstruction(IntType, readStateValue.register, []), ast.location)!
+    const readStateValue = fnCodegen.newRegister()
+    fnCodegen.toValueRegister(readStateValue, IntType, new Pointer(currentBranch.readStateAddress), ast.location)
+    const jumpInstr = fnCodegen.addInstruction(new JumpTableInstruction(IntType, readStateValue, []), ast.location)!
     currentBranch.jumpInstrs.push(jumpInstr)
     
     this.insertNewJumpPoint(generator)
 
     if (currentBranch.readAddress) {
+      fnCodegen.addInstruction(new CommentInstruction(`Read pointer from ${currentBranch.readAddress}`), ast.location)
       fnCodegen.addInstruction(new MarkInitializedInstruction(currentBranch.readAddress, RawPointerType, true), ast.location)
-      const value = fnCodegen.toValue(RawPointerType, new Pointer(currentBranch.readAddress), ast.location, 'yield')
-      return new Pointer(value.register)
+      compilerAssert((context.target instanceof PointerRegister), 'Unexpected target', { context, ast })
+      fnCodegen.toValueRegister(context.target.address, RawPointerType, new Pointer(currentBranch.readAddress), ast.location)
+      return
     }
 
-    // TODO: Maybe need to hold access here
-    return new Pointer('')
   }
   
 }

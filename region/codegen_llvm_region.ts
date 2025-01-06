@@ -344,17 +344,16 @@ const instructionWriter = {
     writer.writer.registers.set(instr.dest, reg)
   },
 
-  pointer_to_address: (writer: LlvmFunctionWriter, instr: AccessInstruction) => {
+  assign: (writer: LlvmFunctionWriter, instr: AssignInstruction) => {
     const reg = writer.writer.registers.get(instr.source)
     compilerAssert(reg, "Register not found", { reg, instr })
     writer.writer.registers.set(instr.dest, reg)
   },
 
-  assign: (writer: LlvmFunctionWriter, instr: AssignInstruction) => {
-    const source = writer.writer.registers.get(instr.source)
-    compilerAssert(source, "Register not found", { instr })
-    const dest = defineRegister(writer, instr.dest, source.type)
-    format(writer, "  $ = bitcast $ $ to $; assign\n", dest, source.type, generateName(writer.writer, source), source.type)
+  pointer_to_address: (writer: LlvmFunctionWriter, instr: AccessInstruction) => {
+    const reg = writer.writer.registers.get(instr.source)
+    compilerAssert(reg, "Register not found", { reg, instr })
+    writer.writer.registers.set(instr.dest, reg)
   },
 
   bitcast: (writer: LlvmFunctionWriter, instr: BitCastInstruction) => {

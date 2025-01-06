@@ -1,4 +1,4 @@
-import compiler
+import compiler for assert
 
 # Globals can be out of order
 
@@ -35,7 +35,7 @@ fn test_mutable_state():
   print(state)
 
 fn test_various():
-  compiler.assert(thing == 101)
+  assert(thing == 101)
 
   foo()
   foo()
@@ -43,10 +43,10 @@ fn test_various():
   print(thing)
   print(foo1)
 
-  compiler.assert(thing3 == 6)
-  compiler.assert(global1 == 123)
-  compiler.assert(foo1.x == 2.0)
-  compiler.assert(foo1.y == 1010)
+  assert(thing3 == 6)
+  assert(global1 == 123)
+  assert(foo1.x == 2.0)
+  assert(foo1.y == 1010)
 
 
 fn main():

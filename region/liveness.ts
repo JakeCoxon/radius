@@ -54,7 +54,7 @@ const getLiveness = (pass: CloseRegionAccessPass): LivenessMap => {
     compilerAssert(instr, `No instruction found for operand ${operand}`);
 
     const regionId = irFunction.getInstructionRegion(operand)!
-    const approximateCoverage = getApproximateCoverage(uses, regionId);
+    const approximateCoverage = getApproximateCoverage(operand, uses, regionId);
 
     if (Object.keys(approximateCoverage).length === 0) {
       // No uses of the operand found in the function.
@@ -100,7 +100,9 @@ const getLiveness = (pass: CloseRegionAccessPass): LivenessMap => {
     return finalCoverage;
   }
 
-  function getApproximateCoverage(uses: Usage[], regionId: RegionId) {
+  function getApproximateCoverage(operand: string, uses: Usage[], regionId: RegionId) {
+
+
     let occurrences: RegionId[] = [];
     uses.forEach(use => occurrences.push(irFunction.getInstructionRegion(use.instrId)));
 
@@ -109,7 +111,7 @@ const getLiveness = (pass: CloseRegionAccessPass): LivenessMap => {
       const occurrence = occurrences.shift()!;
 
       if (regionId === occurrence) continue;
-      if (approximateCoverage[occurrence]?.isLiveIn) continue;
+      if (approximateCoverage[occurrence]?.isLiveIn) continue
 
       approximateCoverage[occurrence] = { ...approximateCoverage[occurrence], isLiveIn: true };
 
@@ -160,7 +162,8 @@ const extendLiveness = (pass: CloseRegionAccessPass, register: string) => {
       instr instanceof PointerOffsetInstruction || 
       instr instanceof GetFieldPointerInstruction ||
       instr instanceof ProjectBundleInstruction ||
-      instr instanceof ProjectAccessInstruction
+      instr instanceof ProjectAccessInstruction ||
+      instr instanceof AssignInstruction
       
     if (!toExtend) continue
     extendLiveness(pass, dest)
@@ -284,12 +287,13 @@ const closeAccess = (pass: CloseRegionAccessPass, sourceInstr: AccessInstruction
     }
     return false
   }
-  
+
   for (const [regionId_, liveness] of Object.entries(boundaries)) {
     const regionId = Number(regionId_) as RegionId
 
     if (liveness.livenessType === LivenessType.Closed || liveness.livenessType === LivenessType.LiveIn) {
       if (alreadyClosed(liveness.lastUse)) continue
+
       const newInstr = new EndAccessInstruction(dest, sourceInstr.capabilities)
       const location = pass.irFunction.locations[dest]
       const newId = liveness.lastUse ?

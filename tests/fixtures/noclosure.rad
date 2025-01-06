@@ -2,7 +2,7 @@ fn main():
 
   let x = 32
 
-  fn thing():
+  fn thing() -> int:
     print(x)
     52
 

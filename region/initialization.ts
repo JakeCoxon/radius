@@ -269,7 +269,6 @@ export class RegionInitializationCheckingPass {
   }
 
   executeAssign(instr: AssignInstruction): void {
-    this.ensureRegisterInitialized(instr.source);
     this.state.locals.set(instr.dest, this.state.locals.get(instr.source)!);
   }
 
@@ -347,7 +346,9 @@ export class RegionInitializationCheckingPass {
     // memory here. A MarkInitialize instruction may have been inserted
     // after this.
     this.ensureRegisterInitialized(instr.address);
-    this.state.locals.set(instr.dest, new InitializationStateObject(TOP));
+    const newAddress = this.addressFromRegister(instr.address, instr.type);
+    this.state.memory.set(newAddress, TOP);
+    this.state.locals.set(instr.dest, new AddressSet([newAddress]));
   }
 
   executeReturn(instr: ReturnInstruction): void {
@@ -359,7 +360,6 @@ export class RegionInitializationCheckingPass {
       const argIndex = i++;
       if (param.capability === Capability.Sink) {
         if (this.isDefinitelyInitialized(this.function.parameterRegisters[argIndex])) {
-          // this.ensureRegisterUninitialized(this.function.parameterRegisters[argIndex]);
           if (this.function.params[argIndex].type instanceof PrimitiveType) {
             // Do nothing for now
           } else {
@@ -461,16 +461,9 @@ export class RegionInitializationCheckingPass {
   }
 
   executeGetGlobalAddress(instr: GetGlobalAddress): void {
-    // const state = new InitializationStateObject(TOP);
-    // this.state.locals.set(instr.dest, state);
     const addr = this.globalsMap.get(instr.global)
     compilerAssert(addr, `Global address not found for ${instr.global}`);
     this.state.locals.set(instr.dest, new AddressSet([addr]));
-    // const newAddr = this.newAddress(instr.type);
-    // this.globalsMap.set(instr.global, newAddr)
-    // this.state.locals.set(instr.dest, new AddressSet([newAddr]));
-    // this.state.memory.set(newAddr, TOP);
-    // this.printLocalsMemory(this.instrId)
   }
 
   executeMarkInitialized(instr: MarkInitializedInstruction): void {
@@ -602,6 +595,12 @@ export class RegionInitializationCheckingPass {
 
   newAddress(type: Type): string {
     const addr = `a${this.freshAddressCounter++}`;
+    this.addressTypes.set(addr, type)
+    return addr;
+  }
+
+  addressFromRegister(reg: string, type: Type): string {
+    const addr = `a_${reg}`;
     this.addressTypes.set(addr, type)
     return addr;
   }

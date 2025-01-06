@@ -425,9 +425,10 @@ fn test_array():
   assert(@sum(arr[:]) == 2.2)
 
 fn test_float_sum():
-  let asd = [1,2,3.2]
+  let asd = [1, 2, 3.2]
   let s = @sum(asd[:] + float(foo[:]))
   assert(s == 9.2)
+
 
 fn main():
   test_fold()

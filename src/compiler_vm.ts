@@ -816,7 +816,8 @@ const instructions: InstructionMapping = {
   push: (vm, { value }) => vm.stack.push(value),
   nil: (vm) => vm.stack.push(null),
   mutast: (vm, ) => {
-    const expr = expectAst(popStack(vm));
+    const expr = expectAst(popStack(vm))
+    if (expr instanceof MutSigilAst) return vm.stack.push(expr)
     vm.stack.push(new MutSigilAst(expr.type, vm.location, expr))
   },
 

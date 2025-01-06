@@ -1,7 +1,7 @@
 import { generateConstructor, generateDestructor, generateMoveFunction } from "../borrow/codegen_ast"
 import { compileClassTask } from "./compiler"
 import { generateTypeMethods } from "./compiler_sugar"
-import { Ast, BasicType, Binding, BoolType, Capability, ClassDefinition, Closure, CompilerError, ConcreteClassType, DoubleType, EnumVariantAst, ExternalTypeConstructor, FloatLiteralType, FloatType, FunctionDefinition, GlobalCompilerState, IntLiteralType, IntType, MutSigilAst, NeverType, NumberAst, OperatorAst, ParameterizedType, ParseCall, ParseIdentifier, ParseNode, PrimitiveType, RawPointerType, Scope, ScopeParentSymbol, SourceLocation, StatementsAst, StringType, TaskContext, Tuple, TupleTypeConstructor, Type, TypeCheckConfig, TypeCheckResult, TypeCheckVar, TypeConstructor, TypeField, TypeMatcher, TypeTable, TypeVariable, UnknownObject, VariantCastAst, VoidType, compilerAssert, getUniqueId, insertTypeInfoFields, isType, u64Type, u8Type } from "./defs"
+import { Ast, BasicType, Binding, BoolType, Capability, ClassDefinition, Closure, CompilerError, ConcreteClassType, DoubleType, EnumVariantAst, ExternalTypeConstructor, FloatLiteralType, FloatType, FunctionDefinition, GlobalCompilerState, IntLiteralType, IntType, MutSigilAst, NeverType, NumberAst, OperatorAst, ParameterizedType, ParseCall, ParseIdentifier, ParseNode, PrimitiveType, RawPointerType, Scope, ScopeParentSymbol, SourceLocation, StatementsAst, StringType, SubscriptAst, TaskContext, Tuple, TupleTypeConstructor, Type, TypeCheckConfig, TypeCheckResult, TypeCheckVar, TypeConstructor, TypeField, TypeMatcher, TypeTable, TypeVariable, UnknownObject, VariantCastAst, VoidType, compilerAssert, getUniqueId, insertTypeInfoFields, isType, u64Type, u8Type } from "./defs"
 import { Event, Task, TaskDef } from "./tasks"
 
 export const isTypeInteger = (type: Type) => type === IntType || type === u64Type || type === u8Type
@@ -388,6 +388,8 @@ export const propagateLiteralType = (inferType: Type, ast: Ast | null): Type => 
     } else if (ast instanceof OperatorAst) {
       ast.type = inferType;
       recur(ast.args[0]); recur(ast.args[1])
+    } else if (ast instanceof SubscriptAst) {
+      ast.type = inferType;
     } else if (ast instanceof StatementsAst) {
       ast.type = inferType;
       recur(ast.statements.at(-1)!)

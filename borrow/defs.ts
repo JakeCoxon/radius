@@ -1,5 +1,5 @@
 import { RegionId } from "../region/region_codegen";
-import { Binding, Capability, CompiledFunction, compilerAssert, escapeString, FunctionParameter, LetType, Type, TypeField } from "../src/defs";
+import { Binding, Capability, CompiledFunction, compilerAssert, escapeString, FunctionParameter, LetType, SourceLocation, Type, TypeField } from "../src/defs";
 
 export class Pointer {
   constructor(public address: string) {}
@@ -16,6 +16,7 @@ export class Variable {
     public type: Type,
     public register: string,
     public capability: Capability,
+    public definitionLocation: SourceLocation,
     public alias = false, // Just to make codegen easier for alias
   ) {}
 }
@@ -259,7 +260,7 @@ export function formatInstruction(instr: IRInstruction): string {
   } else if (instr instanceof StoreToAddressInstruction) {
     return `into ${instr.address} store ${instr.source}`;
   } else if (instr instanceof LoadFromAddressInstruction) {
-    return `${instr.dest} = load from address ${instr.address}`;
+    return `${instr.dest} = load from address ${instr.address} : ${instr.type.shortName}`;
   } else if (instr instanceof AllocInstruction) {
     return `alloc ${instr.dest}: ${instr.type.shortName}`;
   } else if (instr instanceof AccessInstruction) {
@@ -279,7 +280,7 @@ export function formatInstruction(instr: IRInstruction): string {
   } else if (instr instanceof MarkInitializedInstruction) {
     return `mark ${instr.target} as ${instr.initialized ? 'initialized' : 'uninitialized'} : ${instr.type.shortName}`;
   } else if (instr instanceof ProjectBundleInstruction) {
-    return `${instr.target} = project_bundle [${instr.capabilities.join(', ')}] ${instr.source} index (${instr.operands.join(', ')})`;
+    return `${instr.target} = project_bundle [${instr.capabilities.join(', ')}] ${instr.source} index (${instr.operands.join(', ')}) : ${instr.type.shortName}*`;
   } else if (instr instanceof ProjectAccessInstruction) {
     return `${instr.dest} = project_access [${instr.capabilities.join(', ')}] ${instr.accessSource} from address ${instr.source}`;
   } else if (instr instanceof PointerToAddressInstruction) {

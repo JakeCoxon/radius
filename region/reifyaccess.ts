@@ -1,5 +1,5 @@
 import { Capability, CapabilityRanking, compilerAssert } from "../src/defs";
-import { AccessInstruction, FunctionBlock, GetFieldPointerInstruction, IRInstruction, LoadFromAddressInstruction, MoveInstruction, PointerOffsetInstruction, ProjectAccessInstruction, ProjectBundleInstruction, StoreToAddressInstruction, getInstructionResult } from "../borrow/defs";
+import { AccessInstruction, AssignInstruction, FunctionBlock, GetFieldPointerInstruction, IRInstruction, LoadFromAddressInstruction, MoveInstruction, PointerOffsetInstruction, ProjectAccessInstruction, ProjectBundleInstruction, StoreToAddressInstruction, getInstructionResult } from "../borrow/defs";
 import { BlockRegion, createRegionUsageMap, InstructionId, IrDiagnostics, IrFunction, printIrFunction } from "./region_codegen";
 
 export class RegionReifyAccessPass {
@@ -38,7 +38,8 @@ export class RegionReifyAccessPass {
       const extend = (usageInstrId: InstructionId) => {
         const usageInstr = this.irFunction.getInstruction(usageInstrId)!
         const extendable = usageInstr instanceof PointerOffsetInstruction ||
-          usageInstr instanceof GetFieldPointerInstruction
+          usageInstr instanceof GetFieldPointerInstruction || 
+          usageInstr instanceof AssignInstruction
         if (extendable) {
           const transitiveUsages = usages.get(usageInstrId);
           if (!transitiveUsages) return

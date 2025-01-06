@@ -291,7 +291,7 @@ function functionInlineTask(ctx: TaskContext, { location, func, typeArgs, parent
       templateScope[nameValue] = arg
       return
     }
-    const binding = new Binding(nameValue, concreteTypes[i])
+    const binding = new Binding(`inline_${nameValue}`, concreteTypes[i])
     binding.storage = storage // is this right for inline?
     compilerAssert(storage !== 'ref', "Not implemented yet")
     binding.definitionCompiler = inlineInto
@@ -303,8 +303,8 @@ function functionInlineTask(ctx: TaskContext, { location, func, typeArgs, parent
     // TODO: Handle inout params differently so we don't sink by default
     // Find a better way to forward arguments without using let statements
     // Maybe a custom AST, special capability, or custom IR
-    const mutable = capability === Capability.Sink || capability === Capability.Inout
-    if (mutable) arg = new MutSigilAst(arg.type, arg.location, arg)
+    // const mutable = capability === Capability.Sink || capability === Capability.Inout
+    // if (mutable) arg = new MutSigilAst(arg.type, arg.location, arg)
     statements.push(new AliasAst(VoidType, location, binding, arg))
     argBindings.push(binding)
   });

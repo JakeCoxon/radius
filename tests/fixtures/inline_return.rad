@@ -1,3 +1,9 @@
+import compiler for assert
+import vec for vec3
+
+type Rect @struct:
+  top_left: vec3
+  bottom_right: vec3
 
 fn bar!(T)() -> int @inline:
   let x = 43
@@ -14,14 +20,153 @@ fn baz(i: int) -> int @inline:
     return foo(i)
   32 # Implicit return must set breakExprBinding
 
-fn main():
-  print("Before")
-  let z = bar!(123)()
-  print("After")
 
+fn test_projection():
+  let x = vec3(1, 2, 32)
+  var y = vec3(4, 5, 6)
+
+  # var n = 30
+  # let m = 40
+  # print(n)
+  # print(m)
+
+  let z = x
   print(z)
+  # var w = y
+  # print(w)
 
-  let f = foo(2)
-  print(f)
+  print(y)
+
+  let a = ifx 1 == 1: z else: y
+  print(a)
+
+  var asdf = a.copy
+  print(asdf)
+
+  var b = ifx 1 == 1: x.copy else: y
+  print(b)
   
-  print(baz(1))
+  const f = {|| 
+    let z = vec3(4,5,6)
+    z
+  }
+  const g = {|| 
+    let z = vec3(7,8,9)
+    z
+  }
+  
+  let w = ifx true: f() else: g()
+  print(w)
+
+
+
+fn test_primitive_projection():
+  var a = 2
+  let b = ifx 1 == 1: a else: 3
+  print(b)
+
+  print(2 + (ifx 1 == 1: a else: 3))
+
+  var c = ifx 1 == 1: a else: 3
+  print(c)
+
+  c = (ifx 2 > 0: b else: 3)
+  print(c)
+
+
+
+fn rect_foo(rect: inout Rect, i: float):
+  rect.top_left.x += i
+  rect.bottom_right.x += i
+
+fn make_vec3() -> vec3:
+  return vec3(32, 22, 12)
+
+fn make_float() -> float:
+  123.0
+
+fn test_move():
+  var top_left = vec3(1, 2, 3)
+  var bottom_right = vec3(4, 5, 6)
+  var rect1 = Rect(top_left&, bottom_right&)
+  rect1.top_left = rect1.top_left&
+  assert(rect1.top_left.x == 1)
+
+  rect1 = Rect(
+    rect1.bottom_right,
+    rect1.top_left&
+  )
+  assert(rect1.top_left.x == 4)
+  assert(rect1.bottom_right.x == 1)
+
+  print(rect1)
+
+  # var foo = rect1&
+  # print(foo)
+
+
+fn test_implicit_copy():
+  let top_left = vec3(1, 2, 3)
+  var bottom_right = vec3(4, 5, 6)
+  # var x = top_left.x
+  fooasd(top_left)
+
+  assert(bottom_right.x == 4)
+
+  # var foo = rect1&
+  # print(foo)
+
+
+fn fooasd(bar: vec3):
+  var x = bar.x
+  print(x)
+
+fn test_basic():
+  let x = make_float()
+  var y = make_float()
+  assert(x == 123.0)
+  print(x + make_float())
+  print(vec3(1,2,3))
+  y = 2
+  assert(y == 2)
+
+
+fn test_params():
+
+  var rect1 = Rect(make_vec3(), make_vec3())
+  rect_foo(rect1&, 23)
+
+  assert(rect1.top_left.x == 55)
+  print(rect1)
+  print(rect1.top_left)
+
+
+fn test_return_value():
+  var rect1 = Rect(make_vec3(), make_vec3())
+  rect1.top_left = make_vec3()
+  rect1.bottom_right.x = make_float()
+
+  assert(rect1.top_left.x == 32)
+  assert(rect1.bottom_right.x == 123)
+  print(rect1.top_left)
+
+  
+fn main():
+  # print("Before")
+  # let z = bar!(123)()
+  # print("After")
+
+  # print(z)
+
+  test_implicit_copy()
+  test_basic()
+  test_return_value()
+  test_params()
+  test_move()
+  test_projection()
+  test_primitive_projection()
+
+  # let f = foo(2)
+  # print(f)
+  
+  # print(baz(1))

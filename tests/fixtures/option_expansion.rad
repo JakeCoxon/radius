@@ -6,6 +6,7 @@ fn filter_some(iterable) @inline: {|yield|
       yield(unsafe_enum_cast!Some(x).value)
 }
 
+
 fn sum(iterable) @inline:
   (fold(0) + iterable[:] ...)
 
@@ -22,11 +23,12 @@ fn sum(iterable) @inline:
 #   max_by_opt(fold(None!T()), iterable[:]) ...
 
 fn max2!(T)(iterable) @inline:
-  let m = None!T()
+  var m = None!T()
   for it in iterable:
     if it > m.orelse(0):
       m = Some(it)
   m
+
 
 fn test_filter():
   let numbers = [1, 2, 3, 4, 5]
@@ -42,12 +44,15 @@ fn test_filter():
   assert(x.sum == 12)
   print(x[:]) ...
 
+
 fn test_max():
   let numbers = [1, 2, 3, 4, 5]
   let m = numbers.max2!int
 
-  let v = { m? }.orelse 0
-  assert(v == 5)
+  let v = { m? * 10 }.orelse 0
+  assert(v == 50)
+  print(v)
+
 
 fn test_early_exit():
   let numbers = [1, 2, 3, 4, 5]
@@ -60,18 +65,34 @@ fn test_early_exit():
   }.orelse 32
   assert(x == 32)
 
+
 fn test_early_exit_sideffect():
   let numbers = [1, 2, 3, 4, 5, 2, 1]
   let y = Some(23)
-  const foo = {|x| ifx x < 3: Some(x) else: None!int() }
 
-  let r = 0
+  var sideeffects = 0
+
+  const foo = {|x| 
+    sideeffects += 1
+    ifx x < 3: Some(x) else: None!int()
+  }
+
+  # This breaks out of the try block within the ... expansion
+  # so that all numbers are visited
+  var r = 0
   { r += numbers[:].foo? } ...
   assert(r == 6)
+  assert(sideeffects == 7)
 
-  let s = 0
+  sideeffects = 0
+
+  # This one breaks out of the entire try block so only the
+  # first 3 numbers are visited
+  var s = 0
   { s += numbers[:].foo? ... }
   assert(s == 3)
+  assert(sideeffects == 3)
+
 
 fn main():
   test_filter()

@@ -1,11 +1,14 @@
-import { Binding, Capability, CompiledFunction, CompilerError, GlobalCompilerState, PrimitiveType, RawPointerType, VoidType, compilerAssert } from "../src/defs"; // prettier-ignore
+import { Binding, Capability, CompiledFunction, CompilerError, GlobalCompilerState, PrimitiveType, RawPointerType, SourceLocation, VoidType, compilerAssert } from "../src/defs"; // prettier-ignore
 import { CodeGenerator } from '../borrow/codegen_ir';
-import { AccessInstruction, AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, CommentInstruction, ConditionalJumpInstruction, EndAccessInstruction, FunctionBlock, GetFieldPointerInstruction, getInstructionOperands, getInstructionResult, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, MarkInitializedInstruction, Module, PhiInstruction, PhiSource, PointerOffsetInstruction, printIR, ProjectBundleInstruction, ReturnInstruction, StoreToAddressInstruction, YieldInstruction } from '../borrow/defs';
+import { AccessInstruction, AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, BreakInstruction, CallInstruction, CommentInstruction, ConditionalJumpInstruction, EndAccessInstruction, FunctionBlock, GetFieldPointerInstruction, getInstructionOperands, getInstructionResult, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, MarkInitializedInstruction, Module, PhiInstruction, PhiSource, PointerOffsetInstruction, PointerToAddressInstruction, printIR, ProjectAccessInstruction, ProjectBundleInstruction, ReturnInstruction, StoreToAddressInstruction, YieldInstruction } from '../borrow/defs';
 import { BlockRegion, IfRegion, InsertPosition, InstructionId, IrDiagnostics, IrFunction, printIrFunction, Region, RegionCodegen, RegionId, ScopeRegion, SequenceId, WhileRegion } from "./region_codegen";
 
 
 type RegisterMapping = {
   [key: string]: string;
+};
+type RegionMapping = {
+  [key: RegionId]: RegionId;
 };
 
 const findInstructionId = (fn: IrFunction, pred: (instr: IRInstruction) => boolean) => {
@@ -90,6 +93,7 @@ class ProjectYieldInliningPass {
   diagnostics: IrDiagnostics = new IrDiagnostics()
   
   mapping: RegisterMapping = {}
+  regionMapping: RegionMapping = {}
 
   constructor(
     public globalCompiler: GlobalCompilerState,
@@ -112,13 +116,14 @@ class ProjectYieldInliningPass {
     const [prev, next] = this.codegen.splitBlockBeforeInstr(instrId)
     this.codegen.setInsertionBlock(prev)
     // prev.instructions.pop() // Remove the jump instruction, we'll replace it
-    this.codegen.insertInstruction(new CommentInstruction(`Project bundle inlining parameters`))
+    this.codegen.insertInstruction(new CommentInstruction(`Project bundle inlining parameters`), SourceLocation.anon)
     const inserts = this.codegen.insertInstructionsAtPosition(
       InsertPosition.endOfRegion(prev), 
-      this.createParameterInstructions(newIr, projectInstr))
+      this.createParameterInstructions(newIr, projectInstr),
+      SourceLocation.anon)
     this.diagnostics.instructionNote(inserts.lastId!, "Inserted inlining parameters")
 
-    this.codegen.insertInstructionAfter(instrId, new CommentInstruction(`Deleted project bundle (${instrId})`))
+    this.codegen.insertInstructionAfter(instrId, new CommentInstruction(`Deleted project bundle (${instrId})`), SourceLocation.anon)
     this.codegen.deleteInstruction(instrId)
 
 
@@ -159,7 +164,7 @@ class ProjectYieldInliningPass {
 
     const yieldAtEnd = fn.getInstructionRegion(yieldInstrId) === newRegionsInserts.endRegionId
     const [yieldPrev, yieldNext] = this.codegen.splitBlockBeforeInstr(yieldInstrId)
-    this.codegen.insertInstructionAtBeginning(yieldNext, new CommentInstruction(`!! After split copied region`))
+    this.codegen.insertInstructionAtBeginning(yieldNext, new CommentInstruction(`!! After split copied region`), SourceLocation.anon)
     if (yieldAtEnd) newRegionsInserts.endRegionId = yieldNext
 
     {
@@ -169,8 +174,9 @@ class ProjectYieldInliningPass {
       // const newDest = this.codegen.newRegister()
       // Assign is aliasing the value, so it is okay for non-primitive types
       const newInstr = new AssignInstruction(projectInstr.target, yieldInstr.type, yieldInstr.value)
+      const location = fn.locations[yieldInstrId]
       const region = fn.regions[yieldPrev] as BlockRegion
-      this.codegen.insertInstructionAfter(region.lastInstruction!, newInstr)
+      this.codegen.insertInstructionAfter(region.lastInstruction!, newInstr, location)
 
     }
     this.codegen.deleteInstruction(yieldInstrId)
@@ -253,7 +259,7 @@ class ProjectYieldInliningPass {
 
   copyRegionsAfterRegion(sourceFn: IrFunction, prevRegionId: RegionId) {
     const destFn = this.fn
-    const { codegen, mapping } = this
+    const { codegen, mapping, regionMapping } = this
 
     const existingSequence = destFn.regions[prevRegionId].parentSequence
 
@@ -280,15 +286,17 @@ class ProjectYieldInliningPass {
         const region = sourceFn.regions[regionId]
         if (region instanceof BlockRegion) {
           const newRegionId = codegen.insertNewBlockRegion()
+          regionMapping[regionId] = newRegionId
           insert(newRegionId)
           prevRegionId = newRegionId
           codegen.setInsertionBlock(newRegionId)
-          codegen.insertInstruction(new CommentInstruction(`!! Copied region`))
-          mapRegionInstructions(codegen, sourceFn, mapping, region, (instr) => {
-            codegen.insertInstruction(instr)
+          codegen.insertInstruction(new CommentInstruction(`!! Copied region`), SourceLocation.anon)
+          mapRegionInstructions(codegen, sourceFn, mapping, regionMapping, region, (instr, location) => {
+            codegen.insertInstruction(instr, location)
           })
         } else if (region instanceof IfRegion) {
           const newRegionId = codegen.insertNewIfRegion()
+          regionMapping[regionId] = newRegionId
           const newRegion = codegen.getIfRegion(newRegionId)
           insert(newRegionId)
           prevRegionId = newRegionId
@@ -300,10 +308,12 @@ class ProjectYieldInliningPass {
           newRegion.result = mapping[region.result]
           compilerAssert(newRegion.conditionRegister !== undefined, "Condition register not found", { 
             irFunction: sourceFn.debugName,
+            destFn: destFn.debugName,
             newRegionId, regionId,
             region, newRegion, mapping })
         } else if (region instanceof WhileRegion) {
           const newRegionId = codegen.insertNewWhileRegion()
+          regionMapping[regionId] = newRegionId
           const newRegion = codegen.getWhileRegion(newRegionId)
           insert(newRegionId)
           prevRegionId = newRegionId
@@ -313,10 +323,12 @@ class ProjectYieldInliningPass {
           compilerAssert(newRegion.conditionRegister !== undefined, "Condition register not found", { region, newRegion })
         } else if (region instanceof ScopeRegion) {
           const newRegionId = codegen.insertNewScopeRegion()
+          regionMapping[regionId] = newRegionId
           const newRegion = codegen.getScopeRegion(newRegionId)
           insert(newRegionId)
           prevRegionId = newRegionId
           traverseSequence(newRegion.bodySequence, null, region.bodySequence)
+          traverseSequence(newRegion.continuationSequence, null, region.continuationSequence)
           traverseSequence(newRegion.exitSequence, null, region.exitSequence)
         } else compilerAssert(false, "Region not found", { region })
       }
@@ -333,7 +345,7 @@ class ProjectYieldInliningPass {
 
 
 
-const mapRegionInstructions = (codegen: RegionCodegen, fn: IrFunction, mapping: RegisterMapping, region: BlockRegion, func: (instr: IRInstruction) => void) => {
+const mapRegionInstructions = (codegen: RegionCodegen, fn: IrFunction, mapping: RegisterMapping, regionMapping: RegionMapping, region: BlockRegion, func: (instr: IRInstruction, location: SourceLocation) => void) => {
   const newRegister = (prev: string) => {
     const reg = codegen.newRegister()
     mapping[prev] = reg
@@ -342,93 +354,115 @@ const mapRegionInstructions = (codegen: RegionCodegen, fn: IrFunction, mapping: 
   
   for (let instrId = region.firstInstruction; instrId !== null; instrId = fn.getInstructionNode(instrId)!.next) {
     const instr = fn.getInstructionNode(instrId)!.instruction
+    const location = fn.locations[instrId]
 
     if (instr instanceof LoadConstantInstruction) {
       const newDest = newRegister(instr.dest)
       const load = new LoadConstantInstruction(newDest, instr.type, instr.value)
-      func(load)
+      func(load, location)
     } else if (instr instanceof ReturnInstruction) {
       const newSource = instr.value ? mapping[instr.value] : null
       const newInstr = new ReturnInstruction(instr.type, newSource)
-      func(newInstr)
+      func(newInstr, location)
     } else if (instr instanceof ProjectBundleInstruction) {
       const newTarget = newRegister(instr.target)
       const newSource = mapping[instr.source]
       const newOperands = instr.operands.map(op => mapping[op])
       const newInstr = new ProjectBundleInstruction(newTarget, instr.type, instr.capabilities, newSource, newOperands, instr.funcs)
-      func(newInstr)
+      func(newInstr, location)
     } else if (instr instanceof PointerOffsetInstruction) {
       const newDest = newRegister(instr.dest)
       const newAddress = mapping[instr.address]
       const newOffsetReg = mapping[instr.offsetReg]
       const newInstr = new PointerOffsetInstruction(newDest, newAddress, instr.fieldType, newOffsetReg)
-      func(newInstr)
+      func(newInstr, location)
     } else if (instr instanceof AllocInstruction) {
       const newDest = newRegister(instr.dest)
       const newInstr = new AllocInstruction(newDest, instr.type)
-      func(newInstr)
+      func(newInstr, location)
     } else if (instr instanceof AccessInstruction) {
       const newDest = newRegister(instr.dest)
       const newSource = mapping[instr.source]
       const newInstr = new AccessInstruction(newDest, newSource, instr.capabilities, instr.type)
-      func(newInstr)
+      func(newInstr, location)
+    } else if (instr instanceof ProjectAccessInstruction) {
+      const newDest = newRegister(instr.dest)
+      const newSource = mapping[instr.source]
+      const newAccessSource = mapping[instr.accessSource]
+      const newInstr = new ProjectAccessInstruction(newDest, instr.type, instr.capabilities, newAccessSource, newSource)
+      func(newInstr, location)
     } else if (instr instanceof EndAccessInstruction) {
       const newSource = mapping[instr.source]
       const newInstr = new EndAccessInstruction(newSource, instr.capabilities)
-      func(newInstr)
+      func(newInstr, location)
     } else if (instr instanceof StoreToAddressInstruction) {
       const newSource = mapping[instr.source]
       const newAddress = mapping[instr.address]
       const newInstr = new StoreToAddressInstruction(newAddress, instr.type, newSource)
-      func(newInstr)
+      func(newInstr, location)
     } else if (instr instanceof LoadFromAddressInstruction) {
       const newDest = newRegister(instr.dest)
       const newAddress = mapping[instr.address]
       const newInstr = new LoadFromAddressInstruction(newDest, instr.type, newAddress)
-      func(newInstr)
+      func(newInstr, location)
     } else if (instr instanceof YieldInstruction) {
       const newDest = newRegister(instr.dest)
       const newValue = instr.value ? mapping[instr.value] : null
       const newInstr = new YieldInstruction(newDest, instr.type, newValue)
-      func(newInstr)
+      func(newInstr, location)
     } else if (instr instanceof MarkInitializedInstruction) {
       const newTarget = mapping[instr.target]
       const newInstr = new MarkInitializedInstruction(newTarget, instr.type, instr.initialized)
-      func(newInstr)
+      func(newInstr, location)
     } else if (instr instanceof BinaryOperationInstruction) {
       const newDest = newRegister(instr.dest)
       const newLeft = mapping[instr.left]
       const newRight = mapping[instr.right]
       const newInstr = new BinaryOperationInstruction(newDest, instr.type, instr.operator, newLeft, newRight, instr.paramType)
-      func(newInstr)
+      func(newInstr, location)
     } else if (instr instanceof GetFieldPointerInstruction) {
       const newDest = newRegister(instr.dest)
       const newAddress = mapping[instr.address]
       const newInstr = new GetFieldPointerInstruction(newDest, newAddress, instr.field)
-      func(newInstr)
+      func(newInstr, location)
+    } else if (instr instanceof PointerToAddressInstruction) {
+      const newDest = newRegister(instr.dest)
+      const newSource = mapping[instr.source]
+      const newInstr = new PointerToAddressInstruction(newDest, instr.type, newSource)
+      func(newInstr, location)
     } else if (instr instanceof ConditionalJumpInstruction) {
       const newCondition = mapping[instr.condition]
       const newTarget = mapping[instr.targetLabel]
       const newElse = mapping[instr.elseLabel]
       const newInstr = new ConditionalJumpInstruction(newCondition, newTarget, newElse)
-      func(newInstr)
+      func(newInstr, location)
     } else if (instr instanceof JumpInstruction) {
       const newTarget = mapping[instr.target]
       const newInstr = new JumpInstruction(newTarget)
-      func(newInstr)
+      func(newInstr, location)
+    } else if (instr instanceof BreakInstruction) {
+      const newRegionId = regionMapping[instr.regionId]
+      const newValue = instr.value ? mapping[instr.value] : null
+      const newInstr = new BreakInstruction(newRegionId, instr.type, newValue)
+      func(newInstr, location)
     } else if (instr instanceof CallInstruction) {
       const newTarget = instr.target ? newRegister(instr.target) : null
       const newArgs = instr.args.map(arg => mapping[arg])
       const newInstr = new CallInstruction(newTarget, instr.type, instr.binding, newArgs, instr.paramTypes, instr.capabilities)
-      func(newInstr)
+      func(newInstr, location)
     } else if (instr instanceof PhiInstruction) {
       const newDest = newRegister(instr.dest)
       const newSources = instr.sources.map(val => new PhiSource(mapping[val.value], mapping[val.block]))
       const newInstr = new PhiInstruction(newDest, instr.type, newSources)
-      func(newInstr)
+      func(newInstr, location)
     } else if (instr instanceof CommentInstruction) {
       const newInstr = new CommentInstruction(instr.comment)
-      func(newInstr)
+      func(newInstr, location)
+    } else if (instr instanceof AssignInstruction) {
+      const newDest = newRegister(instr.dest)
+      const newSource = mapping[instr.source]
+      const newInstr = new AssignInstruction(newDest, instr.type, newSource)
+      func(newInstr, location)
     } else compilerAssert(false, "Instruction not found", { instr })
   }
 

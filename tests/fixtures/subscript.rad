@@ -1,4 +1,4 @@
-import compiler
+import compiler for assert
 
 
 type Foo @struct:
@@ -16,7 +16,9 @@ fn subscript_foo(arr: Foo, idx: int, f) @subscript:
 
 fn subscript_inout_foo(foo: inout Foo, idx: int, f) @subscript:
   var x = 123 + idx * 10
+  print("Before: ", x)
   f(x)
+  print("After: ", x)
 
   print(rawptr(foo))
 
@@ -32,14 +34,21 @@ fn test_basic_project():
   var f = Foo(1, 2.0)
   print(rawptr(f))
 
-  print(f[0])
-  print(f[10])
+  print("f[0]", f[0])
+  print("f[10]", f[10])
+  assert(f[0] == 123)
+
+
+fn test_project_inout():
+  var f = Foo(1, 2.0)
+  print(rawptr(f))
   increment(f[0]&)
 
   print(rawptr(f))
 
   print(f.x)
-  compiler.assert(f.x == 124)
+  assert(f.x == 124)
+
 
 fn test_var_ref():
   var foo = Foo(1, 2.0)
@@ -48,9 +57,11 @@ fn test_var_ref():
   x *= 2
   print(foo.x)
 
-  compiler.assert(foo.x == 248)
+  assert(foo.x == 248)
+
 
 fn main():
 
+  test_project_inout()
   test_basic_project()
   test_var_ref()

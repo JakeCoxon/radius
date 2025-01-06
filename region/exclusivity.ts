@@ -1,4 +1,4 @@
-import { capabilitiesLargerOrEqualTo, Capability, CapabilityRanking, compilerAssert, DiagnosticLocation, FunctionParameter, Type } from "../src/defs";
+import { capabilitiesLargerOrEqualTo, Capability, CapabilityRanking, compilerAssert, CompilerError, DiagnosticLocation, FunctionParameter, Type } from "../src/defs";
 import { ControlFlowGraph, ControlFlowGraphGeneric, buildCFG, buildCFGFromRegions } from "../borrow/controlflow";
 import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, EndAccessInstruction, PhiInstruction, textColors, CommentInstruction, getInstructionResult, DeallocStackInstruction, CallExpressionNode, MarkInitializedInstruction, PointerOffsetInstruction, formatInstruction, ProjectBundleInstruction, YieldInstruction, BreakInstruction, GetGlobalAddress, BitCastInstruction, YieldGeneratorInstruction, JumpTableInstruction, ProjectAccessInstruction, PointerToAddressInstruction } from "../borrow/defs";
 import { RegionWorklist } from "./initialization";
@@ -31,7 +31,7 @@ export class RegionExclusivityCheckingPass {
   function: IrFunction;
   freshAddressCounter = 0;
   addressTypes = new Map<string, Type>(); // Quick lookup for address types
-  debugLog = false
+  debugLog = true
   runs = 0
   instrId: InstructionId | null = null
   iterationIndex = 0
@@ -48,6 +48,11 @@ export class RegionExclusivityCheckingPass {
     try {
       this.interpret()
     } catch (e) {
+      if (e instanceof CompilerError) {
+        if (!(e.info as any).location && this.instrId !== undefined) {
+          Object.assign(e.info, { location: this.function.locations[this.instrId!] })
+        }
+      }
       this.printDebug()
       console.error(e)
       console.log("State:")
@@ -152,8 +157,8 @@ export class RegionExclusivityCheckingPass {
 
     this.state = cloneState(inputState)
     if (this.debugLog) {
-      console.log(textColors.red(`\nExecuting block: ${regionId}`));
-      console.log("Input state for block:", regionId)
+      // console.log(textColors.red(`\nExecuting block: ${regionId}`));
+      // console.log("Input state for block:", regionId)
 
       this.printLocals(inputState.locals)
       this.printMemory(inputState.memory)
@@ -174,7 +179,7 @@ export class RegionExclusivityCheckingPass {
     }
 
     if (this.debugLog) {
-      console.log("Computed state for block:", regionId)
+      // console.log("Computed state for block:", regionId)
       this.printLocals(this.state.locals)
       this.printMemory(this.state.memory)
     }
@@ -184,8 +189,8 @@ export class RegionExclusivityCheckingPass {
 
   execute(instrId: InstructionId, instr: IRInstruction): void {
     if (this.debugLog) {
-      console.log(`Executing ${instr.irType}: ${instrId}`);
-      console.log(formatInstruction(instr));
+      // console.log(`Executing ${instr.irType}: ${instrId}`);
+      // console.log(formatInstruction(instr));
     }
     if (instr instanceof AssignInstruction)               this.handleAssignInstruction(instr);
     else if (instr instanceof LoadConstantInstruction)    this.handleLoadConstantInstruction(instr);
@@ -232,9 +237,10 @@ export class RegionExclusivityCheckingPass {
   }
 
   handleLoadFromAddressInstruction(instr: LoadFromAddressInstruction): void {
+    const newAddress = this.addressFromRegister(instr.address)
     // const addresses = this.state.locals.get(instr.address);
     // this.state.locals.set(instr.dest, new Set(addresses));
-    const newAddress = this.newAddress(instr.type);
+    // const newAddress = this.newAddress(instr.type);
     this.state.locals.set(instr.dest, new Set([newAddress]));
     this.state.memory.set(newAddress, new BorrowSet());
   }
@@ -249,7 +255,7 @@ export class RegionExclusivityCheckingPass {
 
   handlePointerOffsetInstruction(instr: PointerOffsetInstruction): void {
     if (this.debugLog) {
-      console.log("State before pointer offset")
+      // console.log("State before pointer offset")
       this.printMemory(this.state.memory)
       this.printLocals(this.state.locals)
     }
@@ -299,6 +305,10 @@ export class RegionExclusivityCheckingPass {
     return addr;
   }
 
+  addressFromRegister(reg: string): string {
+    return `a_${reg}`;
+  }
+
   initializeFunctionParam(state: InterpreterState, param: FunctionParameter, reg: string) {
     const addr = this.newAddress(param.type);
     state.locals.set(reg, new Set([addr]));
@@ -333,7 +343,7 @@ export class RegionExclusivityCheckingPass {
     const addrs = this.state.locals.get(source);
     compilerAssert(addrs, `No address found for ${source}`);
     const addrStr = Array.from(addrs).join(', ');
-    if (this.debugLog) console.log(`Accessing ${source} at ${addrStr} ${capability} to ${dest}`);
+    // if (this.debugLog) console.log(`Accessing ${source} at ${addrStr} ${capability} to ${dest}`);
 
     const reborrowId = this.getReborrowSource(dest as InstructionId)
 
@@ -348,12 +358,12 @@ export class RegionExclusivityCheckingPass {
 
       if (borrowSet.borrows.length === 0) {
         borrowSet.insert(addr, capability, instrId, dest)
-        if (this.debugLog) printMemory(this.state.memory)
+        // if (this.debugLog) printMemory(this.state.memory)
         continue
       }
 
-      if (this.debugLog) console.log("Existing borrows for address", instrId, addr)
-      if (this.debugLog) console.log("existingBorrows", borrowSet)
+      // if (this.debugLog) console.log("Existing borrows for address", instrId, addr)
+      // if (this.debugLog) console.log("existingBorrows", borrowSet)
 
       const exclusiveBorrows = borrowSet.getExclusiveBorrows(addr, capability)
 
@@ -386,7 +396,7 @@ export class RegionExclusivityCheckingPass {
     this.state.locals.set(dest, addrs);
     
     if (this.debugLog) {
-      console.log("State after access")
+      // console.log("State after access")
       this.printMemory(this.state.memory)
       this.printLocals(this.state.locals)
     }
@@ -405,6 +415,7 @@ export class RegionExclusivityCheckingPass {
       if (s2 instanceof AccessInstruction) return source2
       if (s2 instanceof ProjectBundleInstruction) return source2
       if (s2 instanceof ProjectAccessInstruction) return source2
+      if (s2 instanceof AssignInstruction) return getSource(s2.source as InstructionId)
       if (s2 instanceof GetFieldPointerInstruction) return getSource(s2.address as InstructionId)
       return null
     }
@@ -419,7 +430,7 @@ export class RegionExclusivityCheckingPass {
     compilerAssert(instr.capabilities.length === 1, "Capability must have been reified by now")
     const capability = instr.capabilities[0];
     const addrStr = Array.from(addrs).join(', ');
-    if (this.debugLog) console.log(`Ending access to ${instr.source} at ${addrStr} ${capability}`);
+    // if (this.debugLog) console.log(`Ending access to ${instr.source} at ${addrStr} ${capability}`);
 
 
     const originalId = instr.source as InstructionId

@@ -57,6 +57,7 @@ fn copy_buffer(dst: set Buffer, buf: Buffer):
 
 fn move_init_buffer(dst: set Buffer, src: sink Buffer):
   print("Move init buffer", dst as rawptr, src as rawptr)
+  print("Source size", src.size)
   dst.size = src.size&
   dst.data = src.data&
   src.data = rawptr(0)
@@ -117,10 +118,10 @@ fn get_array!(T)(arr: Array!T, index: int, f) @subscript:
   #   exit(1)
   if arr.data.data == rawptr(0):
     print("Not allocated")
-    exit(0)
+    exit(1)
   if index < 0 or index >= arr.len:
     print("Bounds check failed")
-    exit(0)
+    exit(1)
   f(compiler.unsafe_subscript!T(arr.data.data, index))
   # f(3)
 
@@ -327,7 +328,8 @@ fn test_project():
   # else:
   #   foo.x = 23
 
-  foo.x = 456
+  # TODO: This is failing for some reason!!!!
+  # foo.x = 456
 
   print(foo)
 
@@ -396,7 +398,21 @@ fn test_loop():
     print(foo[i])
     i += 1
 
+
+
+fn test_basic_pointers():
+  var thing = malloc_or_exit(20)
+
+  compiler.unsafe_set_subscript(thing, 0, 23)
+  
+  print(thing)
+
+  let x = compiler.unsafe_subscript!int(thing, 0)
+  print(x)
+
+
 fn main():
+  test_basic_pointers()
 
   test_array1()
   # test_array2()

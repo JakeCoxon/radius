@@ -1,3 +1,4 @@
+import compiler for assert
 import vec for vec3
 
 # These are test cases for projecting values out of a block (including ifx)
@@ -27,6 +28,7 @@ fn test_project_ifx_result():
   print(x)
   print(y)
   print(z)
+  assert(z == 11)
 
 
 fn test_project_ifx_non_primitive():
@@ -46,6 +48,7 @@ fn test_project_ifx_non_primitive():
   print(a)
   print(b)
   print(c)
+  assert(c.x == 11)
 
 
 fn test_project_block_result():
@@ -64,9 +67,11 @@ fn test_project_block_result():
   print(x)
   print(y)
   print(z)
+  assert(z == 2)
   
   # Fine because the borrow has completed
   x += 1
+  assert(x == 2)
 
 
 fn test_project_block_move():
@@ -82,6 +87,8 @@ fn test_project_block_move():
     # and to be conservative we don't allow it to be used after the block
     # print(x)
     print(z)
+
+    assert(z == 1)
 
   # These will also be an error because the block holds on to the borrows
   # indefinitely even past the end of its scope.
@@ -106,6 +113,7 @@ fn test_project_block_copy():
     print(z)
 
   print(x)
+  assert(x == 1)
 
   print("OK")
 
@@ -134,6 +142,7 @@ fn test_move():
     var c = a&
     print(b)
     print(c)
+    assert(c.x == 2)
   else:
     var d = b&
     print(a)
@@ -142,14 +151,58 @@ fn test_move():
   # print(a)
   # print(b)
 
+
+fn test_project_expression():
+  let x = vec3(1, 2, 32)
+  var y = vec3(4, 5, 6)
+
+  let a = ifx 1 == 1: x else: y
+  print(a)
+  assert(a.x == 1)
+
+  var b = ifx 1 == 1: x.copy else: y
+  print(b)
+  assert(b.x == 1)
+  
+  # Parser issues won't allow this as an expression yet
+  const f = {|| 
+    let z = vec3(4,5,6)
+    z
+  }
+  const g = {|| 
+    let z = vec3(7,8,9)
+    z
+  }
+  
+  let w = ifx true: f() else: g()
+  print(w)
+  assert(w.x == 4)
+
+
+fn test_project_primitive_expression():
+  var a = 2
+  let b = ifx 1 == 1: a else: 3
+  print(b)
+
+  print(2 + (ifx 1 == 1: a else: 3))
+
+  var c = ifx 1 == 1: a else: 3
+  print(c)
+
+  c = (ifx 2 > 0: b else: 3)
+  print(c)
+
+
 fn main():
   test_move()
-  # test_project_block_move()
-  # test_project_block_copy()
-  # test_project_ifx_result()
-  # test_project_ifx_non_primitive()
-  # test_project_block_result()
-  # test_project_and()
+  test_project_block_move()
+  test_project_block_copy()
+  test_project_ifx_result()
+  test_project_ifx_non_primitive()
+  test_project_block_result()
+  test_project_and()
+  test_project_expression()
+  test_project_primitive_expression()
 
 
 # TOOD: Break will need to be transformed into an interleave
