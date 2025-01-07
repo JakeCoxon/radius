@@ -334,10 +334,17 @@ export class FunctionCodeGenerator {
   }
 
   generateMutSigilExpression(ast: MutSigilAst, context: ExpressionContext) {
-    if (context.expectMutable) {
-      return this.generateExpression(this.extractMutableSigil(ast.expr), { target: context.target })
-    }
-    compilerAssert(false, 'Unexpected mutable sigil (&)', { ast, context })
+    let allow = !!context.expectMutable
+
+    // We have a special case for mutable sigils where we don't actually know if the
+    // value will be sinked or not, and we need to get the compiler to allow it.
+    // This happens in the case of array literals which get transformed into a block
+    // expression that moves or projects the array value out. This is the best way I 
+    // can think of dealing with this for now, but open to revisit it later.
+    allow = allow || ast.onlyIfNeccessary
+
+    if (allow) return this.generateExpression(this.extractMutableSigil(ast.expr), { target: context.target })
+    compilerAssert(false, 'Unexpected mutable sigil (&)', { ast, context, location: ast.location })
   }
 
   generateBlockStatement(ast: BlockAst) {
@@ -1195,7 +1202,9 @@ export class FunctionCodeGenerator {
       compilerAssert(global.letType === LetType.Var || isInitializer, 'Cannot assign to a let variable', { location: ast.location, global, ast })
       const targetReg = this.newRegister();
       this.addInstruction(new GetGlobalAddress(targetReg, global.type, global.register), ast.location);
-      this.generateExpression(ast.value, { target: new ConstructRegister(targetReg), expectMutable: new ExpectMutable(ast.location) })
+      const storageReg = this.generateAlloc(global.type, ast.location)
+      this.generateExpression(ast.value, { target: new ConstructRegister(storageReg), expectMutable: new ExpectMutable(ast.location) })
+      this.generateMovePointerInstruction(targetReg, new Pointer(storageReg), global.type, ast.location)
       this.irFunction.globalRegisters.push({ register: global.register, type: global.type, })
       return
     }
@@ -1410,10 +1419,10 @@ class GeneratorCodegen {
     
     if (currentBranch.writeAddress) {
       compilerAssert(ast.expr, 'Expected expression', { ast })
-      const valueAddress = fnCodegen.newRegister()
-      fnCodegen.generateExpression(ast.expr, { target: new PointerRegister(valueAddress) })
-      fnCodegen.addInstruction(new CommentInstruction(`Write pointer ${valueAddress} to ${currentBranch.writeAddress}`), ast.location)
-      fnCodegen.generateCopyPrimitiveToAddressInstruction(currentBranch.writeAddress, new Value(valueAddress), RawPointerType, ast.location)
+      const addressReg = fnCodegen.newRegister()
+      fnCodegen.generateExpression(ast.expr, { target: new PointerRegister(addressReg) })
+      fnCodegen.addInstruction(new CommentInstruction(`Write pointer ${addressReg} to ${currentBranch.writeAddress}`), ast.location)
+      fnCodegen.generateCopyPrimitiveToAddressInstruction(currentBranch.writeAddress, new Value(addressReg), RawPointerType, ast.location)
     }
 
     const nextJumpRegion = currentBranch.regionIds.length
@@ -1432,8 +1441,14 @@ class GeneratorCodegen {
     if (currentBranch.readAddress) {
       fnCodegen.addInstruction(new CommentInstruction(`Read pointer from ${currentBranch.readAddress}`), ast.location)
       fnCodegen.addInstruction(new MarkInitializedInstruction(currentBranch.readAddress, RawPointerType, true), ast.location)
-      compilerAssert((context.target instanceof PointerRegister), 'Unexpected target', { context, ast })
-      fnCodegen.toValueRegister(context.target.address, RawPointerType, new Pointer(currentBranch.readAddress), ast.location)
+      const addressReg = context.target instanceof ValueRegister ? fnCodegen.newRegister() : 
+        context.target instanceof PointerRegister ? context.target.address
+        : (compilerAssert(false, 'Unexpected ConstructValue target. When does this happen?', { context, ast }) as never)
+      
+      fnCodegen.toValueRegister(addressReg, RawPointerType, new Pointer(currentBranch.readAddress), ast.location)
+      if (context.target instanceof ValueRegister) {
+        fnCodegen.addInstruction(new LoadFromAddressInstruction(context.target.register, ast.type, addressReg), ast.location)
+      }
       return
     }
 

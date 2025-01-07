@@ -333,7 +333,10 @@ fn test_if():
   assert(@first(numbers[:] if numbers[:] < 20) == 10)
   assert(@last(numbers[:] if numbers[:] < 20) == 12)
 
-  const cc1 = @concat(numbers[:] if numbers[:] < 20, numbers[:] if numbers[:] > 20)
+  const cc1 = @concat(
+    numbers[:] if numbers[:] < 20, 
+    numbers[:] if numbers[:] > 20
+  )
   print(cc1[:]) ...
 
 fn test_while():

@@ -127,7 +127,7 @@ export class ExclusivityCheckingPass {
       this.execute(instrId, instr);
       index++;
       if (i++ > 10000) {
-        compilerAssert(false, "Infinite instruction loop")
+        compilerAssert(false, "Infinite instruction loop", { i })
       }
     }
 

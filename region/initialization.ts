@@ -141,7 +141,7 @@ export class RegionInitializationCheckingPass {
 
     let runs = 0
     worklist.fixedPoint((regionId) => {
-      if (runs++ > 1000) {
+      if (runs++ > 10000) {
         compilerAssert(false, "Infinite loop");
       }
       const predecessors = this.cfg.predecessors.get(regionId) || [];

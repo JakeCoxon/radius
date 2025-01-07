@@ -528,7 +528,7 @@ export class InterleaveAst extends AstRoot {    key = 'interleave' as const;    
 export class ContinueInterAst extends AstRoot { key = 'continueinter' as const;  constructor(public type: Type, public location: SourceLocation, public interleaveBinding: Binding, public labelBinding: Binding) { super() } }
 export class GeneratorAst extends AstRoot {     key = 'generator' as const;      constructor(public type: Type, public location: SourceLocation, public binding: Binding, public entryLabels: Binding[], public elseLabels: Binding[], public entryValueType: Type, public elseValueType: Type, public entryBlock: Ast, public elseBlock: Ast) { super() } }
 export class YieldGenerAst extends AstRoot {    key = 'yieldgener' as const;     constructor(public type: Type, public location: SourceLocation, public generatorBinding: Binding, public labelBinding: Binding, public expr: Ast | null) { super() } }
-export class MutSigilAst extends AstRoot {      key = 'mut' as const;            constructor(public type: Type, public location: SourceLocation, public expr: Ast) { super() } }
+export class MutSigilAst extends AstRoot {      key = 'mut' as const;            constructor(public type: Type, public location: SourceLocation, public expr: Ast, public onlyIfNeccessary: boolean = false) { super() } }
 export class YieldAst extends AstRoot {         key = 'yield' as const;          constructor(public type: Type, public location: SourceLocation, public expr: Ast) { super() } }
 
 export type Ast = NumberAst | LetAst | SetAst | OperatorAst | IfAst | ListAst | CallAst | AndAst | UserCallAst |

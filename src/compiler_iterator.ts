@@ -168,7 +168,8 @@ const arrayConstructorFinish = new ExternalFunction('arrayConstructorFinish', Vo
   compilerAssert(binding, "Expected list binding", { constructor })
   const let_ = new LetAst(VoidType, ctx.location, binding, constructor.arrayConstructor, LetType.Var)
   const bindingAst = new BindingAst(binding.type, ctx.location, binding)
-  return createStatements(ctx.location, [let_, ...constructor.calls, bindingAst])
+  const mut = new MutSigilAst(binding.type, ctx.location, bindingAst, true)
+  return createStatements(ctx.location, [let_, ...constructor.calls, mut])
 })
 
 const appendValuePartialFn = (() => {

@@ -117,8 +117,8 @@ export class RegionExclusivityCheckingPass {
 
     worklist.fixedPoint((regionId) => {
       this.runs += 1
-      if (this.runs > 1000) {
-        compilerAssert(false, "Infinite worklist loop")
+      if (this.runs > 10000) {
+        compilerAssert(false, "Infinite worklist loop", { runs: this.runs })
         return
       }
       const predecessors = this.cfg.predecessors.get(regionId) || [];
