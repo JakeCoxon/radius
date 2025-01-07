@@ -1120,8 +1120,9 @@ const instructions: InstructionMapping = {
       compilerAssert(fn, "Expected function for binding", { binding })
 
       const letBinding = new Binding("", yieldType);
+      const mutSubscriptAst = new MutSigilAst(yieldType, vm.location, subscriptAst)
       const stmts = createStatements(vm.location, [
-        new LetAst(VoidType, vm.location, letBinding, subscriptAst, LetType.VarRef),
+        new LetAst(VoidType, vm.location, letBinding, mutSubscriptAst, LetType.VarRef),
         new SetAst(VoidType, vm.location, letBinding, value)
       ])
       vm.stack.push(stmts)
