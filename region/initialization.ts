@@ -133,6 +133,8 @@ export class RegionInitializationCheckingPass {
 
     const entryState = this.createInitialState();
 
+    const visitTree = new VisitTree()
+
     const worklist = new RegionWorklist(this.cfg);
 
     const { regionId } = worklist.shift()!;
@@ -142,7 +144,7 @@ export class RegionInitializationCheckingPass {
     let runs = 0
     worklist.fixedPoint((regionId) => {
       if (runs++ > 10000) {
-        compilerAssert(false, "Infinite loop");
+        compilerAssert(false, "Infinite loop", { runs });
       }
       const predecessors = this.cfg.predecessors.get(regionId) || [];
       const state = this.blockStates.get(regionId)!;
@@ -168,6 +170,8 @@ export class RegionInitializationCheckingPass {
       // This ensures we avoid redundant work and helps reach a fixed point efficiently.
       if (state && allInputStates && statesEqual(state.input, mergedInputState)) return;
 
+      visitTree.addVisit(regionId, predecessors.filter(pred => this.blockStates.get(pred)!));
+
       if (false) {
         const diff = state ? statesDiff(state.input, mergedInputState) : ''
         this.diagnostics.regionNote(regionId, ` ${this.visitRegionNum}. Merging input states for ${regionId}: ${predecessors.join(', ')} - ${diff}`);
@@ -186,6 +190,8 @@ export class RegionInitializationCheckingPass {
       worklist.addWork(regionId);
       worklist.visited.add(regionId);
     });
+
+    visitTree.print(this.function.debugName)
 
     console.log("All checked ok");
   }
@@ -248,21 +254,21 @@ export class RegionInitializationCheckingPass {
     else if (instr instanceof GetFieldPointerInstruction) this.executeGetFieldPointer(instr);
     else if (instr instanceof PointerOffsetInstruction)   this.executePointerOffset(instr);
     else if (instr instanceof PointerToAddressInstruction)this.executePointerToAddress(instr);
-    else if (instr instanceof JumpInstruction)            { }
-    else if (instr instanceof BreakInstruction)           { }
     else if (instr instanceof ConditionalJumpInstruction) this.executeConditionalJump(instr);
     else if (instr instanceof ProjectBundleInstruction)   this.executeProjectBundle(instr);
     else if (instr instanceof ProjectAccessInstruction)   this.executeProjectAccess(instr);
     else if (instr instanceof BitCastInstruction)         this.executeBitCast(instr);
-    else if (instr instanceof EndAccessInstruction)       { }
     else if (instr instanceof MoveInstruction)            this.executeMove(instr);
     else if (instr instanceof GetGlobalAddress)           this.executeGetGlobalAddress(instr);
     else if (instr instanceof MarkInitializedInstruction) this.executeMarkInitialized(instr);
     else if (instr instanceof DeallocStackInstruction)    this.executeDeallocStackInstruction(instr);
     else if (instr instanceof YieldInstruction)           this.executeYield(instr);
     else if (instr instanceof YieldGeneratorInstruction)  this.executeYieldGeneratorInstructions(instr);
-    else if (instr instanceof JumpTableInstruction)       { }
     else if (instr instanceof PhiInstruction)             this.executePhi(instr);
+    else if (instr instanceof JumpInstruction)            { }
+    else if (instr instanceof BreakInstruction)           { }
+    else if (instr instanceof EndAccessInstruction)       { }
+    else if (instr instanceof JumpTableInstruction)       { }
     else if (instr instanceof CommentInstruction)         { }
     else compilerAssert(false, `Unknown instruction in initialization pass: ${instr.irType}`);
     this.printLocalsMemory(this.instrId)
@@ -951,4 +957,37 @@ export class RegionWorklist {
     this.worklist.push({ regionId });
   }
 
+}
+
+class VisitTree {
+  nodes: { [regionId: string]: number } = {}
+  edges: { [edgeId: string]: number } = {}
+  connections: [RegionId, RegionId][] = []
+
+  addVisit(regionId: RegionId, predecessors: RegionId[]) {
+    this.nodes[regionId] = this.nodes[regionId] || 0
+    this.nodes[regionId] ++
+    for (const pred of predecessors) {
+      const edgeId = `${pred}->${regionId}`
+      if (!this.edges[edgeId]) {
+        this.connections.push([pred, regionId])
+        this.edges[edgeId] = 0
+      }
+      this.edges[edgeId] ++
+    }
+  }
+
+  print(name: string) {
+    // Print as DOT
+    console.log("##### Visit Tree", name)
+    console.log(`digraph {`)
+    for (const regionId in this.nodes) {
+      console.log(`  ${regionId} [label="${regionId} = ${this.nodes[regionId]}"]`)
+    }
+    for (const [from, to] of this.connections) {
+      const label = this.edges[`${from}->${to}`]
+      console.log(`  ${from} -> ${to} [label="${label}"]`)
+    }
+    console.log(`}`)
+  }
 }
