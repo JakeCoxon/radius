@@ -1,9 +1,9 @@
-import { createDefaultConstructorAst, generateConstructor, generateDestructor, generateMoveFunction } from "../borrow/codegen_ast"
+import { createDefaultConstructorAst, createParameter, generateConstructor, generateDestructor, generateMoveFunction } from "../borrow/codegen_ast"
 import { BytecodeSecondOrder, callFunctionFromValueTask, compileFunctionPrototype, getOperatorTable, pushBytecode, unknownToAst, visitParseNode } from "./compiler_vm"
 import { compileAndExecuteFunctionHeaderTask, compileExportedFunctionTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, FunctionCallArg, functionTemplateTypeCheckAndCompileTask, insertFunctionDefinition } from "./compiler_functions"
 import { concat, generator } from "./compiler_iterator"
 import { OptionTypeConstructor, createParameterizedExternalType, hashValues, isTypeInteger, isTypeScalar, propagateLiteralType, propagatedLiteralAst } from "./compiler_types"
-import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, UserCallAst, NeverType, IfAst, BoolType, VoidAst, LoopObject, CompileTimeObjectType, u64Type, FunctionDefinition, ParserFunctionDecl, StatementsAst, IntLiteralType, FloatLiteralType, isAst, isType, isTypeCheckError, InterleaveAst, ContinueInterAst, CompTimeObjAst, ParseEvalFunc, SetAst, DefaultConsAst, WhileAst, BoolAst, isArray, ExpansionSelector, ParseNote, ExpansionCompilerState, ParseBoolean, ParseOr, ParseBreak, ParseIs, filterNotNull, ParseLetConst, ParseCast, VariantCastAst, ExternalTypeConstructor, GlobalCompilerState, ParseOrElse, ParseField, ParseQuestion, ParseBreakOpt, LabelBlock, BlockAst, ParseMatch, ParseExtract, ParseMatchCase, ParseTuple, ParseString, Tuple, ParseNot, EnumVariantAst, ParseIfMulti, ParseGuard, ParseBlockNoScope, Capability, TypeCheckResult, CompiledFunction, LetType, YieldAst, textColors, MutSigilAst, TypeField, ParseMutSigil, ParseSymbol } from "./defs"
+import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, UserCallAst, NeverType, IfAst, BoolType, VoidAst, LoopObject, CompileTimeObjectType, u64Type, FunctionDefinition, ParserFunctionDecl, StatementsAst, IntLiteralType, FloatLiteralType, isAst, isType, isTypeCheckError, InterleaveAst, ContinueInterAst, CompTimeObjAst, ParseEvalFunc, SetAst, DefaultConsAst, WhileAst, BoolAst, isArray, ExpansionSelector, ParseNote, ExpansionCompilerState, ParseBoolean, ParseOr, ParseBreak, ParseIs, filterNotNull, ParseLetConst, ParseCast, VariantCastAst, ExternalTypeConstructor, GlobalCompilerState, ParseOrElse, ParseField, ParseQuestion, ParseBreakOpt, LabelBlock, BlockAst, ParseMatch, ParseExtract, ParseMatchCase, ParseTuple, ParseString, Tuple, ParseNot, EnumVariantAst, ParseIfMulti, ParseGuard, ParseBlockNoScope, Capability, TypeCheckResult, CompiledFunction, LetType, YieldAst, textColors, MutSigilAst, TypeField, ParseMutSigil, ParseSymbol, FunctionParameter } from "./defs"
 import { Event, Task, TaskDef, isTask } from "./tasks"
 import { resolveScope, loadModule } from "./compiler"
 
@@ -100,6 +100,8 @@ export const defaultMetaFunction = (subCompilerState: SubCompilerState, compiled
   compilerAssert(!copy || copy instanceof Closure)
   const length = templateScope['__length']
   compilerAssert(!length || length instanceof Closure)
+  const print = templateScope['__print']
+  compilerAssert(!print || print instanceof Closure)
 
   // if (compiledClass.classDefinition.keywords.includes('struct'))
   compiledClass.type.typeInfo.isReferenceType = false // Always false for now
@@ -115,7 +117,10 @@ export const defaultMetaFunction = (subCompilerState: SubCompilerState, compiled
   const funcDef = insertFunctionDefinition(subCompilerState.globalCompiler, decl)
   const constructor = new Closure(funcDef, definitionScope, subCompilerState.lexicalParent!)
 
-  Object.assign(compiledClass.metaobject, { iterate, subscript, subscript_inout, subscript_sink, subscript_set, constructor, destructor, moveInit, moveAssign, copy, length })
+  Object.assign(compiledClass.metaobject, { 
+    iterate, subscript, subscript_inout, subscript_sink, subscript_set, constructor, destructor, moveInit,
+    moveAssign, copy, length, print
+  })
 
   return (
     compileCustomDestructor(subCompilerState, compiledClass.debugName, destructor as Closure | undefined, compiledClass)
@@ -129,6 +134,10 @@ export const defaultMetaFunction = (subCompilerState: SubCompilerState, compiled
     }))
     .chainFn(() => compileCustomCopy(subCompilerState, compiledClass.debugName, copy as Closure | undefined, compiledClass).chainFn((task, compiledFn) => {
       if (compiledFn) compiledClass.metaobject.copyConstructorBinding = compiledFn.binding
+      return Task.success()
+    }))
+    .chainFn(() => compileCustomPrint(subCompilerState, compiledClass.debugName, print as Closure | undefined, compiledClass).chainFn((task, compiledFn) => {
+      if (compiledFn) compiledClass.metaobject.printBinding = compiledFn.binding
       return Task.success()
     }))
     .chainFn((task, constructor) => {
@@ -219,6 +228,28 @@ const compileCustomCopy = (subCompilerState: SubCompilerState, structName: strin
   )
 }
 
+const compileCustomPrint = (subCompilerState: SubCompilerState, structName: string, printfn: Closure | undefined, compiledClass: CompiledClass): Task<CompiledFunction | undefined, CompilerError> => {
+  if (!printfn) return Task.of(undefined)
+
+  const ctx: CompilerFunctionCallContext = { location: SourceLocation.anon, compilerState: subCompilerState, resultAst: undefined, typeCheckResult: undefined }
+  const value = new BindingAst(compiledClass.type, ctx.location, new Binding("", compiledClass.type)) // Fake it
+
+  const typeCheckResult: TypeCheckResult = { func: printfn.func, concreteTypes: [], substitutions: {}, returnType: undefined!, sortedArgs: [], checkFailed: false }
+  const call: FunctionCallArg = { location: SourceLocation.anon, func: printfn.func, typeArgs: [], args: [value], parentScope: printfn.scope, lexicalParent: printfn.lexicalParent, result: typeCheckResult }
+
+  return (
+    TaskDef(compileAndExecuteFunctionHeaderTask, call)
+    .chain(TaskDef(functionTemplateTypeCheckAndCompileTask, call))
+    .chainFn((task, compiledFunction) => {
+      compilerAssert(compiledFunction.parameters.length === 1, "Expected 1 parameter in print function", { c: compiledFunction })
+      compilerAssert(compiledFunction.parameters[0].type === compiledClass.type, "Expected type of print function's first argument to be $type got $otherType", { type: compiledClass.type, otherType: compiledFunction.parameters[0].type })
+      compilerAssert(compiledFunction.parameters[0].capability === Capability.Let, "Expected let capability", { c: compiledFunction })
+      compilerAssert(compiledFunction.returnType === VoidType, "Expected return type", { c: compiledFunction })
+      return Task.of(compiledFunction)
+    })
+  )
+}
+
 export const generateTypeMethods = (globalCompiler: GlobalCompilerState, type: Type) => {
 
   const name = type.shortName
@@ -253,7 +284,66 @@ export const generateTypeMethods = (globalCompiler: GlobalCompilerState, type: T
     const moveAssign = generateMoveFunction(type, `moveAssign${name}`, Capability.Inout, Capability.Sink, binding);
     globalCompiler.compiledFunctions.set(moveAssign.binding, moveAssign)
   }
+
+  if (!typeInfo.metaobject.printBinding) {
+    const binding = typeInfo.metaobject.printBinding = new Binding(`print${name}`, VoidType)
+    const print = generatePrintFunction(type, binding);
+    globalCompiler.compiledFunctions.set(print.binding, print)
+  }
 }
+
+export const generatePrintFunction = (type: Type, binding: Binding) => {
+  const funcParams: FunctionParameter[] = [];
+  const argBindings: Binding[] = [];
+  const concreteTypes: Type[] = [];
+
+  const paramBinding = new Binding('param', type);
+  argBindings.push(paramBinding);
+  funcParams.push(createParameter(paramBinding, Capability.Let));
+  concreteTypes.push(type);
+
+  const location = SourceLocation.anon
+
+  const rawstr = (str: string) => new StringAst(RawPointerType, location, str)
+  const printf = (...args: any) => new UserCallAst(VoidType, location, externalBuiltinBindings.printf, args)
+
+  const fieldHelper = (binding: Binding, name: string) => {
+    const field = binding.type.typeInfo.fields.find(x => x.name === name)!
+    return new ValueFieldAst(field.fieldType, location, new BindingAst(binding.type, location, binding), [field])
+  }
+
+  const printStringAst = (format: string, ast: Ast) => {
+    const let_ = new LetAst(VoidType, location, new Binding("", StringType), ast, LetType.Let)
+    const lengthGetter = fieldHelper(let_.binding, 'length')
+    const dataGetter = fieldHelper(let_.binding, 'data')
+    return createStatements(location, [let_, printf(rawstr(format), lengthGetter, dataGetter)])
+  }
+
+  const bindingAst = new BindingAst(type, SourceLocation.anon, paramBinding)
+
+  const constructorBody = (() => {
+    if (type === BoolType) {
+      const bool = new IfAst(StringType, location, bindingAst, new StringAst(StringType, location, "true"), new StringAst(StringType, location, "false"))
+      return printStringAst(textColors.yellow("%.*s"), bool)
+    } else if (type === StringType) {
+      return printStringAst(textColors.yellow("\"%.*s\""), bindingAst)
+    } else if (type.typeInfo.metaobject.isTuple) {
+      const stmts = []
+      stmts.push(printf(rawstr(`(`)))
+      type.typeInfo.fields.forEach((field, j) => {
+        if (j !== 0) stmts.push(printf(rawstr(", ")))
+        const fieldAst = new ValueFieldAst(field.fieldType, location, bindingAst, [field])
+        stmts.push(generateInlinePrintArg(fieldAst))
+      })
+      stmts.push(printf(rawstr(`)`)))
+      return createStatements(location, stmts)
+    }
+    return generateStructPrintStatements(bindingAst)
+  })()
+  const compiledFunc = new CompiledFunction(binding, { debugName: binding.name } as any, VoidType, concreteTypes, constructorBody, argBindings, funcParams, [], 0);
+  return compiledFunc
+}
+
 
 export const createListConstructor = (vm: Vm, elementType: Type, values: Ast[]) => {
   compilerAssert(false, "Not implemented")
@@ -352,6 +442,71 @@ export const assert = new CompilerFunction('assert', (ctx, typeArgs: unknown[], 
   )
 })
 
+const generateStructPrintStatements = (bindingArg: BindingAst) => {
+  const location = bindingArg.location
+
+  const rawstr = (str: string) => new StringAst(RawPointerType, location, str)
+  const printf = (...args: any) => new UserCallAst(VoidType, location, externalBuiltinBindings.printf, args)
+
+  const stmts = []
+  stmts.push(printf(rawstr(`${textColors.green(bindingArg.type.shortName)}(`)))
+  bindingArg.type.typeInfo.fields.forEach((field, j) => {
+    
+    if (j !== 0) stmts.push(printf(rawstr(", ")))
+    stmts.push(printf(rawstr(`${field.name}=`)))
+    const fieldAst = new ValueFieldAst(field.fieldType, location, bindingArg, [field])
+    stmts.push(generateInlinePrintArg(fieldAst))
+  })
+  stmts.push(printf(rawstr(")")))
+  return createStatements(location, stmts)
+}
+
+const generateInlinePrintArg = (arg: Ast) => {
+  const location = arg.location
+  const fieldHelper = (binding: Binding, name: string) => {
+    const field = binding.type.typeInfo.fields.find(x => x.name === name)!
+    return new ValueFieldAst(field.fieldType, location, new BindingAst(binding.type, location, binding), [field])
+  }
+  const formats = new Map()
+  formats.set(IntType,        textColors.yellow("%i"))
+  formats.set(u64Type,        textColors.yellow("%i"))
+  formats.set(RawPointerType, textColors.blue("%p"))
+  formats.set(FloatType,      textColors.yellow("%f"))
+  formats.set(DoubleType,     textColors.yellow("%f"))
+
+  const rawstr = (str: string) => new StringAst(RawPointerType, location, str)
+  const printf = (...args: any) => new UserCallAst(VoidType, location, externalBuiltinBindings.printf, args)
+
+  const printStringAst = (format: string, ast: Ast) => {
+    const let_ = new LetAst(VoidType, location, new Binding("", StringType), ast, LetType.Let)
+    const lengthGetter = fieldHelper(let_.binding, 'length')
+    const dataGetter = fieldHelper(let_.binding, 'data')
+    return createStatements(location, [let_, printf(rawstr(format), lengthGetter, dataGetter)])
+  }
+
+  if (arg.type.typeInfo.metaobject.printBinding) {
+    const binding = arg.type.typeInfo.metaobject.printBinding as Binding
+    const call_ = new UserCallAst(VoidType, location, binding, [arg])
+    return call_
+  }
+  
+  if (arg.type === StringType) {
+    const binding = new Binding("", StringType)
+    const let_ = new LetAst(VoidType, location, binding, arg, LetType.Let)
+    const lengthGetter = fieldHelper(binding, 'length')
+    const dataGetter = fieldHelper(binding, 'data')
+    const call_ = printf(rawstr("%.*s"), lengthGetter, dataGetter)
+    return createStatements(location, [let_, call_])
+  }
+  if (arg.type === BoolType) {
+    const bool = new IfAst(StringType, location, arg, new StringAst(StringType, location, "true"), new StringAst(StringType, location, "false"))
+    return printStringAst(textColors.yellow("%.*s"), bool)
+  }
+  if (formats.has(arg.type)) {
+    return printf(rawstr(formats.get(arg.type)), arg)
+  }
+}
+
 export const print = new CompilerFunction('print', (ctx, typeArgs: unknown[], args: Ast[]) => {
   const location = ctx.location
   const stmts: Ast[] = []
@@ -370,18 +525,6 @@ export const print = new CompilerFunction('print', (ctx, typeArgs: unknown[], ar
   const rawstr = (str: string) => new StringAst(RawPointerType, location, str)
   const printf = (...args: any) => new UserCallAst(VoidType, location, externalBuiltinBindings.printf, args)
 
-  const formatField = (field: TypeField, binding: Binding) => {
-    const fmt = formats.get(field.fieldType)
-    const getter = fieldHelper(binding, field.name)
-    return printf(rawstr(fmt), getter)
-  }
-  const printStringAst = (format: string, ast: Ast) => {
-    const let_ = new LetAst(VoidType, location, new Binding("", StringType), ast, LetType.Let)
-    const lengthGetter = fieldHelper(let_.binding, 'length')
-    const dataGetter = fieldHelper(let_.binding, 'data')
-    return createStatements(location, [let_, printf(rawstr(format), lengthGetter, dataGetter)])
-  }
-
   args.forEach((arg, i) => {
     propagatedLiteralAst(arg)
     if (i !== 0) {
@@ -395,57 +538,18 @@ export const print = new CompilerFunction('print', (ctx, typeArgs: unknown[], ar
         const dataGetter = fieldHelper(binding, 'data')
         const call_ = printf(rawstr("%.*s"), lengthGetter, dataGetter)
         return createStatements(location, [let_, call_])
-      } else if (arg.type === BoolType) {
-        const bool = new IfAst(StringType, location, arg, new StringAst(StringType, location, "true"), new StringAst(StringType, location, "false"))
-        return printStringAst(textColors.yellow("%.*s"), bool)
-        // return printf(rawstr("%i"), num)
-      } else if (formats.has(arg.type)) {
-        return printf(rawstr(formats.get(arg.type)), arg)
-        // printfArgs.push(arg)
-        // formatStr += formats.get(arg.type)
-      } else if (arg.type instanceof ParameterizedType && arg.type.typeConstructor === TupleTypeConstructor) {
-        const binding = new Binding("", arg.type)
-        const localStmts = []
-        localStmts.push(new LetAst(VoidType, location, binding, arg, LetType.Let))
-
-        localStmts.push(printf(rawstr(`(`)))
-        binding.type.typeInfo.fields.forEach((field, j) => {
-          
-          if (j !== 0) localStmts.push(printf(rawstr(", ")))
-          if (field.fieldType === StringType) {
-            return localStmts.push(printStringAst(textColors.yellow("\"%.*s\""), fieldHelper(binding, field.name)))
-          }
-          if (!formats.has(field.fieldType)) {
-            localStmts.push(printf(rawstr(`${textColors.green(field.fieldType.shortName)}(...)`)))
-            return
-          }
-          localStmts.push(formatField(field, binding))
-        })
-
-        localStmts.push(printf(rawstr(`)`)))
-        return createStatements(location, localStmts)
-      } else if (arg.type.typeInfo.fields.length && !arg.type.typeInfo.isReferenceType) {
-        const localStmts = []
-        const binding = new Binding("", arg.type)
-        const let_ = new LetAst(VoidType, location, binding, arg, LetType.Let)
-        localStmts.push(let_)
-        localStmts.push(printf(rawstr(`${textColors.green(arg.type.shortName)}(`)))
-        binding.type.typeInfo.fields.forEach((field, j) => {
-          
-          if (j !== 0) localStmts.push(printf(rawstr(", ")))
-          if (field.fieldType === StringType) {
-            return localStmts.push(printStringAst(textColors.yellow("\"%.*s\""), fieldHelper(binding, field.name)))
-          }
-          if (!formats.has(field.fieldType)) {
-            return localStmts.push(printf(rawstr(`${field.name}=${textColors.green(field.fieldType.shortName)}(...)`)))
-          }
-          localStmts.push(printf(rawstr(`${field.name}=`)))
-          localStmts.push(formatField(field, binding))
-        })
-        localStmts.push(printf(rawstr(")")))
-        return createStatements(location, localStmts)
-      } else {
       }
+
+      if (arg.type.typeInfo.metaobject.printBinding) {
+        const binding = arg.type.typeInfo.metaobject.printBinding as Binding
+        const call_ = new UserCallAst(VoidType, location, binding, [arg])
+        return createStatements(location, [call_])
+      } 
+      
+      if (formats.has(arg.type)) {
+        return printf(rawstr(formats.get(arg.type)), arg)
+      }
+      
       compilerAssert(false, "Cannot print value of type $type. not implemented", { type: arg.type })
     })()
 
@@ -453,86 +557,6 @@ export const print = new CompilerFunction('print', (ctx, typeArgs: unknown[], ar
     stmts.push(ast)
   })
   stmts.push(printf(rawstr("\n")))
-  return Task.of(createStatements(location, stmts))
-})
-
-export const printToPrintf = new CompilerFunction('printToPrintf', (ctx, typeArgs: unknown[], args: Ast[]) => {
-  const location = ctx.location
-  // compilerAssert(args.length === 1 && args[0].type !== VoidType , "Expected non void argument", { args })
-  const stmts: Ast[] = []
-  let formatStr = ''
-  const printfArgs: Ast[] = []
-
-  const fieldHelper = (binding: Binding, name: string) => {
-    const field = binding.type.typeInfo.fields.find(x => x.name === name)!
-    return new ValueFieldAst(field.fieldType, location, new BindingAst(binding.type, location, binding), [field])
-  }
-  const formats = new Map()
-  formats.set(IntType, '%i')
-  formats.set(u64Type, '%i')
-  formats.set(RawPointerType, '%p')
-  formats.set(FloatType, '%f')
-  formats.set(DoubleType, '%f')
-
-
-  args.forEach((arg, i) => {
-    propagatedLiteralAst(arg)
-    if (i !== 0) formatStr += ' '
-    if (arg.type === StringType && arg instanceof StringAst) {
-      // Constant strings
-      formatStr += arg.value
-    } else if (arg.type === StringType) {
-      const binding = new Binding("", StringType)
-      stmts.push(new LetAst(VoidType, location, binding, arg, LetType.Let))
-      const lengthGetter = fieldHelper(binding, 'length')
-      const dataGetter = fieldHelper(binding, 'data')
-      formatStr += '%.*s'
-      printfArgs.push(lengthGetter, dataGetter)
-    } else if (arg.type === BoolType) {
-      const binding = new Binding("", StringType)
-      const str = new IfAst(StringType, location, arg, new StringAst(StringType, location, 'true'), new StringAst(StringType, location, 'false'))
-      stmts.push(new LetAst(VoidType, location, binding, str, LetType.Let))
-      const lengthGetter = fieldHelper(binding, 'length')
-      const dataGetter = fieldHelper(binding, 'data')
-      formatStr += '%.*s'
-      printfArgs.push(lengthGetter, dataGetter)
-    } else if (formats.has(arg.type)) {
-      printfArgs.push(arg)
-      formatStr += formats.get(arg.type)
-    } else if (arg.type instanceof ParameterizedType && arg.type.typeConstructor === TupleTypeConstructor) {
-      const binding = new Binding("", arg.type)
-      stmts.push(new LetAst(VoidType, location, binding, arg, LetType.Let))
-      formatStr += `(`
-      const fieldsToPrint = binding.type.typeInfo.fields.filter(x => formats.has(x.fieldType))
-      fieldsToPrint.forEach((field, j) => {
-        if (j !== 0) formatStr += ', '
-        const getter = fieldHelper(binding, field.name)
-        formatStr += formats.get(field.fieldType)
-        printfArgs.push(getter)
-      })
-      formatStr += ')'
-    } else if (arg.type.typeInfo.fields.length && !arg.type.typeInfo.isReferenceType) {
-      const binding = new Binding("", arg.type)
-      stmts.push(new LetAst(VoidType, location, binding, arg, LetType.Let))
-      formatStr += `${arg.type.shortName}(`
-      const fieldsToPrint = binding.type.typeInfo.fields.filter(x => formats.has(x.fieldType))
-      fieldsToPrint.forEach((field, j) => {
-        if (j !== 0) formatStr += ', '
-        const getter = fieldHelper(binding, field.name)
-        formatStr += `${field.name}=`
-        formatStr += formats.get(field.fieldType)
-        printfArgs.push(getter)
-      })
-      formatStr += ')'
-    } else {
-      compilerAssert(false, "Cannot print value of type $type", { type: arg.type })
-    }
-  })
-  formatStr += '\n'
-  const formatBinding = new Binding("", StringType)
-  stmts.unshift(new LetAst(VoidType, location, formatBinding, new StringAst(StringType, location, formatStr), LetType.Let))
-  printfArgs.unshift(fieldHelper(formatBinding, 'data'))
-  stmts.push(new CallAst(VoidType, location, externalBuiltinBindings.printf, printfArgs, []))
   return Task.of(createStatements(location, stmts))
 })
 
@@ -1210,7 +1234,7 @@ export const createCompilerModuleTask = (ctx: TaskContext): Task<Module, Compile
     operator_bitwise_and, operator_bitwise_or, rawptr: RawPointerType, add_external_library, add_macos_framework, assert, never: NeverType,
     get_current_loop, ctobj: CompileTimeObjectType, operator_mod, overloaded, static_length, assert_compile_error, initializer_function, add_export,
     concat, Option: OptionTypeConstructor, Some: SomeConstructor, None: NoneConstructor, unsafe_enum_cast: unsafeEnumCast, is_enum_variant: isEnumVariant, generator,
-    copy: copyFunction, printToPrintf })
+    copy: copyFunction })
   const subCompilerState = pushSubCompilerState(ctx, { debugName: `compiler module`, lexicalParent: undefined, scope: moduleScope })
   const module = new Module('compiler', subCompilerState, null!)
   return Task.of(module)

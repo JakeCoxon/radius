@@ -1,6 +1,6 @@
 import { generateConstructor, generateDestructor, generateMoveFunction } from "../borrow/codegen_ast"
 import { compileClassTask } from "./compiler"
-import { generateTypeMethods } from "./compiler_sugar"
+import { generatePrintFunction, generateTypeMethods } from "./compiler_sugar"
 import { Ast, BasicType, Binding, BoolType, Capability, ClassDefinition, Closure, CompilerError, ConcreteClassType, DoubleType, EnumVariantAst, ExternalTypeConstructor, FloatLiteralType, FloatType, FunctionDefinition, GlobalCompilerState, IntLiteralType, IntType, MutSigilAst, NeverType, NumberAst, OperatorAst, ParameterizedType, ParseCall, ParseIdentifier, ParseNode, PrimitiveType, RawPointerType, Scope, ScopeParentSymbol, SourceLocation, StatementsAst, StringType, SubscriptAst, TaskContext, Tuple, TupleTypeConstructor, Type, TypeCheckConfig, TypeCheckResult, TypeCheckVar, TypeConstructor, TypeField, TypeMatcher, TypeTable, TypeVariable, UnknownObject, VariantCastAst, VoidType, compilerAssert, getUniqueId, insertTypeInfoFields, isType, u64Type, u8Type } from "./defs"
 import { Event, Task, TaskDef } from "./tasks"
 
@@ -459,6 +459,8 @@ export const createTupleType = (globalCompiler: GlobalCompilerState, argTypes: T
   const type = new ParameterizedType(TupleTypeConstructor, argTypes, { sizeof: 0, alignment: 0, fields: [], metaobject: Object.create(null), isReferenceType: false });
   // TODO: Add getter for length
   insertTypeInfoFields(type, argTypes.map((argType, i) => ({ sourceLocation: SourceLocation.anon, name: `_${i+1}`, fieldType: argType })))
+  type.typeInfo.metaobject.isTuple = true
+  
   generateTypeMethods(globalCompiler, type)
   return Task.of(type)
 }
@@ -467,6 +469,12 @@ export const createTupleType = (globalCompiler: GlobalCompilerState, argTypes: T
 export const createDefaultTypeFunctions = (globalCompiler: GlobalCompilerState) => {
 
   generateStringMethods(globalCompiler)
+  generateBoolMethods(globalCompiler, BoolType)
+}
+
+const generateBoolMethods = (globalCompiler: GlobalCompilerState, type: Type) => {
+  const printBinding = generatePrintFunction(type, type.typeInfo.metaobject.printBinding as Binding);
+  globalCompiler.compiledFunctions.set(printBinding.binding, printBinding)
 }
 
 const generateStringMethods = (globalCompiler: GlobalCompilerState) => {
@@ -491,4 +499,7 @@ const generateStringMethods = (globalCompiler: GlobalCompilerState) => {
 
   const moveAssign = generateMoveFunction(type, `moveAssign${name}`, Capability.Inout, Capability.Sink, typeInfo.metaobject.moveAssignBinding as Binding);
   globalCompiler.compiledFunctions.set(moveAssign.binding, moveAssign)
+
+  const printBinding = generatePrintFunction(type, type.typeInfo.metaobject.printBinding as Binding);
+  globalCompiler.compiledFunctions.set(printBinding.binding, printBinding)
 }

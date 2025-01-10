@@ -462,7 +462,7 @@ fn test_break():
 
 fn test_borrow():
   var foo = Foo(1, 2.0)
-  var ref foo2 = foo
+  var ref foo2 = foo&
   if true:
     let x = foo2.x
     print(x)
@@ -494,21 +494,22 @@ fn test_sink():
   let num = thing + 2
   print(num)
 
+
 fn main():
-  # test_ops()
-  # test_string()
+  test_ops()
+  test_string()
   test_sink()
 
-  # test_array1()
-  # test_break()
+  test_array1()
+  test_break()
   # # test_array2()
-  # test_array3()
-  # test_borrow()
-  # test_move()
-  # test_project()
-  # test_loop()
-  # test_basic_project()
-  # test_set()
+  test_array3()
+  test_borrow()
+  test_move()
+  test_project()
+  test_loop()
+  test_basic_project()
+  test_set()
 
   # print("x", 123)
 

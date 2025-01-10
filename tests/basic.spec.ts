@@ -639,6 +639,16 @@ test('current_loop', async () => {
   testObject.close()
 })
 
+test('print', async () => {
+  const testObject = createTest({ 
+    moduleName: 'print',
+    globalOptions,
+    inputPath: `${import.meta.dir}/fixtures/print.rad`,
+  })
+  await testObject.run()
+  testObject.close()
+})
+
 test('add_operator_bug', async () => {
   const testObject = createTest({ 
     moduleName: 'add_operator_bug',

@@ -736,6 +736,8 @@ export const RawPointerType =   new PrimitiveType("rawptr",        { sizeof: 8, 
 export const AstType =          new PrimitiveType("ast",           { sizeof: 0, alignment: 0, fields: [], metaobject: Object.create(null), isReferenceType: false })
 export const CompileTimeObjectType = new PrimitiveType("ctobj",    { sizeof: 0, alignment: 0, fields: [], metaobject: Object.create(null), isReferenceType: false })
 
+Object.assign(BoolType.typeInfo.metaobject, { printBinding: new Binding("print_bool", FunctionType) })
+
 export type TypeFieldDef = {
   sourceLocation: SourceLocation,
   name: string,
@@ -774,6 +776,7 @@ export const StringType = (() => {
     copyConstructorBinding: new Binding("string_copy_constructor", FunctionType),
     moveInitBinding: new Binding("string_move_init", FunctionType),
     moveAssignBinding: new Binding("string_move_assign", FunctionType),
+    printBinding: new Binding("print_string", FunctionType),
   })
   return type
 })()

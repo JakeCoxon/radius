@@ -1,0 +1,34 @@
+
+type Bar:
+  f: int
+  g: float
+
+type Foo:
+  x: int
+  y: float
+  bar: Bar
+
+type Custom:
+  x: int
+  y: int
+
+  const __print = print_custom
+
+fn print_custom(c: Custom):
+  print("Custom<", c.x, c.y, ">")
+
+fn test_foo():
+  let foo = Foo(1, 2.0, Bar(3, 4.0))
+  print(true)
+  print(123)
+  print(123.0)
+
+  let x = (Bar(3, 4.0), 2)
+  print(x)
+  print("Foo is", foo)
+
+  print(Custom(1, 2))
+
+
+fn main():
+  test_foo()
