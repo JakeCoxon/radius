@@ -6,9 +6,9 @@ fn test_option():
   let y = Some(1)
 
   let x = Some(1).match {
-    Some(z) if z > 0: z + 2
-    Some(z) if z == 0: 0
-    None(): 100
+    .Some(z) if z > 0: z + 2
+    .Some(z) if z == 0: 0
+    .None(): 100
   }
   assert(x == 3)
 
@@ -28,9 +28,9 @@ fn test_nested():
 
   let y = (Some(1), Some(3))
   let x = y.match {
-    (Some(z), None()) if z > 0: 3
-    (Some(z), None()) if z > 0: z.copy
-    (Some(z), Some(w)) if z > 0: z + w
+    (.Some(z), .None()) if z > 0: 3
+    (.Some(z), .None()) if z > 0: z.copy
+    (.Some(z), .Some(w)) if z > 0: z + w
   }
   assert(x == 4)
 
@@ -62,13 +62,13 @@ fn test_nested_continue():
   let y = Some(1)
 
   let x = y.match 'a {
-    Some(x): 
+    .Some(x): 
       print("Some")
       if true:
         continue a
       1
-    Some(x): 123
-    None(): 0
+    .Some(x): 123
+    .None(): 0
   }
   assert(x == 123)
   

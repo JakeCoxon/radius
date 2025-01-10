@@ -359,6 +359,8 @@ export class FunctionCodeGenerator {
 
   generateBlockStatement(ast: BlockAst) {
 
+    // this.generateBlockExpression(ast, { target: new PointerRegister() })
+
     const scopeRegionId = this.regionCodegen.insertNewScopeRegion()
     const scopeRegion = this.regionCodegen.getScopeRegion(scopeRegionId)
     this.regionCodegen.insertChildSequenceAndPushState(scopeRegionId)
@@ -374,6 +376,9 @@ export class FunctionCodeGenerator {
     const label = this.newLabel()
     const scope = new Scope(`Block stmt ${ast.binding.name}`, label)
     scope.regionId = scopeRegionId
+    const addrReg = this.newRegister()
+    scope.currentBreakExprAccessReg = addrReg
+    scope.breakExprReg = this.generateAlloc(RawPointerType, ast.location)
     this.scopes.push(scope);
     this.blockScopeDepth.set(ast.binding, this.scopes.length - 1)
     this.generate(ast.body)
@@ -466,7 +471,7 @@ export class FunctionCodeGenerator {
     compilerAssert(!(scope.target instanceof ConstructRegister), 'Block expression must have a target', { ast, scope })
 
     const resultReg = scope.currentBreakExprAccessReg
-    compilerAssert(resultReg, 'Block expression must have a break expression', { ast, scope })
+    compilerAssert(resultReg !== undefined, 'Block expression must have a break expression', { ast, scope })
 
     const reg = this.generateExpressionToLValueRegister(ast, { })
 
@@ -730,7 +735,7 @@ export class FunctionCodeGenerator {
     const structType = ast.type
     compilerAssert(structType, `Struct type not found`);
     compilerAssert(!(structType instanceof PrimitiveType), 'Cannot create a struct from a primitive type', { structType, currentStatement: this.currentStatement });
-    compilerAssert(ast.args.length === structType.typeInfo.fields.length, 'Field count mismatch', { ast, currentStatement: this.currentStatement });
+    compilerAssert(ast.args.length === structType.typeInfo.fields.length, 'Field count mismatch', { ast, currentStatement: this.currentStatement, got: ast.args.length, expected: structType.typeInfo.fields.length });
     const fnBinding = structType.typeInfo.metaobject.constructorBinding
     compilerAssert(fnBinding && fnBinding instanceof Binding, `Constructor not found for ${structType.shortName}`);
 
@@ -756,6 +761,7 @@ export class FunctionCodeGenerator {
   }
 
   generateEnumVariantExpression(ast: EnumVariantAst, context: ExpressionContext) {
+    this.addInstruction(new CommentInstruction(`Enum variant ${ast.variantType.shortName}`), ast.location)
     const constr = new ConstructorAst(ast.variantType, ast.location, ast.args)
     return this.generateCreateStructExpression(constr, context)
   }

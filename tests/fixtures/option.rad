@@ -1,31 +1,51 @@
 import compiler for Option, Some, None, assert, unsafe_enum_cast, is_enum_variant
 
 fn is_some!(T)(x: Option!T) -> bool @inline:
-  if x is Some:
-    return true
-  return false
+  return is_enum_variant!('Some)(x)
 
-fn test_various():
+fn test_basic():
   var a : Option!int
   a = Some(78)
+  print(a.orelse 0)
 
-  let b : Option!int = Some(124)
+  a = None!int()
+  print(a.orelse 123)
+
+  let b = Some(124)
+
+  b.match {
+    .Some(x):
+      print("Got some", x)
+      23
+    .None:
+      print("None")
+      23
+  }
+
+  print(a)
+  print(b)
+
+fn test_various():
+  var a: Option!int
+  a = Some(78)
+
+  let b: Option!int = Some(124)
 
   var x = None!int()
   var y = Some(10)
   # let g = 10.Some
 
-  var v: Option!int = None()
-  v = None()
+  var v: Option!int = None!int()
+  v = None!int()
   # let v2 = None()
   print(v)
 
   y = Some(32)
 
-  let d = y is Some
+  let d = is_enum_variant!('Some)(y)
 
-  if x is Some:
-    let f = unsafe_enum_cast!Some(y)
+  if is_enum_variant!('Some)(x):
+    let f = unsafe_enum_cast!('Some)(y)
     print(f.value + 123)
   else:
     print("None")
@@ -89,6 +109,7 @@ fn test_valid_question_or_else():
   assert((z.orelse 0) == 13)
 
 fn main():
+  test_basic()
   test_various()
   test_or_else()
   test_question_or_else()

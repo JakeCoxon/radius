@@ -400,39 +400,6 @@ export const propagateLiteralType = (inferType: Type, ast: Ast | null): Type => 
 }
 export const propagatedLiteralAst = (ast: Ast) => { propagateLiteralType(ast.type, ast); return ast }
 
-export const NoneTypeConstructor: ExternalTypeConstructor = new ExternalTypeConstructor("None", (compiler, argTypes) => {
-  const argType = argTypes[0] || NeverType
-  compilerAssert(isType(argType), "Expected one type arg", { argType })
-  const variantPadding = argType.typeInfo.sizeof // TODO: should use actual padding
-  const type = new ParameterizedType(NoneTypeConstructor, [argType], { sizeof: 0, alignment: 0, variantPadding, fields: [], metaobject: Object.create(null), isReferenceType: false });
-  type.typeInfo.isInvalidSize = argType === NeverType
-  type.typeInfo.metaobject.isEnumVariant = true
-  type.typeInfo.metaobject.enumConstructorVariantOf = OptionTypeConstructor
-  type.typeInfo.metaobject.enumVariantIndex = 0
-  insertTypeInfoFields(type, [
-    { sourceLocation: SourceLocation.anon, name: "tag", fieldType: IntType },
-    { sourceLocation: SourceLocation.anon, name: "value", fieldType: argType }
-  ])
-  if (!type.typeInfo.isInvalidSize) generateTypeMethods(compiler, type)
-  return Task.of(type)
-})
-
-export const SomeTypeConstructor: ExternalTypeConstructor = new ExternalTypeConstructor("Some", (compiler, argTypes) => {
-  compilerAssert(argTypes.length === 1, "Expected one type arg", { argTypes })
-  const argType = argTypes[0]
-  const type = new ParameterizedType(SomeTypeConstructor, [argType], { sizeof: 0, alignment: 0, fields: [], metaobject: Object.create(null), isReferenceType: false });
-  type.typeInfo.metaobject.isEnumVariant = true
-  type.typeInfo.metaobject.enumConstructorVariantOf = OptionTypeConstructor
-  type.typeInfo.metaobject.enumVariantIndex = 1
-  type.typeInfo.isInvalidSize = argType === NeverType
-  insertTypeInfoFields(type, [
-    { sourceLocation: SourceLocation.anon, name: "tag", fieldType: IntType },
-    { sourceLocation: SourceLocation.anon, name: "value", fieldType: argType }
-  ])
-  if (!type.typeInfo.isInvalidSize) generateTypeMethods(compiler, type)
-  return Task.of(type)
-})
-
 export const OptionTypeConstructor: ExternalTypeConstructor = new ExternalTypeConstructor("Option", (compiler, argTypes) => {
   const argType = argTypes[0] || NeverType
   compilerAssert(isType(argType), "Expected one type arg", { argType })
@@ -447,23 +414,45 @@ export const OptionTypeConstructor: ExternalTypeConstructor = new ExternalTypeCo
     { sourceLocation: SourceLocation.anon, name: "value", fieldType: argType }
   ])
 
-  return (
-    createParameterizedExternalType(compiler, SomeTypeConstructor, [argType])
-    .chainFn((task, someType) => {
-      return (
-        createParameterizedExternalType(compiler, NoneTypeConstructor, [argType])
-        .chainFn((task, noneType) => {
-          opttype.typeInfo.metaobject.variants = [someType, noneType]
-          opttype.typeInfo.metaobject.Some = someType
-          opttype.typeInfo.metaobject.None = noneType
+  const noneType = (() => {
+    const argType = argTypes[0] || NeverType
+    compilerAssert(isType(argType), "Expected one type arg", { argType })
+    const type = new BasicType("None", { sizeof: 0, alignment: 0, fields: [], metaobject: Object.create(null), isReferenceType: false });
+    type.typeInfo.isInvalidSize = argType === NeverType
+    type.typeInfo.metaobject.isEnumVariant = true
+    type.typeInfo.metaobject.enumType = opttype
+    type.typeInfo.metaobject.enumVariantIndex = 0
+    type.typeInfo.metaobject.variantName = "None"
+    insertTypeInfoFields(type, [
+      { sourceLocation: SourceLocation.anon, name: "tag", fieldType: IntType },
+      { sourceLocation: SourceLocation.anon, name: "value", fieldType: argType }
+    ])
+    generateTypeMethods(compiler, type) // TODO: Only need constructor
+    return type
+  })()
 
-          if (!opttype.typeInfo.isInvalidSize) generateTypeMethods(compiler, opttype)
+  const someType = (() => {
+    compilerAssert(argTypes.length === 1, "Expected one type arg", { argTypes })
+    const argType = argTypes[0]
+    const type = new BasicType("Some", { sizeof: 0, alignment: 0, fields: [], metaobject: Object.create(null), isReferenceType: false });
+    type.typeInfo.metaobject.isEnumVariant = true
+    type.typeInfo.metaobject.enumType = opttype
+    type.typeInfo.metaobject.enumVariantIndex = 1
+    type.typeInfo.isInvalidSize = argType === NeverType
+    type.typeInfo.metaobject.variantName = "Some"
+    insertTypeInfoFields(type, [
+      { sourceLocation: SourceLocation.anon, name: "tag", fieldType: IntType },
+      { sourceLocation: SourceLocation.anon, name: "value", fieldType: argType }
+    ])
+    generateTypeMethods(compiler, type) // TODO: Only need constructor
+    return type
+  })()
 
-          return Task.of(opttype)
-        })
-      )
-    })
-  )
+  opttype.typeInfo.metaobject.variants = [noneType, someType]
+
+  if (!opttype.typeInfo.isInvalidSize) generateTypeMethods(compiler, opttype)
+
+  return Task.of(opttype)
 })
 
 export const createTupleType = (globalCompiler: GlobalCompilerState, argTypes: Type[]): Task<ParameterizedType, CompilerError> => {

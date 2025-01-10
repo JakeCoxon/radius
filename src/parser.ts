@@ -570,7 +570,7 @@ export const makeParser = (input: string, debugName: string) => {
   const parseLeftSideMatch = (): ParseNode => {
     
 
-    const expectIden = (node: ParseNode): ParseIdentifier => (compilerAssert(node instanceof ParseIdentifier, "Expected identifier", { lexer, token, previous, location: previous?.location, prevLocation: previous?.location }), node);
+    const expectIden = (node: ParseNode): ParseIdentifier | ParseSymbol => (compilerAssert(node instanceof ParseIdentifier || node instanceof ParseSymbol, "Expected identifier", { lexer, token, previous, location: previous?.location, prevLocation: previous?.location, node }), node);
 
     const idenOrExtract = (): ParseNode => {
       if (match("(")) {
@@ -580,8 +580,8 @@ export const makeParser = (input: string, debugName: string) => {
         expect(")", "Expected ')' after tuple expression");
         return new ParseTuple(token, args);
       }
-      let left: ParseNode = parseBasicLiteral()
-      
+      let left: ParseNode = match(".") ? new ParseSymbol(parseBasicLiteral().token) : parseBasicLiteral()
+
       if (!match("(")) return left
       if (match(")")) return new ParseExtract(previous, expectIden(left), [])
       let args = [idenOrExtract()];

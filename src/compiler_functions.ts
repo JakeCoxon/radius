@@ -483,38 +483,9 @@ export function createCallAstFromValue(ctx: CompilerFunctionCallContext, value: 
     // TOOD: Do this properly
     // TODO: This should just be a function that gets atttached to the type
     // Then proper type checking will be done automatically
-    const types = typeArgs.length ? typeArgs : args.map(x => x.type)
-    return (
-      TaskDef(callFunctionFromValueTask, ctx.compilerState.vm, value, types, [])
-      .chainFn((task, value_) => {
-        const type = ctx.compilerState.vm.stack.pop()
-        compilerAssert(isType(type), "Expected type got $type", { type })
-        if (type.typeInfo.metaobject.isEnumVariant) {
-          return (
-            getEnumOf(ctx.compilerState.globalCompiler, type)
-            .chainFn((task, enumVariantOf) => {
-              const variantIndex = type.typeInfo.metaobject.enumVariantIndex
-              compilerAssert(typeof variantIndex === 'number', "Expected number", { type, meta: type.typeInfo.metaobject })
-              const num = new NumberAst(IntType, location, variantIndex)
-              const newArgs = args.map(x => propagatedLiteralAst(x))
-              while (newArgs.length < enumVariantOf.typeInfo.fields.length - 1) {
-                const argType = enumVariantOf.typeInfo.fields[newArgs.length].fieldType
-                newArgs.push(createDefaultConstructorAst(argType, location))
-              }
-              // compilerAssert(newArgs.length === enumVariantOf.typeInfo.fields.length - 1, "Expected $expected fields got $got", { expected: enumVariantOf.typeInfo.fields.length - 1, got: newArgs.length })
-              // TODO: Properly check arg types
-              const cast = new EnumVariantAst(enumVariantOf, location, type, enumVariantOf, [num, ...newArgs])
-              return Task.of(cast)
-            })
-          )
-        }
-        compilerAssert(false, "Not implemented", { type, typeInfo: type.typeInfo, value })
-      })
-    )
   }
 
   compilerAssert(false, "Not supported value $value", { value, typeArgs, args })
-
 }
 
 export const compileExportedFunctionTask = (ctx: TaskContext, { exportName, closure } : { exportName?: string, closure: Closure }): Task<CompiledFunction, CompilerError> => {

@@ -2,8 +2,8 @@ import { createDefaultConstructorAst, generateConstructor, generateDestructor, g
 import { BytecodeSecondOrder, callFunctionFromValueTask, compileFunctionPrototype, getOperatorTable, pushBytecode, unknownToAst, visitParseNode } from "./compiler_vm"
 import { compileAndExecuteFunctionHeaderTask, compileExportedFunctionTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, FunctionCallArg, functionTemplateTypeCheckAndCompileTask, insertFunctionDefinition } from "./compiler_functions"
 import { concat, generator } from "./compiler_iterator"
-import { NoneTypeConstructor, OptionTypeConstructor, SomeTypeConstructor, createParameterizedExternalType, hashValues, isTypeInteger, isTypeScalar, propagateLiteralType, propagatedLiteralAst } from "./compiler_types"
-import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, UserCallAst, NeverType, IfAst, BoolType, VoidAst, LoopObject, CompileTimeObjectType, u64Type, FunctionDefinition, ParserFunctionDecl, StatementsAst, IntLiteralType, FloatLiteralType, isAst, isType, isTypeCheckError, InterleaveAst, ContinueInterAst, CompTimeObjAst, ParseEvalFunc, SetAst, DefaultConsAst, WhileAst, BoolAst, isArray, ExpansionSelector, ParseNote, ExpansionCompilerState, ParseBoolean, ParseOr, ParseBreak, ParseIs, filterNotNull, ParseLetConst, ParseCast, VariantCastAst, ExternalTypeConstructor, GlobalCompilerState, ParseOrElse, ParseField, ParseQuestion, ParseBreakOpt, LabelBlock, BlockAst, ParseMatch, ParseExtract, ParseMatchCase, ParseTuple, ParseString, Tuple, ParseNot, EnumVariantAst, ParseIfMulti, ParseGuard, ParseBlockNoScope, Capability, TypeCheckResult, CompiledFunction, LetType, YieldAst, textColors, MutSigilAst, TypeField, ParseMutSigil } from "./defs"
+import { OptionTypeConstructor, createParameterizedExternalType, hashValues, isTypeInteger, isTypeScalar, propagateLiteralType, propagatedLiteralAst } from "./compiler_types"
+import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, UserCallAst, NeverType, IfAst, BoolType, VoidAst, LoopObject, CompileTimeObjectType, u64Type, FunctionDefinition, ParserFunctionDecl, StatementsAst, IntLiteralType, FloatLiteralType, isAst, isType, isTypeCheckError, InterleaveAst, ContinueInterAst, CompTimeObjAst, ParseEvalFunc, SetAst, DefaultConsAst, WhileAst, BoolAst, isArray, ExpansionSelector, ParseNote, ExpansionCompilerState, ParseBoolean, ParseOr, ParseBreak, ParseIs, filterNotNull, ParseLetConst, ParseCast, VariantCastAst, ExternalTypeConstructor, GlobalCompilerState, ParseOrElse, ParseField, ParseQuestion, ParseBreakOpt, LabelBlock, BlockAst, ParseMatch, ParseExtract, ParseMatchCase, ParseTuple, ParseString, Tuple, ParseNot, EnumVariantAst, ParseIfMulti, ParseGuard, ParseBlockNoScope, Capability, TypeCheckResult, CompiledFunction, LetType, YieldAst, textColors, MutSigilAst, TypeField, ParseMutSigil, ParseSymbol } from "./defs"
 import { Event, Task, TaskDef, isTask } from "./tasks"
 import { resolveScope, loadModule } from "./compiler"
 
@@ -712,31 +712,35 @@ export const add_export = new ExternalFunction("add_export", VoidType, (ctx, val
 
 export const getEnumOf = (compiler: GlobalCompilerState, type: Type) => {
   compilerAssert(type.typeInfo.metaobject.isEnumVariant, "Expected enum variant", { type })
-  let args: unknown[] = []
-  if (type instanceof ParameterizedType) args = type.args
-  return createParameterizedExternalType(compiler, type.typeInfo.metaobject.enumConstructorVariantOf as ExternalTypeConstructor, args)
+  const enumType = type.typeInfo.metaobject.enumType
+  compilerAssert(enumType, "Expected enum type", { type })
+  compilerAssert(isType(enumType), "Expected type", { enumType })
+  return enumType
+}
+
+const findVariant = (type: Type, givenVariantType: unknown) => {
+  if (typeof givenVariantType === 'string') {
+    const variants = type.typeInfo.metaobject.variants as Type[]
+    const found = variants.find(x => x.typeInfo.metaobject.isEnumVariant && x.typeInfo.metaobject.variantName === givenVariantType)
+    compilerAssert(found, "Expected variant type", { givenVariantType, variants, shortNames: variants.map(x => x.shortName) })
+    compilerAssert(isType(found), "Expected type", { found })
+    return found
+  }
+  compilerAssert(false, "Not implemented yet", { givenVariantType })
 }
 
 const getTypeIndex = new CompilerFunction("getTypeIndex", (ctx, typeArgs, args) => {
-  let [variantType] = typeArgs
+  let [givenVariantType] = typeArgs
   const [value] = args
   const type = value.type
   compilerAssert(isAst(value), "Expected ast", { value })
   compilerAssert(value.type.typeInfo.metaobject.isEnum, "Expected enum value but got $type", { value, type: value.type })
-  if (typeof variantType === 'string') variantType = (value.type.typeInfo.metaobject.variants as ExternalTypeConstructor[]).find(x => x.typeName === variantType)
-  if (variantType instanceof ExternalTypeConstructor) {
-    variantType = (type.typeInfo.metaobject.variants as ParameterizedType[]).find(x => x.typeConstructor === variantType)
-  }
-  compilerAssert(isType(variantType), "Expected type", { variantType })
+  const variantType = findVariant(type, givenVariantType)
   compilerAssert(variantType.typeInfo.metaobject.isEnumVariant, "Expected enum variant", { type })
-  return (
-    getEnumOf(ctx.compilerState.globalCompiler, variantType)
-    .chainFn((task, enumVariantOf) => {
-      compilerAssert(enumVariantOf === type, "Expected type to match $type $enumVariantOf", { type, enumVariantOf })
-      compilerAssert(typeof variantType.typeInfo.metaobject.enumVariantIndex === 'number', "Expected number", { variantType })
-      return Task.of(new NumberAst(IntType, ctx.location, variantType.typeInfo.metaobject.enumVariantIndex))
-    })
-  )
+  const enumType = getEnumOf(ctx.compilerState.globalCompiler, variantType)
+  compilerAssert(enumType === type, "Expected type to match $type $enumVariantOf", { type, enumType })
+  compilerAssert(typeof variantType.typeInfo.metaobject.enumVariantIndex === 'number', "Expected number", { variantType })
+  return Task.of(new NumberAst(IntType, ctx.location, variantType.typeInfo.metaobject.enumVariantIndex))
 })
 
 const isEnumVariant = new CompilerFunction("isEnumVariant", (ctx, typeArgs, args) => {
@@ -768,27 +772,18 @@ const isTypeOf = new CompilerFunction("isType", (ctx, typeArgs, args) => {
 
 const unsafeEnumCast = new CompilerFunction("unsafeEnumCast", (ctx, typeArgs, args) => {
   const [value] = args
-  let [variantType] = typeArgs
+  let [givenVariantType] = typeArgs
   const type = value.type
   compilerAssert(isType(type), "Expected type", { type })
   compilerAssert(type.typeInfo.metaobject.isEnum, "Expected enum value but got $type", { type, args, typeArgs })
-  if (variantType instanceof ExternalTypeConstructor) {
-    variantType = (type.typeInfo.metaobject.variants as ParameterizedType[]).find(x => x.typeConstructor === variantType)
-  }
-  compilerAssert(isType(variantType), "Expected type", { variantType })
-
-  return (
-    getEnumOf(ctx.compilerState.globalCompiler, variantType)
-    .chainFn((task, enumVariantOf) => {
-      compilerAssert(type === enumVariantOf, "Expected type to match", { type, enumVariantOf })
-      compilerAssert(typeof variantType.typeInfo.metaobject.enumVariantIndex === 'number', "Expected number", { variantType })
-      return Task.of(new VariantCastAst(variantType, ctx.location, type, value))
-    })
-  )
+  const variantType = findVariant(value.type, givenVariantType)
+  const enumType = getEnumOf(ctx.compilerState.globalCompiler, variantType)
+  compilerAssert(type === enumType, "Expected type to match", { type, enumType })
+  compilerAssert(typeof variantType.typeInfo.metaobject.enumVariantIndex === 'number', "Expected number", { variantType })
+  return Task.of(new VariantCastAst(variantType, ctx.location, type, value))
 })
 
 export const guardSugar = (out: BytecodeWriter, node: ParseGuard) => {
-  // compilerAssert(false, "Not implemented", { node })
   const token = node.token
   const blockIden = new ParseFreshIden(token, new FreshBindingToken('block'))
   const break_ = node.conditions.length === 1 ? node.elseBody : new ParseBreak(token, blockIden, null)
@@ -849,7 +844,6 @@ const asExprTuple = new ExternalFunction('asExprTuple', VoidType, (ctx, args) =>
   compilerAssert(typeof numFields === 'number', "Expected number", { numFields })
   compilerAssert(typeof idenName === 'string', "Expected string", { idenName })
   compilerAssert(isAst(subject), "Expected ast", { subject })
-  compilerAssert(type instanceof ExternalTypeConstructor, "Expected type constructor", { type })
 
   const vm = ctx.compilerState.vm
   if (subject.type instanceof ParameterizedType && subject.type.typeConstructor === TupleTypeConstructor) {
@@ -864,8 +858,9 @@ const asExprTuple = new ExternalFunction('asExprTuple', VoidType, (ctx, args) =>
   }
   if (subject.type instanceof ParameterizedType && subject.type.typeInfo.metaobject.isEnum) {
     compilerAssert(subject.type.typeInfo.metaobject.variants, "Expected variants", { subject })
-    const variant = (subject.type.typeInfo.metaobject.variants as Type[]).find(x => x instanceof ParameterizedType && x.typeConstructor === type)
-    compilerAssert(variant, "Expected $subjectType to be a type or a variant of $type", { subjectType: subject.type, type, variant, variants: subject.type.typeInfo.metaobject.variants })
+    compilerAssert(typeof type === 'string', "Expected type constructor", { type })
+    const variant = findVariant(subject.type, type)
+    compilerAssert(variant !== undefined, "Expected $subjectType to be a type or have a variant of $type", { subjectType: subject.type, type, variant, variants: subject.type.typeInfo.metaobject.variants })
     const fnDef = insertFunctionDefinition(ctx.compilerState.globalCompiler, asEnumVariantFn)
     const closure = new Closure(fnDef, ctx.compilerState.scope, ctx.compilerState)
 
@@ -966,6 +961,11 @@ const extractOrElse = (node: ParseNode, subject: ParseNode, elseBlock: ParseNode
   }
 
   const extractIden = new ParseFreshIden(token, new FreshBindingToken('extract'))
+
+  if (node instanceof ParseSymbol) {
+    return guardAsExprSugar(subject, node, 0, extractIden, elseBlock)
+  }
+
   if (node instanceof ParseExtract) {
     const numArgs = node.args.length
     if (numArgs === 0)
@@ -1033,30 +1033,52 @@ export const orElseSugar = (out: BytecodeWriter, node: ParseOrElse) => {
   const letNode = new ParseLet(token, LetType.Let, letIden, null, node.expr)
   const valueIden = new ParseFreshIden(token, new FreshBindingToken('value'))
 
-  const extract = new ParseExtract(token, new ParseIdentifier(createAnonymousToken("Some")), [valueIden])
+  const extract = new ParseExtract(token, new ParseSymbol(createAnonymousToken("Some")), [valueIden])
   const ifLet = new ParseLet(token, LetType.Let, extract, null, letIden)
   const ifNode = new ParseIfMulti(token, true, [ifLet], valueIden, new ParseElse(token, node.orElse))
   const stmts = new ParseStatements(token, [letNode, ifNode])
   visitParseNode(out, stmts)
 }
 
-export const optionCastSugar = (vm: Vm, ast: Ast, type: Type): Task<Ast, CompilerError> => {
-  const ctx: CompilerFunctionCallContext = { location: vm.location, compilerState: vm.context.subCompilerState, resultAst: undefined, typeCheckResult: undefined }
-  return createCallAstFromValue(ctx, SomeTypeConstructor, [ast.type], [ast])
-}
-
 const someOrVoid = new CompilerFunction('someOrVoid', (ctx, typeArgs, args): Task<Ast, CompilerError> => {
   if (args[0].type === VoidType) return Task.of(args[0])
-  const fnctx: CompilerFunctionCallContext = { location: ctx.location, compilerState: ctx.compilerState, resultAst: undefined, typeCheckResult: undefined }
-  return createCallAstFromValue(fnctx, SomeTypeConstructor, [args[0].type], [args[0]])
+  const typeArg = typeArgs[0] ?? args[0].type
+  return (
+    createParameterizedExternalType(ctx.compilerState.globalCompiler, OptionTypeConstructor, [typeArg])
+    .chainFn((task, optionType) => {
+      return createEnumVariant.func(ctx, [optionType, 1], args)
+    })
+  )
 })
 const noneOrVoid = new CompilerFunction('noneOrVoid', (ctx, typeArgs, args): Task<Ast, CompilerError> => {
   if (typeArgs[0] === VoidType) return Task.of(new VoidAst(VoidType, ctx.location))
-  const fnctx: CompilerFunctionCallContext = { location: ctx.location, compilerState: ctx.compilerState, resultAst: undefined, typeCheckResult: undefined }
-  compilerAssert(isType(typeArgs[0]), "Expected type", { type: typeArgs[0] })
-  const def_ = createDefaultConstructorAst(typeArgs[0], ctx.location)
-  return createCallAstFromValue(fnctx, NoneTypeConstructor, [typeArgs[0]], [def_])
+  return (
+    createParameterizedExternalType(ctx.compilerState.globalCompiler, OptionTypeConstructor, typeArgs)
+    .chainFn((task, optionType) => {
+      return createEnumVariant.func(ctx, [optionType, 0], args)
+    })
+  )
 })
+
+const createEnumVariant = new CompilerFunction('createEnumVariant', (ctx, typeArgs, args): Task<Ast, CompilerError> => {
+  const [enumType, variantIndex] = typeArgs
+  compilerAssert(isType(enumType), "Expected type", { enumType })
+  const metaobject = (enumType as ParameterizedType).typeInfo.metaobject as any
+  compilerAssert(typeof variantIndex === 'number', "Expected variantIndex as number", { variantIndex })
+  const variantType = metaobject.variants[variantIndex]
+  compilerAssert(variantType, "Expected variant type", { variantIndex, variants: metaobject.variants })
+  compilerAssert(isType(variantType), "Expected type", { variantType })
+  const newArgs = args.map(x => propagatedLiteralAst(x))
+  while (newArgs.length < enumType.typeInfo.fields.length - 1) {
+    const argType = enumType.typeInfo.fields[newArgs.length].fieldType
+    newArgs.push(createDefaultConstructorAst(argType, ctx.location))
+  }
+  newArgs.unshift(new NumberAst(IntType, ctx.location, variantIndex))
+  return Task.of(new EnumVariantAst(enumType, ctx.location, variantType, enumType, newArgs))
+})
+
+const SomeConstructor = someOrVoid
+const NoneConstructor = noneOrVoid
 
 export const optionBlockSugar = (out: BytecodeWriter, node: ParseBlock) => {
   const name = (node.name instanceof ParseFreshIden ? node.name.freshBindingToken.identifier : node.name?.token.value) ?? null
@@ -1187,7 +1209,7 @@ export const createCompilerModuleTask = (ctx: TaskContext): Task<Module, Compile
     unsafe_subscript, unsafe_set_subscript, operator_bitshift_left, operator_bitshift_right,
     operator_bitwise_and, operator_bitwise_or, rawptr: RawPointerType, add_external_library, add_macos_framework, assert, never: NeverType,
     get_current_loop, ctobj: CompileTimeObjectType, operator_mod, overloaded, static_length, assert_compile_error, initializer_function, add_export,
-    concat, Option: OptionTypeConstructor, Some: SomeTypeConstructor, None: NoneTypeConstructor, unsafe_enum_cast: unsafeEnumCast, is_enum_variant: isEnumVariant, generator,
+    concat, Option: OptionTypeConstructor, Some: SomeConstructor, None: NoneConstructor, unsafe_enum_cast: unsafeEnumCast, is_enum_variant: isEnumVariant, generator,
     copy: copyFunction, printToPrintf })
   const subCompilerState = pushSubCompilerState(ctx, { debugName: `compiler module`, lexicalParent: undefined, scope: moduleScope })
   const module = new Module('compiler', subCompilerState, null!)
