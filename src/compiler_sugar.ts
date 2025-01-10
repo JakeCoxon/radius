@@ -4,8 +4,7 @@ import { compileAndExecuteFunctionHeaderTask, compileExportedFunctionTask, creat
 import { concat, generator } from "./compiler_iterator"
 import { OptionTypeConstructor, createParameterizedExternalType, hashValues, isTypeInteger, isTypeScalar, propagateLiteralType, propagatedLiteralAst } from "./compiler_types"
 import { Ast, BytecodeWriter, Closure, CompiledClass, ConstructorAst, ExternalFunction, FieldAst, FreshBindingToken, ParameterizedType, ParseBlock, ParseBytecode, ParseCall, ParseCompilerIden, ParseConstructor, ParseElse, ParseExpand, ParseFor, ParseFunction, ParseIdentifier, ParseIf, ParseLet, ParseList, ParseListComp, ParseMeta, ParseNode, ParseNumber, ParseOpEq, ParseOperator, ParseQuote, ParseSet, ParseSlice, ParseStatements, ParseSubscript, ParseValue, ParseWhile, Scope, SourceLocation, SubCompilerState, Token, TupleTypeConstructor, VoidType, compilerAssert, createAnonymousParserFunctionDecl, createAnonymousToken, ParseFreshIden, ParseAnd, ParseFold, ParseForExpr, ParseWhileExpr, Module, pushSubCompilerState, createScope, TaskContext, CompilerError, AstType, OperatorAst, CompilerFunction, CallAst, RawPointerType, SubscriptAst, IntType, expectType, SetSubscriptAst, ParserFunctionParameter, FunctionType, Binding, StringType, ValueFieldAst, LetAst, BindingAst, createStatements, StringAst, FloatType, DoubleType, CompilerFunctionCallContext, Vm, expectAst, NumberAst, Type, UserCallAst, NeverType, IfAst, BoolType, VoidAst, LoopObject, CompileTimeObjectType, u64Type, FunctionDefinition, ParserFunctionDecl, StatementsAst, IntLiteralType, FloatLiteralType, isAst, isType, isTypeCheckError, InterleaveAst, ContinueInterAst, CompTimeObjAst, ParseEvalFunc, SetAst, DefaultConsAst, WhileAst, BoolAst, isArray, ExpansionSelector, ParseNote, ExpansionCompilerState, ParseBoolean, ParseOr, ParseBreak, ParseIs, filterNotNull, ParseLetConst, ParseCast, VariantCastAst, ExternalTypeConstructor, GlobalCompilerState, ParseOrElse, ParseField, ParseQuestion, ParseBreakOpt, LabelBlock, BlockAst, ParseMatch, ParseExtract, ParseMatchCase, ParseTuple, ParseString, Tuple, ParseNot, EnumVariantAst, ParseIfMulti, ParseGuard, ParseBlockNoScope, Capability, TypeCheckResult, CompiledFunction, LetType, YieldAst, textColors, MutSigilAst, TypeField, ParseMutSigil, ParseSymbol, FunctionParameter } from "./defs"
-import { Event, Task, TaskDef, isTask } from "./tasks"
-import { resolveScope, loadModule } from "./compiler"
+import { Task, TaskDef } from "./tasks"
 
 const insertMetaObjectPairwiseOperator = (compiledClass: CompiledClass, operatorName: string, operatorSymbol: string) => {
   const operatorFunc = new CompilerFunction(operatorName, (ctx, typeArgs, args) => {
@@ -342,51 +341,6 @@ export const generatePrintFunction = (type: Type, binding: Binding) => {
   })()
   const compiledFunc = new CompiledFunction(binding, { debugName: binding.name } as any, VoidType, concreteTypes, constructorBody, argBindings, funcParams, [], 0);
   return compiledFunc
-}
-
-
-export const createListConstructor = (vm: Vm, elementType: Type, values: Ast[]) => {
-  compilerAssert(false, "Not implemented")
-
-  // TODO: Prefer to do some bytecode manipulations here instead?
-
-  let module: Module
-  let array: Ast
-  let binding: Binding
-  const callArray: Ast[] = []
-  return (
-    TaskDef(loadModule, vm.location, 'array')
-    .chainFn((task, module_) => {
-      module = module_
-      return TaskDef(resolveScope, module.compilerState.scope, 'array_create')
-    })
-    .chainFn((task, func: Closure) => {
-      return createCallAstFromValueAndPushValue(vm, func, [elementType], [new NumberAst(IntType, vm.location, 0)])
-    })
-    .chainFn((task, _) => {
-      array = expectAst(vm.stack.pop())
-      binding = new Binding("", array.type)
-      
-      const calls = values.map(ast => {
-        const mutAst = new MutSigilAst(ast.type, vm.location, ast)
-        return (
-          createMethodCall(vm, new BindingAst(binding.type, vm.location, binding), 'append', [elementType], [mutAst])
-          .chainFn((task, _) => { const ast = expectAst(vm.stack.pop()); callArray.push(ast); return Task.success() })
-        )
-      })
-      const reducedTasks = calls.reduce((acc, nextTask) => acc.chainFn((task, _) => nextTask))
-      return reducedTasks
-    })
-    .chainFn((task, _) => {
-      const stmts = createStatements(vm.location, [
-        new LetAst(VoidType, vm.location, binding, array, LetType.VarRef),
-        ...callArray,
-        new BindingAst(binding.type, vm.location, binding)
-      ])
-      vm.stack.push(stmts)
-      return Task.success()
-    })
-  )
 }
 
 export const externalBuiltinBindings: {[key:string]: Binding} = {

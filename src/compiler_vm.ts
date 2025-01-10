@@ -905,9 +905,7 @@ const instructions: InstructionMapping = {
     return Task.concurrency(values.map(x => createCallAstFromValue(fnctx, x, [], [])))
   },
   listast: (vm, { count }) => {
-    const values = expectAsts(popValues(vm, count))
-    const elementType = getCommonType(values.map(x => x.type))
-    return createListConstructor(vm, elementType, values)
+    compilerAssert(false, "Not implemented", { count })
   },
   callast: (vm, { name, count, tcount, method }) => {
     const args_ = popValues(vm, count)
