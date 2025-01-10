@@ -2,7 +2,7 @@ import { isParseVoid, BytecodeWriter, FunctionDefinition, Type, Binding, LetAst,
 import { CompileTimeFunctionCallArg, FunctionCallArg, insertFunctionDefinition, functionCompileTimeCompileTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, compileExportedFunctionTask } from "./compiler_functions";
 import { Event, Task, TaskDef, Unit, isTask, isTaskResult, withContext } from "./tasks";
 import { createCompilerModuleTask, createListConstructor, defaultMetaFunction, guardSugar, ifMultiSugar, isSugar, matchSugar, optionBlockSugar, orElseSugar, print, questionSugar, subscriptCompiler } from "./compiler_sugar";
-import { expandDotsSugar, expandFuncAllSugar, expandFuncAnySugar, expandFuncConcatSugar, expandFuncFirstSugar, expandFuncLastSugar, expandFuncMaxSugar, expandFuncMinSugar, expandFuncSumSugar, expandIteratorSugar, foldSugar, forExprSugar, forLoopSugar, listComprehensionSugar, listConstructorSugar, sliceSugar, whileExprSugar } from "./compiler_iterator"
+import { expandDotsSugar, expandFuncConcatSugar, expandIteratorSugar, foldSugar, forExprSugar, forLoopSugar, listComprehensionSugar, listConstructorSugar, sliceSugar, whileExprSugar } from "./compiler_iterator"
 import { OptionTypeConstructor, canAssignTypeTo, classDefinitionToType, compileTypeConstructorTask, createParameterizedExternalType, getCommonType, hashValues, isParameterizedTypeOf, propagateLiteralType, propagatedLiteralAst, typeTableGetOrInsert, typecheckEquality, typecheckNumberComparison, typecheckNumberOperator } from "./compiler_types";
 import { createDefaultConstructorAst } from "../borrow/codegen_ast";
 import { resolveScope, setScopeValueAndResolveEvents } from "./compiler";
@@ -344,18 +344,9 @@ export const BytecodeSecondOrder: ParseTreeTable = {
 
   note: (out, node) => {
     if (node.expr instanceof ParseCall) {
-      if (node.expr.left.token.value === 'all') return expandFuncAllSugar(out, node, node.expr.args)
-      if (node.expr.left.token.value === 'any') return expandFuncAnySugar(out, node, node.expr.args)
-      if (node.expr.left.token.value === 'sum') return expandFuncSumSugar(out, node, node.expr.args)
-      if (node.expr.left.token.value === 'last') return expandFuncLastSugar(out, node, node.expr.args)
-      if (node.expr.left.token.value === 'first') return expandFuncFirstSugar(out, node, node.expr.args)
-      if (node.expr.left.token.value === 'min') return expandFuncMinSugar(out, node, node.expr.args)
-      if (node.expr.left.token.value === 'max') return expandFuncMaxSugar(out, node, node.expr.args)
       if (node.expr.left.token.value === 'concat') {
         compilerAssert(false, "Not available for this context", { node })
       }
-      // if (node.expr.left.token.value === 'max') return expandFuncMaxSugar(out, node, node.expr.args)
-      // if (node.expr.left.token.value === 'min') return expandFuncMinSugar(out, node, node.expr.args)
     }
     compilerAssert(false, "Not implemented", { node: node.token.value, expr: node.expr })
   },

@@ -476,52 +476,6 @@ const createIteratorSliceIterator = (token: Token, subCompilerState: SubCompiler
 }
 
 
-const interleaveHelper = () => {
-  const interleaveBinding = new Binding("intrlv", VoidType)
-  const entryLabels: Binding[] = []
-  const otherLabels: Binding[] = []
-  const createEntryLabel = () => {
-    entryLabels.push(new Binding(`inter_entry${entryLabels.length + 1}`, VoidType))
-    return entryLabels[entryLabels.length - 1]
-  }
-  const createElseLabel = () => {
-    otherLabels.push(new Binding(`inter_else${otherLabels.length + 1}`, VoidType))
-    return otherLabels[otherLabels.length - 1]
-  }
-  // Else block has a label for the entry point of the block
-  // but the Entry block doesn't. This is reflected in the IR output
-  createElseLabel()
-
-  const entryParamEvent = new Event<Binding, CompilerError>()
-  const getOrCreateParamBinding = (type: Type) => {
-    if (entryParamEvent._success) {
-      compilerAssert(entryParamEvent._success.type === type, "The producer/consumer types do not match: $type, $type2", { type, type2: entryParamEvent._success.type, entry: entryParamEvent._success })
-      return entryParamEvent._success
-    }
-    const entryParam = new Binding('prd', type)
-    entryParamEvent.success(entryParam)
-    return entryParam
-  }
-  const continueEntry = (location: SourceLocation) => new ContinueInterAst(VoidType, location, interleaveBinding, createEntryLabel())
-  const continueOther = (location: SourceLocation) => new ContinueInterAst(VoidType, location, interleaveBinding, createElseLabel())
-  const waitForEntryBinding = (globalCompiler: GlobalCompilerState) => {
-    globalCompiler.allWaitingEvents.push(entryParamEvent)
-    return Task.waitFor(entryParamEvent)
-      .mapRejected(err => { compilerAssert(false, "Binding not resolved in generator", { interleaveBinding }) })
-  }
-  const buildAst = (location: SourceLocation, a: Ast, b: Ast) => {
-    return new InterleaveAst(VoidType, location, interleaveBinding, entryLabels, otherLabels, a, b)
-  }
-  const createSetter = (location: SourceLocation, value: Ast) => {
-    propagatedLiteralAst(value)
-    const entryParam = getOrCreateParamBinding(value.type)
-    return new SetAst(VoidType, location, entryParam, value)
-  }
-  return {
-    createEntryLabel, createElseLabel, continueEntry, continueOther, waitForEntryBinding, 
-    getOrCreateParamBinding, createSetter, buildAst
-  }
-}
 const generatorInternalHelper = () => {
   const generatorBinding = new Binding("generator", VoidType)
   const entryLabels: Binding[] = []
@@ -605,18 +559,12 @@ const generatorInternalHelper = () => {
       })
     )
   }
-  // const createSetter = (location: SourceLocation, value: Ast) => {
-  //   propagatedLiteralAst(value)
-  //   const entryParam = getOrCreateParamBinding(value.type)
-  //   return new SetAst(VoidType, location, entryParam, value)
-  // }
   return {
     createEntryLabel, createElseLabel, yieldEntry, yieldElse, waitForEntryBinding, 
     getOrCreateParamBinding, buildAst
   }
 }
-
-const iteratableToCallable = (ctx: CompilerFunctionCallContext, token: Token, iteratable: Ast, selector: ExpansionSelector) => {
+const iteraableToCallable = (ctx: CompilerFunctionCallContext, token: Token, iteratable: Ast, selector: ExpansionSelector) => {
   if (iteratable instanceof CompTimeObjAst && isCompilerCallable(iteratable.value)) {
     let closure = iteratable.value
     if (selector.start || selector.end || selector.step) {
@@ -691,7 +639,7 @@ const compileExpansionToParseNode = (out: BytecodeWriter, expansion: ExpansionCo
       const iterator = vm.stack.pop()
       compilerAssert(isAst(iterator), "Expected ast", { iterator })
       const fnctx: CompilerFunctionCallContext = { location: vm.location, compilerState: vm.context.subCompilerState, resultAst: undefined, typeCheckResult: undefined }
-      const callable = iteratableToCallable(fnctx, node.token, iterator, selector)
+      const callable = iteraableToCallable(fnctx, node.token, iterator, selector)
       vm.stack.push(callable)
       return 
     }, [new ParseQuote(node.token, selector.node)], [])
@@ -759,62 +707,6 @@ const createConsumerProducer = (token: Token, callable: ParseNode, produceFn: Pa
   return new ParseStatements(token, [new ParseLetConst(token, name, callable), call_])
 }
 
-export class DeferredLetBinding {
-  type: Type
-  binding: Binding | null
-  letAst: LetAst
-  constructor() {}
-}
-
-const createDeferObject = new ExternalFunction('createDeferObject', CompileTimeObjectType, (ctx, values) => {
-  return new CompTimeObjAst(CompileTimeObjectType, ctx.location, new DeferredLetBinding())
-})
-const deferAssignSet = new ExternalFunction('deferAssignSet', VoidType, (ctx, values) => {
-  let [value, defer] = values
-  if (defer instanceof CompTimeObjAst) defer = defer.value
-  compilerAssert(defer instanceof DeferredLetBinding, "Expected deferred let binding", { defer })
-  compilerAssert(isAst(value), "Expected ast", { value, defer })
-  compilerAssert(value instanceof LetAst, "Expected let ast", { value, defer })
-  if (!defer.letAst) Object.assign(defer, { letAst: value, type: value.type, binding: value.binding })
-  compilerAssert(defer.type === value.type, "Type mismatch", { defer, value })
-})
-const deferToResultAst = new ExternalFunction('deferToResultAst', VoidType, (ctx, values) => {
-  let [stmts, defer] = values
-  if (defer instanceof CompTimeObjAst) defer = defer.value
-  compilerAssert(defer instanceof DeferredLetBinding, "Expected deferred let binding", { defer })
-  compilerAssert(isAst(stmts), "Expected ast", { stmts, defer })
-  const binding = defer.binding
-  compilerAssert(binding, "Expected binding", { defer })
-  const bindingAst = new BindingAst(binding.type, ctx.location, binding)
-  return createStatements(ctx.location, [defer.letAst, stmts, bindingAst])
-})
-const deferToBinding = new ExternalFunction('deferToBinding', VoidType, (ctx, values) => {
-  let [defer] = values
-  if (defer instanceof CompTimeObjAst) defer = defer.value
-  compilerAssert(defer instanceof DeferredLetBinding, "Expected deferred let binding", { defer })
-  const binding = defer.binding
-  compilerAssert(binding, "Expected binding", { defer })
-  return new BindingAst(binding.type, ctx.location, binding)
-})
-
-const createFreshLet = new ExternalFunction('createFreshLet', VoidType, (ctx, values) => {
-  let [value] = values
-  compilerAssert(isAst(value), "Expected ast", { value })
-  const binding = new Binding("defer", value.type)
-  return new LetAst(binding.type, ctx.location, binding, value, LetType.Alias)
-})
-
-const createDeferTypeCheckingIden = (expansion: ExpansionCompilerState, defaultNode: ParseNode) => {
-  const token = createAnonymousToken('')
-  const deferIden = new ParseFreshIden(token, new FreshBindingToken('defer'))
-  const createDefer = new ParseCall(createAnonymousToken(''), new ParseValue(token, createDeferObject), [], [])
-  expansion.lets.push(new ParseLetConst(token, deferIden, createDefer))
-  
-  const toLet_ = callV(token, createFreshLet, [defaultNode], [])
-  expansion.loopBodyMeta.push(callV(token, deferAssignSet, [toLet_, deferIden], []))
-  expansion.metaResult = callV(token, deferToResultAst, [new ParseQuote(token, expansion.metaResult), new ParseQuote(token, deferIden)], [])
-  return new ParseMeta(token, callV(token, deferToBinding, [new ParseQuote(token, deferIden)], []))
-}
 
 type ZipIterator = { callable: ParseNode, elemIden: ParseFreshIden }
 
@@ -843,121 +735,6 @@ export const expandDotsSugar = (out: BytecodeWriter, node: ParseExpand) => {
   }
   visitParseNode(out, compileExpansionToParseNode(out, expansion, node))
 }
-
-export const expandFuncAllSugar = (out: BytecodeWriter, noteNode: ParseNote, args: ParseNode[]) => {
-  compilerAssert(!out.state.expansion, "Already in expansion state")
-  const node = args[0]
-  const expansion = createExpansionState('all', node.token.location)
-  expansion.optimiseSimple = true
-  const result = visitExpansion(out, expansion, node)
-
-  compilerAssert(!expansion.fold, "Fold not supported in this context")
-
-  expansion.fold = { iden: new ParseFreshIden(node.token, new FreshBindingToken('fold_iden')), initial: new ParseBoolean((createAnonymousToken('true'))) }
-  const cond = new ParseNot(node.token, result)
-  const break_ = new ParseBreak(node.token, expansion.breakIden, new ParseBoolean(createAnonymousToken('false')))
-  expansion.loopBodyNode = new ParseIf(node.token, false, cond, new ParseStatements(noteNode.token, [break_]), null)
-
-  visitParseNode(out, compileExpansionToParseNode(out, expansion, node))
-}
-
-export const expandFuncAnySugar = (out: BytecodeWriter, noteNode: ParseNote, args: ParseNode[]) => {
-  compilerAssert(!out.state.expansion, "Already in expansion state")
-  const node = args[0]
-  const expansion = createExpansionState('any', node.token.location)
-  expansion.optimiseSimple = true
-  const cond = visitExpansion(out, expansion, node)
-
-  compilerAssert(!expansion.fold, "Fold not supported in this context")
-
-  expansion.fold = { iden: new ParseFreshIden(node.token, new FreshBindingToken('fold_iden')), initial: new ParseBoolean((createAnonymousToken('false'))) }
-  const break_ = new ParseBreak(node.token, expansion.breakIden, new ParseBoolean(createAnonymousToken('true')))
-  expansion.loopBodyNode = new ParseIf(node.token, false, cond, new ParseStatements(noteNode.token, [break_]), null)
-
-  visitParseNode(out, compileExpansionToParseNode(out, expansion, node))
-}
-export const expandFuncSumSugar = (out: BytecodeWriter, noteNode: ParseNote, args: ParseNode[]) => {
-  compilerAssert(!out.state.expansion, "Already in expansion state")
-  let node = args[0]
-  const expansion = createExpansionState('sum', node.token.location)
-  const result = visitExpansion(out, expansion, node)
-  compilerAssert(!expansion.fold, "Fold not supported in this context")
-
-  expansion.optimiseSimple = expansion.selectors.length === 1 && !expansion.filterNode
-
-  const iden = createDeferTypeCheckingIden(expansion, createDefaultOf(node.token, result))
-  expansion.loopBodyNode = new ParseSet(node.token, iden, new ParseOperator(createAnonymousToken('+'), [iden, result]))
-  visitParseNode(out, compileExpansionToParseNode(out, expansion, node))
-}
-
-export const expandFuncFirstSugar = (out: BytecodeWriter, noteNode: ParseNote, args: ParseNode[]) => {
-  compilerAssert(!out.state.expansion, "Already in expansion state")
-  const node = args[0]
-  const expansion = createExpansionState('first', node.token.location)
-  const result = visitExpansion(out, expansion, node)
-  expansion.optimiseSimple = expansion.selectors.length === 1 && !expansion.filterNode
-
-  compilerAssert(!expansion.fold, "Fold not supported in this context")
-
-  const iden = createDeferTypeCheckingIden(expansion, createDefaultOf(node.token, result))
-  const break_ = new ParseBreak(node.token, expansion.breakIden, null)
-  const set_ = new ParseSet(node.token, iden, makeCopy(result))
-  expansion.loopBodyNode = new ParseStatements(node.token, [set_, break_])
-  visitParseNode(out, compileExpansionToParseNode(out, expansion, node))
-}
-
-export const expandFuncLastSugar = (out: BytecodeWriter, noteNode: ParseNote, args: ParseNode[]) => {
-  compilerAssert(!out.state.expansion, "Already in expansion state")
-  const node = args[0]
-  const expansion = createExpansionState('last', node.token.location)
-  const result = visitExpansion(out, expansion, node)
-  expansion.optimiseSimple = expansion.selectors.length === 1 && !expansion.filterNode
-
-  compilerAssert(!expansion.fold, "Fold not supported in this context")
-
-  const iden = createDeferTypeCheckingIden(expansion, createDefaultOf(node.token, result))
-  expansion.loopBodyNode = new ParseSet(node.token, iden, makeCopy(result))
-  visitParseNode(out, compileExpansionToParseNode(out, expansion, node))
-}
-
-const makeCopy = (node: ParseNode) => {
-  return new ParseField(node.token, node, new ParseIdentifier(createAnonymousToken('copy')))
-}
-
-export const expandFuncMinSugar = (out: BytecodeWriter, noteNode: ParseNote, args: ParseNode[]) => {
-  compilerAssert(!out.state.expansion, "Already in expansion state")
-  const node = args[0]
-  const expansion = createExpansionState('min', node.token.location)
-  const result = visitExpansion(out, expansion, node)
-  expansion.optimiseSimple = expansion.selectors.length === 1 && !expansion.filterNode
-
-  compilerAssert(!expansion.fold, "Fold not supported in this context")
-
-  const initial = callV(node.token, maxOfType, [createTypeOf(node.token, result)], [])
-  const iden = createDeferTypeCheckingIden(expansion, initial)
-  const comp = new ParseOperator(createAnonymousToken('<'), [result, iden])
-  const set_ = new ParseSet(node.token, iden, makeCopy(result))
-  expansion.loopBodyNode = new ParseIf(node.token, false, comp, set_, null)
-  visitParseNode(out, compileExpansionToParseNode(out, expansion, node))
-}
-
-export const expandFuncMaxSugar = (out: BytecodeWriter, noteNode: ParseNote, args: ParseNode[]) => {
-  compilerAssert(!out.state.expansion, "Already in expansion state")
-  const node = args[0]
-  const expansion = createExpansionState('max', node.token.location)
-  const result = visitExpansion(out, expansion, node)
-  expansion.optimiseSimple = expansion.selectors.length === 1 && !expansion.filterNode
-
-  compilerAssert(!expansion.fold, "Fold not supported in this context")
-  
-  const initial = callV(node.token, minOfType, [createTypeOf(node.token, result)], [])
-  const iden = createDeferTypeCheckingIden(expansion, initial)
-  const comp = new ParseOperator(createAnonymousToken('>'), [result, iden])
-  const set_ = new ParseSet(node.token, iden, makeCopy(result))
-  expansion.loopBodyNode = new ParseIf(node.token, false, comp, set_, null)
-  visitParseNode(out, compileExpansionToParseNode(out, expansion, node))
-}
-
 
 export const expandIteratorSugar = (out: BytecodeWriter, iteratorNode: ParseIterator) => {
   const token = iteratorNode.token
