@@ -84,6 +84,16 @@ test('new_array', async () => {
   testObject.close()
 })
 
+test('lib_array', async () => {
+  const testObject = createTest({ 
+    moduleName: 'lib_array',
+    globalOptions,
+    inputPath: `${import.meta.dir}/fixtures/lib_array.rad`,
+  })
+  await testObject.run()
+  testObject.close()
+})
+
 test('subscript', async () => {
   const testObject = createTest({ 
     moduleName: 'subscript',

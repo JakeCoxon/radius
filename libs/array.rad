@@ -63,6 +63,19 @@ type Array!(T) @struct:
   const __move_assign = move_assign_array
   const __destructor = deinit_array
   const __length = array_length
+  const __print = array_print
+
+
+fn array_print!(T)(arr: Array!T):
+  var i = 0
+  print("[", endl=false)
+  while i < arr.length:
+    if i > 0:
+      print(", ", endl=false)
+    print(arr[i], endl=false)
+    i += 1
+  print("]", endl=false)
+
 
 fn array_length!(T)(arr: Array!T) -> int:
   arr.length
@@ -81,7 +94,7 @@ fn array_create!(T)(initial_length: int) -> Array!T:
 
 fn append!(T)(array: inout Array!T, element: sink T) @method:
   if array.length == array.data.size:
-    var new_capacity = array.data.size.copy
+    var new_capacity = array.data.size
     new_capacity = 16 if new_capacity == 0
     new_capacity *= 2
     array&.reserve_array(new_capacity)
@@ -118,6 +131,7 @@ fn copy_array!(T)(dst: set Array!T, src: Array!T):
 
   # TODO: Too many moves ends up calling destructorFoo a lot
   # TODO: The copy is moving the value out of src[i] (need projection)
+  # TODO: Do a mem-copy if possible
 
 
 fn memset(ptr: inout rawptr, value: u8, size: int):
@@ -131,19 +145,16 @@ fn subscript_inout!(T)(arr: inout Array!T, idx: int, f) @subscript:
   var ref input = compiler.unsafe_subscript!T(arr.data.data, idx)&
   f(input)
 
+
 fn subscript_sink!(T)(arr: sink Array!T, idx: int, f) @subscript:
   var input = compiler.unsafe_subscript!T(arr.data.data, idx)&
   f(input)
+
 
 fn subscript_let!(T)(arr: Array!T, idx: int, f) @subscript:
   let input = compiler.unsafe_subscript!T(arr.data.data, idx)
   f(input)
 
-fn print_array!(T)(arr: Array!T):
-  var i = 0
-  while i < arr.length:
-    print(arr[i])
-    i += 1
 
 fn array_iterate!(f, T)(array: Array!T) -> void @inline:
   var i = 0
@@ -151,22 +162,26 @@ fn array_iterate!(f, T)(array: Array!T) -> void @inline:
     f(array[i])
     i += 1
 
+
 fn array_iterate_inout!(T)(array: inout Array!T, f) -> void @inline:
   var i = 0
   while i < array.length:
     f(array[i]&)
     i += 1
 
+
 fn move_init_array!(T)(dst: set Array!T, src: sink Array!T):
   dst.length = src.length&
   dst.data = src.data&
   src.data = Buffer(0, rawptr(0))
+
 
 fn move_assign_array!(T)(dst: inout Array!T, src: sink Array!T):
   deinit_array(dst&)
   dst.length = src.length&
   dst.data = src.data&
   src.data = Buffer(0, rawptr(0))
+
 
 fn deinit_array!(T)(arr: sink Array!T):
   if arr.data.data != rawptr(0):

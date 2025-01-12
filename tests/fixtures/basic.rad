@@ -92,6 +92,18 @@ type Array!(T) @struct:
   const __move_init = move_init_array
   const __move_assign = move_assign_array
   const __destructor = deinit_array
+  const __print = print_array2
+
+
+fn print_array2!(T)(arr: Array!T):
+  var i = 0
+  print("[", endl=false)
+  while i < arr.len:
+    if i > 0:
+      print(", ", endl=false)
+    print(arr[i], endl=false)
+    i += 1
+  print("]", endl=false)
 
 
 fn init_array!(T)(arr: inout Array!T, len: int):
@@ -275,6 +287,7 @@ fn test_array3():
   arr[0]&.init_array(10)
   print("arr[0].len", arr[0].len)
   print("arr[0].data", arr[0].data)
+  print(arr)
 
 #   # var asd = arr[0]&
 #   # asd[0] = Foo(42, 2.0)
@@ -312,6 +325,8 @@ fn test_array3():
       # y.x = 42
       print(y)
     print(x)
+
+  print(arr)
 
 #   # subscript_1(arr, 0, {|x|
 #   #   subscript_1(x, 0, {|y|
@@ -441,6 +456,8 @@ fn test_set():
   arr[0] = Foo(1, 2.0)
   print("Set", arr[0])
 
+  print(arr)
+
 fn test_loop():
 
   var foo = Foo(1, 2.0)
@@ -468,13 +485,6 @@ fn test_borrow():
     print(x)
 
 
-fn test_ops():
-  let index = 23
-  let size = 10
-  if index < 0 or index >= size:
-    print("Bounds check failed")
-    exit(0)
-
 type Person:
   name : string
   age : int
@@ -495,8 +505,15 @@ fn test_sink():
   print(num)
 
 
+fn test_print():
+  var arr = Array!Array!int(0, Buffer(0, rawptr(0))&)
+  arr&.init_array(10)
+  arr[0]&.init_array(10)
+  arr[0][0] = 123
+  
+  print(arr)
+
 fn main():
-  test_ops()
   test_string()
   test_sink()
 
@@ -510,6 +527,7 @@ fn main():
   test_loop()
   test_basic_project()
   test_set()
+  test_print()
 
   # print("x", 123)
 

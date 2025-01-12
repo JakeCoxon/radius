@@ -263,7 +263,7 @@ const astWriter: SyntaxAstWriterTable = {
     compilerAssert(false, "Error unexpected 'comptimeobj'", { ast })
   },
   namedarg: (writer, ast) => {
-    compilerAssert(false, "Error unexpected 'namedarg'", { ast })
+    format(writer, `$=$`, ast.name, ast.expr)
   }
 };
 
