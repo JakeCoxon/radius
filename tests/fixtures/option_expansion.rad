@@ -50,7 +50,7 @@ fn test_max():
   let numbers = [1, 2, 3, 4, 5]
   let m = numbers.max2!int
 
-  let v = { m? * 10 }.orelse 0
+  let v = try { m? * 10 }.orelse 0
   assert(v == 50)
   print(v)
 
@@ -61,7 +61,7 @@ fn test_early_exit():
   const foo = {|x| ifx x > 2: Some(x) else: None!int() }
   let y = Some(23)
 
-  let x = {
+  let x = try {
     foo(numbers[:])?.iter.sum + y?
   }.orelse 32
   assert(x == 32)
@@ -81,7 +81,7 @@ fn test_early_exit_sideffect():
   # This breaks out of the try block within the ... expansion
   # so that all numbers are visited
   var r = 0
-  { r += numbers[:].foo? } ...
+  try { r += numbers[:].foo? } ...
   assert(r == 6)
   assert(sideeffects == 7)
 
@@ -90,7 +90,7 @@ fn test_early_exit_sideffect():
   # This one breaks out of the entire try block so only the
   # first 3 numbers are visited
   var s = 0
-  { s += numbers[:].foo? ... }
+  try { s += numbers[:].foo? ... }
   assert(s == 3)
   assert(sideeffects == 3)
 

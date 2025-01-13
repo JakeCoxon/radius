@@ -57,17 +57,17 @@ fn test_various():
   let w = y.orelse 100
   print(z + w)
 
-  let asd = { x? + y? }.orelse 3
+  let asd = try { x? + y? }.orelse 3
   assert(asd == 3)
 
   x = Some(16)
 
-  let asd2 = { x? + y? }.orelse 3
+  let asd2 = try { x? + y? }.orelse 3
   assert(asd2 == 48)
 
-  print({ x? + y? })
+  print(try { x? + y? })
 
-  let asd3 = { 2 + 3 }
+  let asd3 = try { 2 + 3 }
   print(asd3)
 
   # let x = ifx {
@@ -98,15 +98,15 @@ fn test_or_else():
 fn test_question_or_else():
   let x = None!int()
   let y = None!int()
-  let z = { x? + y? }.orelse 3
+  let z = try { x? + y? }.orelse 3
   assert(z == 3)
 
 fn test_valid_question_or_else():
   let x = Some(4)
   let y = Some(9)
-  let z = { x? + y? }
+  let z = try { x? + y? }
   assert(z.is_some == true)
-  assert((z.orelse 0) == 13)
+  assert(z.orelse(0) == 13)
 
 fn main():
   test_basic()

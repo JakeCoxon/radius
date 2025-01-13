@@ -1,4 +1,4 @@
-import { ParseAnd, ParseNode, ParseBreak, ParseCall, ParseCast, ParseCompTime, ParseContinue, ParseDict, ParseExpand, ParseField, ParseFor, ParseForExpr, ParseIf, ParseLet, ParseLetConst, ParseList, ParseListComp, ParseMeta, ParseNot, ParseNumber, ParseOpEq, ParseOperator, ParseOr, ParseReturn, ParseSet, ParseStatements, ParseString, ParseIdentifier, ParseWhile, ParseWhileExpr, ParserFunctionDecl, Token, compilerAssert, ParsePostCall, ParseSymbol, ParseNote, ParseSlice, ParseSubscript, ParserClassDecl, ParseClass, ParseFunction, createToken, ParseBoolean, ParseElse, ParseMetaIf, ParseMetaFor, ParseBlock, ParseImport, ParsedModule, Source, ParseMetaWhile, ParseTuple, ParseImportName, ParseFold, ParserFunctionParameter, ParseNamedArg, ParseIs, ParseOrElse, ParseIterator, ParseQuestion, ParseExtract, ParseMatch, ParseMatchCase, ParseGuard, createAnonymousToken, ParseLetAs, ParseIfMulti, Capability, ParseMutSigil, LetType } from "./defs";
+import { ParseAnd, ParseNode, ParseBreak, ParseCall, ParseCast, ParseCompTime, ParseContinue, ParseDict, ParseExpand, ParseField, ParseFor, ParseForExpr, ParseIf, ParseLet, ParseLetConst, ParseList, ParseListComp, ParseMeta, ParseNot, ParseNumber, ParseOpEq, ParseOperator, ParseOr, ParseReturn, ParseSet, ParseStatements, ParseString, ParseIdentifier, ParseWhile, ParseWhileExpr, ParserFunctionDecl, Token, compilerAssert, ParsePostCall, ParseSymbol, ParseNote, ParseSlice, ParseSubscript, ParserClassDecl, ParseClass, ParseFunction, createToken, ParseBoolean, ParseElse, ParseMetaIf, ParseMetaFor, ParseBlock, ParseImport, ParsedModule, Source, ParseMetaWhile, ParseTuple, ParseImportName, ParseFold, ParserFunctionParameter, ParseNamedArg, ParseIs, ParseOrElse, ParseIterator, ParseQuestion, ParseExtract, ParseMatch, ParseMatchCase, ParseGuard, createAnonymousToken, ParseLetAs, ParseIfMulti, Capability, ParseMutSigil, LetType, BreakType } from "./defs";
 
 const regexes = {
   KEYWORD:
@@ -260,6 +260,11 @@ export const makeParser = (input: string, debugName: string) => {
     else if (match("true") || match("false")) return new ParseBoolean(previous);
     else return expectIdentifier();
   }
+
+  const parseTry = (previous: Token) => {
+    expect("{", "Expected '{' after 'try'");
+    return parseBraceBlockExpr(previous, 'option', "{")
+  }
   
   const parseLiteral = (): ParseNode => {
     if (match("("))             return parseParens(previous);
@@ -267,7 +272,8 @@ export const makeParser = (input: string, debugName: string) => {
     else if (match("-"))        return new ParseOperator(previous, [parseLiteral()])
     else if (match("@"))        return new ParseNote(previous, parsePostfix()); // TODO: This is broken
     else if (match("%{"))       return parseDict(previous)
-    else if (match("{"))        return match("|") ? parseLambda() : parseBraceBlockExpr("{")
+    else if (match("{"))        return match("|") ? parseLambda() : (expect("|", "Expected '|' after '{'") as never)
+    else if (match("try"))      return parseTry(previous)
     else if (match("block"))    return new ParseBlock(previous, null, token?.value != ':' ? expectIdentifier() : null, parseColonBlockExpr('block'))
     else if (match("ifx"))      return parseIf(previous, true, "if condition")
     else if (match("return"))   return parseReturnExpr(previous);
@@ -340,6 +346,12 @@ export const makeParser = (input: string, debugName: string) => {
   const parseFieldAccess = (left: ParseNode) => new ParseField(previous, left, expectIdentifier())
   const parsePostCall = (left: ParseNode) => new ParsePostCall(previous, left, parseLambda())
 
+  const parseExprOrStatements = () => {
+    if (match("{")) return parseBraceBlockExpr(previous, null, "orelse")
+    if (match("(")) return trailingEndParen(parseExpr())
+    return parseExpr();
+  }
+
   const parsePostfix = (): ParseNode => {
     let left = parseLiteral();
 
@@ -350,7 +362,7 @@ export const makeParser = (input: string, debugName: string) => {
       else if (match(".")) {
         if (match("[")) left = parseSlice(true, left);
         else if (match("iter")) left = new ParseIterator(previous, left);
-        else if (match("orelse")) left = new ParseOrElse(previous, left, parseExpr());
+        else if (match("orelse")) left = new ParseOrElse(previous, left, parseExprOrStatements());
         else if (match("match"))  left = parseMatch(previous, left);
         else left = parseFieldAccess(left)
       }
@@ -407,10 +419,9 @@ export const makeParser = (input: string, debugName: string) => {
     expect(final, `Expected '${final}' after arg list`);
     return params
   };
-  const parseBraceBlockExpr = (afterMessage: string): ParseBlock => {
-    const token = previous;
-    if (!matchType("INDENT")) return new ParseBlock(token, 'option', null, new ParseStatements(token, [trailingEndBrace(parseExpressionStatement())]))
-    return new ParseBlock(token, 'option', null, trailingEndBrace(trailingStatement(parseMultilineBlock(token))))
+  const parseBraceBlockExpr = (token: Token, breakType: BreakType | null, afterMessage: string): ParseBlock => {
+    if (!matchType("INDENT")) return new ParseBlock(token, breakType, null, new ParseStatements(token, [trailingEndBrace(parseExpressionStatement())]))
+    return new ParseBlock(token, breakType, null, trailingEndBrace(trailingStatement(parseMultilineBlock(token))))
   }
   const parseColonBlockExpr = (afterMessage: string): ParseStatements => {
     const token = expect(":", `Expected ':' after ${afterMessage}`);
