@@ -1,11 +1,11 @@
-import { CodeGenerator, FunctionCodeGenerator } from "../borrow/codegen_ir";
-import { FunctionBlock, Module } from "../borrow/defs";
-import { Ast, Binding, compilerAssert, CompilerError, GlobalCompilerState, textColors } from "../src/defs";
+import { CodeGenerator, FunctionCodeGenerator } from "../codegen_ir";
+import { FunctionBlock, Module } from "./ir_common";
+import { Ast, Binding, compilerAssert, CompilerError, GlobalCompilerState, textColors } from "../defs";
 import { RegionExclusivityCheckingPass } from "./exclusivity";
 import { RegionInitializationCheckingPass } from "./initialization";
-import { InlineRegionProjectBundlesPass } from "./inlining";
+import { InlineRegionProjectBundlesPass } from "./ir_inlining";
 import { CloseRegionAccessPass } from "./liveness";
-import { IrFunction, printIrFunction, SequenceId } from "./region_codegen";
+import { IrFunction, printIrFunction, SequenceId } from "./ir_region";
 import { RegionReifyAccessPass } from "./reifyaccess";
 
 

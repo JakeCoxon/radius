@@ -1,4 +1,4 @@
-import { createDefaultConstructorAst } from "../borrow/codegen_ast";
+import { createDefaultConstructorAst } from "./codegen_ast";
 import { BytecodeDefault, BytecodeSecondOrder, callFunctionFromValueTask, compileFunctionPrototype, createBytecodeVmAndExecuteTask, pushBytecode, pushGeneratedBytecode, unknownToAst, visitParseNode, visitParseNodeAndError } from "./compiler_vm";
 import { externalBuiltinBindings, getEnumOf } from "./compiler_sugar";
 import { getCommonType, hashValues, isTypeInteger, normalizeNumberType, numberTypeToConcrete, propagateLiteralType, propagatedLiteralAst, typeCheckAssert, typeMatcherEquals, typeCheckFunctionResult, typeArgumentsToType } from "./compiler_types";

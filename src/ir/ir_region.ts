@@ -1,7 +1,7 @@
 import { inspect } from "bun";
-import { AccessInstruction, CallInstruction, CommentInstruction, EndAccessInstruction, formatInstruction, GetFieldPointerInstruction, getInstructionIdentifier, getInstructionOperands, getInstructionResult, IRInstruction, MarkInitializedInstruction, MoveInstruction } from "../borrow/defs";
-import { Binding, Capability, CompiledFunction, compilerAssert, FunctionParameter, PrimitiveType, SourceLocation, textColors, Type, VoidType } from "../src/defs";
-import { CodeGenerator } from "../borrow/codegen_ir";
+import { AccessInstruction, CallInstruction, CommentInstruction, EndAccessInstruction, formatInstruction, GetFieldPointerInstruction, getInstructionIdentifier, getInstructionOperands, getInstructionResult, IRInstruction, MarkInitializedInstruction, MoveInstruction } from "./ir_common";
+import { Binding, Capability, CompiledFunction, compilerAssert, FunctionParameter, PrimitiveType, SourceLocation, textColors, Type, VoidType } from "../defs";
+import { CodeGenerator } from "../codegen_ir";
 
 export type Regions = Region[];
 

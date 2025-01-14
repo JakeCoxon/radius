@@ -1,4 +1,4 @@
-import { createDefaultConstructorAst } from "../borrow/codegen_ast";
+import { createDefaultConstructorAst } from "./codegen_ast";
 import { compileExportedFunctionTask, insertFunctionDefinition } from "./compiler_functions";
 import { createCompilerModuleTask, defaultMetaFunction } from "./compiler_sugar";
 import { hashValues, typeTableGetOrInsert } from "./compiler_types";

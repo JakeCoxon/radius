@@ -1,4 +1,4 @@
-import { generateConstructor, generateDestructor, generateMoveFunction } from "../borrow/codegen_ast"
+import { generateConstructor, generateDestructor, generateMoveFunction } from "./codegen_ast"
 import { compileClassTask } from "./compiler"
 import { generatePrintFunction, generateTypeMethods } from "./compiler_sugar"
 import { Ast, BasicType, Binding, BoolType, Capability, ClassDefinition, Closure, CompilerError, ConcreteClassType, DoubleType, EnumVariantAst, ExternalTypeConstructor, FloatLiteralType, FloatType, FunctionDefinition, GlobalCompilerState, IntLiteralType, IntType, MutSigilAst, NeverType, NumberAst, OperatorAst, ParameterizedType, ParseCall, ParseIdentifier, ParseNode, PrimitiveType, RawPointerType, Scope, ScopeParentSymbol, SourceLocation, StatementsAst, StringType, SubscriptAst, TaskContext, Tuple, TupleTypeConstructor, Type, TypeCheckConfig, TypeCheckResult, TypeCheckVar, TypeConstructor, TypeField, TypeMatcher, TypeTable, TypeVariable, UnknownObject, VariantCastAst, VoidType, compilerAssert, getUniqueId, insertTypeInfoFields, isType, u64Type, u8Type } from "./defs"

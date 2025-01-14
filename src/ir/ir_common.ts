@@ -1,5 +1,6 @@
-import { RegionId } from "../region/region_codegen";
-import { Binding, Capability, CompiledFunction, compilerAssert, escapeString, FunctionParameter, LetType, SourceLocation, Type, TypeField } from "../src/defs";
+import { RegionId } from "./ir_region";
+import { Binding, Capability, CompiledFunction, compilerAssert, escapeString, FunctionParameter, LetType, SourceLocation, Type, TypeField } from "../defs";
+import { ControlFlowGraphGeneric } from "./ir_controlflow";
 
 export class Pointer {
   constructor(public address: string) {}
@@ -366,4 +367,83 @@ export const textColors = {
   green: (string: string) => `\x1b[32m${string}\x1b[39m`,
   cyan: (string: string) => `\x1b[36m${string}\x1b[39m`,
   gray: (string: string) => `\x1b[38;5;242m${string}\x1b[39m`,
+}
+
+
+type CFG = ControlFlowGraphGeneric<RegionId>
+
+
+export class RegionWorklist {
+  worklist: { regionId: RegionId }[] = []
+  visited: Set<RegionId> = new Set();
+
+  constructor(public cfg: CFG) {
+    for (const regionId of cfg.blocks) {
+      this.worklist.push({ regionId });
+    }
+  }
+
+  hasVisited(regionId: RegionId) { return this.visited.has(regionId) }
+
+  canVisitRegion(regionId: RegionId) {
+    const dom = this.cfg.getImmediateDominator(regionId)
+    if (dom === null) return true
+    if (!this.hasVisited(dom)) return false
+    return this.cfg.predecessors.get(regionId)!.every(pred =>
+      this.hasVisited(pred) || this.cfg.dominates(regionId, pred))
+  }
+
+  fixedPoint(visit: (regionId: RegionId) => void) {
+
+    while (this.worklist.length > 0) {
+      const { regionId } = this.worklist.shift()!;
+      if (!this.canVisitRegion(regionId)) {
+        this.worklist.push({ regionId });
+        continue;
+      }
+      visit(regionId)
+    }
+  }
+
+  shift() {
+    return this.worklist.shift();
+  }
+
+  addWork(regionId: RegionId) {
+    this.worklist.push({ regionId });
+  }
+
+}
+
+export class VisitTree {
+  nodes: { [regionId: string]: number } = {}
+  edges: { [edgeId: string]: number } = {}
+  connections: [RegionId, RegionId][] = []
+
+  addVisit(regionId: RegionId, predecessors: RegionId[]) {
+    this.nodes[regionId] = this.nodes[regionId] || 0
+    this.nodes[regionId] ++
+    for (const pred of predecessors) {
+      const edgeId = `${pred}->${regionId}`
+      if (!this.edges[edgeId]) {
+        this.connections.push([pred, regionId])
+        this.edges[edgeId] = 0
+      }
+      this.edges[edgeId] ++
+    }
+  }
+
+  print(name: string) {
+    // Print as DOT
+    console.log("##### Visit Tree", name)
+    console.log(`digraph {`)
+    for (const regionId in this.nodes) {
+      console.log(`  ${regionId} [label="${regionId} = ${this.nodes[regionId]}"]`)
+    }
+    for (const [from, to] of this.connections) {
+      const label = this.edges[`${from}->${to}`]
+      console.log(`  ${from} -> ${to} [label="${label}"]`)
+    }
+    console.log(`}`)
+  }
 }

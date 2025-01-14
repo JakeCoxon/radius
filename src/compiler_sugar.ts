@@ -1,4 +1,4 @@
-import { createDefaultConstructorAst, createParameter, generateConstructor, generateDestructor, generateMoveFunction } from "../borrow/codegen_ast"
+import { createDefaultConstructorAst, createParameter, generateConstructor, generateDestructor, generateMoveFunction } from "./codegen_ast"
 import { BytecodeSecondOrder, callFunctionFromValueTask, compileFunctionPrototype, getOperatorTable, pushBytecode, unknownToAst, visitParseNode } from "./compiler_vm"
 import { compileAndExecuteFunctionHeaderTask, compileExportedFunctionTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, FunctionCallArg, functionTemplateTypeCheckAndCompileTask, insertFunctionDefinition } from "./compiler_functions"
 import { concat, generator } from "./compiler_iterator"

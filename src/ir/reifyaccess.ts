@@ -1,6 +1,6 @@
-import { Capability, CapabilityRanking, compilerAssert } from "../src/defs";
-import { AccessInstruction, AssignInstruction, FunctionBlock, GetFieldPointerInstruction, IRInstruction, LoadFromAddressInstruction, MoveInstruction, PointerOffsetInstruction, ProjectAccessInstruction, ProjectBundleInstruction, StoreToAddressInstruction, getInstructionResult } from "../borrow/defs";
-import { BlockRegion, createRegionUsageMap, InstructionId, IrDiagnostics, IrFunction, printIrFunction } from "./region_codegen";
+import { Capability, CapabilityRanking, compilerAssert } from "../defs";
+import { AccessInstruction, AssignInstruction, FunctionBlock, GetFieldPointerInstruction, IRInstruction, LoadFromAddressInstruction, MoveInstruction, PointerOffsetInstruction, ProjectAccessInstruction, ProjectBundleInstruction, StoreToAddressInstruction, getInstructionResult } from "./ir_common";
+import { BlockRegion, createRegionUsageMap, InstructionId, IrDiagnostics, IrFunction, printIrFunction } from "./ir_region";
 
 export class RegionReifyAccessPass {
   debugLog = false

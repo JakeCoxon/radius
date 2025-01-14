@@ -1,8 +1,7 @@
-import { Binding, Capability, compilerAssert, CompilerError, ConcreteClassType, PrimitiveType, Type, VoidType } from "../src/defs";
-import { CodeGenerator, FunctionCodeGenerator } from "../borrow/codegen_ir";
-import { ControlFlowGraph, ControlFlowGraphGeneric, buildCFG, buildCFGFromRegions, printRegionCFG } from "../borrow/controlflow";
-import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, EndAccessInstruction, PhiInstruction, MoveInstruction, CommentInstruction, textColors, MarkInitializedInstruction, formatInstruction, Module, DeallocStackInstruction, PointerOffsetInstruction, printIR, ProjectBundleInstruction, YieldInstruction, BreakInstruction, GetGlobalAddress, BitCastInstruction, YieldGeneratorInstruction, JumpTableInstruction, ProjectAccessInstruction, PointerToAddressInstruction } from "../borrow/defs";
-import { BlockRegion, InsertPosition, InstructionId, IrDiagnostics, IrFunction, printIrFunction, RegionCodegen, RegionId } from "./region_codegen";
+import { Binding, Capability, compilerAssert, CompilerError, ConcreteClassType, PrimitiveType, Type, VoidType } from "../defs";
+import { ControlFlowGraph, ControlFlowGraphGeneric, buildCFG, buildCFGFromRegions, printRegionCFG } from "./ir_controlflow";
+import { AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, CallInstruction, AccessInstruction, ConditionalJumpInstruction, FunctionBlock, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, ReturnInstruction, StoreToAddressInstruction, GetFieldPointerInstruction, EndAccessInstruction, PhiInstruction, MoveInstruction, CommentInstruction, textColors, MarkInitializedInstruction, formatInstruction, Module, DeallocStackInstruction, PointerOffsetInstruction, printIR, ProjectBundleInstruction, YieldInstruction, BreakInstruction, GetGlobalAddress, BitCastInstruction, YieldGeneratorInstruction, JumpTableInstruction, ProjectAccessInstruction, PointerToAddressInstruction, VisitTree, RegionWorklist } from "./ir_common";
+import { BlockRegion, InsertPosition, InstructionId, IrDiagnostics, IrFunction, printIrFunction, RegionCodegen, RegionId } from "./ir_region";
 
 type InitializationState = Top | Bottom | Sequence;
 type CFG = ControlFlowGraphGeneric<RegionId>
@@ -914,80 +913,4 @@ function initializationStateEqual(sd1: InitializationState, sd2: InitializationS
     return true;
   }
   return false;
-}
-
-
-export class RegionWorklist {
-  worklist: { regionId: RegionId }[] = []
-  visited: Set<RegionId> = new Set();
-
-  constructor(public cfg: CFG) {
-    for (const regionId of cfg.blocks) {
-      this.worklist.push({ regionId });
-    }
-  }
-
-  hasVisited(regionId: RegionId) { return this.visited.has(regionId) }
-
-  canVisitRegion(regionId: RegionId) {
-    const dom = this.cfg.getImmediateDominator(regionId)
-    if (dom === null) return true
-    if (!this.hasVisited(dom)) return false
-    return this.cfg.predecessors.get(regionId)!.every(pred =>
-      this.hasVisited(pred) || this.cfg.dominates(regionId, pred))
-  }
-
-  fixedPoint(visit: (regionId: RegionId) => void) {
-
-    while (this.worklist.length > 0) {
-      const { regionId } = this.worklist.shift()!;
-      if (!this.canVisitRegion(regionId)) {
-        this.worklist.push({ regionId });
-        continue;
-      }
-      visit(regionId)
-    }
-  }
-
-  shift() {
-    return this.worklist.shift();
-  }
-
-  addWork(regionId: RegionId) {
-    this.worklist.push({ regionId });
-  }
-
-}
-
-class VisitTree {
-  nodes: { [regionId: string]: number } = {}
-  edges: { [edgeId: string]: number } = {}
-  connections: [RegionId, RegionId][] = []
-
-  addVisit(regionId: RegionId, predecessors: RegionId[]) {
-    this.nodes[regionId] = this.nodes[regionId] || 0
-    this.nodes[regionId] ++
-    for (const pred of predecessors) {
-      const edgeId = `${pred}->${regionId}`
-      if (!this.edges[edgeId]) {
-        this.connections.push([pred, regionId])
-        this.edges[edgeId] = 0
-      }
-      this.edges[edgeId] ++
-    }
-  }
-
-  print(name: string) {
-    // Print as DOT
-    console.log("##### Visit Tree", name)
-    console.log(`digraph {`)
-    for (const regionId in this.nodes) {
-      console.log(`  ${regionId} [label="${regionId} = ${this.nodes[regionId]}"]`)
-    }
-    for (const [from, to] of this.connections) {
-      const label = this.edges[`${from}->${to}`]
-      console.log(`  ${from} -> ${to} [label="${label}"]`)
-    }
-    console.log(`}`)
-  }
 }

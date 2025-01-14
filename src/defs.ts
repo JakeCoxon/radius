@@ -1,6 +1,6 @@
 import { FileSink } from "bun";
-import { FunctionBlock } from "../borrow/defs";
-import { IrFunction } from "../region/region_codegen";
+import { FunctionBlock } from "./ir/ir_common";
+import { IrFunction } from "./ir/ir_region";
 import { Event, Task } from "./tasks";
 
 export type UnknownObject = {[key:string]:unknown}

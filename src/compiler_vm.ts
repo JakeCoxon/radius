@@ -4,7 +4,7 @@ import { Event, Task, TaskDef, Unit, isTask, isTaskResult, withContext } from ".
 import { createCompilerModuleTask, createListConstructor, defaultMetaFunction, guardSugar, ifMultiSugar, isSugar, matchSugar, optionBlockSugar, orElseSugar, print, questionSugar, subscriptCompiler } from "./compiler_sugar";
 import { expandDotsSugar, expandFuncConcatSugar, expandIteratorSugar, foldSugar, forExprSugar, forLoopSugar, listComprehensionSugar, listConstructorSugar, sliceSugar, whileExprSugar } from "./compiler_iterator"
 import { OptionTypeConstructor, canAssignTypeTo, classDefinitionToType, compileTypeConstructorTask, createParameterizedExternalType, getCommonType, hashValues, isParameterizedTypeOf, propagateLiteralType, propagatedLiteralAst, typeTableGetOrInsert, typecheckEquality, typecheckNumberComparison, typecheckNumberOperator } from "./compiler_types";
-import { createDefaultConstructorAst } from "../borrow/codegen_ast";
+import { createDefaultConstructorAst } from "./codegen_ast";
 import { resolveScope, setScopeValueAndResolveEvents } from "./compiler";
 
 export const pushBytecode = <T extends BytecodeInstr>(out: BytecodeWriter, token: Token, instr: T) => {

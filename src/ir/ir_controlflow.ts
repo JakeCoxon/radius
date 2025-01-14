@@ -1,6 +1,6 @@
-import { BlockRegion, GeneratorRegion, IfRegion, IrFunction, RegionId, ScopeRegion, SequenceId, WhileRegion } from "../region/region_codegen";
-import { compilerAssert } from "../src/defs";
-import { BasicBlock, ConditionalJumpInstruction, JumpInstruction } from "./defs";
+import { BlockRegion, GeneratorRegion, IfRegion, IrFunction, RegionId, ScopeRegion, SequenceId, WhileRegion } from "./ir_region";
+import { compilerAssert } from "../defs";
+import { BasicBlock, ConditionalJumpInstruction, JumpInstruction } from "./ir_common";
 
 export type ControlFlowGraph = ControlFlowGraphGeneric<BasicBlock>;
 

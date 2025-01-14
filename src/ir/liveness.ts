@@ -1,7 +1,7 @@
-import { compilerAssert, CompilerError } from "../src/defs";
-import { buildCFGFromRegions, ControlFlowGraph, ControlFlowGraphGeneric } from "../borrow/controlflow";
-import { AccessInstruction, AssignInstruction, BasicBlock, CommentInstruction, EndAccessInstruction, FunctionBlock, GetFieldPointerInstruction, IRInstruction, LoadFromAddressInstruction, PointerOffsetInstruction, ProjectAccessInstruction, ProjectBundleInstruction, formatInstruction, getInstructionOperands, getInstructionResult } from "../borrow/defs";
-import { BlockRegion, createRegionUsageMap, type InstructionId, IrDiagnostics, IrFunction, printIrFunction, Region, RegionCodegen, RegionId, Usage, UsageMap } from "./region_codegen";
+import { compilerAssert, CompilerError } from "../defs";
+import { buildCFGFromRegions, ControlFlowGraph, ControlFlowGraphGeneric } from "./ir_controlflow";
+import { AccessInstruction, AssignInstruction, BasicBlock, CommentInstruction, EndAccessInstruction, FunctionBlock, GetFieldPointerInstruction, IRInstruction, LoadFromAddressInstruction, PointerOffsetInstruction, ProjectAccessInstruction, ProjectBundleInstruction, formatInstruction, getInstructionOperands, getInstructionResult } from "./ir_common";
+import { BlockRegion, createRegionUsageMap, type InstructionId, IrDiagnostics, IrFunction, printIrFunction, Region, RegionCodegen, RegionId, Usage, UsageMap } from "./ir_region";
 
 type InsertMap = {[key: string]: (
   { regionId: RegionId, after: InstructionId, newInstr: IRInstruction } | 

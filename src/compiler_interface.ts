@@ -1,12 +1,12 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync } from "fs";
-import { runCodegenPasses } from "../region/passes";
+import { runCodegenPasses } from "./ir/passes";
 import { writeSyntax } from "./codegen_syntax";
 import { createDefaultTypeFunctions } from "./compiler_types";
 import { BuildObject, CompilerError, DiagnosticLocation, GlobalCompilerState, ModuleLoader, ParsedModule, SourceLocation, SubCompilerState, TaskContext, TokenRoot, compilerAssert, createScope, outputSourceLocation } from "./defs";
 import { makeParser } from "./parser";
 import { Queue, TaskDef, stepQueue, withContext } from "./tasks";
 import { basename, dirname, extname, normalize } from "path";
-import { writeLlvmBytecodeBorrowRegion } from "../region/codegen_llvm_region";
+import { writeLlvmBytecodeBorrowRegion } from "./codegen_llvm";
 import { exec } from "child_process";
 import { programEntryTask } from "./compiler";
 

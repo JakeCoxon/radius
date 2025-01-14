@@ -1,7 +1,7 @@
-import { Binding, Capability, CompiledFunction, CompilerError, GlobalCompilerState, PrimitiveType, RawPointerType, SourceLocation, VoidType, compilerAssert } from "../src/defs"; // prettier-ignore
-import { CodeGenerator } from '../borrow/codegen_ir';
-import { AccessInstruction, AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, BreakInstruction, CallInstruction, CommentInstruction, ConditionalJumpInstruction, EndAccessInstruction, FunctionBlock, GetFieldPointerInstruction, getInstructionOperands, getInstructionResult, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, MarkInitializedInstruction, Module, PhiInstruction, PhiSource, PointerOffsetInstruction, PointerToAddressInstruction, printIR, ProjectAccessInstruction, ProjectBundleInstruction, ReturnInstruction, StoreToAddressInstruction, YieldInstruction } from '../borrow/defs';
-import { BlockRegion, IfRegion, InsertPosition, InstructionId, IrDiagnostics, IrFunction, printIrFunction, Region, RegionCodegen, RegionId, ScopeRegion, SequenceId, WhileRegion } from "./region_codegen";
+import { Binding, Capability, CompiledFunction, CompilerError, GlobalCompilerState, PrimitiveType, RawPointerType, SourceLocation, VoidType, compilerAssert } from "../defs"; // prettier-ignore
+import { CodeGenerator } from '../codegen_ir';
+import { AccessInstruction, AllocInstruction, AssignInstruction, BasicBlock, BinaryOperationInstruction, BreakInstruction, CallInstruction, CommentInstruction, ConditionalJumpInstruction, EndAccessInstruction, FunctionBlock, GetFieldPointerInstruction, getInstructionOperands, getInstructionResult, IRInstruction, JumpInstruction, LoadConstantInstruction, LoadFromAddressInstruction, MarkInitializedInstruction, Module, PhiInstruction, PhiSource, PointerOffsetInstruction, PointerToAddressInstruction, printIR, ProjectAccessInstruction, ProjectBundleInstruction, ReturnInstruction, StoreToAddressInstruction, YieldInstruction } from './ir_common';
+import { BlockRegion, IfRegion, InsertPosition, InstructionId, IrDiagnostics, IrFunction, printIrFunction, Region, RegionCodegen, RegionId, ScopeRegion, SequenceId, WhileRegion } from "./ir_region";
 
 
 type RegisterMapping = {

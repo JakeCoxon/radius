@@ -1,4 +1,4 @@
-import { createDefaultConstructorAst } from "../borrow/codegen_ast"
+import { createDefaultConstructorAst } from "./codegen_ast"
 import { BytecodeSecondOrder, compileFunctionPrototype, getOperatorTable, popStack, popValues, pushBytecode, unknownToAst, visitParseNode } from "./compiler_vm"
 import { compileExportedFunctionTask, createCallAstFromValue, createCallAstFromValueAndPushValue, createMethodCall, insertFunctionDefinition } from "./compiler_functions"
 import { createDefaultFromType, maxOfType, minOfType, typeOf } from "./compiler_sugar"

@@ -1,6 +1,7 @@
-import { createDefaultConstructorAst } from "../borrow/codegen_ast";
 import { externalBuiltinBindings } from "./compiler_sugar";
-import { Ast, AstType, AstWriterTable, Binding, BindingAst, BlockAst, BoolType, CallAst, CompiledFunction, ConcreteClassType, ConstructorAst, DefaultConsAst, DoubleType, FileWriter, FloatType, FunctionType, GlobalCompilerState, IntType, LetAst, ListTypeConstructor, LlvmFunctionWriter, LlvmWriter, NeverType, NumberAst, ParameterizedType, Pointer, PrimitiveType, RawPointerType, Register, SetAst, SourceLocation, StatementsAst, StringType, Type, TypeField, UserCallAst, ValueFieldAst, VoidType, compilerAssert, escapeString, isAst, isType, textColors, u64Type, u8Type } from "./defs";
+import { Ast, AstType, AstWriterTable, Binding, BindingAst, BlockAst, BoolType, CallAst, Capability, CompiledFunction, ConcreteClassType, ConstructorAst, DefaultConsAst, DoubleType, FileWriter, FloatType, FunctionType, GlobalCompilerState, IntType, LetAst, ListTypeConstructor, LlvmFunctionWriter, LlvmWriter, NeverType, NumberAst, ParameterizedType, Pointer, PrimitiveType, RawPointerType, Register, SetAst, SourceLocation, StatementsAst, StringType, Type, TypeField, UserCallAst, ValueFieldAst, VoidType, compilerAssert, escapeString, isAst, isType, textColors, u64Type, u8Type } from "./defs";
+import { AccessInstruction, AllocInstruction, AssignInstruction, BinaryOperationInstruction, BitCastInstruction, BreakInstruction, CallInstruction, CommentInstruction, ConditionalJumpInstruction, EndAccessInstruction, formatInstruction, FunctionBlock, GetFieldPointerInstruction, GetGlobalAddress, getInstructionResult, IRInstruction, JumpInstruction, JumpTableInstruction, LoadConstantInstruction, LoadFromAddressInstruction, MarkInitializedInstruction, PhiInstruction, PhiSource, PointerOffsetInstruction, ReturnInstruction, StoreToAddressInstruction, YieldGeneratorInstruction } from "./ir/ir_common";
+import { BlockRegion, GeneratorRegion, IfRegion, IrFunction, ScopeRegion, SequenceId, WhileRegion } from "./ir/ir_region";
 
 // Some useful commands
 //
@@ -21,29 +22,6 @@ import { Ast, AstType, AstWriterTable, Binding, BindingAst, BlockAst, BoolType, 
 // `  simplifycfg`,
 // `),`,
 
-
-const operatorMapSignedInt: {[key: string]:string} = {
-  "+": "add",
-  "-": "sub",
-  "*": "mul",
-  "/": "sdiv", // signed
-  "==": "icmp eq",
-  "!=": "icmp ne",
-
-  "<<": "shl",
-  ">>": "lshr", // Logical shift right
-
-  "&": "and",
-  "|": "or",
-
-  // Signed
-  ">": "icmp sgt",
-  "<": "icmp slt",
-  "<=": "icmp sle",
-  ">=": "icmp sge",
-
-  "mod": "srem"
-}
 
 const operatorMapUnsignedInt: {[key: string]:string} = {
   "+": "add",
@@ -68,65 +46,82 @@ const operatorMapUnsignedInt: {[key: string]:string} = {
   "mod": "urem"
 }
 
-const operatorMapFloat: {[key: string]:string} = {
-  "+": "fadd",
-  "-": "fsub",
-  "*": "fmul",
-  "/": "fdiv",
+const operatorMapAll: {[key: string]: (writer: Writable, typeName: string, left: string, right: string) => string} = {
+  // Result type _ param type _ operator
+  
+  "int_int_+":      (w, t, l, r) => `add ${t} ${l}, ${r}`,
+  "int_int_-":      (w, t, l, r) => `sub ${t} ${l}, ${r}`,
+  "int_int_*":      (w, t, l, r) => `mul ${t} ${l}, ${r}`,
+  "int_int_/":      (w, t, l, r) => `sdiv ${t} ${l}, ${r}`,
+  "bool_int_==":    (w, t, l, r) => `icmp eq ${t} ${l}, ${r}`,
+  "bool_int_!=":    (w, t, l, r) => `icmp ne ${t} ${l}, ${r}`,
+  "bool_int_>":     (w, t, l, r) => `icmp sgt ${t} ${l}, ${r}`,
+  "bool_int_<":     (w, t, l, r) => `icmp slt ${t} ${l}, ${r}`,
+  "bool_int_<=":    (w, t, l, r) => `icmp sle ${t} ${l}, ${r}`,
+  "bool_int_>=":    (w, t, l, r) => `icmp sge ${t} ${l}, ${r}`,
+  "int_int_<<":     (w, t, l, r) => `shl ${t} ${l}, ${r}`,
+  "int_int_>>":     (w, t, l, r) => `lshr ${t} ${l}, ${r}`, // Logical shift right
+  "int_int_&":      (w, t, l, r) => `and ${t} ${l}, ${r}`,
+  "int_int_|":      (w, t, l, r) => `or ${t} ${l}, ${r}`,
+  "int_int_mod":    (w, t, l, r) => `srem ${t} ${l}, ${r}`,
+
+  "float_float_+":  (w, t, l, r) => `fadd ${t} ${l}, ${r}`,
+  "float_float_-":  (w, t, l, r) => `fsub ${t} ${l}, ${r}`,
+  "float_float_*":  (w, t, l, r) => `fmul ${t} ${l}, ${r}`,
+  "float_float_/":  (w, t, l, r) => `fdiv ${t} ${l}, ${r}`,
 
   // https://llvm.org/docs/LangRef.html#fcmp-instruction
   // O means ordered
-  "==": "fcmp oeq",
-  "!=": "fcmp one",
-  ">": "fcmp ogt",
-  "<": "fcmp olt",
-  "<=": "fcmp ole",
-  ">=": "fcmp oge",
+  "bool_float_==":  (w, t, l, r) => `fcmp oeq ${t} ${l}, ${r}`,
+  "bool_float_!=":  (w, t, l, r) => `fcmp one ${t} ${l}, ${r}`,
+  "bool_float_>":   (w, t, l, r) => `fcmp ogt ${t} ${l}, ${r}`,
+  "bool_float_<":   (w, t, l, r) => `fcmp olt ${t} ${l}, ${r}`,
+  "bool_float_<=":  (w, t, l, r) => `fcmp ole ${t} ${l}, ${r}`,
+  "bool_float_>=":  (w, t, l, r) => `fcmp oge ${t} ${l}, ${r}`,
+
+  "double_double_+":  (w, t, l, r) => `fadd ${t} ${l}, ${r}`,
+  "double_double_-":  (w, t, l, r) => `fsub ${t} ${l}, ${r}`,
+  "double_double_*":  (w, t, l, r) => `fmul ${t} ${l}, ${r}`,
+  "double_double_/":  (w, t, l, r) => `fdiv ${t} ${l}, ${r}`,
+
+  "bool_double_==":  (w, t, l, r) => `fcmp oeq ${t} ${l}, ${r}`,
+  "bool_double_!=":  (w, t, l, r) => `fcmp one ${t} ${l}, ${r}`,
+  "bool_double_>":   (w, t, l, r) => `fcmp ogt ${t} ${l}, ${r}`,
+  "bool_double_<":   (w, t, l, r) => `fcmp olt ${t} ${l}, ${r}`,
+  "bool_double_<=":  (w, t, l, r) => `fcmp ole ${t} ${l}, ${r}`,
+  "bool_double_>=":  (w, t, l, r) => `fcmp oge ${t} ${l}, ${r}`,
+  
+  "bool_bool_&":    (w, t, l, r) => `and ${t} ${l}, ${r}`,
+  "bool_bool_|":    (w, t, l, r) => `or ${t} ${l}, ${r}`,
+  "bool_bool_==":   (w, t, l, r) => `icmp eq ${t} ${l}, ${r}`,
+  "bool_bool_!=":   (w, t, l, r) => `icmp ne ${t} ${l}, ${r}`,
+
+  "bool_rawptr_!=": (w, t, l, r) => `icmp ne ${t} ${l}, ${r}`,
+  "bool_rawptr_==": (w, t, l, r) => `icmp eq ${t} ${l}, ${r}`,
+
+  "int_float_cast": (w, t, l, r) => `fptosi float ${l} to i32`,
+  "float_int_cast": (w, t, l, r) => `sitofp i32 ${l} to float`,
+  "int_double_cast": (w, t, l, r) => `fptosi double ${l} to i32`,
+  "double_float_cast": (w, t, l, r) => `fpext float ${l} to double`,
+  "float_double_cast": (w, t, l, r) => `fptrunc double ${l} to float`,
+
+  "u8_int_cast": (w, t, l, r) => `trunc i32 ${l} to i8`,
+  "double_u64_cast": (w, t, l, r) => `uitofp i64 ${l} to double`,
+
+  // TODO: Make this nicer
+  "u64_u64_*": (w, t, l, r) => `mul ${t} ${l}, ${r}`,
+  "u64_u64_+": (w, t, l, r) => `add ${t} ${l}, ${r}`,
+  "u64_u64_-": (w, t, l, r) => `sub ${t} ${l}, ${r}`,
+  "u64_u64_/": (w, t, l, r) => `udiv ${t} ${l}, ${r}`,
+  "u64_u64_mod": (w, t, l, r) => `urem ${t} ${l}, ${r}`,
+
+  
 }
-
-const operatorMapLogical: {[key: string]:string} = {
-  "&": "and",
-  "|": "or",
-  "==": "icmp eq",
-  "!=": "icmp ne",
-};
-
+  
 const log = (...args: any[]) => {
   if ((globalThis as any).logger) (globalThis as any).logger.log(...args)
 }
 
-const writeExpr = (writer: LlvmFunctionWriter, ast: Ast) => {
-  compilerAssert(!writer.writer.astVisitMap.has(ast), "Already visited AST", { ast }) 
-  if (!(ast instanceof NumberAst || ast instanceof BindingAst)) {
-    writer.writer.astVisitMap.set(ast, true) // Takes up a lot of memory
-  }
-  compilerAssert(astWriter[ast.key], `Not implemented ast writer '${ast.key}'`, { ast })
-  const toPrint = !(ast instanceof StatementsAst || ast instanceof BlockAst) && writer.printNextStatement
-  if (toPrint) {
-    writer.printNextStatement = false
-    const line = ast.location.source?.input.split("\n").find((x, i) => i + 1 === ast.location.line)
-    if (line) {
-      format(writer, "; $ | ($) $\n", ast.location.line, ast.key, line.trim())
-    } else format(writer, `; $\n`, ast.key)
-  }
-  const result = astWriter[ast.key](writer, ast as any)
-  if (toPrint) format(writer, "\n")
-  return result
-};
-
-const toStatements = (ast: Ast) => {
-  if (ast instanceof StatementsAst) return ast
-  return new StatementsAst(ast.type, ast.location, [ast])
-}
-
-const toRegister = (writer: LlvmFunctionWriter, v: LlvmResultValue): Register => {
-  compilerAssert(v, "Result was a void when trying to convert to register")
-  if ('register' in v) return v.register
-  const name = createRegister("", v.pointer.type)
-  // if (v.pointer.type === VoidType) compilerAssert(false, "")
-  format(writer, "  $ = load $, ptr $\n", name, v.pointer.type, v.pointer)
-  return name
-}
 const getPointerName = (writer: LlvmFunctionWriter, type: Type) => {
   if (type === RawPointerType) return 'ptr'
   if (type.typeInfo.isReferenceType) return 'ptr'
@@ -140,527 +135,13 @@ export type LlvmResultValue = RegisterResult | PointerResult | null
 const createPointer = (name: string, type: Type) => new Binding(name, type) as Pointer
 const createRegister = (name: string, type: Type) => new Binding(name, type) as Register
 
-const getBindingStorageType = (binding: Binding) => getStorageType(binding.type)
-const getStorageType = (type: Type) => {
-  return type.typeInfo.isReferenceType ? RawPointerType : type
-}
-
 export type LlvmAstWriterTable = {
   [A in Ast as A['key']]: (writer: LlvmFunctionWriter, ast: A) => LlvmResultValue;
 }
 
-const beginBasicBlock = (writer: LlvmFunctionWriter, label: Binding) => {
-  format(writer, "$:\n", generateName(writer.writer, label).substring(1))
-  writer.currentBlockLabel = label
-}
-
-const allocaHelper = (writer: LlvmFunctionWriter, pointer: Pointer, overrideType: Type | null = null) => {
-  writer.currentOutput = writer.outputFunctionHeaders
-  format(writer, "  $ = alloca $ ; $\n", pointer, overrideType ?? pointer.type, getDataTypeName(writer.writer, pointer.type))
-  writer.currentOutput = writer.outputFunctionBody
-  return pointer
-}
-const getElementPointer = (writer: LlvmFunctionWriter, pointer: Pointer, resultType: Type, fieldPath: TypeField[]) => {
-  compilerAssert(pointer.type !== VoidType)
-  const loadFieldPtr = createPointer("", resultType)
-  const indicesStr = fieldPath.reduce((acc, field, i) => {
-    return `${acc}, i32 ${field.index}`
-  }, "i32 0")
-
-  const sourceDataType = getDataTypeName(writer.writer, pointer.type)
-  format(writer, "  $ = getelementptr $, $ $, $\n", loadFieldPtr, sourceDataType, 'ptr', pointer, indicesStr)
-  return loadFieldPtr
-}
-const loadFieldHelper = (writer: LlvmFunctionWriter, leftResult: LlvmResultValue, fieldPath: TypeField[]) => {
-  const loadField = (base: LlvmResultValue, field: TypeField): RegisterResult => {
-    compilerAssert(base, "")
-    const loadFieldPtr = createPointer("", VoidType)
-    const loadFieldVal = createRegister("", field.fieldType)
-
-    if ('pointer' in base) {
-      format(writer, "  $ = getelementptr $, $ $, i32 0, i32 $\n", loadFieldPtr, field.sourceType, getPointerName(writer, field.sourceType), base.pointer, field.index)
-      format(writer, "  $ = load $, $ $\n", loadFieldVal, loadFieldVal.type, getPointerName(writer, loadFieldVal.type), loadFieldPtr)
-    } else {
-      format(writer, "  $ = extractvalue $ $, $\n", loadFieldVal, getDataTypeName(writer.writer, field.sourceType), base.register, String(field.index))
-    }
-    return { register: loadFieldVal }
-  }
-  const result = fieldPath.reduce((reg, field) => {
-    return loadField(leftResult, field)
-  }, leftResult)
-  compilerAssert(result && 'register' in result)
-  return result.register
-}
-
-const astWriter: LlvmAstWriterTable = {
-  statements: (writer, ast) => {
-    // TODO: Filter voids?
-    let result: LlvmResultValue = undefined!
-    ast.statements.forEach((expr, i) => {
-      writer.printNextStatement = true
-      result = writeExpr(writer, expr)
-    })
-    return result
-  },
-  string: (writer, ast) => {
-    const constantName = generateName(writer.writer, new Binding("constant", VoidType), true)
-    const escaped = escapeString(ast.value)
-    const length = ast.value.length + 1 // add null terminator
-    writer.writer.outputHeaders.push(`${constantName} = private unnamed_addr constant [${length} x i8] c"${escaped}\\00"\n`)
-    const pointer = allocaHelper(writer, createPointer("", ast.type))
-    format(writer, `  store $ { i32 $, ptr $ }, ptr $\n`, ast.type, length - 1, constantName, pointer)
-    return { pointer }
-  },
-  binding: (writer, ast) => {
-    compilerAssert(ast.binding.type !== VoidType, "Expected type got $type", { ast, type: ast.binding.type })
-    if (ast.binding.storage === 'ref') {
-      // Ref params are alloca as pointers themselves so we need to load them first (should get optimised away)
-      const pointer = createPointer("", ast.binding.type)
-      format(writer, `  $ = load ptr, ptr $\n`, pointer, ast.binding)
-      return { pointer }
-    }
-    return { pointer: ast.binding as Pointer }
-  },
-  let: (writer, ast) => {
-    // TODO: No value should zero initialize?
-    compilerAssert(ast.value, "Let without value not implemented", { ast })
-    const storageType = getBindingStorageType(ast.binding)
-    const pointer = allocaHelper(writer, ast.binding as Pointer, storageType)
-    const result = toRegister(writer, writeExpr(writer, ast.value))
-    format(writer, "  store $ $, ptr $\n", storageType, result, pointer)
-    return null
-  },
-  set: (writer, ast) => {
-    const result = toRegister(writer, writeExpr(writer, ast.value))
-    const ptrName = ast.binding
-    format(writer, "  store $ $, ptr $\n", ast.binding.type, result, ptrName)
-    return null
-  },
-  number: (writer, ast) => {
-    const valueName = createRegister("", ast.type)
-    if (ast.type === RawPointerType) {
-      compilerAssert(ast.value === 0, "Only null pointer allowed")
-      format(writer, `  $ = bitcast ptr null to ptr; literal null\n`, valueName)
-      return { register: valueName }
-    }
-    compilerAssert(ast.type === IntType || ast.type === u8Type || ast.type === u64Type || ast.type === FloatType || ast.type === DoubleType, "Expected number type got $type", { ast, type: ast.type })
-    
-    if (ast.type === FloatType) {
-      format(writer, `  $ = fadd $ 0.0, $ ; literal $\n`, valueName, ast.type, floatToLlvmHex(ast.value), ast.value)
-    } else if (ast.type === DoubleType) {
-      format(writer, `  $ = fadd $ 0.0, $ ; literal $\n`, valueName, ast.type, doubleToLlvmHex(ast.value), ast.value)
-    } else {
-      format(writer, `  $ = add $ 0, $ ; literal\n`, valueName, ast.type, ast.value)
-    }
-    return { register: valueName }
-  },
-  bool: (writer, ast) => {
-    const name = createRegister("", VoidType)
-    format(writer, `  $ = add $ 0, $ ; literal\n`, name, ast.type, ast.value ? "1" : "0")
-    return { register: name }
-  },
-  if: (writer, ast) => {
-    const outName = ast.type !== VoidType && ast.type !== NeverType ? createRegister("", VoidType) : undefined
-    const thenLabel = new Binding(`if_then`, VoidType)
-    const endLabel = new Binding(`if_end`, VoidType)
-    const elseLabel = ast.falseBody ? new Binding(`if_else`, VoidType) : endLabel
-    let thenVal: Register | undefined = undefined, elseVal: Register | undefined = undefined
-    let thenFinalLabel: Binding | undefined = undefined, elseFinalLabel: Binding | undefined = undefined
-
-    format(writer, `  br i1 $, label $, label $\n\n`, ast.expr, thenLabel, elseLabel)
-    beginBasicBlock(writer, thenLabel)
-    const trueResult = writeExpr(writer, toStatements(ast.trueBody))
-    thenFinalLabel = writer.currentBlockLabel // Nested control flow have have changed current block
-    if (outName && ast.trueBody.type !== NeverType) thenVal = toRegister(writer, trueResult)
-    format(writer, `  br label $\n\n`, endLabel)
-
-    if (ast.falseBody) {
-      beginBasicBlock(writer, elseLabel)
-      const falseResult = writeExpr(writer, toStatements(ast.falseBody))
-      elseFinalLabel = writer.currentBlockLabel // Nested control flow have have changed current block
-      if (outName && ast.falseBody.type !== NeverType) elseVal = toRegister(writer, falseResult)
-      format(writer, `  br label $\n\n`, endLabel)
-    }
-
-    beginBasicBlock(writer, endLabel)
-
-    if (!outName) return null
-    if (thenVal && !elseVal) return { register: thenVal }
-    if (!thenVal && elseVal) return { register: elseVal }
-    compilerAssert(thenVal && elseVal && elseFinalLabel, "Expected 'then' and 'else' branch")
-    format(writer, `  $ = phi $ [ $, $ ], [ $, $ ]\n`, outName, ast.type, thenVal, thenFinalLabel, elseVal, elseFinalLabel)
-    return { register: outName }
-  },
-  and: (writer, ast) => {
-    const outName = createRegister("", VoidType)
-    const [a, b] = ast.args
-    const secondOperand = new Binding(`and_second_operand`, VoidType)
-    const resultFalse = new Binding(`and_result_false`, VoidType)
-    const resultLabel = new Binding(`and_result`, VoidType)
-
-    format(writer, `  br i1 $, label $, label $\n`, a, secondOperand, resultFalse)
-    beginBasicBlock(writer, secondOperand)
-    const bVal = toRegister(writer, writeExpr(writer, b))
-    const secondOperandFinalName = writer.currentBlockLabel // Nested control flow have have changed current block
-    format(writer, `  br label $\n`, resultLabel)
-    beginBasicBlock(writer, resultFalse)
-    format(writer, `  br label $\n`, resultLabel)
-    beginBasicBlock(writer, resultLabel)
-    format(writer, `  $ = phi $ [ false, $ ], [ $, $ ]\n`, outName, ast.type, resultFalse, bVal, secondOperandFinalName)
-    return { register: outName }
-  },
-  or: (writer, ast) => {
-    const outName = createRegister("", VoidType)
-    const [a, b] = ast.args
-    const secondOperand = new Binding(`or_second_operand`, VoidType)
-    const resultTrue = new Binding(`or_result_true`, VoidType)
-    const resultLabel = new Binding(`or_result`, VoidType)
-
-    format(writer, `  br i1 $, label $, label $\n`, a, resultTrue, secondOperand)
-    beginBasicBlock(writer, secondOperand)
-    const bVal = toRegister(writer, writeExpr(writer, b))
-    const secondOperandFinalName = writer.currentBlockLabel // Nested control flow have have changed current block
-    format(writer, `  br label $\n`, resultLabel)
-    beginBasicBlock(writer, resultTrue)
-    format(writer, `  br label $\n`, resultLabel)
-    beginBasicBlock(writer, resultLabel)
-    format(writer, `  $ = phi $ [ true, $ ], [ $, $ ]\n`, outName, ast.type, resultTrue, bVal, secondOperandFinalName)
-    writer.currentBlockLabel = resultLabel
-    return { register: outName }
-  },
-  while: (writer, ast) => {
-    const loopCondition = new Binding(`while_condition`, VoidType)
-    const loopBody = new Binding(`while_body`, VoidType)
-    const loopEnd = new Binding(`while_end`, VoidType)
-
-    format(writer, `  br label $\n\n`, loopCondition)
-    beginBasicBlock(writer, loopCondition)
-    const condResult = writeExpr(writer, ast.condition)
-    const aVal = toRegister(writer, condResult)
-    format(writer, `  br i1 $, label $, label $\n\n`, aVal, loopBody, loopEnd)
-
-    beginBasicBlock(writer, loopBody)
-    writeExpr(writer, ast.body)
-    format(writer, `  br label $\n\n`, loopCondition)
-
-    beginBasicBlock(writer, loopEnd)
-    return null
-  },
-
-  interleave: (writer, ast) => {
-    const interleaveEnd = new Binding(`interleave_end`, VoidType)
-    const unreachable = new Binding(`unreachable`, VoidType)
-
-    const jumpPointerEntry = allocaHelper(writer, createPointer("interjmp", IntType))
-    format(writer, "  store i32 $, ptr $\n", 0, jumpPointerEntry)
-    const jumpPointerElse = allocaHelper(writer, createPointer("interjmp", IntType))
-    format(writer, "  store i32 $, ptr $\n", 0, jumpPointerElse)
-
-    const interleave = { 
-      jumpPointer: jumpPointerElse, returnPointer: jumpPointerEntry,
-      interleaveCurrentLabels: ast.entryLabels, 
-      interleaveLabels: ast.elseLabels, unreachable }
-    writer.blocks.push({ binding: ast.binding, interleave, breakExprBinding: null })
-
-    writeExpr(writer, ast.entryBlock)
-    format(writer, `  br label $\n\n`, interleaveEnd)
-
-    // Swap current and interleave labels for the continue
-    // statements to work correctly
-    Object.assign(interleave, { 
-      jumpPointer: jumpPointerEntry, returnPointer: jumpPointerElse,
-      interleaveCurrentLabels: ast.elseLabels, interleaveLabels: ast.entryLabels })
-
-    beginBasicBlock(writer, ast.elseLabels[0])
-    writeExpr(writer, ast.elseBlock)
-    format(writer, `  br label $\n\n`, interleaveEnd)
-
-    writer.blocks.pop()
-
-    beginBasicBlock(writer, unreachable)
-    format(writer, `  unreachable\n\n`)
-
-    beginBasicBlock(writer, interleaveEnd)
-    return null
-  },
-  continueinter: (writer, ast) => {
-    const block = writer.blocks.findLast(x => x.binding === ast.interleaveBinding)
-    compilerAssert(writer.blocks.filter(x => x.binding === ast.interleaveBinding).length === 1, "Expected one block to match")
-    compilerAssert(block?.interleave, "Expected interleave block")
-    const { jumpPointer, returnPointer, interleaveLabels, interleaveCurrentLabels, unreachable } = block.interleave
-    const table = interleaveLabels.map((x: Binding, i: number) => 
-      `i32 ${i}, label ${generateName(writer.writer, x)}`).join(" ")
-
-    const index = interleaveCurrentLabels.indexOf(ast.labelBinding)
-    compilerAssert(index >= 0, "Expected label")
-
-    const register = createRegister("", IntType)
-    format(writer, "  $ = load $, ptr $\n", register, register.type, jumpPointer)
-    format(writer, "  store i32 $, ptr $\n", index, returnPointer)
-    format(writer, `  switch i32 $, label $ [$]\n\n`, register, unreachable, table)
-
-    beginBasicBlock(writer, ast.labelBinding)
-    return null
-  },
-
-  block: (writer, ast) => {
-    // Funky stuff with implicit returns, break with expression etc
-    // This could probably be a prepass before codegen, along with other stuff like interleave tracking
-    // TODO: Use IR pass for this
-    if (ast.breakExprBinding) writeExpr(writer, new LetAst(VoidType, ast.location, ast.breakExprBinding, createDefaultConstructorAst(ast.type, ast.location), true))
-    writer.blocks.push({ binding: ast.binding, breakExprBinding: ast.breakExprBinding }) // not strictly necessary?
-    let result = null
-    const rewriteImplicitReturn = ast.breakExprBinding && ast.body.type !== VoidType && ast.body.type !== NeverType
-    if (!rewriteImplicitReturn) result = writeExpr(writer, ast.body)
-    else writeExpr(writer, new SetAst(VoidType, ast.location, ast.breakExprBinding!, ast.body))
-    writer.blocks.pop()!
-    format(writer, `  br label $\n\n`, ast.binding)
-    beginBasicBlock(writer, ast.binding)
-    if (!ast.breakExprBinding) return result
-    return writeExpr(writer, new BindingAst(ast.type, ast.location, ast.breakExprBinding))
-  },
-  break: (writer, ast) => {
-    const block = writer.blocks.findLast(x => x.binding === ast.binding)
-    compilerAssert(block, "Programmer error. Expected block") // Programmer error
-    if (ast.expr && block.breakExprBinding) writeExpr(writer, new SetAst(VoidType, ast.location, block.breakExprBinding, ast.expr))
-    format(writer, `  br label $\n`, ast.binding)
-    return null
-  },
-  call: (writer, ast) => {
-
-    if (ast.binding === externalBuiltinBindings.printf) {
-      const name = createRegister("", VoidType)
-      const argsString = ast.args.map((arg, i) => {
-        const reg = toRegister(writer, writeExpr(writer, arg))
-        return `${getTypeName(writer.writer, arg.type)} ${generateName(writer.writer, reg)}`
-      }).join(", ")
-      
-      format(writer, "  $ = call i32 (i8*, ...) @printf($)\n", name, argsString)
-      return { register: name }
-    }
-
-    if (ast.binding === externalBuiltinBindings.sizeof) {
-      compilerAssert(isType(ast.typeArgs[0]), "Expected type")
-      const dataType = getDataTypeName(writer.writer, ast.typeArgs[0])
-      const ptr = createRegister("", VoidType)
-      const register = createRegister("sizeof", VoidType)
-      format(writer, "  $ = getelementptr $*, ptr null, i32 1\n", ptr, dataType)
-      format(writer, "  $ = ptrtoint $* $ to i32\n", register, dataType, ptr)
-      return { register }
-    }
-
-    compilerAssert(false, "External call not implemented", { ast })
-  },
-
-  usercall: (writer, ast) => {
-    const name = ast.type !== VoidType && ast.type !== NeverType && createRegister("", VoidType)
-
-    const argValues = ast.args.map(arg => {
-      return toRegister(writer, writeExpr(writer, arg))
-    })
-    
-    if (name) { format(writer, `  $ = `, name) }
-    else { format(writer, `  `) }
-
-    const args = ast.args.map((arg, i) => {
-      return `${getTypeName(writer.writer, arg.type)} ${generateName(writer.writer, argValues[i])}`
-    }).join(", ")
-    format(writer, `call $ $($)\n`, ast.type, ast.binding, args)
-    if (name) return { register: name }
-    return null
-  },
-  operator: (writer, ast) => {
-    const [a, b] = ast.args
-    const name = createRegister("", VoidType)
-    compilerAssert(a.type === b.type, "Expected types to be equal", { a, b })
-    const op = a.type === IntType ? operatorMapSignedInt[ast.operator] : 
-      a.type === RawPointerType || a.type === u64Type || a.type === u8Type ? operatorMapUnsignedInt[ast.operator] : 
-      a.type === FloatType || a.type === DoubleType ? operatorMapFloat[ast.operator] : 
-      a.type === BoolType ? operatorMapLogical[ast.operator] : undefined
-    compilerAssert(op, "Expected op $op, for type $type", { ast, op: ast.operator, type: a.type })
-    format(writer, `  $ = $ $ $, $\n`, name, op, a.type, a, b)
-    return { register: name }
-  },
-  not: (writer, ast) => {
-    const expr = ast.expr
-    compilerAssert(expr.type === BoolType, "Expected bool")
-    const name = createRegister("", VoidType)
-    format(writer, `  $ = xor $ $, 1\n`, name, expr.type, expr)
-    return { register: name }
-  },
-  constructor: (writer, ast) => {
-    compilerAssert(ast.type.typeInfo.fields.length === ast.args.length, "Expected same number of fields")
-    if (ast.type.typeInfo.isReferenceType) {
-      // TODO: Break out ASTs?
-      const structPtrPtr = allocaHelper(writer, createPointer("", RawPointerType))
-      const dataType = getDataTypeName(writer.writer, ast.type)
-
-      const size = new CallAst(IntType, SourceLocation.anon, externalBuiltinBindings.sizeof, [], [ast.type])
-      const mallocCall = new UserCallAst(RawPointerType, SourceLocation.anon, writer.writer.mallocBinding, [size])
-      const structMallocPtr = toRegister(writer, writeExpr(writer, mallocCall))
-
-      format(writer, "  store ptr $, ptr $\n", structMallocPtr, structPtrPtr)
-      ast.args.forEach((arg, index) => {
-        const reg = toRegister(writer, writeExpr(writer, arg))
-
-        const fieldPtr = createPointer('', VoidType)
-        const field = ast.type.typeInfo.fields[index]
-
-        format(writer, "  $ = getelementptr $, ptr $, i32 0, i32 $\n", fieldPtr, dataType, structMallocPtr, index)
-        format(writer, "  store $ $, $ $\n", field.fieldType, reg, getPointerName(writer, field.fieldType), fieldPtr)
-      })
-      return { pointer: structPtrPtr }
-    }
-
-    const structPtr = allocaHelper(writer, createPointer("", ast.type))
-    ast.args.forEach((arg, index) => {
-      const reg = toRegister(writer, writeExpr(writer, arg))
-
-      const fieldPtr = createPointer('', VoidType)
-      const field = ast.type.typeInfo.fields[index]
-
-      format(writer, "  $ = getelementptr $, ptr $, i32 0, i32 $\n", fieldPtr, ast.type, structPtr, index)
-      format(writer, "  store $ $, $ $\n", field.fieldType, reg, getPointerName(writer, field.fieldType), fieldPtr)
-    })
-    return { pointer: structPtr }
-
-  },
-  valuefield: (writer, ast) => {
-    const leftResult = writeExpr(writer, ast.left)
-    const reg = loadFieldHelper(writer, leftResult, ast.fieldPath)
-    return { register: reg }
-  },
-  field: (writer, ast) => {
-    if (!ast.left.type.typeInfo.isReferenceType) {
-      // This is just valuefield behaviour
-      const leftResult = writeExpr(writer, ast.left)
-      const reg = loadFieldHelper(writer, leftResult, [ast.field])
-      return { register: reg }
-    }
-    const leftResult = toRegister(writer, writeExpr(writer, ast.left))
-    const register = createRegister("", ast.left.type)
-    const dataType = getDataTypeName(writer.writer, register.type)
-    format(writer, "  $ = load $, ptr $\n", register, dataType, leftResult)
-    const reg = loadFieldHelper(writer, { register }, [ast.field])
-    return { register: reg }
-  },
-  setvaluefield: (writer, ast) => {
-    const res = writeExpr(writer, ast.left)
-    compilerAssert(res && 'pointer' in res, "Expected pointer", { left: ast.left, res }) // ast.left is binding so should always be a pointer
-    const finalField = ast.fieldPath[ast.fieldPath.length - 1]
-    const fieldPtr = getElementPointer(writer, res.pointer, res.pointer.type, ast.fieldPath)
-    const valueReg = toRegister(writer, writeExpr(writer, ast.value))
-    format(writer, "  store $ $, $ $\n", finalField.fieldType, valueReg, 'ptr', fieldPtr)
-    return null
-  },
-  setfield: (writer, ast) => {
-    const reg = toRegister(writer, writeExpr(writer, ast.left))
-    const leftPtr = reg as unknown as Pointer // reinterpret reg as a pointer
-    const fieldPtr = getElementPointer(writer, leftPtr, leftPtr.type, [ast.field])
-    const valueReg = toRegister(writer, writeExpr(writer, ast.value))
-    format(writer, "  store $ $, $ $\n", ast.field.fieldType, valueReg, 'ptr', fieldPtr)
-    return null
-  },
-  cast: (writer, ast) => {
-    const op = (() => {
-      if (ast.expr.type === IntType && ast.type === FloatType) return 'sitofp i32 $ to float' 
-      if (ast.expr.type === IntType && ast.type === DoubleType) return 'sitofp i32 $ to double'
-      if (ast.expr.type === FloatType && ast.type === IntType) return 'fptosi float $ to i32'
-      if (ast.expr.type === DoubleType && ast.type === IntType) return 'fptosi double $ to i32'
-      if (ast.expr.type === DoubleType && ast.type === FloatType) return 'fptrunc double $ to float'
-      if (ast.expr.type === FloatType && ast.type === DoubleType) return 'fpext float $ to double'
-      if (ast.expr.type === BoolType && ast.type === IntType) return 'zext i1 $ to i32'
-      if (ast.expr.type === IntType && ast.type === BoolType) return 'trunc i32 $ to i1'
-      if (ast.expr.type === IntType && ast.type === u8Type) return 'trunc i32 $ to i8'
-      if (ast.expr.type === u64Type && ast.type === DoubleType) return 'uitofp i64 $ to double'
-      compilerAssert(false, "Invalid cast conversion from $a to $b", { a: ast.expr.type, b: ast.type })
-    })()
-    const register = createRegister("", ast.type)
-    const input = toRegister(writer, writeExpr(writer, ast.expr))
-    format(writer, `  $ = ${op}\n`, register, input)
-    return { register }
-  },
-  defaultcons: (writer, ast) => {
-    compilerAssert(false, "Not implemented 'defaultcons'", { ast })
-    if (ast.type === IntType || ast.type === FloatType || ast.type === DoubleType || ast.type === RawPointerType) {
-      return writeExpr(writer, new NumberAst(ast.type, ast.location, 0))
-    }
-    const fields = ast.type.typeInfo.fields.map(x => new DefaultConsAst(x.fieldType, ast.location))
-    return writeExpr(writer, new ConstructorAst(ast.type, ast.location, fields))
-  },
-  variantcast: (writer, ast) => {
-    const fromPointer = allocaHelper(writer, createPointer("", ast.type))
-    const pointer = createPointer("", ast.type)
-    format(writer, "  store $ $, $ $\n", ast.enumType, ast.expr, 'ptr', fromPointer)
-    format(writer, "  $ = bitcast $* $ to $*\n", pointer, ast.enumType, fromPointer, ast.type)
-    return { pointer }
-  },
-  enumvariant: (writer, ast) => {
-    const pointer = createPointer("", ast.type)
-    const structPtr = allocaHelper(writer, pointer)
-    // const dataType = getDataTypeName(writer.writer, ast.type)
-    const cons = new ConstructorAst(ast.variantType, ast.location, ast.args)
-    format(writer, "  store $ $, $ $\n", ast.variantType, cons, 'ptr', structPtr)
-    return { pointer: structPtr }
-  },
-  list: (writer, ast) => {
-    compilerAssert(false, "Not implemented 'list'", { ast })
-  },
-  subscript: (writer, ast) => {
-    const reg = toRegister(writer, writeExpr(writer, ast.left))
-    const index = toRegister(writer, writeExpr(writer, ast.right))
-    const pointer = createPointer("", ast.type)
-    format(writer, "  $ = getelementptr $, $ $, i32 $\n", pointer, ast.type, 'ptr', reg, index)
-    return { pointer }
-  },
-  setsubscript: (writer, ast) => {
-    const reg = toRegister(writer, writeExpr(writer, ast.left))
-    const index = toRegister(writer, writeExpr(writer, ast.right))
-    const value = toRegister(writer, writeExpr(writer, ast.value))
-    const pointer = createPointer("", ast.value.type)
-    format(writer, "  $ = getelementptr $, $ $, i32 $\n", pointer, ast.value.type, 'ptr', reg, index)
-    format(writer, "  store $ $, $ $\n", ast.value.type, value, 'ptr', pointer)
-    return null
-  },
-  deref: (writer, ast) => {
-    // TODO: These are the same as value and setvalue. we can merge them
-    const res = writeExpr(writer, ast.left)
-    compilerAssert(res && 'pointer' in res, "Expected pointer")
-    const leftPtr = res.pointer
-    compilerAssert(leftPtr.type !== VoidType, "", { leftPtr, left: ast.left })
-    const fieldPtr = getElementPointer(writer, leftPtr, ast.type, ast.fieldPath)
-    return { pointer: fieldPtr }
-  },
-  setderef: (writer, ast) => {
-    const res = writeExpr(writer, ast.left)
-    compilerAssert(res && 'pointer' in res, "Expected pointer")
-    const fieldPtr = getElementPointer(writer, res.pointer, ast.value.type, ast.fieldPath)
-    const value = toRegister(writer, writeExpr(writer, ast.value))
-    format(writer, "  store $ $, $ $\n", ast.value.type, value, 'ptr', fieldPtr)
-    return null
-  },
-  return: (writer, ast) => {
-    if (!ast.expr) { format(writer, "  ret void\n"); return null }
-    const reg = toRegister(writer, writeExpr(writer, ast.expr))
-    format(writer, "  ret $ $\n", reg.type, reg)
-    return null
-  },
-  address: (writer, ast) => {
-    return { register: ast.binding as Register }
-  },
-  void: (writer, ast) => {
-    return null
-  },
-  comptimeobj: (writer, ast) => {
-    compilerAssert(false, "Error unexpected 'comptimeobj'", { ast })
-  },
-  namedarg: (writer, ast) => {
-    compilerAssert(false, "Error unexpected 'namedarg'", { ast })
-  }
-};
 
 type Writable = { writer: LlvmWriter, currentOutput: string[] }
-const format = (writer: Writable, format: string, ...args: (string | number | Type | Ast | Binding)[]) => {
+const format = (writer: Writable, format: string, ...args: (string | number | Type | Ast | Binding | RegisterName)[]) => {
   let i = 0
   const s = format.replace(/\$/g, (x) => {
     const v = args[i++]
@@ -669,9 +150,9 @@ const format = (writer: Writable, format: string, ...args: (string | number | Ty
     if (typeof v === 'number') return String(v)
     if (isType(v)) return getTypeName(writer.writer, v)
     if (v instanceof Binding) { return generateName(writer.writer, v) }
-    if (isAst(v) && 'function' in writer) {
-      const funcWriter = writer as LlvmFunctionWriter
-      const reg = toRegister(funcWriter, writeExpr(funcWriter, v))
+    if (v instanceof RegisterName) { 
+      const reg = writer.writer.registers.get(v.name)
+      compilerAssert(reg, "Register not found", { v })
       return generateName(writer.writer, reg)
     }
     compilerAssert(false, "Not supported in format", { format, v, str: String(v) })
@@ -679,7 +160,324 @@ const format = (writer: Writable, format: string, ...args: (string | number | Ty
   writer.currentOutput.push(s)
 }
 
-export const writeLlvmBytecode = (globalCompilerState: GlobalCompilerState, outputWriter: FileWriter) => {
+const defineRegister = (writer: Writable, name: string, type: Type) => {
+  const reg = createRegister(name, type)
+  writer.writer.registers.set(name, reg)
+  return reg
+}
+
+class RegisterName {
+  constructor(public name: string) {}
+}
+const register = (name: string) => new RegisterName(name)
+const getRegisterName = (writer: LlvmFunctionWriter, name: string) => {
+  const reg = writer.writer.registers.get(name)
+  compilerAssert(reg, "Register not found", { name })
+  return generateName(writer.writer, reg)
+}
+
+const instructionWriter = {
+  loadconst: (writer: LlvmFunctionWriter, instr: LoadConstantInstruction) => {
+    const dest = defineRegister(writer, instr.dest, instr.type)
+    if (instr.type === RawPointerType) {
+      if (typeof instr.value === 'string') {
+        const str = instr.value
+        const constantName = generateName(writer.writer, new Binding("constant", VoidType), true)
+        const escaped = escapeString(str)
+        const length = str.length + 1 // add null terminator
+        writer.writer.outputHeaders.push(`${constantName} = private unnamed_addr constant [${length} x i8] c"${escaped}\\00"\n`)
+        // format(writer, `  $ = ${constantName}\n`, dest)
+        format(writer, `  $ = getelementptr inbounds [${length} x i8], [${length} x i8]* $, i32 0, i32 0 ; string\n`, dest, constantName)
+        return
+      }
+      compilerAssert(instr.value === 0, "Only null pointer allowed", { instr })
+      format(writer, `  $ = bitcast ptr null to ptr; literal null\n`, dest)
+      return
+    }
+    if (instr.type === BoolType) {
+      format(writer, `  $ = icmp eq $ 1, $ ; literal $\n`, dest, instr.type, instr.value ? '1' : '0', instr.value ? 'true' : 'false')
+      return
+    }
+    compilerAssert(instr.type === IntType || instr.type === u8Type || instr.type === u64Type || instr.type === FloatType || instr.type === DoubleType, "Expected number type got $type", { instr, type: instr.type })
+    
+    if (instr.type === FloatType) {
+      format(writer, `  $ = fadd $ 0.0, $ ; literal $\n`, dest, instr.type, floatToLlvmHex(instr.value as number), instr.value)
+    } else if (instr.type === DoubleType) {
+      format(writer, `  $ = fadd $ 0.0, $ ; literal $\n`, dest, instr.type, doubleToLlvmHex(instr.value as number), instr.value)
+    } else {
+      format(writer, `  $ = add $ 0, $ ; literal $\n`, dest, instr.type, instr.value, instr.value)
+    }
+  },
+
+  call: (writer: LlvmFunctionWriter, instr: CallInstruction) => {
+
+    const funcName = generateName(writer.writer, instr.binding)
+    const args = instr.args
+    const returnType = instr.type
+    const result = instr.type !== VoidType && defineRegister(writer, "", returnType)
+    const paramTypes = instr.paramTypes
+    
+    const argStr = paramTypes.map((type, i) => {
+      const reg = writer.writer.registers.get(args[i])
+      compilerAssert(reg, "Register not found", { instr })
+
+      return `${getTypeName(writer.writer, reg.type)} ${generateName(writer.writer, reg)}`
+    }).join(", ")
+
+    if (result) { format(writer, `  $ = `, result) }
+    else { format(writer, `  `) }
+
+    // Special case for now
+    if (instr.binding === externalBuiltinBindings.printf) {
+      format(writer, "call i32 (i8*, ...) @printf($)\n", argStr)
+      return
+    }
+
+    format(writer, "call $ $($)\n", returnType, funcName, argStr)
+    if (result) format(writer, "  store $ $, $ $\n", returnType, result, 'ptr', register(instr.target!))
+  },
+
+  return: (writer: LlvmFunctionWriter, instr: ReturnInstruction) => {
+    if (!instr.value) { format(writer, "  ret void\n"); return null }
+    const reg = writer.writer.registers.get(instr.value)
+    compilerAssert(reg, "Register not found", { instr })
+    format(writer, "  ret $ $\n", reg.type, reg)
+    return null
+  },
+
+  binaryop: (writer: LlvmFunctionWriter, instr: BinaryOperationInstruction) => {
+    const dest = defineRegister(writer, instr.dest, instr.type)
+    if (instr.operator === "!") {
+      format(writer, "  $ = xor $ 1, $ ; not\n", dest, instr.type, register(instr.left))
+      return
+    }
+    const key = `${instr.type.shortName}_${instr.paramType.shortName}_${instr.operator}`
+    const operator = operatorMapAll[key]
+    compilerAssert(operator, "Operator not found", { key, instr })
+    const typeName = getTypeName(writer.writer, instr.paramType)
+    const left = getRegisterName(writer, instr.left)
+    const right = instr.right ? getRegisterName(writer, instr.right) : ''
+    const op = operator(writer, typeName, left, right)
+    format(writer, "  $ = $\n", dest, op)
+  },
+
+  store_to_address: (writer: LlvmFunctionWriter, instr: StoreToAddressInstruction) => {
+    format(writer, "  store $ $, $ $\n", instr.type, register(instr.source), 'ptr', register(instr.address))
+  },
+
+  load_from_address: (writer: LlvmFunctionWriter, instr: LoadFromAddressInstruction) => {
+    const addr = writer.writer.registers.get(instr.address)
+    compilerAssert(addr, "Register not found", { instr })
+    defineRegister(writer, instr.dest, instr.type)
+    format(writer, "  $ = load $, $ $\n", register(instr.dest), instr.type, getPointerName(writer, addr.type), addr)
+  },
+
+  getfieldptr: (writer: LlvmFunctionWriter, instr: GetFieldPointerInstruction) => {
+    const source = writer.writer.registers.get(instr.address)
+    compilerAssert(source, "Register not found", { instr })
+    const field = instr.field
+    const dest = defineRegister(writer, instr.dest, RawPointerType)
+    const sourceType = getDataTypeName(writer.writer, field.sourceType);
+    const pointerType = getPointerName(writer, field.sourceType);
+    format(writer, "  $ = getelementptr inbounds $, $ $, i32 0, i32 $\n", dest, sourceType, pointerType, source, field.index)
+  },
+
+  get_global_address: (writer: LlvmFunctionWriter, instr: GetGlobalAddress) => {
+    const dest = defineRegister(writer, instr.dest, RawPointerType)
+    const name = `@${instr.global}`
+    format(writer, "  $ = getelementptr inbounds $, $ $, i32 0\n", dest, getDataTypeName(writer.writer, instr.type), getPointerName(writer, instr.type), name)
+  },
+
+  pointer_offset: (writer: LlvmFunctionWriter, instr: PointerOffsetInstruction) => {
+    const source = writer.writer.registers.get(instr.address)
+    compilerAssert(source, "Register not found", { instr })
+    const dest = defineRegister(writer, instr.dest, RawPointerType)
+    const sourceType = getDataTypeName(writer.writer, instr.fieldType);
+    const pointerType = getPointerName(writer, instr.fieldType);
+    const offset = writer.writer.registers.get(instr.offsetReg)
+    compilerAssert(offset, "Register not found", { instr })
+    format(writer, "  $ = getelementptr inbounds $, $ $, i32 $\n", dest, sourceType, pointerType, source, offset)
+  },
+
+  phi: (writer: LlvmFunctionWriter, instr: PhiInstruction) => {
+    const dest = defineRegister(writer, instr.dest, instr.type)
+    const sources = instr.sources.map(source => {
+      const reg = writer.writer.registers.get(source.value)
+      compilerAssert(reg, "Register not found", { instr })
+      compilerAssert(source.block, "Block not found", { source })
+      return `[ ${generateName(writer.writer, reg)}, ${getRegisterName(writer, source.block)} ]`
+    }).join(", ")
+    format(writer, "  $ = phi $ $\n", dest, instr.type, sources)
+  },
+
+  jump: (writer: LlvmFunctionWriter, instr: JumpInstruction) => {
+    format(writer, "  br label $\n", register(instr.target))
+  },
+
+  cjump: (writer: LlvmFunctionWriter, instr: ConditionalJumpInstruction) => {
+    format(writer, "  br i1 $, label $, label $\n", register(instr.condition), register(instr.targetLabel), register(instr.elseLabel))
+  },
+
+  alloc: (writer: LlvmFunctionWriter, instr: AllocInstruction) => {
+    const dest = defineRegister(writer, instr.dest, RawPointerType)
+    format(writer, "  $ = alloca $ ; $\n", dest, instr.type, getDataTypeName(writer.writer, instr.type))
+  },
+
+  yield_generator: (writer: LlvmFunctionWriter, instr: YieldGeneratorInstruction) => {
+    const dest = defineRegister(writer, instr.dest, RawPointerType)
+    format(writer, "  $ = yield_generator\n", dest)
+  },
+
+  comment: (writer: LlvmFunctionWriter, instr: CommentInstruction) => {
+    format(writer, "  ; $\n", instr.comment)
+  },
+  
+  access: (writer: LlvmFunctionWriter, instr: AccessInstruction) => {
+    const reg = writer.writer.registers.get(instr.source)
+    compilerAssert(reg, "Register not found", { reg, instr })
+    writer.writer.registers.set(instr.dest, reg)
+  },
+
+  project_access: (writer: LlvmFunctionWriter, instr: AccessInstruction) => {
+    const reg = writer.writer.registers.get(instr.source)
+    compilerAssert(reg, "Register not found", { reg, instr })
+    writer.writer.registers.set(instr.dest, reg)
+  },
+
+  assign: (writer: LlvmFunctionWriter, instr: AssignInstruction) => {
+    const reg = writer.writer.registers.get(instr.source)
+    compilerAssert(reg, "Register not found", { reg, instr })
+    writer.writer.registers.set(instr.dest, reg)
+  },
+
+  pointer_to_address: (writer: LlvmFunctionWriter, instr: AccessInstruction) => {
+    const reg = writer.writer.registers.get(instr.source)
+    compilerAssert(reg, "Register not found", { reg, instr })
+    writer.writer.registers.set(instr.dest, reg)
+  },
+
+  bitcast: (writer: LlvmFunctionWriter, instr: BitCastInstruction) => {
+    const source = writer.writer.registers.get(instr.source)
+    compilerAssert(source, "Register not found", { instr })
+    const dest = defineRegister(writer, instr.dest, instr.type)
+    format(writer, "  $ = bitcast $ $ to $*; bitcast\n", dest, source.type, generateName(writer.writer, source), instr.type)
+  },
+
+  end_access: (writer: LlvmFunctionWriter, instr: EndAccessInstruction) => {
+    // pass
+  },
+
+  mark_initialized: (writer: LlvmFunctionWriter, instr: MarkInitializedInstruction) => {
+    // pass
+  },
+}
+
+const formatCJump = (writer: LlvmFunctionWriter, condition: string, target: string, elseTarget: string) => {
+  format(writer, "  br i1 $, label %$, label %$\n", register(condition), (target), (elseTarget))
+}
+const formatJump = (writer: LlvmFunctionWriter, target: string, comment = "") => {
+  format(writer, "  br label %$", (target))
+  if (comment) format(writer, " ; $", comment)
+  format(writer, "\n")
+}
+
+const writeInstructions = (writer: LlvmFunctionWriter, fnIr: IrFunction) => {
+
+  const labels = fnIr.sequences.map((_, i) => {
+    const name = `L${i}`
+    // defineRegister(writer as LlvmFunctionWriter, name, VoidType)
+    return name
+  })
+
+  const traverseSequence = (sequenceId: SequenceId) => {
+
+    format(writer, "\n  ; ## Sequence $ ($)\n\n", sequenceId, labels[sequenceId])
+    format(writer, "$:\n", labels[sequenceId])
+    
+    const sequence = fnIr.sequences[sequenceId]
+    for (let regionId = sequence.firstChildRegion; regionId !== null; regionId = fnIr.regions[regionId].nextRegion) {
+      const region = fnIr.regions[regionId]
+
+      if (region instanceof BlockRegion) {
+        format(writer, "\n  ; ### Block Region $\n\n", regionId)
+        printBlock(region)
+        format(writer, "  ; End block $\n", regionId)
+      } else if (region instanceof IfRegion) {
+        format(writer, "\n  ; ### If Region $\n\n", regionId)
+        formatJump(writer, labels[region.conditionSequence], "If condition")
+        traverseSequence(region.conditionSequence)
+        compilerAssert(region.conditionRegister !== null && region.conditionRegister !== undefined, "No result found", { region, regionId: fnIr.sequences[region.conditionSequence].lastChildRegion })
+        formatCJump(writer, region.conditionRegister, labels[region.thenSequence], labels[region.elseSequence])
+        traverseSequence(region.thenSequence)
+        formatJump(writer, labels[region.exitSequence])
+        traverseSequence(region.elseSequence)
+        formatJump(writer, labels[region.exitSequence])
+        traverseSequence(region.exitSequence)
+        format(writer, "  ; End if $\n", regionId)
+      } else if (region instanceof WhileRegion) {
+        format(writer, "\n  ; ### While Region $\n\n", regionId)
+        formatJump(writer, labels[region.conditionSequence])
+        traverseSequence(region.conditionSequence)
+        compilerAssert(region.conditionRegister !== null && region.conditionRegister !== undefined, "No result found", { region, regionId: fnIr.sequences[region.conditionSequence].lastChildRegion })
+        formatCJump(writer, region.conditionRegister, labels[region.bodySequence], labels[region.exitSequence])
+        traverseSequence(region.bodySequence)
+        formatJump(writer, labels[region.conditionSequence])
+        traverseSequence(region.exitSequence)
+        format(writer, "  ; End loop $\n", regionId)
+      } else if (region instanceof ScopeRegion) {
+        format(writer, "\n  ; ### Scope Region $\n\n", regionId)
+        formatJump(writer, labels[region.bodySequence], "Scope body")
+        traverseSequence(region.bodySequence)
+        formatJump(writer, labels[region.continuationSequence], "Scope outer")
+        traverseSequence(region.continuationSequence)
+        formatJump(writer, labels[region.exitSequence], "Scope exit")
+        traverseSequence(region.exitSequence)
+        format(writer, "  ; End scope $\n", regionId)
+      } else if (region instanceof GeneratorRegion) {
+        format(writer, "\n  ; ### Generator Region $\n\n", regionId)
+        formatJump(writer, labels[region.entrySequence], "Generator entry")
+        traverseSequence(region.entrySequence)
+        formatJump(writer, labels[region.exitSequence], "Generator exit")
+        format(writer, "\n  ; ### Generator Else $\n\n", regionId)
+        traverseSequence(region.elseSequence)
+        formatJump(writer, labels[region.exitSequence], "Generator exit")
+        format(writer, "\n  ; ### Generator Exit $\n\n", regionId)
+        traverseSequence(region.exitSequence)
+        format(writer, "  ; End generator $\n", regionId)
+      } else compilerAssert(false, "Unknown region", { region })
+    }
+  }
+
+  formatJump(writer, labels[fnIr.root])
+  traverseSequence(fnIr.root)
+
+  function printBlock(region: BlockRegion) {
+    for (let instrId = region.firstInstruction; instrId !== null; instrId = fnIr.instructions[instrId].next) {
+      const instr = fnIr.instructions[instrId].instruction
+      if (instr instanceof BreakInstruction) {
+        const region = fnIr.regions[instr.regionId] as ScopeRegion
+        formatJump(writer, labels[region.continuationSequence]) // Note: Break to outer sequence
+        continue
+      }
+      if (instr instanceof JumpTableInstruction) {
+        const dests = instr.table.map(regionId => {
+          const region = fnIr.regions[regionId] as ScopeRegion
+          const sequenceId = region.bodySequence
+          return `%${labels[sequenceId]}`
+        })
+        const table = dests.map((dest, i) => `i32 ${i}, label ${dest}`).join("  ")
+        format(writer, "  switch i32 $, label $ [ $ ]\n", register(instr.value), dests[0], table)
+        continue
+      }
+      const func = (instructionWriter as any)[instr.irType]
+      compilerAssert(func, `Instruction not found ${instr.irType}`, { instr })
+      func(writer, instr)
+    }
+  }
+  
+}
+
+export const writeLlvmBytecodeBorrowRegion = (globalCompilerState: GlobalCompilerState, outputWriter: FileWriter) => {
   const bytecodeWriter: LlvmWriter = {
     functions: [],
     globalCompilerState,
@@ -695,7 +493,8 @@ export const writeLlvmBytecode = (globalCompilerState: GlobalCompilerState, outp
     writer: null!,
     currentOutput: null!,
     mallocBinding: null!,
-    astVisitMap: new Map()
+    astVisitMap: new Map(),
+    registers: new Map(),
   }
   bytecodeWriter.writer = bytecodeWriter
   bytecodeWriter.currentOutput = bytecodeWriter.outputHeaders
@@ -725,7 +524,7 @@ export const writeLlvmBytecode = (globalCompilerState: GlobalCompilerState, outp
 
   globalCompilerState.externalDefinitions.forEach(external => {
     // The global name is important to link
-    insertGlobal(external.binding, `@${external.name}`)
+    insertGlobal(external.binding, `@${cleanName(external.name)}`)
 
     const args = external.paramTypes.map((type, i) => getTypeName(bytecodeWriter, type) ).join(", ")
     format(bytecodeWriter, "declare $ $($)\n", external.returnType, external.binding, args)
@@ -740,30 +539,30 @@ export const writeLlvmBytecode = (globalCompilerState: GlobalCompilerState, outp
   bytecodeWriter.outputHeaders.push("declare i32 @printf(i8*, ...)\n\n")
   bytecodeWriter.outputHeaders.push(`\n`)
 
-  globalCompilerState.globalLets.forEach(globalLet => {
-    const name = generateName(bytecodeWriter, globalLet.binding, true)
+  // Hack for now
+  format(bytecodeWriter, `
+@int_format_str = private constant [4 x i8] c"%d\\0A\\00"  ; "%d\\n"
+define void @printInt(i32 %value) {
+entry:
+  %format_str_ptr = getelementptr [4 x i8], [4 x i8]* @int_format_str, i32 0, i32 0
+  call i32 (i8*, ...) @printf(i8* %format_str_ptr, i32 %value)
+  ret void
+}
+`)
 
-    const defaultValueLiteral = (type: Type): string => {
-      if (type === FloatType) return floatToLlvmHex(0)
-      else if (type === DoubleType) return doubleToLlvmHex(0)
-      else if (type === IntType || type === u64Type) return '0'
-      else if (type === RawPointerType) return 'null'
-      else if (type.typeInfo.isReferenceType) return 'null'
-      else {
-        const fields = type.typeInfo.fields.map(x => 
-          `${getTypeName(bytecodeWriter, x.fieldType)} ${defaultValueLiteral(x.fieldType)}`)
-        return `{ ${fields.join(", ")} }`
-      }
-    }
-    
-    format(bytecodeWriter, "$ = global $ $\n", name, globalLet.binding.type, defaultValueLiteral(globalLet.binding.type))
+  globalCompilerState.globalVars.forEach(globalVar => {
+    const name = globalVar.register
+    format(bytecodeWriter, "@$ = global $ $\n", name, globalVar.binding.type, defaultValueLiteral(bytecodeWriter, globalVar.binding.type))
   })
   bytecodeWriter.outputHeaders.push(`\n`)
 
   Array.from(globalCompilerState.compiledFunctions.values()).map(func => {
     generateName(bytecodeWriter, func.binding, true)
     if (!func.body) return
-    const funcWriter = writeLlvmBytecodeFunction(bytecodeWriter, func)
+    if (func.functionDefinition.keywords?.includes("subscript")) return
+    const fnIr = globalCompilerState.compiledRegionIr.get(func.binding)
+    compilerAssert(fnIr, `No instructions found for ${func.binding.name}`)
+    const funcWriter = writeLlvmBytecodeFunction(bytecodeWriter, func, fnIr)
     return funcWriter
   })
 
@@ -779,11 +578,27 @@ export const writeLlvmBytecode = (globalCompilerState: GlobalCompilerState, outp
   return bytecodeWriter
 }
 
+
+
+const defaultValueLiteral = (writer: LlvmWriter, type: Type): string => {
+  if (type === FloatType) return floatToLlvmHex(0)
+  else if (type === DoubleType) return doubleToLlvmHex(0)
+  else if (type === IntType || type === u64Type) return '0'
+  else if (type === RawPointerType) return 'null'
+  else if (type.typeInfo.isReferenceType) return 'null'
+  else {
+    const fields = type.typeInfo.fields.map(x => 
+      `${getTypeName(writer, x.fieldType)} ${defaultValueLiteral(writer, x.fieldType)}`)
+    return `{ ${fields.join(", ")} }`
+  }
+}
+
+const cleanName = (name: string) => name.replace(/[^a-zA-Z0-9_\.]/g, ' ').trim().replace(/ +/g, '_')
 const generateName = (writer: LlvmWriter, binding: Binding, global = false) => {
   if (writer.globalNames.get(binding)) {
     return writer.globalNames.get(binding)!
   }
-  let name = binding.name.replace(/[^a-zA-Z0-9_\.]/g, ' ').trim().replace(/ +/g, '_')
+  let name = cleanName(binding.name)
   if (global) name = `@${name}`
   else name = `%${name}`
 
@@ -793,6 +608,12 @@ const generateName = (writer: LlvmWriter, binding: Binding, global = false) => {
   writer.globalNames.set(binding, newName)
   writer.globalNameToBinding.set(newName, binding)
   return newName
+}
+
+const freshLabel = (writer: Writable) => {
+  const name = `L${writer.writer.nextGlobalSlot++}`
+  defineRegister(writer as LlvmFunctionWriter, name, VoidType)
+  return name
 }
 
 const getTypeName = (writer: LlvmWriter, obj: Type): string => {
@@ -819,7 +640,7 @@ const getDataTypeName = (writer: LlvmWriter, obj: Type): string => {
 
   return name
 }
-const writeLlvmBytecodeFunction = (bytecodeWriter: LlvmWriter, func: CompiledFunction) => {
+const writeLlvmBytecodeFunction = (bytecodeWriter: LlvmWriter, func: CompiledFunction, fnIr: IrFunction) => {
   log("\nWriting func", func.functionDefinition.debugName, "\n")
   const funcWriter: LlvmFunctionWriter = {
     writer: bytecodeWriter,
@@ -830,39 +651,70 @@ const writeLlvmBytecodeFunction = (bytecodeWriter: LlvmWriter, func: CompiledFun
     outputFunctionBody: [],
     outputFunctionHeaders: [],
     currentOutput: null!,
-    printNextStatement: false
+    printNextStatement: false,
   }
 
   const isMain = bytecodeWriter.globalCompilerState.entryFunction === func
   const name = isMain ? "@main" : generateName(bytecodeWriter, func.binding)
   
-  funcWriter.currentOutput = funcWriter.outputFunctionBody
-
-  const result = writeExpr(funcWriter, func.body)
-
   funcWriter.currentOutput = bytecodeWriter.outputStrings
 
-  format(funcWriter, `define $ $(`, func.returnType, name)
+  const argValueBindings = func.parameters.map(param => {
+    if (param.reference) return param.binding
+    return new Binding(param.binding.name, param.binding.type)
+  })
 
-  func.argBindings.forEach((binding, i) => {
+  format(funcWriter, `; `)
+  func.parameters.forEach((param, i) => {
     if (i !== 0) format(funcWriter, ", ")
-    const storageType = binding.storage === 'ref' ? RawPointerType : binding.type
-    generateName(bytecodeWriter, binding)
-  
-    const argValueBinding = new Binding(binding.name, binding.type)
-    format(funcWriter, `$ $`, storageType, argValueBinding)
-    
-    allocaHelper(funcWriter, binding as Pointer)
-    funcWriter.currentOutput = funcWriter.outputFunctionHeaders
-    format(funcWriter, "  store $ $, $ $\n", storageType, argValueBinding, 'ptr', binding)
-    funcWriter.currentOutput = bytecodeWriter.outputStrings
+    format(funcWriter, `$: $ $`, param.binding.name, param.capability.toLowerCase(), param.type.shortName)
+  })
+  format(funcWriter, `\n`)
+  format(funcWriter, `define $ $(`, fnIr.returnType, name)
+
+  let sep = false
+  if (fnIr.returnParameter) {
+    const regName = fnIr.returnRegister
+    const type = fnIr.returnParameter.type
+    const reg = defineRegister(funcWriter, regName, RawPointerType)
+    generateName(bytecodeWriter, reg)
+    format(funcWriter, `ptr sret($) $`, type, register(regName))
+    // format(funcWriter, `) {\n`, func.returnType, name)
+    // format(funcWriter, "  $ = alloca $ ; $\n", reg, reg.type, getDataTypeName(funcWriter.writer, reg.type))
+    // format(funcWriter, "  store $ $, $ $\n", func.returnType, reg, 'ptr', reg)
+    sep = true
+  }
+
+  func.parameters.forEach((param, i) => {
+    if (sep) format(funcWriter, ", ")
+    sep = true
+    // @ParameterPassing
+    format(funcWriter, `$ $`, param.passingType, argValueBindings[i])
   })
   format(funcWriter, `) {\n`, func.returnType, name)
 
-  if (funcWriter.outputFunctionHeaders.length) {
-    bytecodeWriter.outputStrings.push(...funcWriter.outputFunctionHeaders)
-    bytecodeWriter.outputStrings.push('\n')
-  }
+  func.parameters.forEach((param, i) => {
+    const regName = fnIr.parameterRegisters[i]
+    const reg = defineRegister(funcWriter, regName, param.passingType)
+    generateName(bytecodeWriter, reg)
+
+    // @ParameterPassing
+    if (!param.reference) {
+      format(funcWriter, "  $ = alloca $ ; $\n", reg, reg.type, getDataTypeName(funcWriter.writer, reg.type))
+      format(funcWriter, "  store $ $, $ $\n", param.passingType, argValueBindings[i], 'ptr', reg)
+    } else {
+      format(funcWriter, "  $ = bitcast ptr $ to ptr ; $*\n", reg, argValueBindings[i], argValueBindings[i].type.shortName)
+    }
+  })
+  format(funcWriter, "\n")
+  // format(funcWriter, "  br label %$\n", fnIr.blocks[0].label)
+
+  // fnIr.blocks.forEach(block => {
+  //   defineRegister(funcWriter, block.label, VoidType)
+  // })
+
+  writeInstructions(funcWriter, fnIr)
+  
   bytecodeWriter.outputStrings.push(...funcWriter.outputFunctionBody)
 
   if (isMain) { // hardcode for now
@@ -870,50 +722,35 @@ const writeLlvmBytecodeFunction = (bytecodeWriter: LlvmWriter, func: CompiledFun
   } else if (func.body.type === NeverType) {
     format(funcWriter, `  unreachable\n`)
   } else if (func.returnType !== VoidType) {
-    const v = toRegister(funcWriter, result)
-    format(funcWriter, `  ret $ $\n`, func.returnType, v)
+    // const v = toRegister(funcWriter, result)
+    // format(funcWriter, `  ret $ $\n`, func.returnType, v)
   } else {
-    format(funcWriter, `  ret void\n`)
+    // format(funcWriter, `  ret void\n`)
   }
   format(funcWriter, `}\n\n`)
 
   return funcWriter
 };
 
-
-const numberToDoubleBitString = (f: number) => {
-  const buffer = new ArrayBuffer(8)
-  const floatView = new Float64Array(buffer)
-  floatView[0] = f
-  const intView = new DataView(buffer)
-  const intBitsLow = intView.getUint32(0, true) // true for little-endian, lower part
-  const intBitsHigh = intView.getUint32(4, true) // true for little-endian, higher part
-  return (intBitsHigh.toString(2).padStart(32, '0') + intBitsLow.toString(2).padStart(32, '0'))
+// https://llvm.org/docs/LangRef.html#id1977
+// Floats must be rounded to what fits in 32 bits
+const roundToFloat32 = (x: number) => {
+  const f32 = new Float32Array(1);
+  f32[0] = x;
+  return f32[0];
 }
 
-const bitStringToFloat = (bitString: string) => {
-  // https://llvm.org/docs/LangRef.html#id1977
-  // TODO: What was I thinking here? Do it properly
-  
-  // LLVM has some weird behaviour where a float constant is 
-  // written in 64 bit but the exponent is rounded to 23 bits
-  // otherwise it won't compile. Easiest way is string manipulations
+const toHex64 = (value: number) => {
+  const buffer64 = new ArrayBuffer(8);
+  const view64 = new DataView(buffer64);
+  view64.setFloat64(0, value, false); // Big-endian
 
-  // So it looks like
-  //  1 bit sign | 11 bit mantissa | 23 bit exponent | 29 bit zeros
-  
-  // Testcases
-  // 0.001 => 0x3F50624DE0000000
-  // 3.14159 => 0x400921FA00000000
-
-  const cap = 1 + 11 + 23
-  if (bitString[cap] === '1') {
-    const rounded = parseInt(bitString.substring(0, cap), 2) + 1
-    return rounded.toString(2).padStart(cap, '0').padEnd(64, '0')
+  let hex64 = '';
+  for (let i = 0; i < 8; i++) {
+    hex64 += view64.getUint8(i).toString(16).padStart(2, '0');
   }
-  return bitString.substring(0, cap).padEnd(64, '0')
+  return `0x${hex64}`;
 }
 
-const bitsToHex = (bits: string) => `0x${parseInt(bits, 2).toString(16).padStart(16, '0').toUpperCase()}`
-const doubleToLlvmHex = (f: number) => bitsToHex(numberToDoubleBitString(f))
-const floatToLlvmHex = (f: number) => bitsToHex(bitStringToFloat(numberToDoubleBitString(f)))
+const doubleToLlvmHex = (f: number) => toHex64(f)
+const floatToLlvmHex = (f: number) => toHex64(roundToFloat32(f))
