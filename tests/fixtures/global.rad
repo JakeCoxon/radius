@@ -1,6 +1,6 @@
 import compiler for assert
 
-# Globals can be out of order
+// Globals can be out of order
 
 let foo1 = Foo(2.0, thing2)
 
@@ -24,10 +24,10 @@ var state = 0
 
 fn test_mutable_state() {
 
-  # Make sure to test a bug where the state object
-  # is initialized inside the while loop, but after
-  # exiting the loop the state is deleted and it's
-  # a compile error
+  // Make sure to test a bug where the state object
+  // is initialized inside the while loop, but after
+  // exiting the loop the state is deleted and it's
+  // a compile error
 
   var i = 0
   while i < 10 {

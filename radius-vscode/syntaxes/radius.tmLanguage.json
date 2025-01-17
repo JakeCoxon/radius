@@ -31,7 +31,7 @@
 			]
 		},
 		{
-			"begin": "(^[ \\t]+)?(?=#)",
+			"begin": "(^[ \\t]+)?(?=\/\/)",
 			"beginCaptures": {
 				"1": {
 					"name": "punctuation.whitespace.comment.leading.radius"
@@ -40,7 +40,7 @@
 			"end": "(?!\\G)",
 			"patterns": [
 				{
-					"begin": "#",
+					"begin": "//",
 					"beginCaptures": {
 						"0": {
 							"name": "punctuation.definition.comment.radius"

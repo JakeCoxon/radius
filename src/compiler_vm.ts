@@ -1241,9 +1241,10 @@ const instructions: InstructionMapping = {
   letlocal: (vm, { name, t, v }) => {
     const type = t ? expectType(popStack(vm)) : null
     const value = v ? popStack(vm) : null
-    // Always set on the scope of the current function for now. Not sure if this is the best idea
-    compilerAssert(vm.context.subCompilerState.functionCompiler, "Expected function compiler")
-    const scope = vm.context.subCompilerState.functionCompiler.scope
+    // I removed the following line because it messes things up especially in global scope.
+    // Figure out why is was there and make sure it doesn't break anything
+    // compilerAssert(vm.context.subCompilerState.functionCompiler, "Expected function compiler")
+    const scope = vm.context.subCompilerState.scope
     compilerAssert(!Object.hasOwn(scope, name), `$name is already in scope`, { name });
     setScopeValueAndResolveEvents(scope, name, value)
     vm.stack.push(null) // statement expression

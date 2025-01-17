@@ -60,6 +60,15 @@ fn main() {
     ff + 32
   } + 1
 
+  if 1 {
+    print("OK")
+  } else if 2 {
+    print("OK")
+  } else {
+    print("OK")
+  }
+  
+
   let gf = try { 123? + 123? }.orelse 30
 
   let x = 32
@@ -159,10 +168,10 @@ fn main() {
   break a
   break a with 123
 
-  # let Some(x) = thing + 1
-  # else: return
+  // let Some(x) = thing + 1
+  // else: return
 
   print(x)
   
-  # hello
+  // hello
 }

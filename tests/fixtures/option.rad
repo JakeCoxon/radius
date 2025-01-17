@@ -35,11 +35,11 @@ fn test_various() {
 
   var x = None!int()
   var y = Some(10)
-  # let g = 10.Some
+  // let g = 10.Some
 
   var v: Option!int = None!int()
   v = None!int()
-  # let v2 = None()
+  // let v2 = None()
   print(v)
 
   y = Some(32)
@@ -73,10 +73,10 @@ fn test_various() {
   let asd3 = try { 2 + 3 }
   print(asd3)
 
-  # let x = ifx {
-  #   x? + y?
-  # } else {
-  # }
+  // let x = ifx {
+  //   x? + y?
+  // } else {
+  // }
 
   if x.is_some {
     print(x)

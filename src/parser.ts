@@ -7,7 +7,7 @@ const regexes = {
   STRING: /^(?:"(?:[^"\\]|\\.)*")/,
   SPECIALNUMBER: /^0o[0-7]+|^0x[0-9a-fA-F_]+|^0b[01_]+/,
   NUMBER: /^-?(0|[1-9][0-9_]*)(\.[0-9_]+)?(?:[eE][+-]?[0-9]+)?/,
-  COMMENT: /^#[^\n]+/,
+  COMMENT: /^\/\/[^\n]+/,
   OPENPAREN: /^(?:\{\||[\[\{\(]|%{)/,
   CLOSEPAREN: /^[\]\}\)]/,
   PUNCTUATION: /^(?:==|!=|:=|<=|>=|\+=|\-=|\*=|\/=|::|->|\|\>|\.\.\.|@@|[@!:,=<>\-+\.*\/'\|?;&])/,
@@ -270,7 +270,6 @@ export const makeParser = (input: string, debugName: string) => {
   const parseLiteral = (): ParseNode => {
     if (match("("))             return parseParens(previous);
     else if (match("["))        return parseList();
-    else if (match("-"))        return new ParseOperator(previous, [parseLiteral()])
     else if (match("@"))        return new ParseNote(previous, parsePostfix()); // TODO: This is broken
     else if (match("%{"))       return parseDict(previous)
     else if (match("{|"))       return parseLambda()
@@ -376,7 +375,8 @@ export const makeParser = (input: string, debugName: string) => {
     }
   };
   
-  const parseNot = (): ParseNode => match("!")  ? new ParseNot(previous, parseNot()) : parsePostfix();
+  const parseMinus = (): ParseNode => match("-") ? new ParseOperator(previous, [parseMinus()]) : parsePostfix();
+  const parseNot = (): ParseNode => match("!")  ? new ParseNot(previous, parseNot()) : parseMinus();
 
   const parseIs = () => {        let left = parseNot();      while (match("is"))                   left = new ParseIs(previous, left, parseNot());        return left; };
   const parseAs = () => {        let left = parseIs();       while (match("as!") || match("as"))   left = new ParseCast(previous, left, parseIs());            return left; };
@@ -495,10 +495,10 @@ export const makeParser = (input: string, debugName: string) => {
       parseKeywords(), parseColonBlock("class definition header"))
   };
 
-  const parseElse = (isExpr: boolean): ParseIf | ParseIfMulti | ParseElse | null => {
-    if (match("elif")) return parseIf(previous, isExpr, "elif condition")
-    else if (match("else")) return new ParseElse(previous, parseColonBlockExpr("else"))
-    return null
+  const parseElseIf = (isExpr: boolean): ParseIf | ParseIfMulti | ParseElse | null => {
+    if (!match("else")) return null
+    if (match("if")) return parseIf(previous, isExpr, "elif condition")
+    return new ParseElse(previous, parseColonBlockExpr("else"))
   }
 
   const parseLetOrExpr = () => 
@@ -510,10 +510,10 @@ export const makeParser = (input: string, debugName: string) => {
     while (match(";")) list.push(parseLetOrExpr());
     if (list.length === 1 && !(list[0] instanceof ParseLet)) {
       const block = parseColonBlockExpr(message)
-      return new ParseIf(ifToken, isExpr, list[0], block, parseElse(isExpr));
+      return new ParseIf(ifToken, isExpr, list[0], block, parseElseIf(isExpr));
     }
     const block = parseColonBlockExpr(message);
-    return new ParseIfMulti(ifToken, isExpr, list, block, parseElse(isExpr));
+    return new ParseIfMulti(ifToken, isExpr, list, block, parseElseIf(isExpr));
   }
   const parseIfStatement = (ifToken: Token, isExpr: boolean, message: string = "if condition"): ParseIf | ParseIfMulti => {
     return trailingStatement(parseIf(ifToken, isExpr, message))

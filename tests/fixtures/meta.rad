@@ -26,11 +26,11 @@ fn foop(a: int, b: int) {
 
   if 2 < 3 {
     print("OK")
-  } elif 3 > 2 {
+  } else if 3 > 2 {
     print("wow")
-  } elif 3 > 2 {
+  } else if 3 > 2 {
     print("wow")
-  } elif 3 > 2 {
+  } else if 3 > 2 {
     print("wow")
   } else {
     print(3)

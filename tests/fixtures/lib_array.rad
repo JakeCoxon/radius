@@ -92,9 +92,9 @@ fn test_sink_elem() {
   var moved = arr[0]&
   print("Moved", moved)
 
-  # TODO: This should be a compile time error some how
-  # but right now it will allow it and cause undefined behaviour
-  # print(arr)
+  // TODO: This should be a compile time error some how
+  // but right now it will allow it and cause undefined behaviour
+  // print(arr)
 }
 
 
@@ -137,8 +137,8 @@ fn test_loop() {
 fn main() {
 
   test_array1()
-  # test_array2()
-  # test_array3()
+  // test_array2()
+  // test_array3()
   test_move()
   test_project()
   test_sink_elem()

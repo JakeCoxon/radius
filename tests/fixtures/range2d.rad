@@ -2,11 +2,11 @@ define Range2d {
   w: int
   h: int
 
-  # This tells the compiler what function to use for iteration
+  // This tells the compiler what function to use for iteration
   const __iterate = range2d_iterate
 }
 
-# the loop body is passed as a template parameter 'f'. and the function must be marked @inline
+// the loop body is passed as a template parameter 'f'. and the function must be marked @inline
 fn range2d_iterate!(f)(range: Range2d) -> void @inline {
   for j in Range(0, range.h) {
     for i in Range(0, range.w) {
@@ -38,14 +38,14 @@ fn main() {
   var range = Range2d(32, 64)
   for vec in range {
     if vec.x * vec.y > 256 {
-      continue # continue does the right thing
+      continue // continue does the right thing
     }
     print(vec.x + vec.y)
   }
 
   for vec in range {
     if vec.x * vec.y > 256 {
-      break # break does the right thing
+      break // break does the right thing
     }
     print(vec.x + vec.y)
   }

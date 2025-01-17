@@ -8,39 +8,39 @@ const to_iterator = |thing|
     }
   }
 
-# TODO: Can this work?
-# Where the compiler automatically generates the interleave
-# control flow and disallows using yield_outer twice otherwise
-# concat2 :: |iterator_a, iterator_b|
-#   {|yield_outer: iter|
-#     while true:
-#       iterator_a({|consume| 
-#         let elem = consume()
-#         yield_outer(elem)
-#       })
-#       iterator_b({|consume| 
-#         let elem = consume()
-#         yield_outer(elem)
-#       })
-#   }
-# or
-# concat2 :: |iterator_a, iterator_b|
-#   yielder {|yield_outer|
-#     while true:
-#       let elem_a = consume(iterator_a)
-#       yield_outer(elem_a)
-#       let elem_b = consume(iterator_b)
-#       yield_outer(elem_b)
-#   }
-# 
-# concat2 :: {|iterator_a: iter, iterator_b: iter| -> |outer: yielder|
-#   while true:
-#     let elem_a = iterator_a()
-#     outer(elem_a)
-#     let elem_b = iterator_b()
-#     outer(elem_b)
-# }
-# 
+// TODO: Can this work?
+// Where the compiler automatically generates the interleave
+// control flow and disallows using yield_outer twice otherwise
+// concat2 :: |iterator_a, iterator_b|
+//   {|yield_outer: iter|
+//     while true:
+//       iterator_a({|consume| 
+//         let elem = consume()
+//         yield_outer(elem)
+//       })
+//       iterator_b({|consume| 
+//         let elem = consume()
+//         yield_outer(elem)
+//       })
+//   }
+// or
+// concat2 :: |iterator_a, iterator_b|
+//   yielder {|yield_outer|
+//     while true:
+//       let elem_a = consume(iterator_a)
+//       yield_outer(elem_a)
+//       let elem_b = consume(iterator_b)
+//       yield_outer(elem_b)
+//   }
+// 
+// concat2 :: {|iterator_a: iter, iterator_b: iter| -> |outer: yielder|
+//   while true:
+//     let elem_a = iterator_a()
+//     outer(elem_a)
+//     let elem_b = iterator_b()
+//     outer(elem_b)
+// }
+// 
 
 
 
@@ -59,14 +59,14 @@ const concat2 = |iterator_a, iterator_b|
   }
 
 
-# zip2 :: {|iterator_a: Iterator, iterator_b: Iterator|
-#   {|yield_outer|
-#     while true:
-# let       elem_a = consume(iterator_a)
-# let       elem_b = consume(iterator_b)
-#       yield_outer((elem_a, elem_b))
-#   }
-# }
+// zip2 :: {|iterator_a: Iterator, iterator_b: Iterator|
+//   {|yield_outer|
+//     while true:
+// let       elem_a = consume(iterator_a)
+// let       elem_b = consume(iterator_b)
+//       yield_outer((elem_a, elem_b))
+//   }
+// }
 
 const zip2 = |iterator_a, iterator_b|
   {|yield_outer|
@@ -112,7 +112,7 @@ const interleave = |iterator_a, iterator_b|
 const interleave_infinite = |iterator_a, iterator_b|
   {|yield_outer|
 
-    # Track which one is complete
+    // Track which one is complete
     var complete_a = false
     var complete_b = false
 
@@ -121,11 +121,11 @@ const interleave_infinite = |iterator_a, iterator_b|
         while !complete_a or !complete_b {
           let elem_a = consume_a()
           if !complete_a {
-            yield_outer(elem_a) # TODO: yield is repeated!
+            yield_outer(elem_a) // TODO: yield is repeated!
           }
           let elem_b = consume_b()
           if !complete_b {
-            yield_outer(elem_b) # TODO: yield is repeated!
+            yield_outer(elem_b) // TODO: yield is repeated!
           }
         }
       }, {|yield_c|
@@ -148,26 +148,26 @@ const interleave_infinite = |iterator_a, iterator_b|
     })
   }
 
-# interleave_infinite :: |iterator_a, iterator_b| -> |yield_outer|
+// interleave_infinite :: |iterator_a, iterator_b| -> |yield_outer|
 
-#   generator!({|yield_a| 
-#     generator!({|yield_b| 
-#       while true:
-#         let complete_a, elem_a = yield_a()
-#         if !complete_a: yield_outer(elem_a)
+//   generator!({|yield_a| 
+//     generator!({|yield_b| 
+//       while true:
+//         let complete_a, elem_a = yield_a()
+//         if !complete_a: yield_outer(elem_a)
 
-#         let complete_b, elem_b = yield_b()
-#         if !complete_b: yield_outer(elem_b)
+//         let complete_b, elem_b = yield_b()
+//         if !complete_b: yield_outer(elem_b)
 
-#         if !complete_a and !complete_b: break
-#     }, {|yield_c|
-#       for elem in iterator_b: yield_c(false, elem)
-#       while true: yield_c(true, 0)
-#     })()
-#   }, {|yield_d|
-#     for elem in iterator_a: yield_d((false, elem))
-#     while true: yield_d((true, 0))
-#   })()
+//         if !complete_a and !complete_b: break
+//     }, {|yield_c|
+//       for elem in iterator_b: yield_c(false, elem)
+//       while true: yield_c(true, 0)
+//     })()
+//   }, {|yield_d|
+//     for elem in iterator_a: yield_d((false, elem))
+//     while true: yield_d((true, 0))
+//   })()
 
 const foo = |yield|
   for i in Range(0, 10) {
@@ -232,12 +232,12 @@ fn test_concat2() {
     }
       
   const foo_then_bar = concat2(foo1, bar1)
-  # let  num = 0
+  // let  num = 0
   for x in foo_then_bar {
     print(x)
-    # num += x
+    // num += x
   }
-  # assert(num == 249)
+  // assert(num == 249)
 }
   
 fn test_normal_concat() {
@@ -273,20 +273,20 @@ fn test_zip2() {
   assert(num == 1092)
 }
 
-# fn test_zip_syntax():
+// fn test_zip_syntax():
 
 
-#   zip_foo_bar :: %iter[
-#     %ints ...,
-#     foo[:] + bar[:] ...,
-#     1, 2, 3
-#   ]
+//   zip_foo_bar :: %iter[
+//     %ints ...,
+//     foo[:] + bar[:] ...,
+//     1, 2, 3
+//   ]
   
-# let   num = 0
-#   for tup in zip_foo_bar:
-#     num += tup._1 * tup._2
+// let   num = 0
+//   for tup in zip_foo_bar:
+//     num += tup._1 * tup._2
 
-#   assert(num == 1092)
+//   assert(num == 1092)
 
 fn test_interpose() {
 
@@ -332,12 +332,12 @@ fn test_interleave_infinite() {
 
 
 fn main() {
-  # test_basic()
+  // test_basic()
   test_concat2()
   test_normal_concat()
   test_concat2_concat2()
   test_zip2()
-  # test_interpose()
+  // test_interpose()
   test_interleave()
   test_interleave_to_iterator()
   test_interleave_infinite()

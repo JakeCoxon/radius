@@ -519,7 +519,6 @@ const generatorInternalHelper = () => {
     return entryParam
   }
   const yieldEntry = (location: SourceLocation, expr: Ast | null): Task<Ast, CompilerError> => {
-    console.log("Yield entry", expr)
     expr && propagatedLiteralAst(expr)
     succeedEntryType(expr?.type ?? VoidType)
     return (
@@ -532,7 +531,6 @@ const generatorInternalHelper = () => {
     )
   }
   const yieldElse = (location: SourceLocation, expr: Ast) => {
-    console.log("Yield else", expr)
     propagatedLiteralAst(expr)
     succeedElseType(expr.type)
     return new YieldGenerAst(VoidType, location, generatorBinding, createElseLabel(), expr)

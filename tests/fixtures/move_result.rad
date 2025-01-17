@@ -8,8 +8,8 @@ fn test_fail_result() {
 }
 
 fn main() {
-  # Cannot assert on IR code errors yet
-  # assert_compile_error!(test_fail_result, "Not enough params")
+  // Cannot assert on IR code errors yet
+  // assert_compile_error!(test_fail_result, "Not enough params")
 
   var a = 1
   var b = 2

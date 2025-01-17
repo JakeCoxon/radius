@@ -35,7 +35,7 @@ fn main():
     next_cells = swap
 
 
-# https://mathworld.wolfram.com/ElementaryCellularAutomaton.html
+// https://mathworld.wolfram.com/ElementaryCellularAutomaton.html
 const rule_num = 126
 
 const bsl = compiler.operator_bitshift_left

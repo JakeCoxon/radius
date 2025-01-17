@@ -8,7 +8,7 @@ fn foo():
 
     ifx 2 == 2:
       32
-    elif 2 == 3:
+    else if 2 == 3:
       if true:
         #print("OK")
         3
@@ -26,15 +26,15 @@ fn foo():
 
   let thing4 = (block: 2 + 2)
 
-  # let thing4 = (block;
-  #  2 + 2;
-  #        3 + 4;
-  #              2 + 4)
+  // let thing4 = (block;
+  //  2 + 2;
+  //        3 + 4;
+  //              2 + 4)
   #tlet hing4 = block {
-  #    2 + 2
-  #    3 + 4
-  #    2 + 4
-  #  } + 2
+  //    2 + 2
+  //    3 + 4
+  //    2 + 4
+  //  } + 2
   
   2
 

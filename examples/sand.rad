@@ -19,12 +19,13 @@ var prev_mouse = vec2i(0, 0)
 
 var current_color = 200.0
 
-fn init() @export:
+fn init() @export {
 
   cells[:] = 0 ...
   next_cells[:] = 0 ...
+}
 
-fn frame() @export:
+fn frame() @export {
 
   next_cells[:] = 0 ...
   let pressed_left = get_mouse_down(0)
@@ -35,13 +36,15 @@ fn frame() @export:
 
   let mouse_size = 4 + mouse_velocity.x.abs / 4
 
-  if pressed_left:
+  if pressed_left {
     current_color += 0.1
-    if current_color > 360.0:
+    if current_color > 360.0 {
       current_color = 1.0
+    }
+  }
 
-  for y in Range(0, cells_height - 1):
-    for x in Range(1, cells_width - 1):
+  for y in Range(0, cells_height - 1) {
+    for x in Range(1, cells_width - 1) {
 
       let cell = x + y * cells_width
       let down = cell + cells_width
@@ -56,41 +59,52 @@ fn frame() @export:
       let down_left_blocked = cells[down_left] > 0 or bottom_edge.copy or x == 1
       let down_right_blocked = cells[down_right] > 0 or bottom_edge.copy or x == cells_width - 2
 
-      if cell_value > 0:
-        if !down_blocked:
+      if cell_value > 0 {
+        if !down_blocked {
           next_cells[down] = cell_value
-        elif !down_left_blocked:
+        } else if !down_left_blocked {
           next_cells[down_left] = cell_value
-        elif !down_right_blocked:
+        } else if !down_right_blocked {
           next_cells[down_right] = cell_value
-        else:
+        } else {
           next_cells[cell] = cell_value
+        }
+      }
 
       let in_circle = (mouse - vec2i(x, y)).length_squared < mouse_size * mouse_size
-      if in_circle:
-        if pressed_left:
+      if in_circle {
+        if pressed_left {
           next_cells[cell] = int(current_color + simple_random_float() * 10)
-        elif pressed_right:
+        } else if pressed_right {
           next_cells[cell] = 0
+        }
+      }
+    }
+  }
 
-  for y in Range(0, cells_height):
-    for x in Range(0, cells_width):
+  for y in Range(0, cells_height) {
+    for x in Range(0, cells_width) {
 
       let cell = next_cells[x + y * cells_width]
       var color = rgba(0, 0, 0, 0)
-      if cell > 0:
+      if cell > 0 {
         color = hsva_to_rgba(float(cell), 0.7, 0.7, 1)
+      }
 
       rgba_image[x + y * cells_width] = color.copy
+    }
+  }
     
   put_float_image_data(rgba_image.data.data, cells_width, cells_height, window_width * 4, 0, 0)
   draw_canvas_to_screen()
 
   swap(cells, next_cells)
+}
 
-
-fn cleanup() @export:
+fn cleanup() @export {
   0
+}
 
-fn on_event() @export:
+fn on_event() @export {
   0
+}

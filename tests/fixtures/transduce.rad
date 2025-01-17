@@ -77,18 +77,18 @@ fn main() {
   )
 
   var list = [1, 2, 3, 4, 5, 6, 7]
-  var sum_result = transduce!(trx, sum())(list) # 6 + 7
+  var sum_result = transduce!(trx, sum())(list) // 6 + 7
   assert(sum_result == 13)
   
-  var sum_result2 = [1, 2, 3, 4, 5, 6, 7 | trx |> sum()] # 6 + 7
+  var sum_result2 = [1, 2, 3, 4, 5, 6, 7 | trx |> sum()] // 6 + 7
   assert(sum_result2 == 13)
 
-  var sum_result3 = [list... | trx |> sum()] # 6 + 7
+  var sum_result3 = [list... | trx |> sum()] // 6 + 7
   assert(sum_result3 == 13)
 
-  var sum_result4 = [list... | take_while {|x| x < 4} |> sum()] # 1 + 2 + 3
+  var sum_result4 = [list... | take_while {|x| x < 4} |> sum()] // 1 + 2 + 3
   assert(sum_result4 == 6)
 
-  var sum_result5 = [list... | drop_while {|x| x < 4} |> sum()] # 4 + 5 + 6 +7
+  var sum_result5 = [list... | drop_while {|x| x < 4} |> sum()] // 4 + 5 + 6 +7
   assert(sum_result5 == 22)
 }

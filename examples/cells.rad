@@ -3,21 +3,22 @@ import range for Range
 import array for Array, array_create
 import graphics for begin_app, end_app, window_open, render_app, frame_ticks, copy_pixels, save, restore, set_fill_color, fill_rectangle, rotate, translate
 
-# https://mathworld.wolfram.com/ElementaryCellularAutomaton.html
+// https://mathworld.wolfram.com/ElementaryCellularAutomaton.html
 const rule_num = 126
 
 const bsl = compiler.operator_bitshift_left
 const bsr = compiler.operator_bitshift_right
 const band = compiler.operator_bitwise_and
 
-fn calculate_state(a: int, b: int, c: int) -> int:
+fn calculate_state(a: int, b: int, c: int) -> int {
   let index = bsl(a, 2) + bsl(b, 1) + c
   band(bsr(rule_num, index), 1)
+}
 
 const scale = 2
 const num_cells = 320 / scale
 
-fn main():
+fn main() {
 
   begin_app()
 
@@ -30,27 +31,32 @@ fn main():
   set_fill_color(0, 0, 0, 1)
   fill_rectangle(0, 0, 320, 240)
 
-  while window_open():
+  while window_open() {
 
     copy_pixels(0, scale, 320, 240, 0, 0)
 
-    for x in Range(1, num_cells - 1):
+    for x in Range(1, num_cells - 1) {
       next_cells[x] = calculate_state(
         cells[x - 1], cells[x], cells[x + 1])
+    }
 
-    for x in Range(0, num_cells):
-      if next_cells[x] == 1: 
+    for x in Range(0, num_cells) {
+      if next_cells[x] == 1 {
         set_fill_color(1, 1, 1, 1)
-      else:
+      } else {
         set_fill_color(0, 0, 0, 1)
+      }
       
       fill_rectangle(scale * float(x), 240 - scale, scale, scale)
+    }
 
     var swap = cells&
     cells = next_cells&
     next_cells = swap&
 
-    # render_app()
-    # delay(5)
+    // render_app()
+    // delay(5)
+  }
 
   end_app()
+}

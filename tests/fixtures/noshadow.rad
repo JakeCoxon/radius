@@ -4,7 +4,7 @@ fn thing(x: int):
 
 fn main():
   
-  # should this reference outer scope or inner scope?
+  // should this reference outer scope or inner scope?
 
   const foo = thing(100)
 

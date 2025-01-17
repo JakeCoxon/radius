@@ -12,14 +12,15 @@ const window_height = 240
 
 var t = 0.0
 
-fn init() @export:
+fn init() @export {
   0
+}
 
-fn frame() @export:
+fn frame() @export {
   draw_defaults()
   t += 1
   
-  block:
+  block {
     push_matrix()
     translate3d(sin(t * 0.01) * 0.1, 0, 0)
     
@@ -29,8 +30,9 @@ fn frame() @export:
     vertex(vec2( 0.5, -0.5), rgb(0, 1, 0))
     end_draw()
     pop_matrix()
+  }
 
-  block:
+  block {
     push_matrix()
     rotate3d(t * 0.01, 0, 0, 1)
     
@@ -40,9 +42,13 @@ fn frame() @export:
     vertex(vec2( 0.5, -0.5), rgb(1, 0, 1))
     end_draw()
     pop_matrix()
+  }
+}
 
-fn cleanup() @export:
+fn cleanup() @export {
   0
+}
 
-fn on_event() @export:
+fn on_event() @export {
   0
+}

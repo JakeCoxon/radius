@@ -53,7 +53,7 @@ fn move_assign_buffer(dst: inout Buffer, src: sink Buffer) {
 fn deinit_buffer(buf: sink Buffer) {
   if buf.data != rawptr(0) {
 
-    # free(buf.data)
+    // free(buf.data)
     buf.data = rawptr(0)
   }
 }
@@ -94,7 +94,7 @@ fn array_length!(T)(arr: Array!T) -> int {
 }
 
 
-# This will zero initialize the array. TOOD: Make this better
+// This will zero initialize the array. TOOD: Make this better
 fn array_create!(T)(initial_length: int) -> Array!T {
   var buffer = Buffer(0, rawptr(0))
   var array = Array!T(0, buffer&)
@@ -151,9 +151,9 @@ fn copy_array!(T)(dst: set Array!T, src: Array!T) {
     i += 1
   }
 
-  # TODO: Too many moves ends up calling destructorFoo a lot
-  # TODO: The copy is moving the value out of src[i] (need projection)
-  # TODO: Do a mem-copy if possible
+  // TODO: Too many moves ends up calling destructorFoo a lot
+  // TODO: The copy is moving the value out of src[i] (need projection)
+  // TODO: Do a mem-copy if possible
 }
 
 fn memset(ptr: inout rawptr, value: u8, size: int) {
@@ -175,7 +175,6 @@ fn subscript_sink!(T)(arr: sink Array!T, idx: int, f) @subscript {
   var input = compiler.unsafe_subscript!T(arr.data.data, idx)&
   f(input)
 }
-
 
 fn subscript_let!(T)(arr: Array!T, idx: int, f) @subscript {
   let input = compiler.unsafe_subscript!T(arr.data.data, idx)

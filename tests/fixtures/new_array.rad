@@ -90,7 +90,7 @@ fn deinit_buffer(buf: sink Buffer) {
   if buf.data != rawptr(0) {
 
     print("Free buffer", buf.data as rawptr)
-    # free(buf.data)
+    // free(buf.data)
     buf.data = rawptr(0)
   }
 }
@@ -132,9 +132,9 @@ fn reserve_array!(T)(arr: inout Array!T, len: int) {
 
 
 fn get_array!(T)(arr: Array!T, index: int, f) @subscript {
-  # if true:
-  #   print("Not allocated")
-  #   exit(1)
+  // if true:
+  //   print("Not allocated")
+  //   exit(1)
   if arr.data.data == rawptr(0) {
     print("Not allocated")
     exit(1)
@@ -144,7 +144,7 @@ fn get_array!(T)(arr: Array!T, index: int, f) @subscript {
     exit(1)
   }
   f(compiler.unsafe_subscript!T(arr.data.data, index))
-  # f(3)
+  // f(3)
 }
 
 
@@ -156,10 +156,10 @@ fn copy_array!(T)(dst: set Array!T, src: Array!T) {
   
   dst.len = src.len
   dst.data = Buffer(0, rawptr(0))
-  # # print("Copy", src.len)
+  // // print("Copy", src.len)
   dst.data&.buffer_alloc(src.len * (meta T.sizeof))
 
-  # print("data", dst.data.data)
+  // print("data", dst.data.data)
 
   var i = 0
   while i < src.len {
@@ -167,8 +167,8 @@ fn copy_array!(T)(dst: set Array!T, src: Array!T) {
     i += 1
   }
 
-  # TODO: Too many moves ends up calling destructorFoo a lot
-  # TODO: The copy is moving the value out of src[i] (need projection)
+  // TODO: Too many moves ends up calling destructorFoo a lot
+  // TODO: The copy is moving the value out of src[i] (need projection)
 }
 
 
@@ -233,46 +233,46 @@ fn test_array1() {
   print("Copied", arr2[1])
   print("Copied", arr2[2])
   print("Copied", arr2[4])
-  # compiler.assert(arr2[0] == 10)
+  // compiler.assert(arr2[0] == 10)
 }
 
-# fn test_array2():
+// fn test_array2():
 
-#   var buffer = Buffer(0, rawptr(0))
-#   var arr = Array!Foo(0, buffer&)
-#   arr&.init_array(10)
+//   var buffer = Buffer(0, rawptr(0))
+//   var arr = Array!Foo(0, buffer&)
+//   arr&.init_array(10)
 
-#   arr[0] = Foo(3, 2.0)
-#   arr[1] = Foo(4, 3.0)
+//   arr[0] = Foo(3, 2.0)
+//   arr[1] = Foo(4, 3.0)
 
-#   arr[0].x += 1
-#   print(arr[0].x)
+//   arr[0].x += 1
+//   print(arr[0].x)
 
-#   var arr2 = arr&
-#   let el = arr2[0]
+//   var arr2 = arr&
+//   let el = arr2[0]
 
-#   print(el.x)
-#   arr2[0].x += 1
-#   print(arr2[0].x)
-#   # # print(arr[0].x)
-#   # print(arr2[0].x)
+//   print(el.x)
+//   arr2[0].x += 1
+//   print(arr2[0].x)
+//   // // print(arr[0].x)
+//   // print(arr2[0].x)
 
-#   var arr3 = arr2.copy
-#   print(arr3[0].x)
+//   var arr3 = arr2.copy
+//   print(arr3[0].x)
 
-#   subscript_1(arr3, 0, {|foo|
-#     foo.x = 42
-#   })
+//   subscript_1(arr3, 0, {|foo|
+//     foo.x = 42
+//   })
 
-#   print(arr3[0].x)
+//   print(arr3[0].x)
 
 
 fn subscript_inout!(T)(arr: inout Array!T, idx: int, f) @subscript {
-  # var ref input = compiler.unsafe_subscript!T(arr.data.data, idx)
-  # var x = 32 + idx
+  // var ref input = compiler.unsafe_subscript!T(arr.data.data, idx)
+  // var x = 32 + idx
   var ref input = compiler.unsafe_subscript!T(arr.data.data, idx)&
   f(input)
-  # compiler.unsafe_set_subscript(arr.data.data, idx, input&)
+  // compiler.unsafe_set_subscript(arr.data.data, idx, input&)
 }
 
 
@@ -300,35 +300,35 @@ fn test_array3() {
   print("arr[0].len", arr[0].len)
   print("arr[0].data", arr[0].data)
 
-#   # var asd = arr[0]&
-#   # asd[0] = Foo(42, 2.0)
+//   // var asd = arr[0]&
+//   // asd[0] = Foo(42, 2.0)
 
-#   print("Foo")
-#   arr[0][0] = Foo(42, 2.0)
-#   # subscript_1(arr, 0, {|x|
-#   #   subscript_1(x, 0, {|y|
-#   #     y = Foo(13, 2.0)
-#   #   })
-#   # })
+//   print("Foo")
+//   arr[0][0] = Foo(42, 2.0)
+//   // subscript_1(arr, 0, {|x|
+//   //   subscript_1(x, 0, {|y|
+//   //     y = Foo(13, 2.0)
+//   //   })
+//   // })
 
-#   # compiler.unsafe_set_subscript(arr[0].data.data, 0, Foo(43, 2.0))
-#   print("arr.len", arr.len)
-#   print("arr.data.data", arr.data.data as rawptr)
-#   print("arr[0].len", arr[0].len)
-#   print("arr[0].data", arr[0].data)
+//   // compiler.unsafe_set_subscript(arr[0].data.data, 0, Foo(43, 2.0))
+//   print("arr.len", arr.len)
+//   print("arr.data.data", arr.data.data as rawptr)
+//   print("arr[0].len", arr[0].len)
+//   print("arr[0].data", arr[0].data)
 
-#   print("BAR")
-#   var ref foo = arr[0][0]
-#   var asd = arr&
+//   print("BAR")
+//   var ref foo = arr[0][0]
+//   var asd = arr&
 
-#   foo.x += 1
+//   foo.x += 1
 
-#   print(asd)
-#   # let z = arr[0]
-#   # print("arr[0][0]", arr[0][0])
-#   # print(arr[0][0].x)
+//   print(asd)
+//   // let z = arr[0]
+//   // print("arr[0][0]", arr[0][0])
+//   // print(arr[0][0].x)
 
-#   # print(foo) # TODO: This should be an error because foo is mutable
+//   // print(foo) // TODO: This should be an error because foo is mutable
 }
 
 
@@ -356,25 +356,25 @@ fn test_project() {
   var arr = Array!Foo(0, buffer&)
   arr&.init_array(10)
 
-  # arr[0] = Foo(3, 2.0)
+  // arr[0] = Foo(3, 2.0)
 
-  # subscript_let(arr, 0, {|first|
-  #   print(first)
-  # })
+  // subscript_let(arr, 0, {|first|
+  //   print(first)
+  // })
 
-  # let first = arr[0]
+  // let first = arr[0]
 
 
   var ref foo = arr[0]&
   print("rawptr", rawptr(foo))
 
-  # if true:
-  #   foo.x = 23
-  # else:
-  #   foo.x = 23
+  // if true:
+  //   foo.x = 23
+  // else:
+  //   foo.x = 23
 
-  # TODO: This is failing for some reason!!!!
-  # foo.x = 456
+  // TODO: This is failing for some reason!!!!
+  // foo.x = 456
 
   print(foo)
 
@@ -399,38 +399,38 @@ fn foo(foo: inout int) {
 }
 
 
-# fn test_foo_move():
-#   var x = 1
-#   var y = 2.0
-#   var foo = Foo(x&, y&)
+// fn test_foo_move():
+//   var x = 1
+//   var y = 2.0
+//   var foo = Foo(x&, y&)
   
-#   # This will be an error because x is moved from
-#   # print(x)
-#   print(foo.x)
+//   // This will be an error because x is moved from
+//   // print(x)
+//   print(foo.x)
 
-# fn test_basic_array():
+// fn test_basic_array():
 
-#   var buffer = Buffer(0, rawptr(0))
-#   var arr = Array!int(0, buffer&)
-#   arr&.init_array(10)
-#   arr[0] = 1
-#   arr[1] = 2
+//   var buffer = Buffer(0, rawptr(0))
+//   var arr = Array!int(0, buffer&)
+//   arr&.init_array(10)
+//   arr[0] = 1
+//   arr[1] = 2
 
-#   print(arr[0])
-#   print(arr[1])
+//   print(arr[0])
+//   print(arr[1])
 
-#   print(arr)
+//   print(arr)
 
-# fn test_print():
+// fn test_print():
 
-#   compiler.printToPrintf("Hello")
-#   compiler.printToPrintf(23)
-#   compiler.printToPrintf(23.0)
-#   let i = 3
-#   print(12, 41.0, "Hello", i == 3)
+//   compiler.printToPrintf("Hello")
+//   compiler.printToPrintf(23)
+//   compiler.printToPrintf(23.0)
+//   let i = 3
+//   print(12, 41.0, "Hello", i == 3)
 
-#   let foo = Foo(2, 3)
-#   print(foo)
+//   let foo = Foo(2, 3)
+//   print(foo)
 
 fn test_set() {
   var buffer = Buffer(0, rawptr(0))
@@ -470,7 +470,7 @@ fn main() {
   test_basic_pointers()
 
   test_array1()
-  # test_array2()
+  // test_array2()
   test_array3()
   test_move()
   test_project()
@@ -478,35 +478,35 @@ fn main() {
   test_basic_project()
   test_set()
 
-  # test_foo_move()
-  # test_print()
+  // test_foo_move()
+  // test_print()
 
 
-  # test_basic_array()
+  // test_basic_array()
 
-  # let zzz = 3
-  # let z: int = 2
-  # # let x: int = ifx 2 == 2: z else: 2
-  # let x = z + 232
+  // let zzz = 3
+  // let z: int = 2
+  // // let x: int = ifx 2 == 2: z else: 2
+  // let x = z + 232
 
-  # var foo = Foo(1, 2.0)
-  # foo.x += 1
-  # print(foo.x)
+  // var foo = Foo(1, 2.0)
+  // foo.x += 1
+  // print(foo.x)
 
-  # bar(foo.x&)
-  # print(foo.x)
-  # baz(foo&)
-  # print(foo.x)
+  // bar(foo.x&)
+  // print(foo.x)
+  // baz(foo&)
+  // print(foo.x)
 
-  # while foo.x < 10:
-  #   foo.x += 1
+  // while foo.x < 10:
+  //   foo.x += 1
 
-  # print(foo.x)
+  // print(foo.x)
 
 
-  # if !!!(2 == 2):
-  #   print(21) 
+  // if !!!(2 == 2):
+  //   print(21) 
 
-  # if 3 == 1 and 2 > 1:
-  #   print(1)
+  // if 3 == 1 and 2 > 1:
+  //   print(1)
 }

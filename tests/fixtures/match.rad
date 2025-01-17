@@ -1,5 +1,5 @@
 import compiler for Some, None, Option, assert, assert_compile_error
-# import compiler for assert, assert_compile_error
+// import compiler for assert, assert_compile_error
 
 
 fn test_option() {
@@ -85,7 +85,7 @@ fn test_nested_continue() {
 fn main() {
   test_tuple()
   test_nested_tuple()
-  # test_fail()
+  // test_fail()
   test_option()
   test_nested()
   test_nested_continue()

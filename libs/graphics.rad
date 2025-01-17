@@ -11,18 +11,18 @@ comptime {
   add_export("gfx_main", gfx_main)
 }
 
-# Because graphicslib takes over main, this function is expected
-# by the graphics library called during to run the language initializers
+// Because graphicslib takes over main, this function is expected
+// by the graphics library called during to run the language initializers
 fn gfx_main() {
   initializer_function()
 }
 
-# fn render_app() @external
+// fn render_app() @external
 fn frame_ticks() -> int @external
-# fn set_pixel(x: int, y: int, color: int) @external
-# fn get_pixel(x: int, y: int) -> int @external
-# fn fill_rect(x: int, y: int, w: int, h: int, color: int) @external
-# fn delay(milliseconds: int) @external
+// fn set_pixel(x: int, y: int, color: int) @external
+// fn get_pixel(x: int, y: int) -> int @external
+// fn fill_rect(x: int, y: int, w: int, h: int, color: int) @external
+// fn delay(milliseconds: int) @external
 fn copy_pixels(source_x: int, source_y: int, w: int, h: int, dest_x: int, dest_y: int) @external
 
 fn begin_path() @external
@@ -71,13 +71,17 @@ const fill_rectangle = overloaded([
 
 @@external("move_to")
 fn move_to_xy(x: float, y: float)
-fn move_to_vec2(vec: vec2): move_to_xy(vec.x, vec.y)
+fn move_to_vec2(vec: vec2) { 
+  move_to_xy(vec.x, vec.y)
+}
 const move_to = overloaded([
   move_to_xy, move_to_vec2])
 
 @@external("line_to")
 fn line_to_xy(x: float, y: float) @external
-fn line_to_vec2(vec: vec2): line_to_xy(vec.x, vec.y)
+fn line_to_vec2(vec: vec2) { 
+  line_to_xy(vec.x, vec.y)
+}
 const line_to = overloaded([
   line_to_xy, line_to_vec2])
 

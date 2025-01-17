@@ -142,7 +142,7 @@ fn test_nested_loop() {
 
 fn test_zip() {
 
-  # Not working yet
+  // Not working yet
 
   let lst1 = [1, 2, 3, 4, 5]
   let lst2 = [6, 7, 8, 9]
@@ -155,7 +155,7 @@ fn test_zip() {
 
   var x2 = 0
   x2 += lst1[1:-2] * lst2[:100:2] ...
-  print(x2) # Something broke here
+  print(x2) // Something broke here
 
   var x3 = 0
   x3 += lst1[1:4] * lst2[:3] ...
@@ -171,7 +171,7 @@ fn test_zip() {
   let m = (min(fold(1000), lst1[:]) ...)
   assert(m == 1)
 
-  # let b = (fold(1) + x *Z x for x in lst1)
+  // let b = (fold(1) + x *Z x for x in lst1)
 }
 
 fn main() {

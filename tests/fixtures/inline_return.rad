@@ -23,7 +23,7 @@ fn baz(i: int) -> int @inline {
   if i > 3 {
     return foo(i)
   }
-  32 # Implicit return must set breakExprBinding
+  32 // Implicit return must set breakExprBinding
 }
 
 
@@ -31,15 +31,15 @@ fn test_projection() {
   let x = vec3(1, 2, 32)
   var y = vec3(4, 5, 6)
 
-  # var n = 30
-  # let m = 40
-  # print(n)
-  # print(m)
+  // var n = 30
+  // let m = 40
+  // print(n)
+  // print(m)
 
   let z = x
   print(z)
-  # var w = y
-  # print(w)
+  // var w = y
+  // print(w)
 
   print(y)
 
@@ -112,21 +112,21 @@ fn test_move() {
 
   print(rect1)
 
-  # var foo = rect1&
-  # print(foo)
+  // var foo = rect1&
+  // print(foo)
 }
 
 
 fn test_implicit_copy() {
   let top_left = vec3(1, 2, 3)
   var bottom_right = vec3(4, 5, 6)
-  # var x = top_left.x
+  // var x = top_left.x
   fooasd(top_left)
 
   assert(bottom_right.x == 4)
 
-  # var foo = rect1&
-  # print(foo)
+  // var foo = rect1&
+  // print(foo)
 }
 
 
@@ -168,11 +168,11 @@ fn test_return_value() {
 
   
 fn main() {
-  # print("Before")
-  # let z = bar!(123)()
-  # print("After")
+  // print("Before")
+  // let z = bar!(123)()
+  // print("After")
 
-  # print(z)
+  // print(z)
 
   test_implicit_copy()
   test_basic()
@@ -182,8 +182,8 @@ fn main() {
   test_projection()
   test_primitive_projection()
 
-  # let f = foo(2)
-  # print(f)
+  // let f = foo(2)
+  // print(f)
   
-  # print(baz(1))
+  // print(baz(1))
 }

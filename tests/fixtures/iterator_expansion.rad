@@ -100,7 +100,7 @@ fn last_or_zero(arr) @inline {
 }
 
 fn all(arr) @inline {
-  # Issues with returning directly from the loop
+  // Issues with returning directly from the loop
   var res = true
   for x in arr {
     if !x {
@@ -112,7 +112,7 @@ fn all(arr) @inline {
 }
 
 fn any(arr) @inline {
-  # Issues with returning directly from the loop
+  // Issues with returning directly from the loop
   var res = false
   for x in arr {
     if x {
@@ -326,16 +326,16 @@ fn test_first_last() {
   print(x)
   assert(x == 40)
 
-  # y = @last(numbers[:])
-  # print(y)
-  # assert(y == 3124)
+  // y = @last(numbers[:])
+  // print(y)
+  // assert(y == 3124)
 
   let people = [Person(10), Person(20), Person(30), Person(40), Person(50)]
   let age = people[1:].age.iter.first_or_zero
   assert(age == 20)
 
-  # p2 = @last(people[:])
-  # assert(p2.age == 50)
+  // p2 = @last(people[:])
+  // assert(p2.age == 50)
 }
 
 fn test_range() {
@@ -350,11 +350,11 @@ fn test_range() {
 
 fn test_stuff() {
 
-  # print(squares[5:10:2]) ...
-  # print(squares[1:100:10]) ...
-  # print(squares[2:10], factorial[1:20:2]) ...
+  // print(squares[5:10:2]) ...
+  // print(squares[1:100:10]) ...
+  // print(squares[2:10], factorial[1:20:2]) ...
   print(factorial[:20:4], factorial[1:10:2]) ...
-  # print(squares[:10].iter.sum)
+  // print(squares[:10].iter.sum)
 }
 
 
@@ -450,9 +450,9 @@ fn test_flatmap() {
 
   let cells = [[1,2,3], [4,5,6], [7,8,9]]
 
-  # foo = @mapcat(cells[:])
+  // foo = @mapcat(cells[:])
 
-  # x = cells[:][:].iter.sum
+  // x = cells[:][:].iter.sum
 }
 
 
@@ -518,7 +518,7 @@ fn test_float_sum() {
 
 fn main() {
   test_fold()
-  # test_fold_setter() # Capability check issue
+  // test_fold_setter() // Capability check issue
   test_setters()
   test_shorthand()
   test_concat()
@@ -535,7 +535,7 @@ fn main() {
   test_stuff()
   test_for_loop()
   test_if()
-  # test_sideeffect()
+  // test_sideeffect()
   test_template!int()
   test_template!float()
   test_while()

@@ -1,3 +1,4 @@
-fn main():
+fn main() {
   let x = 23.float
   print(x)
+}

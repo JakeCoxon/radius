@@ -19,6 +19,6 @@ fn main() {
   assert(calculate(1, 2, 3, 4) == 1103)
   assert(calculate(vec2(1, 2), vec2(3, 4)) == 1103)
 
-  # Named args
+  // Named args
   assert(calculate(size=vec2(3, 4), pos=vec2(1, 2)) == 1103)
 }

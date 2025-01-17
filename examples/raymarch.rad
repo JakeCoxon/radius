@@ -6,8 +6,8 @@ import color for hsva_to_rgba, rgba, rgb
 import array for Array, array_create
 import graphics for frame_ticks, get_mouse_down, put_float_image_data, get_mouse_x, get_mouse_y, draw_canvas_to_screen
 
-# Ideas from 
-# https://michaelwalczyk.com/blog-ray-marching.html
+// Ideas from 
+// https://michaelwalczyk.com/blog-ray-marching.html
 
 const window_width = 320
 const window_height = 240
@@ -16,10 +16,11 @@ var rgba_image = array_create!rgba(window_width * window_height)
 
 var time = 0.0
 
-fn sphere_sdf(p: vec3, center: vec3, radius: float) -> float:
+fn sphere_sdf(p: vec3, center: vec3, radius: float) -> float {
   (p - center).length - radius
+}
 
-fn calculate_normal!(scene)(p: vec3) -> vec3:
+fn calculate_normal!(scene)(p: vec3) -> vec3 {
   let s = 0.001
   normal: vec3
   normal.x = scene(p + vec3(s, 0, 0)) - scene(p - vec3(s, 0, 0))
@@ -27,30 +28,35 @@ fn calculate_normal!(scene)(p: vec3) -> vec3:
   normal.z = scene(p + vec3(0, 0, s)) - scene(p - vec3(0, 0, s))
   normal /= normal.length
   normal
+}
 
-fn ray_march!(scene)(ray_origin: vec3, ray_dir: vec3) -> rgb:
+fn ray_march!(scene)(ray_origin: vec3, ray_dir: vec3) -> rgb {
   var total_dist = 0.0
   const num_steps = 256
   const min_hit_distance = 0.0001
   const max_hit_distance = 1000.0
   var col = rgb(0, 0, 0)
 
-  for i in Range(0, num_steps):
+  for i in Range(0, num_steps) {
     let ray_pos = ray_origin + total_dist * ray_dir
     let distance_to_closest = scene(ray_pos)
 
-    if distance_to_closest < min_hit_distance:
+    if distance_to_closest < min_hit_distance {
       let normal = calculate_normal!scene(ray_pos)
       col = rgb(normal.x, normal.y, normal.z) * 0.5 + 0.5
       break
-    if total_dist > max_hit_distance:
+    }
+    if total_dist > max_hit_distance {
       break
+    }
     total_dist += distance_to_closest
+  }
 
-  # Background
+  // Background
   col
+}
 
-fn sdf_scene(p: vec3) -> float:
+fn sdf_scene(p: vec3) -> float {
   let sphere = sphere_sdf(p, vec3(0, 0, 0), 1)
 
   let displacement_size = sin(time) * 3 + 4
@@ -61,17 +67,21 @@ fn sdf_scene(p: vec3) -> float:
     0.25
   )
   sphere + displacement
+}
 
-fn cleanup() @export:
+fn cleanup() @export {
   0
+}
 
-fn on_event() @export:
+fn on_event() @export {
   0
+}
 
-fn init() @export:
+fn init() @export {
   0
+}
 
-fn frame() @export:
+fn frame() @export {
 
   time += 0.02
 
@@ -79,13 +89,13 @@ fn frame() @export:
   let cam_pos = vec3(sin(time) * 2, 0, cos(time) * 2)
   let global_up = vec3(0, 1, 0)
 
-  for y in Range(0, window_height):
-    for x in Range(0, window_width):
+  for y in Range(0, window_height) {
+    for x in Range(0, window_width) {
       var uv = vec2(
         (float(x) / float(window_width)) * 2 - 1, 
         (float(y) / float(window_height)) * 2 - 1)
       uv.x *= window_ratio
-      uv.y = - (uv.y)  # Parsing WTF
+      uv.y = -uv.y
 
       let ray_origin = cam_pos
       var ray_dir = (vec3(0,0,0) - ray_origin) / ray_origin.length
@@ -98,7 +108,10 @@ fn frame() @export:
 
       let color = rgba(color_rgb.r, color_rgb.g, color_rgb.b, 1)
       rgba_image[x + y * window_width] = color.copy
+    }
+  }
     
   put_float_image_data(rgba_image.data.data, window_width, window_height, window_width * 4, 0, 0)
 
   draw_canvas_to_screen()
+}
