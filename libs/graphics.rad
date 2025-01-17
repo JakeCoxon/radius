@@ -2,18 +2,20 @@ import compiler for overloaded, add_external_library, add_macos_framework, add_e
 import vec for vec2
 import color for rgb
 
-comptime:
+comptime {
   add_external_library("graphicslib")
   add_external_library("c++")
   add_macos_framework("Cocoa")
   add_macos_framework("QuartzCore")
   add_macos_framework("OpenGL")
   add_export("gfx_main", gfx_main)
+}
 
 # Because graphicslib takes over main, this function is expected
 # by the graphics library called during to run the language initializers
-fn gfx_main():
+fn gfx_main() {
   initializer_function()
+}
 
 # fn render_app() @external
 fn frame_ticks() -> int @external
@@ -31,8 +33,9 @@ fn get_mouse_y() -> int @external
 fn get_key_down(key: int) -> bool @external
 fn get_mouse_down(button: int) -> bool @external
 
-fn get_mouse() -> vec2:
+fn get_mouse() -> vec2 {
   vec2(float(get_mouse_x()), float(get_mouse_y()))
+}
 
 fn save() @external
 fn restore() @external
@@ -45,21 +48,24 @@ fn put_float_image_data(image: rawptr, width: int, height: int, stride: int, x: 
 
 fn draw_canvas_to_screen() @external
 
-fn rotate_at_origin(angle_radians: float, x: float, y: float):
+fn rotate_at_origin(angle_radians: float, x: float, y: float) {
   translate(x, y)
   rotate(angle_radians)
   translate(-x, -y)
+}
 
 @@external("translate")
 fn translate_xy(x: float, y: float) @external
-fn translate_vec2(pos: vec2):
+fn translate_vec2(pos: vec2) {
   translate_xy(pos.x, pos.y)
+}
 const translate = overloaded([translate_xy, translate_vec2])
 
 @@external("fill_rectangle")
 fn fill_rectangle_xywh(x: float, y: float, w: float, h: float) @external
-fn fill_rectangle_vec2_vec2(pos: vec2, size: vec2):
+fn fill_rectangle_vec2_vec2(pos: vec2, size: vec2) {
   fill_rectangle_xywh(pos.x, pos.y, size.x, size.y)
+}
 const fill_rectangle = overloaded([
   fill_rectangle_xywh, fill_rectangle_vec2_vec2])
 
@@ -77,15 +83,17 @@ const line_to = overloaded([
 
 @@external("set_fill_color")
 fn set_fill_color_rgba(r: float, g: float, b: float, a: float) @external
-fn set_fill_color_vec4(color: vec4):
+fn set_fill_color_vec4(color: vec4) {
   set_fill_color_rgba(color.r, color.g, color.b, color.a)
+}
 const set_fill_color = overloaded([
   set_fill_color_rgba, set_fill_color_vec4])
 
 @@external("set_stroke_color")
 fn set_stroke_color_rgba(r: float, g: float, b: float, a: float) @external
-fn set_stroke_color_vec4(color: vec4):
+fn set_stroke_color_vec4(color: vec4) {
   set_stroke_color_rgba(color.r, color.g, color.b, color.a)
+}
 const set_stroke_color = overloaded([
   set_stroke_color_rgba, set_stroke_color_vec4])
 
@@ -105,14 +113,17 @@ fn push_matrix()
 fn pop_matrix()
 
 fn sgl_v2f_c3b(x: float, y: float, r: u8, g: u8, b: u8) @external
-fn sgl_v2f_floats(x: float, y: float, r: float, g: float, b: float):
+fn sgl_v2f_floats(x: float, y: float, r: float, g: float, b: float) {
   sgl_v2f_c3b(x, y, u8(int(r * 255)), u8(int(g * 255)), u8(int(b * 255)))
+}
 
-fn vertex_v2f_color(x: float, y: float, color: rgb):
+fn vertex_v2f_color(x: float, y: float, color: rgb) {
   sgl_v2f_floats(x, y, color.r, color.g, color.b)
+}
 
-fn vertex_vec2_color(pos: vec2, color: rgb):
+fn vertex_vec2_color(pos: vec2, color: rgb) {
   sgl_v2f_floats(pos.x, pos.y, color.r, color.g, color.b)
+}
 
 const vertex = overloaded([sgl_v2f_c3b, sgl_v2f_floats, vertex_v2f_color, vertex_vec2_color])
 
