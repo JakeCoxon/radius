@@ -1,5 +1,6 @@
 const foo = thing()
 
-fn main():
+fn main() {
 
   print(1)
+}

@@ -1,12 +1,15 @@
-type Range @struct:
+define Range {
   start: int
   end: int
   const __iterate = range_iterate
+}
 
-fn range_iterate!(f)(range: Range) -> void @inline:
+fn range_iterate!(f)(range: Range) -> void @inline {
   var i = range.start.copy
-  while i < range.end:
+  while i < range.end {
     f(i)
     i += 1
+  }
+}
 
 let ints = Range(0, 2147483647)

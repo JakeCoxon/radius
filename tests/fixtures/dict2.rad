@@ -1,4 +1,4 @@
-fn my_map():
+fn my_map() {
   {|x| 
     %{
       a = x,
@@ -6,12 +6,15 @@ fn my_map():
       c = 3
     }
   }
+}
 
-fn thing():
+fn thing() {
   let f = my_map()
   let map = f(23)
   print(map.a + map.b + map.c)
   map.a + map.b + map.c
+}
 
-fn main():
+fn main() {
   let x = meta thing()
+}

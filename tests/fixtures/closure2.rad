@@ -1,4 +1,4 @@
-fn main():
+fn main() {
 
   const foo = 90
   const make_number = {|a,b| a + b + foo}
@@ -7,3 +7,4 @@ fn main():
   let x = make_number(1, 2)
 
   print(bamp)
+}

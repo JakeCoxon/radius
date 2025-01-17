@@ -3,8 +3,9 @@ import range for Range
 
 const to_iterator = |thing|
   {|yield|
-    for v in thing:
+    for v in thing {
       yield(v)
+    }
   }
 
 # TODO: Can this work?
@@ -47,9 +48,10 @@ const to_iterator = |thing|
 const concat2 = |iterator_a, iterator_b|
   {|yield_outer|
     meta generator({|consume| 
-      while true:
+      while true {
         let elem = consume()
         yield_outer(elem)
+      }
     }, {|yield|
       iterator_a(yield)
       iterator_b(yield)
@@ -70,10 +72,11 @@ const zip2 = |iterator_a, iterator_b|
   {|yield_outer|
     meta generator({|consume_b|
       meta generator({|consume_a| 
-        while true:
+        while true {
           let elem_a = consume_a()
           let elem_b = consume_b()
           yield_outer((elem_a, elem_b))
+        }
       }, iterator_a)
     }, iterator_b)
   }
@@ -84,10 +87,11 @@ const interpose = |iterator, value|
     meta generator({|consume| 
       let elem = consume()
       yield_outer(elem)
-      while true:
+      while true {
         let elem2 = consume()
         yield_outer(value)
         yield_outer(elem2)
+      }
     }, iterator)
   }
   
@@ -95,11 +99,12 @@ const interleave = |iterator_a, iterator_b|
   {|yield_outer|
     meta generator({|consume_a| 
       meta generator({|consume_b| 
-        while true:
+        while true {
           let elem_a = consume_a()
           yield_outer(elem_a)
           let elem_b = consume_b()
           yield_outer(elem_b)
+        }
       }, iterator_b)
     }, iterator_a)
   }
@@ -113,26 +118,33 @@ const interleave_infinite = |iterator_a, iterator_b|
 
     meta generator({|consume_a| 
       meta generator({|consume_b| 
-        while !complete_a or !complete_b:
+        while !complete_a or !complete_b {
           let elem_a = consume_a()
-          if !complete_a:
+          if !complete_a {
             yield_outer(elem_a) # TODO: yield is repeated!
+          }
           let elem_b = consume_b()
-          if !complete_b:
+          if !complete_b {
             yield_outer(elem_b) # TODO: yield is repeated!
+          }
+        }
       }, {|yield_c|
-        for elem in iterator_b:
+        for elem in iterator_b {
           yield_c(elem)
+        }
         complete_b = true
-        while true:
+        while true {
           yield_c(0)
+        }
       })
     }, {|yield_d|
-      for elem in iterator_a:
+      for elem in iterator_a {
         yield_d(elem)
+      }
       complete_a = true
-      while true:
+      while true {
         yield_d(0)
+      }
     })
   }
 
@@ -158,30 +170,35 @@ const interleave_infinite = |iterator_a, iterator_b|
 #   })()
 
 const foo = |yield|
-  for i in Range(0, 10):
+  for i in Range(0, 10) {
     yield(i)
+  }
 
 const bar = |yield|
-  for i in Range(1, 9):
+  for i in Range(1, 9) {
     yield(i * i)
+  }
 
 const bamp = |yield|
-  for i in Range(1, 9):
+  for i in Range(1, 9) {
     yield(i * i * i)
+  }
 
 const baz = |yield|
   let f = 1
-  while true:
+  while true {
     yield(f)
     f *= 2
+  }
 
 const custom_consume = |yield|
-  while true:
+  while true {
     let val = yield()
     print(val)
+  }
 
   
-fn test_basic():
+fn test_basic() {
 
   meta generator({|consume| 
     let elem1 = consume()
@@ -195,54 +212,66 @@ fn test_basic():
     yield(2)
     yield(3)
   })
+}
   
-fn test_concat2():
+fn test_concat2() {
 
 
   const foo1 = |yield|
     var i = 0
-    while i < 3:
+    while i < 3 {
       yield(i)
       i += 1
+    }
 
   const bar1 = |yield|
     var j = 0
-    while j < 5:
+    while j < 5 {
       yield(j)
       j += 1
+    }
       
   const foo_then_bar = concat2(foo1, bar1)
   # let  num = 0
-  for x in foo_then_bar:
+  for x in foo_then_bar {
     print(x)
     # num += x
+  }
   # assert(num == 249)
+}
   
-fn test_normal_concat():
+fn test_normal_concat() {
   var num = 0
-  for i in Range(0, 10):
+  for i in Range(0, 10) {
     num += i
-  for i in Range(1, 9):
+  }
+  for i in Range(1, 9) {
     num += i * i
+  }
   assert(num == 249)
+}
 
-fn test_concat2_concat2():
+fn test_concat2_concat2() {
 
 
   const foo_bar_bamp = concat2(concat2(foo, bar), bamp)
   var num = 0
-  for y in foo_bar_bamp:
+  for y in foo_bar_bamp {
     num += y
+  }
   assert(num == 1545)
+}
 
-fn test_zip2():
+fn test_zip2() {
 
   const zip_foo_bar = zip2(foo, bar)
   var num = 0
-  for tup in zip_foo_bar:
+  for tup in zip_foo_bar {
     num += tup._1 * tup._2
+  }
 
   assert(num == 1092)
+}
 
 # fn test_zip_syntax():
 
@@ -259,42 +288,50 @@ fn test_zip2():
 
 #   assert(num == 1092)
 
-fn test_interpose():
+fn test_interpose() {
 
   const interposed = interpose(foo, 1000)
   var num = 0
-  for x2 in interposed:
+  for x2 in interposed {
     num += x2
+  }
   assert(num == 9045)
+}
   
-fn test_interleave():
+fn test_interleave() {
   
   const interleaved = interleave(foo, bar)
   var num = 0
-  for x3 in interleaved:
+  for x3 in interleaved {
     num += x3
+  }
   assert(num == 240)
+}
   
-fn test_interleave_to_iterator():
+fn test_interleave_to_iterator() {
 
   let thing = [10, 20, 30]
   const interleaved2 = interleave(to_iterator(thing), bar)
   var num = 0
-  for x4 in interleaved2:
+  for x4 in interleaved2 {
     num += x4
+  }
   assert(num == 74)
+}
 
-fn test_interleave_infinite():
+fn test_interleave_infinite() {
 
   let thing = [10, 20, 30]
   const interleaved3 = interleave_infinite(to_iterator(thing), bar)
   var num = 0
-  for x5 in interleaved3:
+  for x5 in interleaved3 {
     num += x5
+  }
   assert(num == 264)
+}
 
 
-fn main():
+fn main() {
   # test_basic()
   test_concat2()
   test_normal_concat()
@@ -304,3 +341,4 @@ fn main():
   test_interleave()
   test_interleave_to_iterator()
   test_interleave_infinite()
+}

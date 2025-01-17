@@ -1,16 +1,18 @@
 import compiler for assert
 
-type Thing:
+define Thing {
   x : int
   y : float
+}
 
-fn foothing(a: inout Thing):
+fn foothing(a: inout Thing) {
   print(a.x)
   # print(a)
   a.x = 64
   a.y = float(100)
+}
 
-fn main():
+fn main() {
 
   var thing: Thing
   thing = Thing(32, float(100))
@@ -21,3 +23,4 @@ fn main():
 
   assert(thing.x == 64)
   assert(thing.y == 100.0)
+}

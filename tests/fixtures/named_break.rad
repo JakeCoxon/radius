@@ -1,27 +1,33 @@
 import compiler for assert
 
-fn foo():
+fn foo() {
 
-  block cool_block:
+  block cool_block {
     let x = 32
     print(x)
-    if x > 0:
+    if x > 0 {
       break cool_block
+    }
 
     print("nope")
     exit(1)
+  }
 
-  let foo = block cool_block2:
+  let foo = block cool_block2 {
     let y = 32
-    if y > 0:
+    if y > 0 {
       break cool_block2 with 40
+    }
 
     print("Never get here")
     exit(1)
     2
+  }
   print(foo)
 
   assert(foo == 40)
+}
     
-fn main():
+fn main() {
   foo()
+}

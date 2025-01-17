@@ -1,13 +1,16 @@
-fn compose3(a, b, c) -> any:
+fn compose3(a, b, c) -> any {
   {|x| c(b(a(x)))}
+}
 
-fn add(y) -> any:
+fn add(y) -> any {
   {|x| x + y}
+}
 
-fn mul(y) -> any:
+fn mul(y) -> any {
   {|x| x * y}
+}
 
-fn main():
+fn main() {
 
   let z = 41
   const baz = compose3(
@@ -16,3 +19,4 @@ fn main():
     mul(2)
   )
   print(baz(z))
+}

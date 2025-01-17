@@ -1,14 +1,16 @@
 import compiler
 
-fn malloc_or_exit(size: int) -> rawptr:
+fn malloc_or_exit(size: int) -> rawptr {
   var ptr = malloc(size)
-  if ptr == rawptr(0):
+  if ptr == rawptr(0) {
     exit(1)
+  }
   ptr
+}
 
 
 
-type Buffer @struct:
+define Buffer @struct {
   size: int
   data: rawptr
 
@@ -16,41 +18,47 @@ type Buffer @struct:
   const __move_init = move_init_buffer
   const __move_assign = move_assign_buffer
   const __copy = copy_buffer
+}
 
 
-fn buffer_alloc(buf: inout Buffer, size: int):
+fn buffer_alloc(buf: inout Buffer, size: int) {
   buf.size = size
   buf.data = malloc_or_exit(size)
   memset(buf.data&, u8(0), size)
+}
 
 
-fn copy_buffer(dst: set Buffer, buf: Buffer):
+fn copy_buffer(dst: set Buffer, buf: Buffer) {
   dst.size = buf.size
   dst.data = malloc_or_exit(buf.size)
+}
 
 
-fn move_init_buffer(dst: set Buffer, src: sink Buffer):
+fn move_init_buffer(dst: set Buffer, src: sink Buffer) {
   dst.size = src.size&
   dst.data = src.data&
   src.data = rawptr(0)
+}
 
 
-fn move_assign_buffer(dst: inout Buffer, src: sink Buffer):
+fn move_assign_buffer(dst: inout Buffer, src: sink Buffer) {
   deinit_buffer(dst&)
   dst.size = src.size&
   dst.data = src.data&
   src.data = rawptr(0)
   src.size = 0
+}
 
 
-fn deinit_buffer(buf: sink Buffer):
-  if buf.data != rawptr(0):
+fn deinit_buffer(buf: sink Buffer) {
+  if buf.data != rawptr(0) {
 
     # free(buf.data)
     buf.data = rawptr(0)
+  }
+}
 
-
-type Array!(T) @struct:
+define Array!(T) @struct {
   length: int
   data: Buffer
 
@@ -64,25 +72,30 @@ type Array!(T) @struct:
   const __destructor = deinit_array
   const __length = array_length
   const __print = array_print
+}
 
 
-fn array_print!(T)(arr: Array!T):
+fn array_print!(T)(arr: Array!T) {
   var i = 0
   print("[", endl=false)
-  while i < arr.length:
-    if i > 0:
+  while i < arr.length {
+    if i > 0 {
       print(", ", endl=false)
+    }
     print(arr[i], endl=false)
     i += 1
+  }
   print("]", endl=false)
+}
 
 
-fn array_length!(T)(arr: Array!T) -> int:
+fn array_length!(T)(arr: Array!T) -> int {
   arr.length
+}
 
 
 # This will zero initialize the array. TOOD: Make this better
-fn array_create!(T)(initial_length: int) -> Array!T:
+fn array_create!(T)(initial_length: int) -> Array!T {
   var buffer = Buffer(0, rawptr(0))
   var array = Array!T(0, buffer&)
   array&.reserve_array(initial_length)
@@ -90,103 +103,126 @@ fn array_create!(T)(initial_length: int) -> Array!T:
 
   memset(array.data.data&, u8(0), initial_length)
   array
+}
 
 
-fn append!(T)(array: inout Array!T, element: sink T) @method:
-  if array.length == array.data.size:
+fn append!(T)(array: inout Array!T, element: sink T) @method {
+  if array.length == array.data.size {
     var new_capacity = array.data.size
     new_capacity = 16 if new_capacity == 0
     new_capacity *= 2
     array&.reserve_array(new_capacity)
+  }
 
   compiler.unsafe_set_subscript(array.data.data, array.length, element&)
   array.length += 1
+}
 
 
-fn reserve_array!(T)(arr: inout Array!T, capacity: int):
-  if capacity > arr.data.size:
+fn reserve_array!(T)(arr: inout Array!T, capacity: int) {
+  if capacity > arr.data.size {
     let size_bytes = capacity * (meta T.sizeof)
     arr.data&.buffer_alloc(size_bytes)
+  }
+}
 
 
-fn get_array!(T)(arr: Array!T, index: int, f) @subscript:
-  if arr.data.data == rawptr(0):
+fn get_array!(T)(arr: Array!T, index: int, f) @subscript {
+  if arr.data.data == rawptr(0) {
     print("Not allocated")
     exit(0)
-  if index < 0 or index >= arr.length:
+  }
+  if index < 0 or index >= arr.length {
     print("Bounds check failed")
     exit(0)
+  }
   f(compiler.unsafe_subscript!T(arr.data.data, index))
+}
 
 
-fn copy_array!(T)(dst: set Array!T, src: Array!T):
+fn copy_array!(T)(dst: set Array!T, src: Array!T) {
   dst.length = src.length
   dst.data = Buffer(0, rawptr(0))
   dst.data&.buffer_alloc(src.length * (meta T.sizeof))
 
   var i = 0
-  while i < src.length:
+  while i < src.length {
     dst[i] = src[i].copy
     i += 1
+  }
 
   # TODO: Too many moves ends up calling destructorFoo a lot
   # TODO: The copy is moving the value out of src[i] (need projection)
   # TODO: Do a mem-copy if possible
+}
 
-
-fn memset(ptr: inout rawptr, value: u8, size: int):
+fn memset(ptr: inout rawptr, value: u8, size: int) {
   var i = 0
-  while i < size:
+  while i < size {
     compiler.unsafe_set_subscript(ptr, i, value)
     i += 1
+  }
+}
 
 
-fn subscript_inout!(T)(arr: inout Array!T, idx: int, f) @subscript:
+fn subscript_inout!(T)(arr: inout Array!T, idx: int, f) @subscript {
   var ref input = compiler.unsafe_subscript!T(arr.data.data, idx)&
   f(input)
+}
 
 
-fn subscript_sink!(T)(arr: sink Array!T, idx: int, f) @subscript:
+fn subscript_sink!(T)(arr: sink Array!T, idx: int, f) @subscript {
   var input = compiler.unsafe_subscript!T(arr.data.data, idx)&
   f(input)
+}
 
 
-fn subscript_let!(T)(arr: Array!T, idx: int, f) @subscript:
+fn subscript_let!(T)(arr: Array!T, idx: int, f) @subscript {
   let input = compiler.unsafe_subscript!T(arr.data.data, idx)
   f(input)
+}
 
 
-fn array_iterate!(f, T)(array: Array!T) -> void @inline:
+fn array_iterate!(f, T)(array: Array!T) -> void @inline {
   var i = 0
-  while i < array.length:
+  while i < array.length {
     f(array[i])
     i += 1
+  }
+}
 
 
-fn array_iterate_inout!(T)(array: inout Array!T, f) -> void @inline:
+fn array_iterate_inout!(T)(array: inout Array!T, f) -> void @inline {
   var i = 0
-  while i < array.length:
+  while i < array.length {
     f(array[i]&)
     i += 1
+  }
+}
 
 
-fn move_init_array!(T)(dst: set Array!T, src: sink Array!T):
+fn move_init_array!(T)(dst: set Array!T, src: sink Array!T) {
   dst.length = src.length&
   dst.data = src.data&
   src.data = Buffer(0, rawptr(0))
+}
 
 
-fn move_assign_array!(T)(dst: inout Array!T, src: sink Array!T):
+fn move_assign_array!(T)(dst: inout Array!T, src: sink Array!T) {
   deinit_array(dst&)
   dst.length = src.length&
   dst.data = src.data&
   src.data = Buffer(0, rawptr(0))
+}
 
 
-fn deinit_array!(T)(arr: sink Array!T):
-  if arr.data.data != rawptr(0):
+fn deinit_array!(T)(arr: sink Array!T) {
+  if arr.data.data != rawptr(0) {
     var i = 0
-    while i < arr.length:
+    while i < arr.length {
       var input = compiler.unsafe_subscript!T(arr.data.data, i)&
       i += 1
+    }
     arr.data&.deinit_buffer()
+  }
+}

@@ -2,24 +2,28 @@ const foo2 = foo + 3
 const foo = thing4(5)
 
 
-fn thing(x: int) -> int:
+fn thing(x: int) -> int {
   print("thing")
   print(x)
   print(x + 32)
   x + 32
+}
 
-fn thing4(x: int) -> int:
+fn thing4(x: int) -> int {
   print(x)
   return x + 2
+}
 
-fn foop(a: int, b: int):
+fn foop(a: int, b: int) {
   print(2 + 42 * thing(12))
 
   print(meta thing(12))
+}
 
-fn main():
+fn main() {
   print(2 + 42 * thing(12))
 
 
   meta foop(2, 1)
   foop(2, 1)
+}

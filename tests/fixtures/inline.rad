@@ -1,9 +1,11 @@
 
-fn bar!(T)() -> int @inline:
+fn bar!(T)() -> int @inline {
   let x = 43
   x + (meta T + 10)
+}
 
-fn main():
+fn main() {
 
   let z = bar!(123)()
+}
   

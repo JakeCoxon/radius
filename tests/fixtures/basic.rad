@@ -1,38 +1,45 @@
 import compiler
 
-fn malloc_or_exit(size: int) -> rawptr:
+fn malloc_or_exit(size: int) -> rawptr {
   var ptr = malloc(size)
-  if ptr == rawptr(0):
+  if ptr == rawptr(0) {
     exit(1)
+  }
   print("Malloc", size, ptr)
   ptr
+}
 
-type Foo @struct:
+define Foo @struct {
   x: int
   y: float
 
   const __subscript = subscript_foo
   const __subscript_inout = subscript_inout_foo
+}
 
 
-fn subscript_foo(arr: Foo, idx: int, f) @subscript:
+fn subscript_foo(arr: Foo, idx: int, f) @subscript {
   let x = 123 + idx * 10
   f(x)
+}
 
-fn subscript_inout_foo(arr: inout Foo, idx: int, f) @subscript:
+fn subscript_inout_foo(arr: inout Foo, idx: int, f) @subscript {
   var x = 123 + idx * 10
   f(x)
   print("Subscript inout", x)
+}
 
 
-fn memset(ptr: inout rawptr, value: u8, size: int):
+fn memset(ptr: inout rawptr, value: u8, size: int) {
   var i = 0
-  while i < size:
+  while i < size {
     compiler.unsafe_set_subscript(ptr, i, value)
     i += 1
+  }
+}
 
 
-type Buffer @struct:
+define Buffer @struct {
   size: int
   data: rawptr
 
@@ -40,47 +47,54 @@ type Buffer @struct:
   const __move_init = move_init_buffer
   const __move_assign = move_assign_buffer
   const __copy = copy_buffer
+}
 
 
-fn buffer_alloc(buf: inout Buffer, size: int):
+fn buffer_alloc(buf: inout Buffer, size: int) {
   print("Alloc size", size)
   buf.size = size
   buf.data = malloc_or_exit(size)
   memset(buf.data&, u8(0), size)
+}
 
 
-fn copy_buffer(dst: set Buffer, buf: Buffer):
+fn copy_buffer(dst: set Buffer, buf: Buffer) {
   print("Copy buffer")
   dst.size = buf.size
   dst.data = malloc_or_exit(buf.size)
+}
 
 
-fn move_init_buffer(dst: set Buffer, src: sink Buffer):
+fn move_init_buffer(dst: set Buffer, src: sink Buffer) {
   print("Move init buffer", dst as rawptr, src as rawptr)
   dst.size = src.size&
   dst.data = src.data&
   src.data = rawptr(0)
+}
 
 
-fn move_assign_buffer(dst: inout Buffer, src: sink Buffer):
+fn move_assign_buffer(dst: inout Buffer, src: sink Buffer) {
   print("Move assign buffer", dst as rawptr, src as rawptr, rawptr(dst) == rawptr(src))
   deinit_buffer(dst&)
   dst.size = src.size&
   dst.data = src.data&
   src.data = rawptr(0)
   src.size = 0
+}
 
 
-fn deinit_buffer(buf: sink Buffer):
+fn deinit_buffer(buf: sink Buffer) {
   print("Deinit buffer")
-  if buf.data != rawptr(0):
+  if buf.data != rawptr(0) {
 
     print("Free buffer", buf.data as rawptr)
     # free(buf.data)
     buf.data = rawptr(0)
+  }
+}
 
 
-type Array!(T) @struct:
+define Array!(T) @struct {
   len: int
   data: Buffer
 
@@ -93,20 +107,24 @@ type Array!(T) @struct:
   const __move_assign = move_assign_array
   const __destructor = deinit_array
   const __print = print_array2
+}
 
 
-fn print_array2!(T)(arr: Array!T):
+fn print_array2!(T)(arr: Array!T) {
   var i = 0
   print("[", endl=false)
-  while i < arr.len:
-    if i > 0:
+  while i < arr.len {
+    if i > 0 {
       print(", ", endl=false)
+    }
     print(arr[i], endl=false)
     i += 1
+  }
   print("]", endl=false)
+}
 
 
-fn init_array!(T)(arr: inout Array!T, len: int):
+fn init_array!(T)(arr: inout Array!T, len: int) {
   print("init array")
   arr.len = len
   print("meta T.sizeof", (meta T.sizeof))
@@ -114,31 +132,37 @@ fn init_array!(T)(arr: inout Array!T, len: int):
   print("init array buffer alloc")
   arr.data&.buffer_alloc(size_bytes)
   print("init array buffer alloc done")
+}
 
 
-fn reserve_array!(T)(arr: inout Array!T, len: int):
-  if len > arr.len:
+fn reserve_array!(T)(arr: inout Array!T, len: int) {
+  if len > arr.len {
     print("Reserve array", len, arr.len)
     arr.len = len
     let size_bytes = len * (meta T.sizeof)
     arr.data&.buffer_alloc(size_bytes)
+  }
+}
 
 
-fn get_array!(T)(arr: Array!T, index: int, f) @subscript:
+fn get_array!(T)(arr: Array!T, index: int, f) @subscript {
   # if true:
   #   print("Not allocated")
   #   exit(1)
-  if arr.data.data == rawptr(0):
+  if arr.data.data == rawptr(0) {
     print("Not allocated")
     exit(0)
-  if index < 0 or index >= arr.len:
+  }
+  if index < 0 or index >= arr.len {
     print("Bounds check failed")
     exit(0)
+  }
   f(compiler.unsafe_subscript!T(arr.data.data, index))
   # f(3)
+}
 
 
-fn copy_array!(T)(dst: set Array!T, src: Array!T):
+fn copy_array!(T)(dst: set Array!T, src: Array!T) {
   print("Copy")
   print("T.sizeof", (meta T.sizeof))
   print("src.len", src.len)
@@ -152,65 +176,86 @@ fn copy_array!(T)(dst: set Array!T, src: Array!T):
   # print("data", dst.data.data)
 
   var i = 0
-  while i < src.len:
+  while i < src.len {
     dst[i] = src[i].copy
     i += 1
+  }
 
   # TODO: Too many moves ends up calling destructorFoo a lot
   # TODO: The copy is moving the value out of src[i] (need projection)
+}
 
-fn print_array!(T)(arr: Array!T):
+
+fn print_array!(T)(arr: Array!T) {
   var i = 0
-  while i < arr.len:
+  while i < arr.len {
     print(arr[i])
     i += 1
+  }
+}
 
-fn array_iterate!(f, T)(array: Array!T) -> void @inline:
+
+fn array_iterate!(f, T)(array: Array!T) -> void @inline {
   var i = 0
-  while i < array.len:
+  while i < array.len {
     f(array[i])
     i += 1
+  }
+}
 
-fn array_iterate_inout!(T)(array: inout Array!T, f) -> void @inline:
+
+fn array_iterate_inout!(T)(array: inout Array!T, f) -> void @inline {
   var i = 0
-  while i < array.len:
+  while i < array.len {
     f(array[i]&)
     i += 1
+  }
+}
 
-fn move_init_array!(T)(dst: set Array!T, src: sink Array!T):
+
+fn move_init_array!(T)(dst: set Array!T, src: sink Array!T) {
   print("Move init array")
   dst.len = src.len&
   dst.data = src.data&
   src.data = Buffer(0, rawptr(0))
   print("Move init array done")
+}
 
-fn move_assign_array!(T)(dst: inout Array!T, src: sink Array!T):
+fn move_assign_array!(T)(dst: inout Array!T, src: sink Array!T) {
   print("Move assign array")
   deinit_array(dst&)
   dst.len = src.len&
   dst.data = src.data&
   src.data = Buffer(0, rawptr(0))
   print("Move assign array done")
+}
 
-fn deinit_array!(T)(arr: sink Array!T):
+
+fn deinit_array!(T)(arr: sink Array!T) {
   print("Deinit array")
-  if arr.data.data != rawptr(0):
+  if arr.data.data != rawptr(0) {
     var i = 0
-    while i < arr.len:
+    while i < arr.len {
       print("Deinit", i)
       var input = compiler.unsafe_subscript!T(arr.data.data, i)&
       i += 1
+    }
     arr.data&.deinit_buffer()
+  }
+}
 
-fn bar(x: inout int):
+
+fn bar(x: inout int) {
   x += 1
+}
 
 
-fn baz(foo: inout Foo):
+fn baz(foo: inout Foo) {
   foo.x += 1
+}
 
 
-fn test_array1():
+fn test_array1() {
 
   var buffer = Buffer(0, rawptr(0))
   var arr = Array!int(0, buffer&)
@@ -229,6 +274,8 @@ fn test_array1():
   print("Copied", arr2[2])
   print("Copied", arr2[4])
   # compiler.assert(arr2[0] == 10)
+
+}
 
 # fn test_array2():
 
@@ -261,22 +308,28 @@ fn test_array1():
 #   print(arr3[0].x)
 
 
-fn subscript_inout!(T)(arr: inout Array!T, idx: int, f) @subscript:
+fn subscript_inout!(T)(arr: inout Array!T, idx: int, f) @subscript {
   # var ref input = compiler.unsafe_subscript!T(arr.data.data, idx)
   # var x = 32 + idx
   var ref input = compiler.unsafe_subscript!T(arr.data.data, idx)&
   f(input)
   # compiler.unsafe_set_subscript(arr.data.data, idx, input&)
+}
 
-fn subscript_sink!(T)(arr: sink Array!T, idx: int, f) @subscript:
+
+fn subscript_sink!(T)(arr: sink Array!T, idx: int, f) @subscript {
   var input = compiler.unsafe_subscript!T(arr.data.data, idx)&
   f(input)
+}
 
-fn subscript_let!(T)(arr: Array!T, idx: int, f) @subscript:
+
+fn subscript_let!(T)(arr: Array!T, idx: int, f) @subscript {
   let input = compiler.unsafe_subscript!T(arr.data.data, idx)
   f(input)
+}
 
-fn test_array3():
+
+fn test_array3() {
 
   var buffer = Buffer(0, rawptr(0))
   var arr = Array!Array!Foo(0, buffer&)
@@ -320,11 +373,13 @@ fn test_array3():
   #   print_array(x)
   # })
 
-  for x in arr:
-    for y in x:
+  for x in arr {
+    for y in x {
       # y.x = 42
       print(y)
+    }
     print(x)
+  }
 
   print(arr)
 
@@ -352,8 +407,9 @@ fn test_array3():
 #   # print(arr[0][0].x)
 
 #   # print(foo) # TODO: This should be an error because foo is mutable
+}
 
-fn test_move():
+fn test_move() {
   var buffer = Buffer(0, rawptr(0))
   var arr = Array!Array!Foo(0, buffer&)
   arr&.init_array(10)
@@ -368,9 +424,10 @@ fn test_move():
   moved = arr2&
 
   print(moved)
+}
 
 
-fn test_project():
+fn test_project() {
 
   var buffer = Buffer(0, rawptr(0))
   var arr = Array!Foo(0, buffer&)
@@ -388,11 +445,12 @@ fn test_project():
   var ref foo = arr[0]&
   print("rawptr", rawptr(foo))
 
-  if true:
+  if true {
     # print("OK")
     foo.x = 23
-  else:
+  } else {
     foo.x = 32
+  }
 
   # foo.x = 456
 
@@ -402,17 +460,21 @@ fn test_project():
   
   # var moved = arr[0]&
   # print("Moved", moved)
+}
 
 
-fn test_basic_project():
+fn test_basic_project() {
   var f = Foo(1, 2.0)
 
   print(f[0])
   print(f[10])
   foo(f[0]&)
+}
 
-fn foo(foo: inout int):
+
+fn foo(foo: inout int) {
   foo += 1
+}
 
 # fn test_foo_move():
 #   var x = 1
@@ -447,7 +509,7 @@ fn foo(foo: inout int):
 #   let foo = Foo(2, 3)
 #   print(foo)
 
-fn test_set():
+fn test_set() {
   var buffer = Buffer(0, rawptr(0))
   var arr = Array!Foo(0, buffer&)
 
@@ -457,63 +519,77 @@ fn test_set():
   print("Set", arr[0])
 
   print(arr)
+}
 
-fn test_loop():
+fn test_loop() {
 
   var foo = Foo(1, 2.0)
   var i = 0
-  while i < 10:
+  while i < 10 {
     print("x", foo[i])
     i += 1
+  }
+}
 
 
-fn test_break():
+fn test_break() {
   var i = 0
-  while i < 10:
+  while i < 10 {
     print("i", i)
     i += 1
-    if i == 5:
+    if i == 5 {
       break
+    }
+  }
   print("Done")
+}
 
 
-fn test_borrow():
+fn test_borrow() {
   var foo = Foo(1, 2.0)
   var ref foo2 = foo&
-  if true:
+  if true {
     let x = foo2.x
     print(x)
+  }
+}
 
 
-type Person:
+define Person {
   name : string
   age : int
+}
 
-fn test_string():
+
+fn test_string() {
   var str = "Hello"
   print(str)
 
   var person = Person("Jake", 300)
   print(person)
+}
   
 
-fn test_sink():
+fn test_sink() {
   let asd = Foo(1, 2.0)
   let two = asd
   let thing = two.x
   let num = thing + 2
   print(num)
+}
 
 
-fn test_print():
+fn test_print() {
   var arr = Array!Array!int(0, Buffer(0, rawptr(0))&)
   arr&.init_array(10)
   arr[0]&.init_array(10)
   arr[0][0] = 123
   
   print(arr)
+}
 
-fn main():
+
+fn main() {
   test_string()
   test_sink()
 
@@ -532,4 +608,5 @@ fn main():
   # print("x", 123)
 
   # if 2 == 2:
-  #   print("Hello")
+  #   print("Hello")}
+}

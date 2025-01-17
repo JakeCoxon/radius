@@ -1,13 +1,17 @@
-type Thing:
+define Thing {
   let x : int
 
   const __iterate = iterate
+}
 
-fn iterate!(f)(thing: Thing) @inline: 
+fn iterate!(f)(thing: Thing) @inline {
   f(32 + thing.x)
+}
 
-fn main():
+fn main() {
   let thing = Thing(200)
 
-  for x in thing:
+  for x in thing {
     print(x)
+  }
+}

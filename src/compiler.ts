@@ -3,7 +3,7 @@ import { compileExportedFunctionTask, insertFunctionDefinition } from "./compile
 import { createCompilerModuleTask, defaultMetaFunction } from "./compiler_sugar";
 import { hashValues, typeTableGetOrInsert } from "./compiler_types";
 import { BytecodeDefault, BytecodeSecondOrder, compileFunctionPrototype, createBytecodeVmAndExecuteTask, pushGeneratedBytecode, visitParseNodeAndError } from "./compiler_vm";
-import { Binding, BytecodeWriter, ClassDefinition, Closure, CompiledClass, CompiledFunction, CompilerError, CompilerFunctionCallContext, ConcreteClassType, ExternalFunction, ExternalTypeConstructor, FunctionType, IntType, LetAst, Module, NumberAst, ParameterizedType, ParseCall, ParseIdentifier, ParseImport, ParseLet, ParseLetConst, ParseNode, ParseNote, ParseStatements, ParsedModule, ParserClassDecl, ParserFunctionDecl, Scope, ScopeEventsSymbol, ScopeParentSymbol, SetAst, SourceLocation, StatementsAst, TaskContext, Type, TypeFieldDef, TypeInfo, UserCallAst, VoidType, bytecodeToString, compilerAssert, createAnonymousToken, createCompilerError, createScope, createStatements, insertTypeInfoFields, isAst, pushSubCompilerState, textColors } from "./defs";
+import { Binding, BytecodeWriter, ClassDefinition, Closure, CompiledClass, CompiledFunction, CompilerError, CompilerFunctionCallContext, ConcreteClassType, ExternalFunction, ExternalTypeConstructor, FunctionType, IntType, LetAst, Module, NumberAst, ParameterizedType, ParseBlock, ParseCall, ParseIdentifier, ParseImport, ParseLet, ParseLetConst, ParseNode, ParseNote, ParseStatements, ParsedModule, ParserClassDecl, ParserFunctionDecl, Scope, ScopeEventsSymbol, ScopeParentSymbol, SetAst, SourceLocation, StatementsAst, TaskContext, Type, TypeFieldDef, TypeInfo, UserCallAst, VoidType, bytecodeToString, compilerAssert, createAnonymousToken, createCompilerError, createScope, createStatements, insertTypeInfoFields, isAst, pushSubCompilerState, textColors } from "./defs";
 import { Event, Task, TaskDef } from "./tasks";
 
 
@@ -39,12 +39,12 @@ export const setScopeValueAndResolveEvents = (scope: Scope, name: string, value:
 
 export function compileClassTask(ctx: TaskContext, { classDef, typeArgs }: { classDef: ClassDefinition, typeArgs: unknown[] }): Task<ConcreteClassType | ParameterizedType, CompilerError> {
   const binding = new Binding(classDef.debugName, VoidType);
-  const body = null as any
   compilerAssert(typeArgs.length === classDef.typeArgs.length, "Expected $x type parameters for class $classDef, got $y", { x: classDef.typeArgs.length, y: typeArgs.length, classDef })
-  
+
   if (!classDef.templatePrototype)  {
     compilerAssert(classDef.body, "Expected class body");
-    classDef.templatePrototype = { name: `${classDef.debugName} class template bytecode`, body: classDef.body, initialInstructionTable: BytecodeSecondOrder, params: [] }; 
+    const bodyNode = classDef.body instanceof ParseBlock ? classDef.body.statements : classDef.body
+    classDef.templatePrototype = { name: `${classDef.debugName} class template bytecode`, body: bodyNode, initialInstructionTable: BytecodeSecondOrder, params: [] }; 
     compileFunctionPrototype(ctx, classDef.templatePrototype);
   }
 
@@ -75,7 +75,7 @@ export function compileClassTask(ctx: TaskContext, { classDef, typeArgs }: { cla
         `${classDef.debugName}!(...)`
       const compiledClass = new CompiledClass(
           classDef.location, debugName,
-          binding, classDef, null!, body, [], typeArgs, typeParamHash)
+          binding, classDef, null!, null as any, [], typeArgs, typeParamHash)
 
       const typeInfo: TypeInfo = { sizeof: 0, alignment: 0, fields: compiledClass.fields, metaobject: compiledClass.metaobject, isReferenceType: true }
       let type: Type
@@ -109,7 +109,7 @@ export function compileClassTask(ctx: TaskContext, { classDef, typeArgs }: { cla
               const fnctx: CompilerFunctionCallContext = { location: SourceLocation.anon, compilerState: ctx.subCompilerState, resultAst: undefined, typeCheckResult: undefined }
               func.func(fnctx, [compiledClass])
             } else compilerAssert(false, "Not implemented yet", { func })
-            
+
             return (
               defaultMetaFunction(subCompilerState, compiledClass, definitionScope, templateScope)
               .chainFn(() => Task.of(returnType))

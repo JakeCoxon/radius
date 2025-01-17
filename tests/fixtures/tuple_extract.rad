@@ -1,6 +1,6 @@
 import compiler for assert
 
-fn main():
+fn main() {
 
   let a, (b, c), (d, (e, f), g) = (1, (2, float(3)), (4, (5, float(6)), 7))
   assert(a == 1)
@@ -17,13 +17,16 @@ fn main():
     
 
   let list = [(1, 2), (3, 4), (5, 6)]
-  for foo, bar in list:
+  for foo, bar in list {
     print(foo, bar)
+  }
   
   print("---")
 
   # rng := Range(0, 100)
   let rng = [1, 2, 3, 4, 5, 6, 7, 8, 9]
   const zip = @concat((rng[:], rng[:] * 2, rng[1:]))
-  for a, b, c in zip:
+  for a, b, c in zip {
     print(a, b, c)
+  }
+}

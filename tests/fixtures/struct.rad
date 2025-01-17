@@ -1,40 +1,49 @@
 
-fn thing4(x: int):
+fn thing4(x: int) {
   return x + 2
+}
 
-fn fam!(T)(a: int):
+fn fam!(T)(a: int) {
   print(a)
   print(T)
+}
 
-fn famz!(T)(a: T):
+fn famz!(T)(a: T) {
   print(a)
+}
 
-type Thing:
+define Thing {
   x: int
   y: float
+}
 
-type MyList!(T):
+define MyList!(T) {
   elem: T
+}
 
-fn foothing(a: Thing):
+fn foothing(a: Thing) {
   print(a.x)
   #print(a)
+}
 
-fn foo_list!(E)(a: MyList!E):
+fn foo_list!(E)(a: MyList!E) {
   print(a.elem)
+}
 
 
 
-fn foo(x: int, y: float) -> Thing:
+fn foo(x: int, y: float) -> Thing {
   Thing(x, y)
+}
 
 
-fn create_thing() -> MyList!Thing:
+fn create_thing() -> MyList!Thing {
   var foo = foo(1, float(2))
   MyList!Thing(foo&)
+}
 
 
-fn main():
+fn main() {
 
   const foo = {|x| x + 1}
 
@@ -59,3 +68,4 @@ fn main():
   let ret_val = create_thing()
   print(ret_val)
   print(ret_val.elem)
+}

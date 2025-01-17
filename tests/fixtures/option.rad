@@ -1,9 +1,10 @@
 import compiler for Option, Some, None, assert, unsafe_enum_cast, is_enum_variant
 
-fn is_some!(T)(x: Option!T) -> bool @inline:
+fn is_some!(T)(x: Option!T) -> bool @inline {
   return is_enum_variant!('Some)(x)
+}
 
-fn test_basic():
+fn test_basic() {
   var a : Option!int
   a = Some(78)
   print(a.orelse 0)
@@ -24,8 +25,9 @@ fn test_basic():
 
   print(a)
   print(b)
+}
 
-fn test_various():
+fn test_various() {
   var a: Option!int
   a = Some(78)
 
@@ -44,11 +46,12 @@ fn test_various():
 
   let d = is_enum_variant!('Some)(y)
 
-  if is_enum_variant!('Some)(x):
+  if is_enum_variant!('Some)(x) {
     let f = unsafe_enum_cast!('Some)(y)
     print(f.value + 123)
-  else:
+  } else {
     print("None")
+  }
 
   print(x)
   print(y)
@@ -75,10 +78,11 @@ fn test_various():
   # } else {
   # }
 
-  if x.is_some:
+  if x.is_some {
     print(x)
-  else:
+  } else {
     print("None", x)
+  }
 
   x = None!int()
 
@@ -87,30 +91,38 @@ fn test_various():
   print(u)
   print("Should not print")
   assert(1 == 0)
+}
 
 
-fn test_or_else():
+fn test_or_else() {
   let x = None!int()
   let z = x.orelse 69
   assert(z == 69)
   print("DONE")
+}
 
-fn test_question_or_else():
+
+fn test_question_or_else() {
   let x = None!int()
   let y = None!int()
   let z = try { x? + y? }.orelse 3
   assert(z == 3)
+}
 
-fn test_valid_question_or_else():
+
+fn test_valid_question_or_else() {
   let x = Some(4)
   let y = Some(9)
   let z = try { x? + y? }
   assert(z.is_some == true)
   assert(z.orelse(0) == 13)
+}
 
-fn main():
+
+fn main() {
   test_basic()
   test_various()
   test_or_else()
   test_question_or_else()
   test_valid_question_or_else()
+}

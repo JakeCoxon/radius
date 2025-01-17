@@ -10,17 +10,19 @@ let thing2 = foo()
 var thing = 100
 let thing3 = meta 1 + 2 + 3
 
-type Foo @struct:
+define Foo @struct {
   x: float
   y: int
+}
 
-fn foo() -> int:
+fn foo() -> int {
   thing += 1
   thing * 10
+}
 
 var state = 0
 
-fn test_mutable_state():
+fn test_mutable_state() {
 
   # Make sure to test a bug where the state object
   # is initialized inside the while loop, but after
@@ -28,13 +30,15 @@ fn test_mutable_state():
   # a compile error
 
   var i = 0
-  while i < 10:
+  while i < 10 {
     i += 1
     state += 1
+  }
   
   print(state)
+}
 
-fn test_various():
+fn test_various() {
   assert(thing == 101)
 
   foo()
@@ -47,11 +51,13 @@ fn test_various():
   assert(global1 == 123)
   assert(foo1.x == 2.0)
   assert(foo1.y == 1010)
+}
 
 
-fn main():
+fn main() {
   test_various()
 
   test_mutable_state()
 
   print("Passed")
+}

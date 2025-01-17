@@ -1,8 +1,10 @@
-fn create_adder(x) -> any:
+fn create_adder(x) -> any {
   {|y| y + x}
+}
 
-fn main():
+fn main() {
 
   let z = 41
   const baz = create_adder(z)
   print(baz(3))
+}

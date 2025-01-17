@@ -1,7 +1,8 @@
-fn foo(x: int, y: float):
+fn foo(x: int, y: float) {
   print(x)
+}
 
-fn main():
+fn main() {
   let x : int = 2
 
   let b = x < 2
@@ -41,3 +42,4 @@ fn main():
   let list1 = [1, 2, 3, int(2)]
   let list2 = [1, 2, 3, 4.5]
   let list3 = [1, 2, 3, float(3.4)]
+}

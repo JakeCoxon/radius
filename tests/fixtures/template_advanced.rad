@@ -1,16 +1,20 @@
-fn bar!(T)() -> int:
-  meta if T == 123:
+fn bar!(T)() -> int {
+  meta if T == 123 {
     65
-  else:
+  } else {
     32
+  }
+}
 
-fn main():
+fn main() {
 
   bar!(122)()
   bar!(123)()
   bar!(124)()
 
   meta let f = 0
-  meta while f < 10:
+  meta while f < 10 {
     print(meta f)
     meta f = f + 1
+  }
+}

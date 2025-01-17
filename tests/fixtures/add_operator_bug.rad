@@ -1,12 +1,15 @@
 import color for rgba
 
-fn hsva_to_rgba(h: float, s: float, v: float, a: float) -> rgba:
+fn hsva_to_rgba(h: float, s: float, v: float, a: float) -> rgba {
   let c = 1.0
   let x = 1.0
   let m = rgba(v - c, v - c, v - c, 0.0)
-  if h >= 0 and h < 60:
+  if h >= 0 and h < 60 {
     rgba(x, c, 0.0, a) + m
+  }
   rgba(c, 0.0, x, a)
+}
 
-fn main():
+fn main() {
   hsva_to_rgba(1, 0, 0, 0)
+}

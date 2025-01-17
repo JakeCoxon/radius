@@ -1,32 +1,38 @@
 import compiler for assert, static_length
 
-type vec2i < VecType @struct:
+define vec2i < VecType @struct {
   x: int
   y: int
+}
 
-type vec3i < VecType @struct:
+define vec3i < VecType @struct {
   x: int
   y: int
   z: int
+}
 
-type vec2 < VecType @struct:
+define vec2 < VecType @struct {
   x: float
   y: float
+}
 
-type vec3 < VecType @struct:
+define vec3 < VecType @struct {
   x: float
   y: float
   z: float
+}
 
-fn magnitude!(T)(vec: T) -> float:
+fn magnitude!(T)(vec: T) -> float {
   var magnitude = 0.0
   meta var index = 0
-  meta while index < static_length(vec):
+  meta while index < static_length(vec) {
     magnitude += vec.[index]
     meta index = index + 1
+  }
   magnitude
+}
 
-fn main():
+fn main() {
   var v1 = vec2i(1, 2)
   let v2 = vec2i(3, 4)
   let v3 = v1 + v2
@@ -57,3 +63,4 @@ fn main():
 
   assert(int(magnitude(v20)) == 18)
   assert(magnitude(v30) == 6)
+}

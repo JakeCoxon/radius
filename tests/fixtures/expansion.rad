@@ -2,15 +2,16 @@ import compiler for assert, generator
 
 
   
-fn test_basic():
+fn test_basic() {
 
   meta generator({|consume| 
     let elem1 = consume()
     print(elem1)
     let elem2 = consume()
     print(elem2)
-    if true:
+    if true {
       print("Nice")
+    }
     let elem3 = consume()
     print(elem1 + elem3)
   }, {|yield|
@@ -18,18 +19,20 @@ fn test_basic():
     yield(2)
     yield(3)
   })
+}
 
   
-fn test_deep():
+fn test_deep() {
 
   meta generator({|consume| 
     let elem1 = consume()
     print(elem1)
     let elem2 = consume()
     print(elem2)
-    if true:
+    if true {
       let elem3 = consume()
       print("Nice", elem3)
+    }
     let elem4 = consume()
     print(elem1 + elem4)
   }, {|yield|
@@ -38,29 +41,34 @@ fn test_deep():
     yield(3)
     yield(4)
   })
+}
 
-fn test_loop():
+fn test_loop() {
 
   meta generator({|consume| 
-    while true:
+    while true {
       let elem = consume()
       print(elem + 2)
+    }
   }, {|yield|
   
     let list = [1, 2, 3, 4, 5]
-    for x in list:
+    for x in list {
       yield(x)
+    }
   })
+}
 
 
-fn test_nested_advanced():
+fn test_nested_advanced() {
 
   meta generator({|consume_1| 
     meta generator({|consume_2|
-      while true:
+      while true {
         let elem_1 = consume_1()
         let elem_2 = consume_2()
         print(elem_1 + elem_2)
+      }
     }, {|yield|
       yield(1)
       yield(2)
@@ -71,59 +79,68 @@ fn test_nested_advanced():
     yield(7)
     yield(8)
   })
+}
 
 
-fn test_loop_2():
+fn test_loop_2() {
 
   meta generator({|consume_1| 
     meta generator({|consume| 
-      while true:
+      while true {
         let elem = consume()
         let elem2 = consume_1()
         print(elem + 2)
+      }
     }, {|yield|
     
       let list = [1, 2, 3, 4, 5]
-      for x in list:
+      for x in list {
         yield(x)
+      }
     })
 
     consume_1()
   }, {|yield|
     print("Hello")
     var i = 0
-    while i < 1000:
+    while i < 1000 {
       yield(1)
       i = i + 1
+    }
     
   })
+}
 
 
-fn test_nested_loop():
+fn test_nested_loop() {
 
   meta generator({|consume_1| 
 
     meta generator({|consume_2| 
-      while true:
+      while true {
         let elem_1 = consume_1()
         let elem_2 = consume_2()
         print(elem_1 + elem_2)
+      }
     }, {|yield|
     
       let list = [1, 2, 3, 4, 5]
-      for x in list:
+      for x in list {
         yield(x)
+      }
     })
     
   }, {|yield|
   
     let list = [1, 2, 3, 4, 5]
-    for x in list:
+    for x in list {
       yield(x)
+    }
   })
+}
 
 
-fn test_zip():
+fn test_zip() {
 
   # Not working yet
 
@@ -155,9 +172,9 @@ fn test_zip():
   assert(m == 1)
 
   # let b = (fold(1) + x *Z x for x in lst1)
+}
 
-
-fn main():
+fn main() {
 
   test_basic()
   test_loop()
@@ -166,3 +183,4 @@ fn main():
   test_nested_loop()
   test_deep()
   test_zip()
+}

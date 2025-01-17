@@ -1,21 +1,27 @@
 import compiler for assert
 
-fn foo(z: int):
-  if 2 > 0:
+fn foo(z: int) {
+  if 2 > 0 {
     return
+  }
   print("OK")
+}
 
-fn bam() -> int:
-  if 2 == 2:
+fn bam() -> int {
+  if 2 == 2 {
     return 2
+  }
   return 8
+}
 
-fn bar() -> int:
-  if 2 == 2:
+fn bar() -> int {
+  if 2 == 2 {
     return 2
+  }
   23
+}
 
-fn main():
+fn main() {
 
   foo(2)
 
@@ -24,3 +30,4 @@ fn main():
   
   let a3 = bar()
   assert(a3 == 2)
+}

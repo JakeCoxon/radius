@@ -1,12 +1,15 @@
-type Thing!(T) @struct:
+define Thing!(T) @struct {
   x : int
   y : int
+}
 
-fn foo!(T)(thing: T):
+fn foo!(T)(thing: T) {
   print(thing.x)
+}
 
-fn main():
+fn main() {
 
   let t: Thing!int
 
   foo(t)
+}

@@ -3,56 +3,66 @@ const foo2 = foo + 3
 const foo = thing4(5)
 
 
-fn thing(x: int) -> int:
+fn thing(x: int) -> int {
   print(x + 32)
   32
+}
 
-fn thing4(x: int) -> int:
+fn thing4(x: int) -> int {
   return x + 2
+}
 
-fn fam!(T)(a: int):
+fn fam!(T)(a: int) {
   print(a)
   print(T)
+}
 
-fn famz!(T)(a: T):
+fn famz!(T)(a: T) {
   print(a)
+}
 
-fn foop(a: int, b: int):
+fn foop(a: int, b: int) {
   print(2 + 42 * thing(12))
 
-  if 2 < 3:
+  if 2 < 3 {
     print("OK")
-  elif 3 > 2:
+  } elif 3 > 2 {
     print("wow")
-  elif 3 > 2:
+  } elif 3 > 2 {
     print("wow")
-  elif 3 > 2:
+  } elif 3 > 2 {
     print("wow")
-  else:
+  } else {
     print(3)
+  }
 
   let zzz = 3
   let z : int = 2
-  let x : int = ifx z > 0: 2 else: 2
+  let x : int = ifx z > 0 { 2 } else { 2 }
 
   print(21) if !(2 == 2)
 
   var i = 0
-  while true:
+  while true {
     i = i + 1
-    if i > 10:
+    if i > 10 {
       break
+    }
+  }
   print(i)
   print("thanks")
   
-  if 3 and 2:
+  if 3 and 2 {
     print("asd")
+  }
 
-  meta if thing4(2):
+  meta if thing4(2) {
     print("k thing4")
+  }
 
-  meta if true:
+  meta if true {
     print("this is meta if")
+  }
 
   const foo1 = {|x| x + 1}
 
@@ -68,8 +78,9 @@ fn foop(a: int, b: int):
   print(meta thing(12))
 
   412
+}
 
-fn main():
+fn main() {
   print(2 + 42 * thing(12))
 
   let x = float(200)
@@ -77,3 +88,4 @@ fn main():
 
   let y = meta foop(2, 1)
   foop(2, 1)
+}

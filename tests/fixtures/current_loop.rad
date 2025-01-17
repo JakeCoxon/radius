@@ -1,18 +1,22 @@
 import compiler for get_current_loop, assert, ctobj
 
-fn do_something_with_loop(loop: ctobj, x: int) @inline:
-  if x == 10:
+fn do_something_with_loop(loop: ctobj, x: int) @inline {
+  if x == 10 {
     break loop
+  }
+}
 
-fn do_something_else_with_loop(loop: ctobj, x: int) @inline:
-  if x == 3:
+fn do_something_else_with_loop(loop: ctobj, x: int) @inline {
+  if x == 3 {
     continue loop
+  }
+}
 
-fn main():
+fn main() {
 
   var i = 0
   var iterations = 0
-  while i < 100000:
+  while i < 100000 {
     i += 1
 
     const loop = get_current_loop()
@@ -20,5 +24,7 @@ fn main():
     do_something_else_with_loop(loop, i)
 
     iterations += 1
+  }
     
   assert(iterations == 8)
+}

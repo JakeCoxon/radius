@@ -1,101 +1,129 @@
 import compiler for concat, assert, operator_mod
 import range for Range, ints
 
-fn error() -> never:
+fn error() -> never {
   exit(1)
+}
 
-type Person @struct:
+define Person @struct {
   age: int
+}
 
 const foo = |yield|
-  for i in Range(0, 10):
+  for i in Range(0, 10) {
     yield(i)
+  }
 
 const bar = |yield|
-  for i in Range(1, 9):
+  for i in Range(1, 9) {
     yield(i * i)
+  }
 
 const bamp = |yield|
-  for i in Range(1, 9):
+  for i in Range(1, 9) {
     yield(i * i * i)
+  }
 
 const baz = |yield|
   var f = 1
-  while true:
+  while true {
     yield(f)
     f *= 2
+  }
 
 const squares = |yield|
   var i = 0
-  while true:
+  while true {
     yield(i * i)
     i += 1
+  }
 
 const factorial = |yield|
   var i = 1
   var f = 1
-  while true:
+  while true {
     yield(f)
     f *= i
     i += 1
+  }
 
-fn range2d(x: int, y: int): |yield|
-  for j in Range(0, y):
-    for i in Range(0, x):
+fn range2d(x: int, y: int) { {|yield|
+  for j in Range(0, y) {
+    for i in Range(0, x) {
       yield((i, j))
+    }
+  }
+} }
 
 const fixed_iterator = |yield|
   yield(123)
-  if 1 == 1:
+  if 1 == 1 {
     yield(32)
+  }
   yield(123)
 
-fn custom_iterator(x: Person, foo: int): |yield|
-  for i in Range(0, 10):
+fn custom_iterator(x: Person, foo: int) { {|yield|
+  for i in Range(0, 10) {
     yield((x.age + i, foo))
+  }
+} }
 
-fn custom_iterator2(x: Person, foo: int): |yield|
-  for i in Range(0, 10):
+fn custom_iterator2(x: Person, foo: int) { {|yield|
+  for i in Range(0, 10) {
     yield(x.age + i + foo)
+  }
+} }
 
-fn sum(arr) @inline:
+fn sum(arr) @inline {
   (fold(0) + arr[:] ...)
+}
 
-fn float_sum(arr) @inline:
+fn float_sum(arr) @inline {
   (fold(0.0) + arr[:] ...)
+}
 
-fn first_or_zero(arr) @inline:
+fn first_or_zero(arr) @inline {
   var res = 0
-  for x in arr:
+  for x in arr {
     res = x
     break
+  }
   res
+}
 
-fn last_or_zero(arr) @inline:
+fn last_or_zero(arr) @inline {
   var res = 0
-  for x in arr:
+  for x in arr {
     res = x
+  }
   res
+}
 
-fn all(arr) @inline:
+fn all(arr) @inline {
   # Issues with returning directly from the loop
   var res = true
-  for x in arr:
-    if !x:
+  for x in arr {
+    if !x {
       res = false
       break
+    }
+  }
   res
+}
 
-fn any(arr) @inline:
+fn any(arr) @inline {
   # Issues with returning directly from the loop
   var res = false
-  for x in arr:
-    if x:
+  for x in arr {
+    if x {
       res = true
       break
+    }
+  }
   res
+}
 
-fn test_fold():
+fn test_fold() {
 
   let numbers = [40, 20, 10, 32, 12, 3124]
 
@@ -109,8 +137,9 @@ fn test_fold():
   const r = range2d(4, 3)
   let count3 = (fold(0) + r[:]._1 ...)
   assert(count3 == 18)
+}
 
-fn test_fold_setter():
+fn test_fold_setter() {
   let numbers = [40, 20, 10, 32, 12, 3124]
   var foos = [0, 0, 0, 0]
   foos[:] = numbers[:] * bamp[:] + 2 ...
@@ -122,8 +151,9 @@ fn test_fold_setter():
   let count3 = (fold(0) + foo[:] ...)
   print(count3)
   assert(count3 == 45)
+}
 
-fn test_setters():
+fn test_setters() {
   var numbers = [40, 20, 10, 32, 12, 3124]
 
   numbers[:] = 1 ...
@@ -137,8 +167,9 @@ fn test_setters():
   numbers[:] = fold(0) + 1 ...
   assert(numbers[:].iter.sum == 21)
   print(numbers[:]) ...
+}
 
-fn test_shorthand():
+fn test_shorthand() {
 
   let numbers = [40, 20, 10, 32, 12, 3124]
   
@@ -168,9 +199,10 @@ fn test_shorthand():
 
   assert((squares[:] == 81).iter.any == true)
   assert((factorial[:] < 1000).iter.all == false)
+}
 
 
-fn test_concat():
+fn test_concat() {
 
   let numbers = [40, 20, 10, 32, 12, 3124]
   
@@ -184,8 +216,9 @@ fn test_concat():
   let x4 = concat2[:].iter.sum
   print(x4)
   assert(x4 == 4783)
+}
 
-fn test_concat2():
+fn test_concat2() {
 
   let numbers = [40, 20, 10, 32, 12, 3124]
   
@@ -193,17 +226,20 @@ fn test_concat2():
   let x3 = concat1[:].iter.sum
   print(x3)
   assert(x3 == 3496)
+}
 
-fn test_concat3():
+fn test_concat3() {
 
   let numbers = [40, 20, 10, 32, 12, 3124]
   
   const concat1 = @concat(foo[:], bar[:], numbers[:], 2, 3, 4)
-  for x in concat1:
+  for x in concat1 {
     print(x)
+  }
+}
 
 
-fn test_concat4():
+fn test_concat4() {
 
   let numbers = [40, 20, 10, 32, 12, 3124]
   
@@ -214,9 +250,10 @@ fn test_concat4():
   res += concat2[:] ...
   print(res)
   assert(res == 3514)
+}
 
 
-fn test_concat5():
+fn test_concat5() {
 
   let numbers = [40, 20, 10, 32, 12, 3124]
   
@@ -224,17 +261,19 @@ fn test_concat5():
   let x3 = concat1[:].iter.sum
   print(x3)
   assert(x3 == 15813)
+}
 
 
-fn test_concat6():
+fn test_concat6() {
 
   var numbers = [40, 20, 10, 32, 12, 3124]
   
   const concat1 = @concat(foo[:] * numbers[:], 2, 3, 4)
   numbers[:] = concat1[:] ...
   print(numbers[:]) ...
+}
 
-fn test_iterator_syntax():
+fn test_iterator_syntax() {
 
   let numbers = [40, 20, 10, 32, 12, 3124]
   let x = [foo[:] * numbers[:] ..., 2, 3, 4].iter.sum
@@ -253,8 +292,9 @@ fn test_iterator_syntax():
 
   let g = foo[:].bar.iter.sum
   assert(g == 90)
+}
 
-fn test_postfix():
+fn test_postfix() {
 
   const bar = {|x| x * 2}
 
@@ -265,18 +305,20 @@ fn test_postfix():
   
   foo[:].bar.p ...
   assert(i == 90)
+}
 
-fn test_people():
+fn test_people() {
 
   let people = [Person(10), Person(20), Person(30), Person(40), Person(50)]
   
   let x4 = people[:].age.iter.sum
   print(x4)
   assert(x4 == 150)
+}
 
 
 
-fn test_first_last():
+fn test_first_last() {
 
   let numbers = [40, 20, 10, 32, 12, 3124]
   
@@ -294,8 +336,9 @@ fn test_first_last():
 
   # p2 = @last(people[:])
   # assert(p2.age == 50)
+}
 
-fn test_range():
+fn test_range() {
   let rng = Range(10, 20)
   print(rng[1:10:2]) ...
 
@@ -303,34 +346,41 @@ fn test_range():
 
   let sum = ints[1:10:2].iter.sum
   assert(sum == 25)
-  
+}
 
-fn test_stuff():
+fn test_stuff() {
 
   # print(squares[5:10:2]) ...
   # print(squares[1:100:10]) ...
   # print(squares[2:10], factorial[1:20:2]) ...
   print(factorial[:20:4], factorial[1:10:2]) ...
   # print(squares[:10].iter.sum)
+}
 
-fn test_for_loop():
 
-  for a in ints[1:100:10]:
+fn test_for_loop() {
+
+  for a in ints[1:100:10] {
     print(a)
+  }
 
   print("--")
 
-  for a, b, c in (ints[:4], squares[:], factorial[:]):
+  for a, b, c in (ints[:4], squares[:], factorial[:]) {
     print(a, b, c)
+  }
 
   print("--")
 
-  for a, b in (squares[:], factorial[:]):
+  for a, b in (squares[:], factorial[:]) {
     print(a, b)
-    if a >= 100:
+    if a >= 100 {
       break
+    }
+  }
+}
 
-fn test_if():
+fn test_if() {
 
   let numbers = [43, 21, 10, 34, 12, 3124]
   let x = (numbers[:] if numbers[:] > 20).iter.sum
@@ -341,8 +391,9 @@ fn test_if():
 
   print("--")
 
-  for x in (numbers[:] if numbers[:] < 20):
+  for x in (numbers[:] if numbers[:] < 20) {
     print(x)
+  }
 
   print("--")
 
@@ -355,8 +406,10 @@ fn test_if():
     numbers[:] if numbers[:] > 20 ...
   ].iter
   print(cc1[:]) ...
+}
 
-fn test_while():
+
+fn test_while() {
   
   let numbers = [40, 20, 10, 32, 12, 3124]
   let x = (numbers[:] while numbers[:] < 100).iter.sum
@@ -365,10 +418,12 @@ fn test_while():
 
   print(factorial[:]) while numbers[:] < 100 ...
 
-  for x in (numbers[:] while numbers[:] < 100):
+  for x in (numbers[:] while numbers[:] < 100) {
     print(x)
+  }
+}
 
-fn test_sideeffect():
+fn test_sideeffect() {
 
   let numbers = [40, 20, 10, 32, 12, 3124]
   let calls = 0
@@ -381,26 +436,32 @@ fn test_sideeffect():
 
   let x = (numbers[:] > side()).iter.any
   assert(calls == 1)
+}
 
-fn test_template!(T)():
+fn test_template!(T)() {
 
   let numbers = [40, 20, 10, 32, 12, 3124]
   let x = numbers[:].iter.sum
   print(x)
-  
-fn test_flatmap():
+}
+
+
+fn test_flatmap() {
 
   let cells = [[1,2,3], [4,5,6], [7,8,9]]
 
   # foo = @mapcat(cells[:])
 
   # x = cells[:][:].iter.sum
+}
 
-fn test_custom_iterator():
+
+fn test_custom_iterator() {
   let person = Person(10)
   const it = custom_iterator(person, 23)
-  for x, y in it:
+  for x, y in it {
     print(x, y)
+  }
 
   const it2 = custom_iterator2(person, 23)
   let f = it2[:].iter.sum
@@ -408,9 +469,9 @@ fn test_custom_iterator():
 
   let f2 = (meta custom_iterator2(person, 23))[:].iter.sum
   assert(f2 == 375)
+}
 
-
-fn test_iterator_to_array():
+fn test_iterator_to_array() {
   let arr = [
     3,
     factorial[:5] ...,
@@ -428,29 +489,34 @@ fn test_iterator_to_array():
 
   let arr4 = [1, 2, 3, 5 if false]
   assert(arr4.sum == 6)
+}
 
-fn test_for_expr_array():
+fn test_for_expr_array() {
 
   const r = range2d(4, 3)
   let arr = [x + x * y for x, y in r ...]
   assert(arr.sum == 36)
-  
-fn test_slice():
+}
+
+fn test_slice() {
   const c = @concat(factorial[2:8:2])
   assert(c.sum == 746)
+}
 
-fn test_array():
+fn test_array() {
   let x = 0.2
   let arr = [x, 1, 1]
   assert(arr.float_sum == 2.2)
+}
 
-fn test_float_sum():
+fn test_float_sum() {
   let asd = [1, 2, 3.2]
   let s = (asd[:] + float(foo[:])).iter.float_sum
   assert(s == 9.2)
+}
 
 
-fn main():
+fn main() {
   test_fold()
   # test_fold_setter() # Capability check issue
   test_setters()
@@ -480,3 +546,4 @@ fn main():
   test_array()
   test_slice()
   test_float_sum()
+}

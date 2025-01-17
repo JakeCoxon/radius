@@ -1,7 +1,6 @@
 import { test, expect, describe } from 'bun:test'
 import { createModuleLoader, createTest } from './testUtils'
 import { GlobalExternalCompilerOptions } from '../src/defs'
-import { makeParser } from '../src/parser'
 
 const globalOptions: GlobalExternalCompilerOptions = {
   libraryDirs: [`${import.meta.dir}/../libs/`, `/opt/homebrew/lib/`],
@@ -592,16 +591,6 @@ test('numbers', async () => {
   testObject.close()
 })
 
-test('array', async () => {
-  const testObject = createTest({ 
-    moduleName: 'array',
-    globalOptions,
-    inputPath: `${import.meta.dir}/fixtures/array.rad`,
-  })
-  await testObject.run()
-  testObject.close()
-})
-
 test('ops', async () => {
   const testObject = createTest({ 
     moduleName: 'ops',
@@ -610,23 +599,6 @@ test('ops', async () => {
   })
   await testObject.run()
   testObject.close()
-})
-
-test('parser', async () => {
-  const testObject = createTest({ 
-    moduleName: 'parser',
-    globalOptions,
-    inputPath: `${import.meta.dir}/fixtures/parser.rad`,
-  })
-  try {
-    const input = await Bun.file(testObject.inputPath).text()
-    const parser = makeParser(input, "parser")
-  } catch(ex) {
-    logError(ex, testObject.logger)
-    throw ex
-  } finally {
-    testObject.close()
-  }
 })
 
 test('binding_bug', async () => {

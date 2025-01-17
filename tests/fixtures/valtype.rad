@@ -1,12 +1,14 @@
-type Thing @struct:
+define Thing @struct {
   x : int
   y : float
+}
 
-type Foo @struct:
+define Foo @struct {
   thing1: Thing
   thing2: Thing
+}
 
-fn main():
+fn main() {
 
   var thing: Thing
   print(thing.x)
@@ -24,4 +26,4 @@ fn main():
 
   foo.thing2.x = 32
   foo.thing2.y = 1.2
-  
+}

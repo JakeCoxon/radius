@@ -1,10 +1,12 @@
 
-fn bar!(T)() -> int @inline:
+fn bar!(T)() -> int @inline {
   let x = 43
   100
+}
 
-fn main():
+fn main() {
 
   let x = 32
   bar!(123)()
+}
   

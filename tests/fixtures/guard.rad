@@ -1,40 +1,47 @@
 import compiler for Some, None, Option, assert
 
-fn test_guard():
+fn test_guard() {
   let x = 3
-  guard x == 3 else:
+  guard x == 3 else {
     return
+  }
 
   let y = Some(32)
-  guard let .Some(u) = y; x == 1 else:
+  guard let .Some(u) = y; x == 1 else {
     return
+  }
 
   print(u)
   print("OK")
+}
 
-fn test_if_let():
+
+fn test_if_let() {
   var x: Option!int = Some(32)
   var t = 0
-  if let .Some(u) = x:
+  if let .Some(u) = x {
     print(u)
     t += 1
+  }
 
   assert(t == 1)
 
   x = None()
-  if let .Some(v) = x:
+  if let .Some(v) = x {
     print(v)
-  else:
+  } else {
     t += 1
+  }
 
   assert(t == 2)
 
   x = Some(32)
 
-  if let .Some(w) = x; w == 33:
+  if let .Some(w) = x; w == 33 {
     print(w)
-  else:
+  } else {
     t += 1
+  }
   
   assert(t == 3)
 
@@ -42,17 +49,23 @@ fn test_if_let():
   #   t += 1
     
   # assert(t == 4)
+}
 
-fn test_if_let_expr():
+
+fn test_if_let_expr() {
   let x = Some(32)
-  let y = (ifx let .Some(u) = x:
-      u
-    else:
-      0)
+  let y = ifx let .Some(u) = x {
+    u
+  } else {
+    0
+  }
 
   assert(y == 32)
+}
 
-fn main():
+
+fn main() {
   test_guard()
   # test_if_let()
   test_if_let_expr()
+}

@@ -1,15 +1,18 @@
 import compiler for Option, Some, None, assert, is_enum_variant, unsafe_enum_cast
 
-fn filter_some(iterable) @inline: {|yield|
-  for x in iterable:
-    if let .Some(y) = x:
+fn filter_some(iterable) @inline { {|yield|
+  for x in iterable {
+    if let .Some(y) = x {
       yield(y)
       0 # Compiler error if this is not here
-}
+    }
+  }
+} }
 
 
-fn sum(iterable) @inline:
+fn sum(iterable) @inline {
   (fold(0) + iterable[:] ...)
+}
 
 # fn max2!(T)(iterable) @inline: {
 #   let m = fold(None!T())
@@ -23,51 +26,58 @@ fn sum(iterable) @inline:
 # fn max2!(T)(iterable) @inline: 
 #   max_by_opt(fold(None!T()), iterable[:]) ...
 
-fn max2!(T)(iterable) @inline:
+fn max2!(T)(iterable) @inline {
   var m = None!T()
-  for it in iterable:
-    if it > m.orelse(0):
+  for it in iterable {
+    if it > m.orelse(0) {
       m = Some(it)
+    }
+  }
   m
+}
 
 
-fn test_filter():
+fn test_filter() {
   let numbers = [1, 2, 3, 4, 5]
 
   const foo = {|x|
-    (ifx x > 2:
+    ifx x > 2 {
       Some(x)
-    else:
-      None!int())
+    } else {
+      None!int()
+    }
   }
   
   const x = filter_some(foo(numbers[:]).iter)
   assert(x.sum == 12)
   print(x[:]) ...
+}
 
 
-fn test_max():
+fn test_max() {
   let numbers = [1, 2, 3, 4, 5]
   let m = numbers.max2!int
 
   let v = try { m? * 10 }.orelse 0
   assert(v == 50)
   print(v)
+}
 
 
-fn test_early_exit():
+fn test_early_exit() {
   let numbers = [1, 2, 3, 4, 5]
 
-  const foo = {|x| ifx x > 2: Some(x) else: None!int() }
+  const foo = {|x| ifx x > 2 { Some(x) } else { None!int() } }
   let y = Some(23)
 
   let x = try {
     foo(numbers[:])?.iter.sum + y?
   }.orelse 32
   assert(x == 32)
+}
 
 
-fn test_early_exit_sideffect():
+fn test_early_exit_sideffect() {
   let numbers = [1, 2, 3, 4, 5, 2, 1]
   let y = Some(23)
 
@@ -75,7 +85,7 @@ fn test_early_exit_sideffect():
 
   const foo = {|x| 
     sideeffects += 1
-    ifx x < 3: Some(x) else: None!int()
+    ifx x < 3 { Some(x) } else { None!int() }
   }
 
   # This breaks out of the try block within the ... expansion
@@ -93,10 +103,12 @@ fn test_early_exit_sideffect():
   try { s += numbers[:].foo? ... }
   assert(s == 3)
   assert(sideeffects == 3)
+}
 
 
-fn main():
+fn main() {
   test_filter()
   test_max()
   test_early_exit()
   test_early_exit_sideffect()
+}

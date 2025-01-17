@@ -3,34 +3,39 @@ import compiler for assert
 import array for Array, Buffer, array_create
 
 
-type Foo @struct:
+define Foo @struct {
   x: int
   y: float
 
   const __subscript = subscript_foo
   const __subscript_inout = subscript_inout_foo
+}
 
 
-fn subscript_foo(arr: Foo, idx: int, f) @subscript:
+fn subscript_foo(arr: Foo, idx: int, f) @subscript {
   let x = 123 + idx * 10
   f(x)
+}
 
-fn subscript_inout_foo(arr: inout Foo, idx: int, f) @subscript:
+fn subscript_inout_foo(arr: inout Foo, idx: int, f) @subscript {
   var x = 123 + idx * 10
   f(x)
   print("Subscript inout", x)
+}
 
 
 
-fn bar(x: inout int):
+fn bar(x: inout int) {
   x += 1
+}
 
 
-fn baz(foo: inout Foo):
+fn baz(foo: inout Foo) {
   foo.x += 1
+}
 
 
-fn test_array1():
+fn test_array1() {
 
   var arr = array_create!int(0)
 
@@ -45,9 +50,10 @@ fn test_array1():
   var arr2 = arr.copy
   print("Copied", arr2)
   compiler.assert(arr2[0] == 123)
+}
 
 
-fn test_move():
+fn test_move() {
   var arr = array_create!Array!Foo(0)
 
   arr&.append(array_create!Foo(0))
@@ -60,9 +66,10 @@ fn test_move():
   moved = arr2&
 
   print(moved)
+}
 
 
-fn test_project():
+fn test_project() {
 
   var arr = array_create!Foo(0)
   arr&.append(Foo(1, 2.0))
@@ -75,9 +82,10 @@ fn test_project():
   print(arr[0])
 
   assert(arr[0].x == 2)
+}
+
   
-  
-fn test_sink_elem():
+fn test_sink_elem() {
   var arr = array_create!Foo(0)
   arr&.append(Foo(1, 2.0))
 
@@ -87,21 +95,24 @@ fn test_sink_elem():
   # TODO: This should be a compile time error some how
   # but right now it will allow it and cause undefined behaviour
   # print(arr)
+}
 
 
-fn test_basic_project():
+fn test_basic_project() {
   var f = Foo(1, 2.0)
 
   print(f[0])
   print(f[10])
   foo(f[0]&)
+}
 
 
-fn foo(foo: inout int):
+fn foo(foo: inout int) {
   foo += 1
+}
 
 
-fn test_set():
+fn test_set() {
   var arr = array_create!Foo(0)
   arr&.append(Foo(1, 2.0))
   arr[0] = Foo(3, 13.0)
@@ -109,18 +120,21 @@ fn test_set():
   print("Set", arr[0])
   assert(arr[0].x == 3)
   assert(arr[0].y == 13.0)
+}
 
 
-fn test_loop():
+fn test_loop() {
 
   var foo = Foo(1, 2.0)
   var i = 0
-  while i < 10:
+  while i < 10 {
     print(foo[i])
     i += 1
+  }
+}
 
 
-fn main():
+fn main() {
 
   test_array1()
   # test_array2()
@@ -131,3 +145,4 @@ fn main():
   test_loop()
   test_basic_project()
   test_set()
+}

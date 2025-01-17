@@ -2,46 +2,57 @@ import compiler
 import range for Range
 import array for Array, array_create
 
-fn foo(a: int, b: int) -> int:
+fn foo(a: int, b: int) -> int {
   a * b * 2
+}
 
-fn bar(a: int, b: int) -> int:
+fn bar(a: int, b: int) -> int {
   a >= 2 and (b == 3 or b == 4)
+}
 
-fn foop(str: string):
+fn foop(str: string) {
   print(str.data)
   print(str.length)
+}
 
-fn foobar(b: Bar):
+fn foobar(b: Bar) {
   print(b.x)
   print(b.y)
+}
 
-fn createbar(x: int, y: int):
+fn createbar(x: int, y: int) {
   Bar(x, y)
+}
 
-fn do_thing() -> int:
-  if 1 == 1:
+fn do_thing() -> int {
+  if 1 == 1 {
     return 5454
+  }
   4343
+}
 
-type Bar @struct:
-  x : int
-  y : int 
-
-type Baz:
+define Bar {
   x : int
   y : int
+}
 
-fn my_bar(bar: inout Bar):
+define Baz {
+  x : int
+  y : int
+}
+
+fn my_bar(bar: inout Bar) {
   bar.x = 200
+}
 
-fn main():
+fn main() {
 
   var bar = Bar(1, 2)
   my_bar(bar&)
 
-  if false:
+  if false {
     exit(1)
+  }
 
   compiler.assert(bar.x == 200)
 
@@ -159,3 +170,4 @@ fn main():
 
   # asdasd := ifx 2 == 3: 1 else: 2
   # print(asdasd)
+}

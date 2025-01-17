@@ -1,26 +1,35 @@
-type Person:
+define Person {
   name : string
   age : int
+}
 
-type MyVec @struct:
+define MyVec @struct {
   x : int
   y : int
+}
 
-fn foo(tup: (int, float, Person, MyVec)):
+fn foo(tup: (int, float, Person, MyVec)) {
   print(tup._1 + int(tup._2) + tup._3.age + tup._4.x + tup._4.y)
+}
 
-fn modify_tuple(tup: (int, float, Person, MyVec)):
+fn modify_tuple(tup: (int, float, Person, MyVec)) {
   tup._3.age = 31
   tup._4.x = 12
   tup._4.y = 10
+}
 
 @@external("fill_rectangle")
 fn thing() -> int
 
-fn named_func(foo: int, bar: int) -> int:
+fn named_func(foo: int, bar: int) -> int {
   foo * 32 + bar
+}
 
-fn main():
+fn func(x: int, y: int) -> int {
+  x + y
+}
+
+fn main() {
 
   let new_vec = MyVec(30, 40)
   let new_person = Person("Another Person", 100)
@@ -45,13 +54,13 @@ fn main():
 
   named_func(bar=1, foo=2)
 
-  let asdffs = { 2 + 3 + 4 } + 1
-  let asdffs2 = { 
+  let asdffs = try { 2 + 3 + 4 } + 1
+  let asdffs2 = try { 
     let ff = 2 + 3 + 4
     ff + 32
   } + 1
 
-  let gf = { 123? + 123? }.orelse 30
+  let gf = try { 123? + 123? }.orelse 30
 
   let x = 32
   let y: int = 123
@@ -70,10 +79,10 @@ fn main():
 
   let x = ( a[:]? + b[:]? ).iter
   let x = [ a? + b? ...].iter
-  let x = ({
+  let x = try {
     let foo = a? + b?
     foo + 32
-  }.orelse 0).iter
+  }.orelse{0}.iter
 
   let x, y = thing
   let (x, y) = thing
@@ -82,36 +91,52 @@ fn main():
   let (Some(x, y), None) = thing
   let a, b, c, d, Some(e), f = thing
   let a, b, (c, (d, d)), Some(e, (a, Some(b))), f = thing
-
-  guard let Some(x) = thing else:
-    return
-
-  guard let Some(x) = thing; let Some(y) = thing; x != y else:
-    return
-
-  if let Some(x) = thing:
-    print(x)
-  else:
-    return
-
-  if a; b; c:
-    print("OK")
-
-
-  if let x = thing as? Some:
-    print(x)
-
-  let x = (ifx let Some(u) = x:
-    u
-  else:
-    0)
   
+  let .Some(x, y) = thing
+  let .Some(x, y), .Some(x, y) = thing
+  let (.Some(x, y), .None) = thing
+  let a, b, c, d, .Some(e), f = thing
+  let a, b, (c, (d, d)), .Some(e, (a, .Some(b))), f = thing
+
+  guard let Some(x) = thing else { return }
+  guard let Some(x) = thing; let Some(y) = thing; x != y else {
+    return
+  }
+
+
+  if a; b; c {
+    print("OK")
+  }
+
+  if true { return }
+
+
+  if let x = thing as? Some {
+    print(x)
+  }
+
+  let x = foo {|x| x + 1}
+  let x = {|x| x + 1}.foo
+  
+  let x = ifx let Some(u) = x {
+    let x = 2
+    x + 1
+  } else {
+    print("Go")
+    0
+  }
 
   let x = thing.match {
     A(a, b, c): 123
     A((a, b), (c, d), e): 232
     A(a, b, c) if a == b: 123
     B: 232
+    c(): 32
+
+    .A(a, b, c): 123
+    .A((a, b), B(c, d), e): 232
+    .A(a, b, c) if a == b: 123
+    .B: 232
     c(): 32
   }
 
@@ -140,3 +165,4 @@ fn main():
   print(x)
   
   # hello
+}

@@ -1,20 +1,24 @@
-type Person:
+define Person {
   name : string
   age : int
+}
 
-type MyVec @struct:
+define MyVec @struct {
   x : int
   y : int
+}
 
-fn foo(tup: (int, float, Person, MyVec)):
+fn foo(tup: (int, float, Person, MyVec)) {
   print(tup._1 + int(tup._2) + tup._3.age + tup._4.x + tup._4.y)
+}
 
-fn modify_tuple(tup: inout (int, float, Person, MyVec)):
+fn modify_tuple(tup: inout (int, float, Person, MyVec)) {
   tup._3.age = 31
   tup._4.x = 12
   tup._4.y = 10
+}
 
-fn main():
+fn main() {
   var vec = MyVec(4, 3) # value type
   var person = Person("Jake", 300) # reference type
 
@@ -57,4 +61,4 @@ fn main():
   print(list3[:]._2) ...
   print(list3[:]._3) ...
   print(list3[:]._4) ...
-  
+}

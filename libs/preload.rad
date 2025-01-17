@@ -13,49 +13,59 @@ fn fmod_double(t: double, b: double) -> double
 fn fmod_float(t: float, b: float) -> float
 const fmod = overloaded([fmod_double, fmod_float])
 
-fn abs_int(v: int) -> int:
-  ifx v < 0: -1 * v else: v.copy
-fn abs_float(v: float) -> float:
-  ifx v < 0.0: -1.0 * v else: v.copy
+fn abs_int(v: int) -> int {
+  ifx v < 0 { -1 * v } else { v.copy }
+}
+fn abs_float(v: float) -> float {
+  ifx v < 0.0 { -1.0 * v } else { v.copy }
+}
 const abs = overloaded([abs_int, abs_float])
 
 @@external("sin")
 fn sin_double(t: double) -> double
-fn sin_float(t: float) -> float:
+fn sin_float(t: float) -> float {
   float(sin_double(double(t)))
+}
 const sin = overloaded([sin_double, sin_float])
 
 @@external("cos")
 fn cos_double(t: double) -> double
-fn cos_float(t: float) -> float:
+fn cos_float(t: float) -> float {
   float(cos_double(double(t)))
+}
 const cos = overloaded([cos_double, cos_float])
 
 @@external("tan")
 fn tan_double(t: double) -> double
-fn tan_float(t: float) -> float:
+fn tan_float(t: float) -> float {
   float(tan_double(double(t)))
+}
 const tan = overloaded([tan_double, tan_float])
 
 @@external("sqrt")
 fn sqrt_double(t: double) -> double 
-fn sqrt_float(t: float) -> float:
+fn sqrt_float(t: float) -> float {
   float(sqrt_double(double(t)))
+}
 const sqrt = overloaded([sqrt_double, sqrt_float])
 
-fn min!(T)(a: T, b: T) -> T @inline:
-  ifx a <= b: a.copy else: b.copy
-fn max!(T)(a: T, b: T) -> T @inline:
-  ifx a >= b: a.copy else: b.copy
+fn min!(T)(a: T, b: T) -> T @inline {
+  ifx a <= b { a.copy } else { b.copy }
+}
+fn max!(T)(a: T, b: T) -> T @inline {
+  ifx a >= b { a.copy } else { b.copy }
+}
 
 fn exit(status: int) -> never @external
-fn unreachable() -> never @inline:
+fn unreachable() -> never @inline {
   print("Unreachable code")
   exit(1)
+}
 
-fn swap!(T)(a: inout T, b: inout T) @inline:
+fn swap!(T)(a: inout T, b: inout T) @inline {
   var tmp = a&
   a = b&
   b = tmp&
+}
 
 const PI = 3.14159265359

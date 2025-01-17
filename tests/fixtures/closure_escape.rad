@@ -1,9 +1,10 @@
-fn create_adder(x: int) -> any: {|y| y + x}
+fn create_adder(x: int) -> any { {|y| y + x} }
 
-fn main():
+fn main() {
 
   const baz = create_adder(10)
   print(baz(20) + baz(1))
 
   const bamp = create_adder(123)
   print(baz(3) * bamp(20))
+}

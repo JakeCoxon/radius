@@ -1,22 +1,27 @@
 import compiler for assert, assert_compile_error
 
-type vec2 @struct:
+define vec2 @struct {
   x: float
   y: float
+}
 
-fn named_func(baz: int, foo: int, bar: int) -> int:
+fn named_func(baz: int, foo: int, bar: int) -> int {
   foo * 32 + baz * 16 + bar
+}
 
-fn error_not_enough():
+fn error_not_enough() {
   named_func(bar=1, foo=2)
+}
 
-fn error_duplicated_positional():
+fn error_duplicated_positional() {
   named_func(2, baz=1, foo=1)
+}
 
-fn error_duplicated_name():
+fn error_duplicated_name() {
   named_func(bar=1, foo=1, bar=2)
+}
 
-fn main():
+fn main() {
   assert_compile_error!(error_not_enough, "Not enough params")
   assert_compile_error!(error_duplicated_name, "Already specified parameter")
   assert_compile_error!(error_duplicated_positional, "Already specified parameter")
@@ -27,3 +32,4 @@ fn main():
   assert(named_func(4, bar=1, 2) == 129) # Named in the middle
 
   assert(vec2(y=2, x=1).x == 1) # constructor
+}

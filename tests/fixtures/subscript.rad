@@ -1,20 +1,22 @@
 import compiler for assert
 
 
-type Foo @struct:
+define Foo @struct {
   x: int
   y: float
 
   const __subscript = subscript_foo
   const __subscript_inout = subscript_inout_foo
+}
 
 
-fn subscript_foo(arr: Foo, idx: int, f) @subscript:
+fn subscript_foo(arr: Foo, idx: int, f) @subscript {
   let x = 123 + idx * 10
   f(x)
+}
 
 
-fn subscript_inout_foo(foo: inout Foo, idx: int, f) @subscript:
+fn subscript_inout_foo(foo: inout Foo, idx: int, f) @subscript {
   var x = 123 + idx * 10
   print("Before: ", x)
   f(x)
@@ -24,22 +26,25 @@ fn subscript_inout_foo(foo: inout Foo, idx: int, f) @subscript:
 
   foo.x = x&
   print(foo.x)
+}
 
 
-fn increment(x: inout int):
+fn increment(x: inout int) {
   x += 1
+}
 
 
-fn test_basic_project():
+fn test_basic_project() {
   var f = Foo(1, 2.0)
   print(rawptr(f))
 
   print("f[0]", f[0])
   print("f[10]", f[10])
   assert(f[0] == 123)
+}
 
 
-fn test_project_inout():
+fn test_project_inout() {
   var f = Foo(1, 2.0)
   print(rawptr(f))
   increment(f[0]&)
@@ -48,9 +53,10 @@ fn test_project_inout():
 
   print(f.x)
   assert(f.x == 124)
+}
 
 
-fn test_var_ref():
+fn test_var_ref() {
   var foo = Foo(1, 2.0)
   var ref x = foo[0]&
   x += 1
@@ -58,10 +64,12 @@ fn test_var_ref():
   print(foo.x)
 
   assert(foo.x == 248)
+}
 
 
-fn main():
+fn main() {
 
   test_project_inout()
   test_basic_project()
   test_var_ref()
+}

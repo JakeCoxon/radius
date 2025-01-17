@@ -1,5 +1,7 @@
-fn foo(x: int):
+fn foo(x: int) {
   print(x)
+}
 
-fn foo2(x: int):
+fn foo2(x: int) {
   print(x)
+}

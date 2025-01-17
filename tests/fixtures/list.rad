@@ -1,12 +1,15 @@
 
-fn main():
+fn main() {
   var lst = [1,2,3]
 
-  for x in lst:
+  for x in lst {
     print(x)
+  }
 
   lst&.append(4)
   lst&.append(5)
 
-  for x in lst:
+  for x in lst {
     print(x)
+  }
+}

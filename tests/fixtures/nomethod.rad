@@ -1,6 +1,7 @@
 
-fn main():
+fn main() {
 
   2.fam
   print("OK")
   nevermind()
+}

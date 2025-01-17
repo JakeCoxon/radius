@@ -1,9 +1,11 @@
-fn main():
+fn main() {
 
   let x = 32
 
-  fn thing() -> int:
+  fn thing() -> int {
     print(x)
     52
+  }
 
   print(thing())
+}

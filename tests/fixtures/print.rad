@@ -1,23 +1,27 @@
 
-type Bar:
+define Bar {
   f: int
   g: float
+}
 
-type Foo:
+define Foo {
   x: int
   y: float
   bar: Bar
+}
 
-type Custom:
+define Custom {
   x: int
   y: int
 
   const __print = print_custom
+}
 
-fn print_custom(c: Custom):
+fn print_custom(c: Custom) {
   print("Custom<", c.x, c.y, ">")
+}
 
-fn test_foo():
+fn test_foo() {
   let foo = Foo(1, 2.0, Bar(3, 4.0))
   print(true)
   print(123)
@@ -28,7 +32,9 @@ fn test_foo():
   print("Foo is", foo)
 
   print(Custom(1, 2))
+}
 
 
-fn main():
+fn main() {
   test_foo()
+}

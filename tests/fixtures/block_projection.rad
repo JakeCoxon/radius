@@ -11,7 +11,7 @@ import vec for vec3
 # and if they are sinked (moved) out of the block we cannot use ANY of the original
 # variables after the block.
 
-fn test_project_ifx_result():
+fn test_project_ifx_result() {
   var x = 1
   var y = 2
 
@@ -20,7 +20,7 @@ fn test_project_ifx_result():
     x
   }
   
-  let z = ifx x <= y: foo() else: y
+  let z = ifx x <= y { foo() } else { y }
 
   # This will be an error because the if projects the x and y
   # x += 1
@@ -29,9 +29,10 @@ fn test_project_ifx_result():
   print(y)
   print(z)
   assert(z == 11)
+}
 
 
-fn test_project_ifx_non_primitive():
+fn test_project_ifx_non_primitive() {
   var a = vec3(1, 2, 3)
   var b = vec3(4, 5, 6)
 
@@ -40,7 +41,7 @@ fn test_project_ifx_non_primitive():
     a
   }
   
-  let c = ifx a.x <= a.y: foo() else: b
+  let c = ifx a.x <= a.y { foo() } else { b }
 
   # This will be an error because the if projects the a and b
   # x += 1
@@ -49,16 +50,19 @@ fn test_project_ifx_non_primitive():
   print(b)
   print(c)
   assert(c.x == 11)
+}
 
 
-fn test_project_block_result():
+fn test_project_block_result() {
   var x = 1
   let y = 2
 
-  let z = block bl:
-    if 2 == 1:
+  let z = block bl {
+    if 2 == 1 {
       break bl with x
+    }
     y
+  }
 
   # An error because an immutable borrow is held by the block
   # x += 1
@@ -72,23 +76,27 @@ fn test_project_block_result():
   # Fine because the borrow has completed
   x += 1
   assert(x == 2)
+}
 
 
-fn test_project_block_move():
+fn test_project_block_move() {
   var x = 1
   var y = 2
 
-  if true:
-    var z = block bl:
-      if false:
+  if true {
+    var z = block bl {
+      if false {
         break bl with y
+      }
       x
+    }
     # This will be an error because the block moves the x variable
     # and to be conservative we don't allow it to be used after the block
     # print(x)
     print(z)
 
     assert(z == 1)
+  }
 
   # These will also be an error because the block holds on to the borrows
   # indefinitely even past the end of its scope.
@@ -96,29 +104,32 @@ fn test_project_block_move():
   # print(y)
 
   print("OK")
+}
 
 
-
-fn test_project_block_copy():
+fn test_project_block_copy() {
   var x = 1
   let y = 2
 
-  if true:
-    var z = block bl:
+  if true {
+    var z = block bl {
       x.copy
+    }
 
     # This is fine because the block copies the x variable and the borrow
     # it retains is a new memory location
     print(x)
     print(z)
+  }
 
   print(x)
   assert(x == 1)
 
   print("OK")
+}
 
 
-fn test_project_and():
+fn test_project_and() {
   # And/or will make a copy of the result since we know it will be a 
   # bool type and it's cheap to copy, and therefore safe to move
   var a = true
@@ -131,36 +142,39 @@ fn test_project_and():
   print(b)
   print(x)
   print(y)
+}
 
 
-fn test_move():
+fn test_move() {
 
   var a = vec3(2, 2, 3)
   var b = vec3(1, 2, 3)
 
-  if true:
+  if true {
     var c = a&
     print(b)
     print(c)
     assert(c.x == 2)
-  else:
+  } else {
     var d = b&
     print(a)
     print(d)
+  }
 
   # print(a)
   # print(b)
+}
 
 
-fn test_project_expression():
+fn test_project_expression() {
   let x = vec3(1, 2, 32)
   var y = vec3(4, 5, 6)
 
-  let a = ifx 1 == 1: x else: y
+  let a = ifx 1 == 1 { x } else { y }
   print(a)
   assert(a.x == 1)
 
-  var b = ifx 1 == 1: x.copy else: y
+  var b = ifx 1 == 1 { x.copy } else { y }
   print(b)
   assert(b.x == 1)
   
@@ -174,26 +188,28 @@ fn test_project_expression():
     z
   }
   
-  let w = ifx true: f() else: g()
+  let w = ifx true { f() } else { g() }
   print(w)
   assert(w.x == 4)
+}
 
 
-fn test_project_primitive_expression():
+fn test_project_primitive_expression() {
   var a = 2
-  let b = ifx 1 == 1: a else: 3
+  let b = ifx 1 == 1 { a } else { 3 }
   print(b)
 
-  print(2 + (ifx 1 == 1: a else: 3))
+  print(2 + ifx 1 == 1 { a } else { 3 })
 
-  var c = ifx 1 == 1: a else: 3
+  var c = ifx 1 == 1 { a } else { 3 }
   print(c)
 
-  c = (ifx 2 > 0: b else: 3)
+  c = ifx 2 > 0 { b } else { 3 }
   print(c)
+}
 
 
-fn main():
+fn main() {
   test_move()
   test_project_block_move()
   test_project_block_copy()
@@ -203,6 +219,7 @@ fn main():
   test_project_and()
   test_project_expression()
   test_project_primitive_expression()
+}
 
 
 # TOOD: Break will need to be transformed into an interleave
