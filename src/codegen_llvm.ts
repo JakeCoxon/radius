@@ -104,6 +104,7 @@ const operatorMapAll: {[key: string]: (writer: Writable, typeName: string, left:
   "int_double_cast": (w, t, l, r) => `fptosi double ${l} to i32`,
   "double_float_cast": (w, t, l, r) => `fpext float ${l} to double`,
   "float_double_cast": (w, t, l, r) => `fptrunc double ${l} to float`,
+  "int_bool_cast": (w, t, l, r) => `zext i1 ${l} to i32`,
 
   "u8_int_cast": (w, t, l, r) => `trunc i32 ${l} to i8`,
   "double_u64_cast": (w, t, l, r) => `uitofp i64 ${l} to double`,
@@ -586,6 +587,8 @@ const defaultValueLiteral = (writer: LlvmWriter, type: Type): string => {
   else if (type === IntType || type === u64Type) return '0'
   else if (type === RawPointerType) return 'null'
   else if (type.typeInfo.isReferenceType) return 'null'
+  else if (type === BoolType) return 'false'
+  else if (type === u8Type) return '0'
   else {
     const fields = type.typeInfo.fields.map(x => 
       `${getTypeName(writer, x.fieldType)} ${defaultValueLiteral(writer, x.fieldType)}`)

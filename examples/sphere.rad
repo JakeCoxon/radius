@@ -5,7 +5,7 @@ import vec for vec3, vec4
 import color for hsva_to_rgba
 import matrix for mat4, mat4_identity, create_perspective_projection, mul_mat4_vec4, mul_mat4_mat4, ndc_to_screen
 import array for Array, array_create
-import graphics for frame_ticks, get_mouse_down, put_float_image_data, get_mouse_x, get_mouse_y, set_fill_color, move_to, line_to, stroke, set_stroke_color_rgba, begin_path, set_line_width, fill_rectangle
+import graphics for frame_ticks, get_mouse_down, put_float_image_data, get_mouse_x, get_mouse_y, set_fill_color, move_to, line_to, stroke, set_stroke_color_rgba, begin_path, set_line_width, fill_rectangle, draw_canvas_to_screen
 
 const window_width = 320
 const window_height = 240
@@ -152,6 +152,8 @@ fn frame() @export {
     line_to(screen_coords[edge._2].xy)
     stroke()
   }
+
+  draw_canvas_to_screen()
 }
 
 fn cleanup() @export {

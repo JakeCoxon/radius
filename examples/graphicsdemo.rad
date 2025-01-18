@@ -1,6 +1,6 @@
 import range for Range
 import vec for vec2
-import graphics for begin_app, end_app, window_open, render_app, frame_ticks, delay, copy_pixels, save, restore, set_fill_color, fill_rectangle, rotate, translate, rotate_at_origin, get_mouse, get_key_down
+import graphics for frame_ticks, copy_pixels, save, restore, set_fill_color, fill_rectangle, rotate, translate, rotate_at_origin, get_mouse, get_key_down, draw_canvas_to_screen
 
 // https://fossies.org/linux/SDL2/include/SDL_scancode.h
 
@@ -11,91 +11,97 @@ define Entity {
   on_ground: bool
 }
 
-fn main() {
+var player = Entity(
+  pos= vec2(100.0, 100.0), 
+  size= vec2(20.0, 25.0),
+  velocity= vec2(0.0, 0.0),  // TODO: Fix literals here
+  on_ground= false)
 
-  begin_app()
+var jump_velocity_x = 0.0
 
-  let player = Entity(
-    vec2(100.0, 100.0), 
-    vec2(20.0, 25.0),
-    vec2(0.0, 0.0),  // TODO: Fix literals here
-    false)
+fn init() @export {
+  0
+}
 
-  let jump_velocity_x = 0.0
-  
-  while window_open() {
+fn frame() @export {
 
-    player.on_ground = (player.pos.y >= 240 - player.size.y)
+  player.on_ground = (player.pos.y >= 240 - player.size.y)
 
-    if player.on_ground {
-      player.velocity.y = 0.0
-      if get_key_down(26) {
-        jump_velocity_x = player.velocity.x
-        player.velocity.y = -3.0
-        player.on_ground = false
-      }
-    } else {
-      player.velocity.y += 0.1
+  if player.on_ground {
+    player.velocity.y = 0.0
+    if get_key_down(26) {
+      jump_velocity_x = player.velocity.x
+      player.velocity.y = -3.0
+      player.on_ground = false
     }
-    player.pos += player.velocity
+  } else {
+    player.velocity.y += 0.1
+  }
+  player.pos += player.velocity
 
-    let press_x = int(get_key_down(7)) - int(get_key_down(4))
-    let press_y = int(get_key_down(22)) - int(get_key_down(26))
+  let press_x = int(get_key_down(7)) - int(get_key_down(4))
+  let press_y = int(get_key_down(22)) - int(get_key_down(26))
 
-    if player.on_ground {
-      if press_x == 0 {
-        player.velocity.x *= 0.8
-      } else if press_x > 0 {
-        player.velocity.x = min(player.velocity.x + 1, 5.0)
-      } else if press_x < 0 {
-        player.velocity.x = max(player.velocity.x - 1, -5.0)
-      }
-    } else {
-      if press_x == 0 {
-        player.velocity.x = player.velocity.x
-      } else if press_x > 0 {
-        player.velocity.x += 0.1
-        player.velocity.x = min(player.velocity.x, jump_velocity_x + 2)
-        player.velocity.x = min(player.velocity.x, 5.0)
-      } else if press_x < 0 {
-        player.velocity.x -= 0.1
-        player.velocity.x = max(player.velocity.x, jump_velocity_x - 2)
-        player.velocity.x = max(player.velocity.x, -5.0)
-      }
+  if player.on_ground {
+    if press_x == 0 {
+      player.velocity.x *= 0.8
+    } else if press_x > 0 {
+      player.velocity.x = min(player.velocity.x + 1, 5.0)
+    } else if press_x < 0 {
+      player.velocity.x = max(player.velocity.x - 1, -5.0)
     }
-
-
-    save()
-
-    let time = float(frame_ticks()) * 0.001
-    let pos = get_mouse()
-
-    set_fill_color(0, 0, 0, 1)
-    fill_rectangle(0, 0, 320, 240)
-
-    set_fill_color(1, 0, 0, 1)
-    fill_rectangle(player.pos.x, player.pos.y, player.size.x, player.size.y)
-
-    let x = sinf(time * 2) * 100 + 150
-
-    block {
-      save()
-
-      rotate_at_origin(time, 100, 100)
-      
-      set_fill_color(1, 0, 0, 1)
-      fill_rectangle(10, 10, 100, 40)
-
-      restore()
+  } else {
+    if press_x == 0 {
+      // player.velocity.x = player.velocity.x
+      0
+    } else if press_x > 0 {
+      player.velocity.x += 0.1
+      player.velocity.x = min(player.velocity.x, jump_velocity_x + 2)
+      player.velocity.x = min(player.velocity.x, 5.0)
+    } else if press_x < 0 {
+      player.velocity.x -= 0.1
+      player.velocity.x = max(player.velocity.x, jump_velocity_x - 2)
+      player.velocity.x = max(player.velocity.x, -5.0)
     }
-
-    set_fill_color(0, 1, 0, 1)
-    fill_rectangle(x, pos.y, 30, 30)
-
-    restore()
-
-    render_app()
   }
 
-  end_app()
+
+  save()
+
+  let time = float(frame_ticks()) * 0.001
+  let pos = get_mouse()
+
+  set_fill_color(0, 0, 0, 1)
+  fill_rectangle(0, 0, 320, 240)
+
+  set_fill_color(1, 0, 0, 1)
+  fill_rectangle(player.pos.x, player.pos.y, player.size.x, player.size.y)
+
+  let x = sin(time * 2) * 100 + 150
+
+  block {
+    save()
+
+    rotate_at_origin(time, 100, 100)
+    
+    set_fill_color(1, 0, 0, 1)
+    fill_rectangle(10, 10, 100, 40)
+
+    restore()
+  }
+
+  set_fill_color(0, 1, 0, 1)
+  fill_rectangle(x, pos.y, 30, 30)
+
+  restore()
+
+  draw_canvas_to_screen()
+}
+
+fn cleanup() @export {
+  0
+}
+
+fn on_event() @export {
+  0
 }
