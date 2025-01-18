@@ -5,7 +5,7 @@ import vec for vec3, vec4
 import color for hsva_to_rgba
 import matrix for mat4, mat4_identity, create_perspective_projection, mul_mat4_vec4, mul_mat4_mat4, ndc_to_screen
 import array for Array, array_create
-import graphics for frame_ticks, get_mouse_down, put_float_image_data, get_mouse_x, get_mouse_y, set_fill_color, fill_rectangle, move_to, line_to, stroke, set_stroke_color, begin_path
+import graphics for frame_ticks, get_mouse_down, put_float_image_data, get_mouse_x, get_mouse_y, set_fill_color, fill_rectangle, move_to, line_to, stroke, set_stroke_color, begin_path, draw_canvas_to_screen
 
 const window_width = 320
 const window_height = 240
@@ -57,7 +57,7 @@ fn frame() @export {
   }
 
   t += 0.1
-
+  
   if attractor_points.length < 2000 {
     let prev_point = attractor_points[attractor_points.length - 1]
     let new_point = attractor(prev_point)
@@ -83,12 +83,13 @@ fn frame() @export {
 
   for point in attractor_points {
     let scale = 0.02
-    let vec = vec4(point.x * scale , point.y * scale, point.z * scale + 0.5, 1)
+    let vec = vec4(point.x * scale , point.y * scale, point.z * scale - 0.5, 1)
 
     let clip_coords = mul_mat4_vec4(transform, vec)
     let ndc = clip_coords.xyz / clip_coords.w
 
     if clip_coords.w < 0 {
+      screen_coords&.append(vec3(0, 0, 10))
       continue
     }
 
@@ -97,13 +98,15 @@ fn frame() @export {
   }
 
   set_stroke_color(1, 1, 1, 1)
-  for i in Range(0, attractor_points.length - 1) {
-
-    begin_path()
-    move_to(screen_coords[i].xy)
-    line_to(screen_coords[i + 1].xy)
-    stroke()
+  begin_path()
+  for i in Range(0, attractor_points.length) {
+    if i == 0 {
+      move_to(screen_coords[i].xy)
+    } else {
+      line_to(screen_coords[i].xy)
+    }
   }
+  stroke()
 
 
   // Cube border
@@ -117,6 +120,7 @@ fn frame() @export {
     let ndc = clip_coords.xyz / clip_coords.w
 
     if clip_coords.w < 0 {
+      screen_coords&.append(vec3(0, 0, 0))
       continue
     }
 
@@ -125,13 +129,15 @@ fn frame() @export {
   }
 
   set_stroke_color(1, 0, 0, 1)
-  for edge in cube_edges {
+  for a, b in cube_edges {
 
     begin_path()
-    move_to(screen_coords[edge._1].xy)
-    line_to(screen_coords[edge._2].xy)
+    move_to(screen_coords[a].xy)
+    line_to(screen_coords[b].xy)
     stroke()
   }
+
+  draw_canvas_to_screen()
 }
 
 fn cleanup() @export {

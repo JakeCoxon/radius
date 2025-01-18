@@ -3,6 +3,7 @@ import compiler
 fn malloc_or_exit(size: int) -> rawptr {
   var ptr = malloc(size)
   if ptr == rawptr(0) {
+    print("Failed to allocate memory")
     exit(1)
   }
   ptr
@@ -11,7 +12,7 @@ fn malloc_or_exit(size: int) -> rawptr {
 
 
 define Buffer @struct {
-  size: int
+  size: int // size in bytes
   data: rawptr
 
   const __destructor = deinit_buffer
@@ -21,10 +22,11 @@ define Buffer @struct {
 }
 
 
-fn buffer_alloc(buf: inout Buffer, size: int) {
-  buf.size = size
-  buf.data = malloc_or_exit(size)
-  memset(buf.data&, u8(0), size)
+fn buffer_alloc(buf: inout Buffer, size_bytes: int) {
+  buf&.deinit_buffer()
+  buf.size = size_bytes
+  buf.data = malloc_or_exit(size_bytes)
+  memset(buf.data&, u8(0), size_bytes)
 }
 
 
@@ -52,8 +54,7 @@ fn move_assign_buffer(dst: inout Buffer, src: sink Buffer) {
 
 fn deinit_buffer(buf: sink Buffer) {
   if buf.data != rawptr(0) {
-
-    // free(buf.data)
+    free(buf.data)
     buf.data = rawptr(0)
   }
 }
@@ -107,7 +108,8 @@ fn array_create!(T)(initial_length: int) -> Array!T {
 
 
 fn append!(T)(array: inout Array!T, element: sink T) @method {
-  if array.length == array.data.size {
+  let current_size_bytes = array.length * (meta T.sizeof)
+  if current_size_bytes == array.data.size {
     var new_capacity = array.data.size
     new_capacity = 16 if new_capacity == 0
     new_capacity *= 2
