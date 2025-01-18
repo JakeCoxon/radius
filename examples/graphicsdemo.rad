@@ -12,10 +12,11 @@ define Entity {
 }
 
 var player = Entity(
-  pos= vec2(100.0, 100.0), 
-  size= vec2(20.0, 25.0),
-  velocity= vec2(0.0, 0.0),  // TODO: Fix literals here
-  on_ground= false)
+  pos: vec2(100.0, 100.0), 
+  size: vec2(20.0, 25.0),
+  velocity: vec2(0.0, 0.0),  // TODO: Fix literals here
+  on_ground: false,
+)
 
 var jump_velocity_x = 0.0
 

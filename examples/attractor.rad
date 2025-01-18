@@ -29,7 +29,11 @@ let cube_points = block {
 
 let screen_coords = array_create!vec3(0)
 let projection = create_perspective_projection(
-    120, window_width / window_height, 0.1, 10000)
+  fov: 120, 
+  aspect_ratio: window_width / window_height, 
+  near_plane: 0.1, 
+  far_plane: 10000
+)
 
 fn attractor(pos: vec3) -> vec3 {
   let sigma = 10.0

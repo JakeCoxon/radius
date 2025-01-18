@@ -23,7 +23,7 @@ define MyList!(T) {
 
 fn foothing(a: Thing) {
   print(a.x)
-  #print(a)
+  // print(a)
 }
 
 fn foo_list!(E)(a: MyList!E) {

@@ -78,15 +78,15 @@ define Array!(T) @struct {
 
 fn array_print!(T)(arr: Array!T) {
   var i = 0
-  print("[", endl=false)
+  print("[", endl: false)
   while i < arr.length {
     if i > 0 {
-      print(", ", endl=false)
+      print(", ", endl: false)
     }
-    print(arr[i], endl=false)
+    print(arr[i], endl: false)
     i += 1
   }
-  print("]", endl=false)
+  print("]", endl: false)
 }
 
 

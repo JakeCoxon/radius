@@ -37,10 +37,13 @@ fn main() {
   let asdf = thing()
 
   let tup = (23, float(67), new_person, new_vec)
+  foo(a, b, c,) // trailing comma
+  foo(a: a, b: b, c: c,) // trailing comma
 
   foo(tup)
 
   let list = [MyVec(30, 40), MyVec(1, 2), MyVec(3, 6)]
+  let list = [MyVec(30, 40), MyVec(1, 2), MyVec(3, 6),] // trailing comma
 
   let x = list[0].x + list[1].y
   print(x)
@@ -52,7 +55,7 @@ fn main() {
 
   print(list2[0].age)
 
-  named_func(bar=1, foo=2)
+  named_func(bar: 1, foo: 2)
 
   let asdffs = try { 2 + 3 + 4 } + 1
   let asdffs2 = try { 

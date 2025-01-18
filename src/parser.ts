@@ -196,7 +196,8 @@ export const makeParser = (input: string, debugName: string) => {
     const listToken = previous;
     if (match("]")) return new ParseList(listToken, []);
 
-    const list = [parseExpr()];        while (match(",")) list.push(parseExpr());
+    const list = [parseExpr()];
+    while (match(",") && token?.value !== "]") list.push(parseExpr());
     const mapping: ParseNode[] = [];   while (match("|")) mapping.push(parseExpr());
     const reduce = match("|>") ? parseExpr() : null;
     expect("]", `Expected ']' after list item`);
@@ -210,13 +211,13 @@ export const makeParser = (input: string, debugName: string) => {
     const parseArg = (): ParseNode => {
       const argToken = token!
       const expr = parseExpr()
-      if (match("=")) {
+      if (match(":")) {
         return new ParseNamedArg(argToken, assertIdentifier(expr), parseExpr())
       }
       return expr
     }
     const args = [parseArg()];
-    while (match(",")) args.push(parseArg());
+    while (match(",") && token?.value !== ")") args.push(parseArg());
     expect(")", `Expected ')' after argument list`);
     return args;
   };

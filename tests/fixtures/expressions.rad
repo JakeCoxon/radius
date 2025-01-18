@@ -10,7 +10,7 @@ fn foo():
       32
     else if 2 == 3:
       if true:
-        #print("OK")
+        // print("OK")
         3
       else:
         23123123
@@ -30,7 +30,7 @@ fn foo():
   //  2 + 2;
   //        3 + 4;
   //              2 + 4)
-  #tlet hing4 = block {
+  // let thing4 = block {
   //    2 + 2
   //    3 + 4
   //    2 + 4

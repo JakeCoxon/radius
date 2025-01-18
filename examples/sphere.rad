@@ -15,7 +15,11 @@ const band = compiler.operator_bitwise_and
 let cube_points = array_create!vec3(8)
 let screen_coords = array_create!vec3(0)
 let projection = create_perspective_projection(
-  120, window_width / window_height, 0.1, 10000)
+  fov: 120, 
+  aspect_ratio: window_width / window_height, 
+  near_plane: 0.1, 
+  far_plane: 10000,
+)
 
 let cube_edges = [(0, 1), (0, 2), (3, 1), (3, 2), (4, 5), (4, 6), (7, 5), (7, 6), (0, 4), (1, 5), (2, 6), (3, 7)]
 var edges = array_create!(Tuple!(int, int))(0)

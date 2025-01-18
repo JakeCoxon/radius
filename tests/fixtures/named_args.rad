@@ -10,15 +10,15 @@ fn named_func(baz: int, foo: int, bar: int) -> int {
 }
 
 fn error_not_enough() {
-  named_func(bar=1, foo=2)
+  named_func(bar: 1, foo: 2)
 }
 
 fn error_duplicated_positional() {
-  named_func(2, baz=1, foo=1)
+  named_func(2, baz: 1, foo: 1)
 }
 
 fn error_duplicated_name() {
-  named_func(bar=1, foo=1, bar=2)
+  named_func(bar: 1, foo: 1, bar: 2)
 }
 
 fn main() {
@@ -27,9 +27,9 @@ fn main() {
   assert_compile_error!(error_duplicated_positional, "Already specified parameter")
 
   // TODO: Test side effects order
-  assert(named_func(bar=1, foo=2, baz=0) == 65) // Reversed order
-  assert(named_func(4, bar=1, foo=2) == 129) // Unnamed
-  assert(named_func(4, bar=1, 2) == 129) // Named in the middle
+  assert(named_func(bar: 1, foo: 2, baz: 0) == 65) // Reversed order
+  assert(named_func(4, bar: 1, foo: 2) == 129) // Unnamed
+  assert(named_func(4, bar: 1, 2) == 129) // Named in the middle
 
-  assert(vec2(y=2, x=1).x == 1) // constructor
+  assert(vec2(y: 2, x: 1).x == 1) // constructor
 }
