@@ -38,12 +38,25 @@ fn length_squared(vec: vec3) -> float @method {
   vec.x * vec.x + vec.y * vec.y + vec.z * vec.z
 }
 
+fn normalize(vec: inout vec3) @method {
+  let len = vec.length
+  vec.x /= len
+  vec.y /= len
+  vec.z /= len
+}
+
 fn length(vec: vec2) -> float @method {
   sqrt(vec.x * vec.x + vec.y * vec.y)
 }
 
 fn length_squared(vec: vec2) -> float @method {
   vec.x * vec.x + vec.y * vec.y
+}
+
+fn normalize(vec: inout vec2) @method {
+  let len = vec.length
+  vec.x /= len
+  vec.y /= len
 }
 
 fn length(vec: vec2i) -> float @method {
@@ -54,12 +67,13 @@ fn length_squared(vec: vec2i) -> int @method {
   vec.x * vec.x + vec.y * vec.y
 }
 
+
 fn dot(v1: vec3, v2: vec3) -> float {
   v1.x * v2.x + v1.y * v2.y + v1.z * v2.z
 }
 
 fn cross(v1: vec3, v2: vec3) -> vec3 {
-  result: vec3
+  var result: vec3
   result.x = v1.y * v2.z - v1.z * v2.y
   result.y = v1.z * v2.x - v1.x * v2.z
   result.z = v1.x * v2.y - v1.y * v2.x

@@ -175,24 +175,29 @@ export const typeCheckFunctionResult = (result: TypeCheckResult, compiledParamTy
     const givenArg = result.sortedArgs[i]
     const fromType: TypeCheckVar = { type: givenArg.type }
     if (isType(paramType)) normalizeNumberType(fromType, { type: paramType })
-    numberTypeToConcrete(fromType)
 
     if (paramType === null) {
+      numberTypeToConcrete(fromType)
     } else if (paramType instanceof TypeMatcher) {
       const matches = typeMatcherEquals(result, paramType, fromType.type, result.substitutions)
       typeCheckAssert(result, matches, "Type check failed. Expected $expected got $got", { expected: paramType, got: fromType.type })
     } else if (paramType instanceof TypeVariable) {
       if (result.substitutions[paramType.name]) {
-        compilerAssert(result.substitutions[paramType.name] === fromType.type, "Tried to substitute $name with $got but but it was already substituted with $existing", { name: paramType.name, existing: result.substitutions[paramType.name], got: fromType.type })
+        const substituted = result.substitutions[paramType.name]
+        compilerAssert(isType(substituted), "Expected type", { type: substituted })
+        normalizeNumberType(fromType, { type: substituted })
+        compilerAssert(substituted === fromType.type, "Tried to substitute $name with $got but but it was already substituted with $existing", { name: paramType.name, existing: result.substitutions[paramType.name], got: fromType.type, substitutions: result.substitutions })
+      } else {
+        numberTypeToConcrete(fromType)
+        result.substitutions[paramType.name] = fromType.type
       }
-      result.substitutions[paramType.name] = fromType.type
     } else {
       compilerAssert(isType(paramType), "Expected type got $paramType", { paramType });
       const param = result.func.params[i]
       typeCheckAssert(result, fromType.type === paramType, "Argument $name of type $value does not match $expected", { name: param.name.token, value: fromType.type, expected: paramType })
     }
 
-    compilerAssert(fromType.type !== IntLiteralType && fromType.type !== FloatLiteralType, "Unexpected literal type", { type: result.concreteTypes.at(-1) })
+    compilerAssert(fromType.type !== IntLiteralType && fromType.type !== FloatLiteralType, "Unexpected literal type", { result, type: result.concreteTypes.at(-1), fromType, paramType })
 
     result.concreteTypes.push(fromType.type)
   })

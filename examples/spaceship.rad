@@ -10,7 +10,7 @@ import graphics for frame_ticks, get_mouse_down, put_float_image_data, get_mouse
 const window_width = 320
 const window_height = 240
 
-var t = 0.0
+var num_ticks = 0
 
 fn init() @export {
   0
@@ -19,25 +19,35 @@ fn init() @export {
 define Player {
   var pos: vec2
   var velocity: vec2
+  var dodge_velocity: float
 }
+
+define Bullet {
+  var pos: vec2
+  var velocity: vec2
+}
+var last_bullet = 0
+var last_dodge = 0
 
 var player = Player(
   pos: vec2(0, 0),
-  velocity: vec2(0, 0)
+  velocity: vec2(0, 0),
+  dodge_velocity: 0
 )
+var bullets = array_create!Bullet(0)
 
 fn frame() @export {
   if get_key_down(256) { exit(0) }
 
   draw_defaults()
-  t += 1
+  num_ticks += 1
 
   update_player()
 
   
   block {
     push_matrix()
-    translate3d(sin(t * 0.01) * 0.1, 0, 0)
+    translate3d(sin(num_ticks.float * 0.01) * 0.1, 0, 0)
     scale3d(5, 5, 5)
     
     begin_triangles()
@@ -50,7 +60,7 @@ fn frame() @export {
 
   block {
     push_matrix()
-    rotate3d(t * 0.01, 0, 0, 1)
+    rotate3d(num_ticks.float * 0.01, 0, 0, 1)
     
     begin_triangles()
     vertex(vec2( 0.0,  0.5), rgb(1, 1, 0))
@@ -73,6 +83,20 @@ fn frame() @export {
     end_draw()
     pop_matrix()
   }
+
+  for b in bullets {
+    push_matrix()
+    translate3d(b.pos.x, b.pos.y, 0)
+    scale3d(0.04, 0.04, 0.04)
+    rotate3d(-0.5 * PI, 0, 0, 1)
+    
+    begin_triangles()
+    vertex(vec2( 0.0,  0.5), rgb(1, 0, 0))
+    vertex(vec2(-0.5, -0.5), rgb(0, 0, 1))
+    vertex(vec2( 0.5, -0.5), rgb(0, 1, 0))
+    end_draw()
+    pop_matrix()
+  }
 }
 
 fn update_player() {
@@ -80,29 +104,107 @@ fn update_player() {
   let key_up = get_key_down(265) // Up
   let key_left = get_key_down(263) // Left
   let key_right = get_key_down(262) // Right
+  let key_a = get_key_down(65) // A
+  let key_z = get_key_down(90) // Z
   
   let max_velocity = 0.01
+  let move_acceleration = 0.001
+  let dodge_deceleration = 0.8
+  let dodge_initial_velocity = 0.1
+  let deceleration = 0.98
 
   let left_right_delta = key_right.int - key_left.int
   let up_down_delta = key_up.int - key_down.int
   
   if up_down_delta != 0 {
-    player.velocity.y += up_down_delta.float * 0.001
+    player.velocity.y += up_down_delta.float * move_acceleration
   } else {
-    player.velocity.y *= 0.98
-  }
-  
-  if left_right_delta != 0 {
-    player.velocity.x += left_right_delta.float * 0.001
-  } else {
-    player.velocity.x *= 0.98
+    player.velocity.y *= deceleration
   }
 
-  player.velocity.x.clamp(-max_velocity, max_velocity)
-  player.velocity.y.clamp(-max_velocity, max_velocity)
+  if left_right_delta != 0 {
+    player.velocity.x += left_right_delta.float * move_acceleration
+  } else {
+    player.velocity.x *= deceleration
+  }
+
+  player.velocity.x&.clamp(-max_velocity, max_velocity)
+  player.velocity.y&.clamp(-max_velocity, max_velocity)
   
-  player.pos.x += player.velocity.x
-  player.pos.y += player.velocity.y
+  var current_velocity = player.velocity.copy
+  if current_velocity.length > max_velocity {
+    current_velocity&.normalize()
+    current_velocity *= max_velocity
+  }
+
+  if key_z and up_down_delta != 0 {
+    if num_ticks - last_dodge > 60 {
+      last_dodge = num_ticks
+      player.dodge_velocity = dodge_initial_velocity * up_down_delta.float
+    }
+  }
+  current_velocity.y += player.dodge_velocity
+
+  if player.dodge_velocity.abs > 0.000001 {
+    player.dodge_velocity *= dodge_deceleration
+  }
+
+  
+  player.pos += current_velocity
+
+  if player.pos.y < -1 {
+    player.pos.y = -1
+    player.velocity.y = 0
+  } else if player.pos.y > 1 {
+    player.pos.y = 1
+    player.velocity.y = 0
+  }
+
+  if player.pos.x < -1 {
+    player.pos.x = -1
+    player.velocity.x = 0
+  } else if player.pos.x > 1 {
+    player.pos.x = 1
+    player.velocity.x = 0
+  }
+
+  // Bullets
+
+  var any_to_remove = false
+
+  fn in_bounds(pos: vec2) -> bool {
+    pos.y >= -1 and pos.y <= 1 and pos.x >= -1 and pos.x <= 1
+  }
+
+  for b in bullets {
+    b.pos += b.velocity
+    if !in_bounds(b.pos) {
+      any_to_remove = true
+    }
+  }
+
+  // Do it by creating a new array. This should be improved
+  if any_to_remove {
+    var new_bullets = array_create!Bullet(0)
+    for b in bullets {
+      if in_bounds(b.pos) {
+        new_bullets&.append(b.copy)
+      }
+    }
+    bullets = new_bullets&
+  }
+
+  let bullet_repeat_ticks = 20
+
+  if key_a {
+    if num_ticks - last_bullet > bullet_repeat_ticks {
+      last_bullet = num_ticks
+      bullets&.append(Bullet(
+        pos: player.pos,
+        velocity: vec2(0.05, 0)
+      ))
+    }
+  }
 }
 
 fn cleanup() @export {
