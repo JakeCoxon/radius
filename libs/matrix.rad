@@ -50,7 +50,7 @@ fn mul_mat4_vec4(m: mat4, v: vec4) -> vec4 {
 }
 
 fn mul_mat4_mat4(m1: mat4, m2: mat4) -> mat4 {
-  result: mat4
+  var result: mat4
 
   result.m11 = m1.m11 * m2.m11 + m1.m12 * m2.m21 + m1.m13 * m2.m31 + m1.m14 * m2.m41
   result.m12 = m1.m11 * m2.m12 + m1.m12 * m2.m22 + m1.m13 * m2.m32 + m1.m14 * m2.m42

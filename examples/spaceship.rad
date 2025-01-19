@@ -1,0 +1,114 @@
+import compiler
+import range for Range
+import random for simple_random_float
+import vec for vec2, vec3, vec4
+import color for hsva_to_rgba, rgb
+import matrix for mat4, mat4_identity, create_perspective_projection, mul_mat4_vec4, mul_mat4_mat4, ndc_to_screen
+import array for Array, array_create
+import graphics for frame_ticks, get_mouse_down, put_float_image_data, get_mouse_x, get_mouse_y, set_fill_color, move_to, line_to, stroke, set_stroke_color_rgba, begin_path, set_line_width, fill_rectangle, draw_defaults, begin_triangles, vertex, end_draw, translate3d, push_matrix, pop_matrix, rotate3d, get_key_down, scale3d
+
+const window_width = 320
+const window_height = 240
+
+var t = 0.0
+
+fn init() @export {
+  0
+}
+
+define Player {
+  var pos: vec2
+  var velocity: vec2
+}
+
+var player = Player(
+  pos: vec2(0, 0),
+  velocity: vec2(0, 0)
+)
+
+fn frame() @export {
+  if get_key_down(256) { exit(0) }
+
+  draw_defaults()
+  t += 1
+
+  update_player()
+
+  
+  block {
+    push_matrix()
+    translate3d(sin(t * 0.01) * 0.1, 0, 0)
+    scale3d(5, 5, 5)
+    
+    begin_triangles()
+    vertex(vec2( 0.0,  0.5), rgb(1, 1, 0))
+    vertex(vec2(-0.5, -0.5), rgb(0, 1, 1))
+    vertex(vec2( 0.5, -0.5), rgb(1, 0, 1))
+    end_draw()
+    pop_matrix()
+  }
+
+  block {
+    push_matrix()
+    rotate3d(t * 0.01, 0, 0, 1)
+    
+    begin_triangles()
+    vertex(vec2( 0.0,  0.5), rgb(1, 1, 0))
+    vertex(vec2(-0.5, -0.5), rgb(0, 1, 1))
+    vertex(vec2( 0.5, -0.5), rgb(1, 0, 1))
+    end_draw()
+    pop_matrix()
+  }
+
+  block {
+    push_matrix()
+    translate3d(player.pos.x, player.pos.y, 0)
+    scale3d(0.1, 0.1, 0.1)
+    rotate3d(-0.5 * PI, 0, 0, 1)
+    
+    begin_triangles()
+    vertex(vec2( 0.0,  0.5), rgb(1, 0, 0))
+    vertex(vec2(-0.5, -0.5), rgb(0, 0, 1))
+    vertex(vec2( 0.5, -0.5), rgb(0, 1, 0))
+    end_draw()
+    pop_matrix()
+  }
+}
+
+fn update_player() {
+  let key_down = get_key_down(264) // Down
+  let key_up = get_key_down(265) // Up
+  let key_left = get_key_down(263) // Left
+  let key_right = get_key_down(262) // Right
+  
+  let max_velocity = 0.01
+
+  let left_right_delta = key_right.int - key_left.int
+  let up_down_delta = key_up.int - key_down.int
+  
+  if up_down_delta != 0 {
+    player.velocity.y += up_down_delta.float * 0.001
+  } else {
+    player.velocity.y *= 0.98
+  }
+  
+  if left_right_delta != 0 {
+    player.velocity.x += left_right_delta.float * 0.001
+  } else {
+    player.velocity.x *= 0.98
+  }
+
+  player.velocity.x.clamp(-max_velocity, max_velocity)
+  player.velocity.y.clamp(-max_velocity, max_velocity)
+  
+  player.pos.x += player.velocity.x
+  player.pos.y += player.velocity.y
+}
+
+fn cleanup() @export {
+  0
+}
+
+fn on_event() @export {
+  0
+}

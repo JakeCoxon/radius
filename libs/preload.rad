@@ -55,6 +55,9 @@ fn min!(T)(a: T, b: T) -> T @inline {
 fn max!(T)(a: T, b: T) -> T @inline {
   ifx a >= b { a.copy } else { b.copy }
 }
+fn clamp!(T)(v: inout T, min: T, max: T) @inline {
+  v = ifx v < min { min.copy } else if v > max { max.copy } else { v.copy }
+}
 
 fn exit(status: int) -> never @external
 fn unreachable() -> never @inline {
