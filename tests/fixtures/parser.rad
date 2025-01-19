@@ -89,12 +89,12 @@ fn main() {
 
   let x = [ a? + b? ...]
 
-  let x = ( a[:]? + b[:]? ).iter
-  let x = [ a? + b? ...].iter
+  let x = ( a[:]? + b[:]? ).as_iter
+  let x = [ a? + b? ...].as_iter
   let x = try {
     let foo = a? + b?
     foo + 32
-  }.orelse{0}.iter
+  }.orelse{0}.as_iter
 
   let x, y = thing
   let (x, y) = thing

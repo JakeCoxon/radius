@@ -48,7 +48,7 @@ fn test_filter() {
     }
   }
   
-  const x = filter_some(foo(numbers[:]).iter)
+  const x = filter_some(foo(numbers[:]).as_iter)
   assert(x.sum == 12)
   print(x[:]) ...
 }
@@ -71,7 +71,7 @@ fn test_early_exit() {
   let y = Some(23)
 
   let x = try {
-    foo(numbers[:])?.iter.sum + y?
+    foo(numbers[:])?.as_iter.sum + y?
   }.orelse 32
   assert(x == 32)
 }

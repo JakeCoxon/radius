@@ -2,7 +2,7 @@ import { ParseAnd, ParseNode, ParseBreak, ParseCall, ParseCast, ParseCompTime, P
 
 const regexes = {
   KEYWORD:
-    /^(?:and|as\!|as\?|as|break|class|continue|comptime|const|define|elif|else|fn|for|guard|if|ifx|in|inout|is|iter|lambda|let|match|meta|null|or|orelse|pass|return|set|sink|try|while|with|interface|import|block|fold|ref|var)(?=\W)/, // note (?=\W)
+    /^(?:and|as\!|as\?|as|as_iter|break|class|continue|comptime|const|define|elif|else|fn|for|guard|if|ifx|in|inout|is|lambda|let|match|meta|null|or|orelse|pass|return|set|sink|try|while|with|interface|import|block|fold|ref|var)(?=\W)/, // note (?=\W)
   IDENTIFIER: /^[a-zA-Z_][a-zA-Z_0-9]*/,
   STRING: /^(?:"(?:[^"\\]|\\.)*")/,
   SPECIALNUMBER: /^0o[0-7]+|^0x[0-9a-fA-F_]+|^0b[01_]+/,
@@ -362,7 +362,7 @@ export const makeParser = (input: string, debugName: string) => {
       else if (match("["))   left = parseSlice(false, left);
       else if (match(".")) {
         if (match("[")) left = parseSlice(true, left);
-        else if (match("iter")) left = new ParseIterator(previous, left);
+        else if (match("as_iter")) left = new ParseIterator(previous, left);
         else if (match("orelse")) left = new ParseOrElse(previous, left, parseExprOrStatements());
         else if (match("match"))  left = parseMatch(previous, left);
         else left = parseFieldAccess(left)

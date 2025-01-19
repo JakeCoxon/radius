@@ -157,15 +157,15 @@ fn test_setters() {
   var numbers = [40, 20, 10, 32, 12, 3124]
 
   numbers[:] = 1 ...
-  assert(numbers[:].iter.sum == 6)
+  assert(numbers[:].as_iter.sum == 6)
   print(numbers[:]) ...
 
   numbers[:] = [1, 2, 3][:] ...
-  assert(numbers[:].iter.sum == 9)
+  assert(numbers[:].as_iter.sum == 9)
   print(numbers[:]) ...
 
   numbers[:] = fold(0) + 1 ...
-  assert(numbers[:].iter.sum == 21)
+  assert(numbers[:].as_iter.sum == 21)
   print(numbers[:]) ...
 }
 
@@ -173,32 +173,32 @@ fn test_shorthand() {
 
   let numbers = [40, 20, 10, 32, 12, 3124]
   
-  let x1 = (numbers[:] > 9).iter.all
+  let x1 = (numbers[:] > 9).as_iter.all
   print(x1)
   assert(x1 == true)
 
-  let x2 = (numbers[:] < 1000).iter.all
+  let x2 = (numbers[:] < 1000).as_iter.all
   print(x2)
   assert(x2 == false)
 
-  let y1 = (numbers[:] == 20).iter.any
+  let y1 = (numbers[:] == 20).as_iter.any
   assert(y1 == true)
   print(y1)
 
-  let y2 = (numbers[:] == 1000).iter.any
+  let y2 = (numbers[:] == 1000).as_iter.any
   assert(y2 == false)
   print(y2)
 
-  let z1 = numbers[1:].iter.sum
+  let z1 = numbers[1:].as_iter.sum
   assert(z1 == 3198)
   print(z1)
 
-  let w1 = bar[:].iter.sum
+  let w1 = bar[:].as_iter.sum
   print(w1)
   assert(w1 == 204)
 
-  assert((squares[:] == 81).iter.any == true)
-  assert((factorial[:] < 1000).iter.all == false)
+  assert((squares[:] == 81).as_iter.any == true)
+  assert((factorial[:] < 1000).as_iter.all == false)
 }
 
 
@@ -207,13 +207,13 @@ fn test_concat() {
   let numbers = [40, 20, 10, 32, 12, 3124]
   
   const concat1 = @concat(foo[:], bar[:])
-  let x3 = concat1[:].iter.sum
+  let x3 = concat1[:].as_iter.sum
   print(x3)
   assert(x3 == 249)
 
 
   const concat2 = @concat(foo[:], bar[:], bamp[:], numbers[:])
-  let x4 = concat2[:].iter.sum
+  let x4 = concat2[:].as_iter.sum
   print(x4)
   assert(x4 == 4783)
 }
@@ -223,7 +223,7 @@ fn test_concat2() {
   let numbers = [40, 20, 10, 32, 12, 3124]
   
   const concat1 = @concat(foo[:], bar[:], numbers[:], 2, 3, 4)
-  let x3 = concat1[:].iter.sum
+  let x3 = concat1[:].as_iter.sum
   print(x3)
   assert(x3 == 3496)
 }
@@ -258,7 +258,7 @@ fn test_concat5() {
   let numbers = [40, 20, 10, 32, 12, 3124]
   
   const concat1 = @concat(foo[:] * numbers[:], 2, 3, 4)
-  let x3 = concat1[:].iter.sum
+  let x3 = concat1[:].as_iter.sum
   print(x3)
   assert(x3 == 15813)
 }
@@ -276,21 +276,21 @@ fn test_concat6() {
 fn test_iterator_syntax() {
 
   let numbers = [40, 20, 10, 32, 12, 3124]
-  let x = [foo[:] * numbers[:] ..., 2, 3, 4].iter.sum
+  let x = [foo[:] * numbers[:] ..., 2, 3, 4].as_iter.sum
   assert(x == 15813)
 
-  const y = [ foo[:] ..., 2, 3, 4 ].iter
+  const y = [ foo[:] ..., 2, 3, 4 ].as_iter
   assert(y.sum == 54)
 
   let z = foo.sum
   assert(z == 45)
 
-  const w = (foo[:] + 1).iter
+  const w = (foo[:] + 1).as_iter
   assert(w.sum == 55)
 
   const bar = {|x| x * 2}
 
-  let g = foo[:].bar.iter.sum
+  let g = foo[:].bar.as_iter.sum
   assert(g == 90)
 }
 
@@ -311,7 +311,7 @@ fn test_people() {
 
   let people = [Person(10), Person(20), Person(30), Person(40), Person(50)]
   
-  let x4 = people[:].age.iter.sum
+  let x4 = people[:].age.as_iter.sum
   print(x4)
   assert(x4 == 150)
 }
@@ -322,7 +322,7 @@ fn test_first_last() {
 
   let numbers = [40, 20, 10, 32, 12, 3124]
   
-  let x = numbers[:].iter.first_or_zero
+  let x = numbers[:].as_iter.first_or_zero
   print(x)
   assert(x == 40)
 
@@ -331,7 +331,7 @@ fn test_first_last() {
   // assert(y == 3124)
 
   let people = [Person(10), Person(20), Person(30), Person(40), Person(50)]
-  let age = people[1:].age.iter.first_or_zero
+  let age = people[1:].age.as_iter.first_or_zero
   assert(age == 20)
 
   // p2 = @last(people[:])
@@ -344,7 +344,7 @@ fn test_range() {
 
   print(ints[1:10:2]) ...
 
-  let sum = ints[1:10:2].iter.sum
+  let sum = ints[1:10:2].as_iter.sum
   assert(sum == 25)
 }
 
@@ -354,7 +354,7 @@ fn test_stuff() {
   // print(squares[1:100:10]) ...
   // print(squares[2:10], factorial[1:20:2]) ...
   print(factorial[:20:4], factorial[1:10:2]) ...
-  // print(squares[:10].iter.sum)
+  // print(squares[:10].as_iter.sum)
 }
 
 
@@ -383,7 +383,7 @@ fn test_for_loop() {
 fn test_if() {
 
   let numbers = [43, 21, 10, 34, 12, 3124]
-  let x = (numbers[:] if numbers[:] > 20).iter.sum
+  let x = (numbers[:] if numbers[:] > 20).as_iter.sum
   print(x)
   assert(x == 3222)
   
@@ -397,14 +397,14 @@ fn test_if() {
 
   print("--")
 
-  const nums = (numbers[:] if numbers[:] < 20).iter
+  const nums = (numbers[:] if numbers[:] < 20).as_iter
   assert(nums.first_or_zero == 10)
   assert(nums.last_or_zero == 12)
 
   const cc1 = [
     numbers[:] if numbers[:] < 20 ..., 
     numbers[:] if numbers[:] > 20 ...
-  ].iter
+  ].as_iter
   print(cc1[:]) ...
 }
 
@@ -412,7 +412,7 @@ fn test_if() {
 fn test_while() {
   
   let numbers = [40, 20, 10, 32, 12, 3124]
-  let x = (numbers[:] while numbers[:] < 100).iter.sum
+  let x = (numbers[:] while numbers[:] < 100).as_iter.sum
   print(x)
   assert(x == 114)
 
@@ -434,14 +434,14 @@ fn test_sideeffect() {
     500
   }
 
-  let x = (numbers[:] > side()).iter.any
+  let x = (numbers[:] > side()).as_iter.any
   assert(calls == 1)
 }
 
 fn test_template!(T)() {
 
   let numbers = [40, 20, 10, 32, 12, 3124]
-  let x = numbers[:].iter.sum
+  let x = numbers[:].as_iter.sum
   print(x)
 }
 
@@ -452,7 +452,7 @@ fn test_flatmap() {
 
   // foo = @mapcat(cells[:])
 
-  // x = cells[:][:].iter.sum
+  // x = cells[:][:].as_iter.sum
 }
 
 
@@ -464,10 +464,10 @@ fn test_custom_iterator() {
   }
 
   const it2 = custom_iterator2(person, 23)
-  let f = it2[:].iter.sum
+  let f = it2[:].as_iter.sum
   assert(f == 375)
 
-  let f2 = (meta custom_iterator2(person, 23))[:].iter.sum
+  let f2 = (meta custom_iterator2(person, 23))[:].as_iter.sum
   assert(f2 == 375)
 }
 
@@ -511,7 +511,7 @@ fn test_array() {
 
 fn test_float_sum() {
   let asd = [1, 2, 3.2]
-  let s = (asd[:] + float(foo[:])).iter.float_sum
+  let s = (asd[:] + float(foo[:])).as_iter.float_sum
   assert(s == 9.2)
 }
 
