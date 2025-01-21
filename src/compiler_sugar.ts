@@ -55,7 +55,7 @@ const insertMetaObjectPairwiseOperator = (compiledClass: CompiledClass, operator
 
 export const VecTypeMetaClass = new ExternalFunction('VecType', VoidType, (ctx, args) => {
   const compiledClass = args[0]
-  compilerAssert(compiledClass instanceof CompiledClass)
+  compilerAssert(compiledClass instanceof CompiledClass, "Expected compiled class", { compiledClass })
   insertMetaObjectPairwiseOperator(compiledClass, "add", "+")
   insertMetaObjectPairwiseOperator(compiledClass, "sub", "-")
   insertMetaObjectPairwiseOperator(compiledClass, "mul", "*")

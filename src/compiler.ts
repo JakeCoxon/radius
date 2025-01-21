@@ -2,8 +2,8 @@ import { createDefaultConstructorAst } from "./codegen_ast";
 import { compileExportedFunctionTask, insertFunctionDefinition } from "./compiler_functions";
 import { createCompilerModuleTask, defaultMetaFunction } from "./compiler_sugar";
 import { hashValues, typeTableGetOrInsert } from "./compiler_types";
-import { BytecodeDefault, BytecodeSecondOrder, compileFunctionPrototype, createBytecodeVmAndExecuteTask, pushGeneratedBytecode, visitParseNodeAndError } from "./compiler_vm";
-import { Binding, BytecodeWriter, ClassDefinition, Closure, CompiledClass, CompiledFunction, CompilerError, CompilerFunctionCallContext, ConcreteClassType, ExternalFunction, ExternalTypeConstructor, FunctionType, IntType, LetAst, Module, NumberAst, ParameterizedType, ParseBlock, ParseCall, ParseIdentifier, ParseImport, ParseLet, ParseLetConst, ParseNode, ParseNote, ParseStatements, ParsedModule, ParserClassDecl, ParserFunctionDecl, Scope, ScopeEventsSymbol, ScopeParentSymbol, SetAst, SourceLocation, StatementsAst, TaskContext, Type, TypeFieldDef, TypeInfo, UserCallAst, VoidType, bytecodeToString, compilerAssert, createAnonymousToken, createCompilerError, createScope, createStatements, insertTypeInfoFields, isAst, pushSubCompilerState, textColors } from "./defs";
+import { BytecodeDefault, BytecodeSecondOrder, callFunctionFromValueTask, compileFunctionPrototype, createBytecodeVmAndExecuteTask, pushGeneratedBytecode, visitParseNodeAndError } from "./compiler_vm";
+import { Ast, Binding, BytecodeWriter, ClassDefinition, Closure, CompiledClass, CompiledFunction, CompilerError, CompilerFunction, CompilerFunctionCallContext, ConcreteClassType, ExternalFunction, ExternalTypeConstructor, FunctionType, IntType, LetAst, LetType, Module, NumberAst, ParameterizedType, ParseBlock, ParseCall, ParseEvalFunc, ParseIdentifier, ParseImport, ParseLet, ParseLetConst, ParseNode, ParseNote, ParseQuote, ParseStatements, ParseValue, ParsedModule, ParserClassDecl, ParserFunctionDecl, Scope, ScopeEventsSymbol, ScopeParentSymbol, SetAst, SourceLocation, StatementsAst, TaskContext, Type, TypeFieldDef, TypeInfo, UserCallAst, VoidType, bytecodeToString, compilerAssert, createAnonymousToken, createCompilerError, createScope, createStatements, expectAst, insertTypeInfoFields, isAst, pushSubCompilerState, textColors } from "./defs";
 import { Event, Task, TaskDef } from "./tasks";
 
 
@@ -37,6 +37,98 @@ export const setScopeValueAndResolveEvents = (scope: Scope, name: string, value:
 }
 
 
+class VirtualClass {
+  constructor(
+    public name: string, 
+    public classDef: ClassDefinition,
+    public binding: Binding,
+    public typeParamHash: string,
+    public typeArgs: unknown[], 
+    public definitionBlock: Ast
+  ) {}
+}
+
+// Virtual type is an object representing the type that hasn't been actualized yet
+// This is to allow metaprogramming to happen before the type is created.
+// However we currently need the actual type to instantiate functions, so it's a bit of a mess right now.
+const createActualTypeFromVirtual = new ExternalFunction("createActualTypeFromVirtual", VoidType, (ctx, values) => {
+  const virtualClass = values[0]
+  compilerAssert(virtualClass instanceof VirtualClass, "Expected virtual class", { virtualClass })
+  const { classDef, typeArgs, binding, typeParamHash, definitionBlock } = virtualClass
+
+  const debugName = typeArgs.length === 0 ? classDef.debugName :
+    `${classDef.debugName}!(...)`
+  const compiledClass = new CompiledClass(
+      classDef.location, debugName,
+      binding, classDef, null!, null as any, [], typeArgs, typeParamHash)
+
+  const typeInfo: TypeInfo = { sizeof: 0, alignment: 0, fields: compiledClass.fields, metaobject: compiledClass.metaobject, isReferenceType: true }
+  
+  let type: Type
+  if (classDef.typeArgs.length === 0) { 
+    type = new ConcreteClassType(compiledClass, typeInfo)
+    classDef.concreteType = type;
+  } else {
+    type = typeTableGetOrInsert(ctx.compilerState.globalCompiler.typeTable, new ParameterizedType(classDef, typeArgs, typeInfo))
+  }
+  compilerAssert(type instanceof ConcreteClassType || type instanceof ParameterizedType, "Expected concrete class type or parameterized type", { type })
+  compiledClass.type = type;
+  binding.type = type;
+
+  const fieldAsts = definitionBlock instanceof StatementsAst ? definitionBlock.statements : [definitionBlock]
+
+  const fieldDefs: TypeFieldDef[] = []
+  for (const ast of fieldAsts) {
+    if (ast instanceof LetAst) {
+      const name = ast.binding.name
+      fieldDefs.push({ sourceLocation: ast.location, name, fieldType: ast.binding.type })
+    }
+  }
+  insertTypeInfoFields(type, fieldDefs)
+
+  classDef.compiledClasses.push(compiledClass)
+
+  return compiledClass
+})
+
+const classSugar = (classDef: ClassDefinition, bodyNode: ParseNode) => {
+
+  const token = createAnonymousToken('')
+
+  const defaultMeta = new ExternalFunction("defaultMeta", VoidType, (ctx, values) => {
+    const compiledClass = values[0]
+    compilerAssert(compiledClass instanceof CompiledClass, "Expected compiled class", { compiledClass })
+    const definitionScope = classDef.parentScope
+    const templateScope = ctx.compilerState.scope
+    return defaultMetaFunction(ctx.compilerState, compiledClass, definitionScope, templateScope)
+  })
+
+  const createVirtualClass = new ParseEvalFunc(token, (vm) => {
+    const definitionBlock = expectAst(vm.stack.pop())
+    const virt = vm.context.subCompilerState.scope['virtual']
+    compilerAssert(virt instanceof VirtualClass, "Expected virtual class", { virt })
+    virt.definitionBlock = definitionBlock
+    vm.stack.push(virt)
+  }, [new ParseQuote(token, bodyNode)], [])
+
+  const iden = new ParseIdentifier(createAnonymousToken('foo'))
+  const classIden = new ParseIdentifier(createAnonymousToken('cls'))
+  const meta = classDef.metaClass ? [
+    new ParseCall(token, classDef.metaClass, [classIden], []),
+    new ParseCall(token, new ParseValue(token, defaultMeta), [classIden], []),
+  ] : [
+    new ParseCall(token, new ParseValue(token, defaultMeta), [classIden], []),
+  ]
+  const classNode = new ParseStatements(token, [
+    new ParseLet(token, LetType.Let, iden, null, createVirtualClass),
+    new ParseLet(token, LetType.Let, classIden, null,
+      new ParseCall(token, new ParseValue(token, createActualTypeFromVirtual), [iden], [])),
+    ...meta,
+    classIden
+  ])
+  return classNode
+}
+
 export function compileClassTask(ctx: TaskContext, { classDef, typeArgs }: { classDef: ClassDefinition, typeArgs: unknown[] }): Task<ConcreteClassType | ParameterizedType, CompilerError> {
   const binding = new Binding(classDef.debugName, VoidType);
   compilerAssert(typeArgs.length === classDef.typeArgs.length, "Expected $x type parameters for class $classDef, got $y", { x: classDef.typeArgs.length, y: typeArgs.length, classDef })
@@ -44,8 +136,10 @@ export function compileClassTask(ctx: TaskContext, { classDef, typeArgs }: { cla
   if (!classDef.templatePrototype)  {
     compilerAssert(classDef.body, "Expected class body");
     const bodyNode = classDef.body instanceof ParseBlock ? classDef.body.statements : classDef.body
-    classDef.templatePrototype = { name: `${classDef.debugName} class template bytecode`, body: bodyNode, initialInstructionTable: BytecodeSecondOrder, params: [] }; 
-    compileFunctionPrototype(ctx, classDef.templatePrototype);
+    const classNode = classSugar(classDef, bodyNode)
+
+    classDef.templatePrototype = { name: `${classDef.debugName} class bytecode`, body: classNode, initialInstructionTable: BytecodeDefault, params: [] }; 
+    compileFunctionPrototype(ctx, classDef.templatePrototype)
   }
 
   const typeParamHash = hashValues(typeArgs, { classDef })
@@ -66,66 +160,16 @@ export function compileClassTask(ctx: TaskContext, { classDef, typeArgs }: { cla
     templateScope[typeArg.token.value] = typeArgs[i];
   });
 
+  const virtual = new VirtualClass(classDef.debugName, classDef, binding, typeParamHash, typeArgs, null!)
+  templateScope['virtual'] = virtual
+
   return (
     TaskDef(createBytecodeVmAndExecuteTask, subCompilerState, classDef.templatePrototype!.bytecode!, templateScope)
-    .chainFn((task, ast) => {
-      compilerAssert(isAst(ast), "Expected ast got $ast", { ast });
-
-      const debugName = typeArgs.length === 0 ? classDef.debugName :
-        `${classDef.debugName}!(...)`
-      const compiledClass = new CompiledClass(
-          classDef.location, debugName,
-          binding, classDef, null!, null as any, [], typeArgs, typeParamHash)
-
-      const typeInfo: TypeInfo = { sizeof: 0, alignment: 0, fields: compiledClass.fields, metaobject: compiledClass.metaobject, isReferenceType: true }
-      let type: Type
-      if (classDef.typeArgs.length === 0) { 
-        type = new ConcreteClassType(compiledClass, typeInfo)
-        classDef.concreteType = type;
-      } else {
-        type = typeTableGetOrInsert(ctx.globalCompiler.typeTable, new ParameterizedType(classDef, typeArgs, typeInfo))
-      }
-      compilerAssert(type instanceof ConcreteClassType || type instanceof ParameterizedType, "Expected concrete class type or parameterized type", { type })
-      compiledClass.type = type;
-      binding.type = type;
-
-      const fieldDefs: TypeFieldDef[] = []
-      for (const name of Object.getOwnPropertyNames(templateScope)) {
-        if (templateScope[name] instanceof Binding)
-          fieldDefs.push({ sourceLocation: SourceLocation.anon, name, fieldType: templateScope[name].type })
-      }
-      insertTypeInfoFields(type, fieldDefs)
-
-      classDef.compiledClasses.push(compiledClass)
-
-      const returnType = type;
-      const definitionScope = classDef.parentScope
-      
-      if (classDef.metaClass) {
-        return (
-          TaskDef(resolveScope, classDef.parentScope, classDef.metaClass.token.value)
-          .chainFn((task, func) => {
-            if (func instanceof ExternalFunction) {
-              const fnctx: CompilerFunctionCallContext = { location: SourceLocation.anon, compilerState: ctx.subCompilerState, resultAst: undefined, typeCheckResult: undefined }
-              func.func(fnctx, [compiledClass])
-            } else compilerAssert(false, "Not implemented yet", { func })
-
-            return (
-              defaultMetaFunction(subCompilerState, compiledClass, definitionScope, templateScope)
-              .chainFn(() => Task.of(returnType))
-            )
-          })
-        )
-      }
-
-      return (
-        defaultMetaFunction(subCompilerState, compiledClass, definitionScope, templateScope)
-        .chainFn(() => Task.of(returnType))
-      )
-
+    .chainFn((task, compiledClass) => {
+      compilerAssert(compiledClass instanceof CompiledClass, "Expected compiled class", { compiledClass })
+      return Task.of(compiledClass.type)
     })
   )
-  
 }
 
 

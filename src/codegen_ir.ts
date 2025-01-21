@@ -737,7 +737,7 @@ export class FunctionCodeGenerator {
     compilerAssert(!(structType instanceof PrimitiveType), 'Cannot create a struct from a primitive type', { structType, currentStatement: this.currentStatement });
     compilerAssert(ast.args.length === structType.typeInfo.fields.length, 'Field count mismatch', { ast, currentStatement: this.currentStatement, got: ast.args.length, expected: structType.typeInfo.fields.length });
     const fnBinding = structType.typeInfo.metaobject.constructorBinding
-    compilerAssert(fnBinding && fnBinding instanceof Binding, `Constructor not found for ${structType.shortName}`);
+    compilerAssert(fnBinding && fnBinding instanceof Binding, `Constructor not found for ${structType.shortName}`, { fnBinding });
 
     const storageReg = this.createAllocTargetFromContext(context, structType, ast.location)
     

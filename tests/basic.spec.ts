@@ -522,6 +522,16 @@ test('meta', async () => {
   testObject.close()
 })
 
+test('meta_class', async () => {
+  const testObject = createTest({ 
+    moduleName: 'meta_class',
+    globalOptions,
+    inputPath: `${import.meta.dir}/fixtures/meta_class.rad`,
+  })
+  await testObject.run()
+  testObject.close()
+})
+
 test('advanced', async () => {
   const testObject = createTest({ 
     moduleName: 'advanced',

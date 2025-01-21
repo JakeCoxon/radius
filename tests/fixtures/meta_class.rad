@@ -1,0 +1,24 @@
+fn custom_metaclass(type) {
+  print("Hello, world!", type)
+}
+
+define Foo {
+  x: int
+}
+
+define Thing < VecType {
+  x: int
+}
+
+define Bar < custom_metaclass {
+  x: int
+}
+
+fn main() {
+  var bar = Bar(x: 1)
+  var foo = Foo(x: 1)
+  var thing = Thing(x: 1) + Thing(x: 10)
+  print(thing)
+  print(foo)
+  print("Hello, world!")
+}
