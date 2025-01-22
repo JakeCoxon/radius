@@ -21,7 +21,7 @@ define Range {
   const __iterate = range_iterate
 }
 
-fn range_iterate!(f)(range: Range) -> void @inline {
+fn range_iterate!(f)(_ range: Range) -> void @inline {
   var i = range.start
   while i < range.end {
     f(i)
@@ -35,7 +35,7 @@ define vec2i {
 }
 
 fn main() {
-  var range = Range2d(32, 64)
+  var range = Range2d(w: 32, h: 64)
   for vec in range {
     if vec.x * vec.y > 256 {
       continue // continue does the right thing

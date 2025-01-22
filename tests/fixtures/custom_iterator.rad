@@ -4,12 +4,12 @@ define Thing {
   const __iterate = iterate
 }
 
-fn iterate!(f)(thing: Thing) @inline {
+fn iterate!(f)(_ thing: Thing) @inline {
   f(32 + thing.x)
 }
 
 fn main() {
-  let thing = Thing(200)
+  let thing = Thing(x: 200)
 
   for x in thing {
     print(x)

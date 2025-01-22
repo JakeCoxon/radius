@@ -53,22 +53,32 @@ export function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, ar
   typeCheckAssert(result, func.variadic || args.length == func.params.length, 'Too many params. Expected $expected args got $got', { expected: func.params.length, got: args.length, args, func })
 
   // if (func.params.length === 0 && func.returnType === null) return Task.success()
-  
 
   const scope = createScope({}, parentScope)
   const subCompilerState = pushSubCompilerState(ctx, { debugName: `${func.debugName} header`, scope, lexicalParent: ctx.subCompilerState });
   ;(subCompilerState as any).location = func.name?.token.location
   subCompilerState.functionCompiler = subCompilerState
 
-  const sortedArgs: Ast[] = args.filter(x => !(x instanceof NamedArgAst))
+  const namedParams = func.params.map(x => x.label !== null ? x.label.token.value : x.name.token.value)
+
+  const sortedArgs: Ast[] = []
   args.forEach((arg, i) => {
-    if (arg instanceof NamedArgAst) {
-      const namedParamIndex = func.params.findIndex(x => x.name.token.value === arg.name)
-      typeCheckAssert(result, namedParamIndex > -1, "Unexpected function parameter named $name", { name: arg.name })
-      typeCheckAssert(result, !sortedArgs[namedParamIndex], "Already specified parameter at index $namedParamIndex for argument $name", { namedParamIndex, name: arg.name })
-      sortedArgs[namedParamIndex] = arg.expr
-    }
+    if (arg instanceof NamedArgAst) return
+    compilerAssert(i === sortedArgs.length, "Invalid positional argument at index $i", { i, sortedArgs, location: arg.location })
+    compilerAssert(func.params[i], "Expected $i parameter", { i, params: func.params, location: arg.location })
+    compilerAssert(func.params[i].label === null, "Expected named parameter", { func: func.debugName, arg, location: arg.location, namedParams, params: func.params })
+    sortedArgs.push(arg) 
   })
+
+
+  args.forEach((arg, i) => {
+    if (!(arg instanceof NamedArgAst)) return
+    const namedParamIndex = namedParams.indexOf(arg.name)
+    typeCheckAssert(result, namedParamIndex > -1, "Unexpected function parameter named $name", { name: arg.name, namedParams, location: arg.location })
+    typeCheckAssert(result, !sortedArgs[namedParamIndex], "Already specified parameter at index $namedParamIndex for argument $name", { namedParamIndex, name: arg.name, location: arg.location })
+    sortedArgs[namedParamIndex] = arg.expr
+  })
+  compilerAssert(sortedArgs.length === func.params.length, "Expected $expected args got $got", { expected: func.params.length, got: sortedArgs.length, func })
   result.sortedArgs = sortedArgs
 
   func.params.forEach((param, i) => {
@@ -219,7 +229,7 @@ export function functionTemplateTypeCheckAndCompileTask(ctx: TaskContext, { func
         const reference = !((capability === Capability.Let || capability === Capability.Sink)
           && argBinding.type instanceof PrimitiveType);
         const passingType = reference ? RawPointerType : argBinding.type;
-        return new FunctionParameter(argBinding, argBinding.type, reference, passingType, capability);
+        return new FunctionParameter(argBinding.name, argBinding, argBinding.type, reference, passingType, capability);
       })
       const compiledFunction = new CompiledFunction(
           binding, func, returnType, result.concreteTypes, ast, argBindings, parameters, typeArgs, typeParamHash);
@@ -406,8 +416,8 @@ export function createCallAstFromValue(ctx: CompilerFunctionCallContext, value: 
 
   if (value instanceof ClassDefinition) {
     return (
-      TaskDef(compileClassTask, { classDef: value, typeArgs }).
-      chainFn((task, clssType) => {
+      TaskDef(compileClassTask, { classDef: value, typeArgs })
+      .chainFn((task, clssType) => {
         const constructor = expectMap(clssType.typeInfo.metaobject, 'constructor', "Expected constructor in metaobject for object $obj", { obj: value })
         return createCallAstFromValue({...ctx}, constructor, [], args)
       })

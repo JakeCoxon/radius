@@ -4,23 +4,23 @@ define Thing {
   y : int
 }
 
-fn foo(thing: Thing, z: int) {
+fn foo(_ thing: Thing, z: int) {
   print(thing.x + z)
 }
 
-fn bam(thing: Thing) {
+fn bam(_ thing: Thing) {
   print(thing.x)
 }
 
 fn main() {
 
-  var thing = Thing(0, 0)
+  var thing = Thing(x: 0, y: 0)
 
   thing.x = 1
   thing.y = 10
   print(thing.x + thing.y)
 
-  thing.foo(200)
+  thing.foo(z: 200)
   thing.bam
 
   const fam = {|x| x + 100}

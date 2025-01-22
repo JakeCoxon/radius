@@ -10,13 +10,13 @@ define Foo @struct {
 }
 
 
-fn subscript_foo(arr: Foo, idx: int, f) @subscript {
+fn subscript_foo(_ arr: Foo, _ idx: int, _ f) @subscript {
   let x = 123 + idx * 10
   f(x)
 }
 
 
-fn subscript_inout_foo(foo: inout Foo, idx: int, f) @subscript {
+fn subscript_inout_foo(_ foo: inout Foo, _ idx: int, _ f) @subscript {
   var x = 123 + idx * 10
   print("Before: ", x)
   f(x)
@@ -35,7 +35,7 @@ fn increment(x: inout int) {
 
 
 fn test_basic_project() {
-  var f = Foo(1, 2.0)
+  var f = Foo(x: 1, y: 2.0)
   print(rawptr(f))
 
   print("f[0]", f[0])
@@ -45,9 +45,9 @@ fn test_basic_project() {
 
 
 fn test_project_inout() {
-  var f = Foo(1, 2.0)
+  var f = Foo(x: 1, y: 2.0)
   print(rawptr(f))
-  increment(f[0]&)
+  increment(x: f[0]&)
 
   print(rawptr(f))
 
@@ -57,7 +57,7 @@ fn test_project_inout() {
 
 
 fn test_var_ref() {
-  var foo = Foo(1, 2.0)
+  var foo = Foo(x: 1, y: 2.0)
   var ref x = foo[0]&
   x += 1
   x *= 2

@@ -15,15 +15,15 @@ fn thing4(x: int) -> int {
 }
 
 fn foop(a: int, b: int) {
-  print(2 + 42 * thing(12))
+  print(2 + 42 * thing(x: 12))
 
   print(meta thing(12))
 }
 
 fn main() {
-  print(2 + 42 * thing(12))
+  print(2 + 42 * thing(x: 12))
 
 
   meta foop(2, 1)
-  foop(2, 1)
+  foop(a: 2, b: 1)
 }

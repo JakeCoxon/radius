@@ -1,8 +1,8 @@
 import compiler for rawptr, overloaded, never
 
-fn malloc(size: int) -> rawptr @external
-fn realloc(ptr: rawptr, new_size: int) -> rawptr @external
-fn free(ptr: rawptr) @external
+fn malloc(_ size_bytes: int) -> rawptr @external
+fn realloc(_ ptr: rawptr, new_size_bytes: int) -> rawptr @external
+fn free(_ ptr: rawptr) @external
 fn sizeof!(T)() @external
 fn printInt(v: int) @external
 fn printFloat(v: float) @external
@@ -62,7 +62,7 @@ fn clamp!(T)(v: inout T, min: T, max: T) @inline {
 fn exit(status: int) -> never @external
 fn unreachable() -> never @inline {
   print("Unreachable code")
-  exit(1)
+  exit(status: 1)
 }
 
 fn swap!(T)(a: inout T, b: inout T) @inline {

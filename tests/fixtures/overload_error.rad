@@ -8,11 +8,11 @@ fn inner(x: float) -> float {
   x
 }
 
-fn calculate_xywh(x: float, y: float, w: float, h: float) -> float {
+fn calculate_xywh(_ x: float, _ y: float, _ w: float, _ h: float) -> float {
   inner(x, y) // type check error
 }
 
-fn calculate_xywh2(x: float, y: float, w: float, h: float) -> float {
+fn calculate_xywh2(_ x: float, _ y: float, _ w: float, _ h: float) -> float {
   x + y + 100 * w + 200 * h
 }
 

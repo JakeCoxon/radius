@@ -24,7 +24,7 @@ export const forLoopSugar = (out: BytecodeWriter, node: ParseFor) => {
   compilerAssert(!expansion.fold, "Fold not supported in for loop")
 
   const fnIden = node.left instanceof ParseIdentifier ? node.left : new ParseFreshIden(node.token, new FreshBindingToken('it'))
-  const fnParams: ParserFunctionParameter[] = [{ name: fnIden, storage: null, type: null, capability: Capability.Let }]
+  const fnParams: ParserFunctionParameter[] = [{ label: null, name: fnIden, storage: null, type: null, capability: Capability.Let }]
   const extract = node.left instanceof ParseTuple ? new ParseLet(node.token, LetType.Var, node.left, null, fnIden) : null
   const continueBlock = new ParseBlock(node.token, 'continue', null, new ParseStatements(node.token, filterNotNull([extract, node.body])))
   const decl = createAnonymousParserFunctionDecl("for", node.token, fnParams, continueBlock)
@@ -189,8 +189,8 @@ const appendValuePartialFn = (() => {
   const decl = createAnonymousParserFunctionDecl('appendValue', token, [], mutMeta)
 
   const params: ParserFunctionParameter[] = [
-    { name: consIdenParam, storage: null, type: null, capability: Capability.Let },
-    { name: exprParam, storage: null, type: null, capability: Capability.Let }
+    { label: null, name: consIdenParam, storage: null, type: null, capability: Capability.Let },
+    { label: null, name: exprParam, storage: null, type: null, capability: Capability.Let }
   ]
   return createAnonymousParserFunctionDecl('appendValuePartial', token, params, new ParseFunction(token, decl))
 })()
@@ -214,9 +214,9 @@ const appendValuePartialIfFn = (() => {
 
   // TODO: Create partial higher-order function ?
   const params: ParserFunctionParameter[] = [
-    { name: consIdenParam, storage: null, type: null, capability: Capability.Let },
-    { name: exprParam, storage: null, type: null, capability: Capability.Let },
-    { name: condParam, storage: null, type: null, capability: Capability.Let }
+    { label: null, name: consIdenParam, storage: null, type: null, capability: Capability.Let },
+    { label: null, name: exprParam, storage: null, type: null, capability: Capability.Let },
+    { label: null, name: condParam, storage: null, type: null, capability: Capability.Let }
   ]
   return createAnonymousParserFunctionDecl('appendValuePartial', token, params, new ParseFunction(token, decl))
 })()
@@ -289,7 +289,7 @@ const createArrayIterator = (token: Token, subCompilerState: SubCompilerState, s
   const yieldParam = new ParseFreshIden(token, new FreshBindingToken('yield'))
   const indexIdentifier = selector.indexIdentifier
   compilerAssert(indexIdentifier)
-  const fnParams: ParserFunctionParameter[] = [{ name: yieldParam, storage: null, type: null, capability: Capability.Let }]
+  const fnParams: ParserFunctionParameter[] = [{ label: null, name: yieldParam, storage: null, type: null, capability: Capability.Let }]
 
   const letNodeNode = new ParseLet(token, LetType.Let, new ParseFreshIden(token, new FreshBindingToken('node')), null, selector.node)
   let lengthNode: ParseNode = getLength(token, letNodeNode.left)
@@ -320,7 +320,7 @@ const createArraySetterIterator2 = (token: Token, selector: { node: ParseNode, s
   const valueIdentifier = new ParseFreshIden(token, new FreshBindingToken('value'))
   const indexIdentifier = selector.indexIdentifier
   compilerAssert(indexIdentifier)
-  const fnParams: ParserFunctionParameter[] = [{ name: yieldParam, storage: null, type: null, capability: Capability.Let }]
+  const fnParams: ParserFunctionParameter[] = [{ label: null, name: yieldParam, storage: null, type: null, capability: Capability.Let }]
 
   let lengthNode: ParseNode = getLength(token, selector.node)
   if (selector.end) {
@@ -365,8 +365,8 @@ const createIteratorSliceLoopPartialFn = (() => {
   const indexIdentifier = new ParseFreshIden(token, new FreshBindingToken('index'))
   compilerAssert(indexIdentifier)
   const fnParams: ParserFunctionParameter[] = [
-    { name: consumeParam, storage: null, type: null, capability: Capability.Let },
-    { name: yieldParam, storage: null, type: null, capability: Capability.Let },
+    { label: null, name: consumeParam, storage: null, type: null, capability: Capability.Let },
+    { label: null, name: yieldParam, storage: null, type: null, capability: Capability.Let },
   ]
   const startIden = new ParseIdentifier(createAnonymousToken('start'))
   const endIden = new ParseIdentifier(createAnonymousToken('end'))
@@ -421,8 +421,8 @@ const createIteratorSliceLoopPartialFn = (() => {
     const consumeParam2 = new ParseFreshIden(token, new FreshBindingToken('consume'))
     const yieldParam2 = new ParseFreshIden(token, new FreshBindingToken('yield'))
     const fnParams2: ParserFunctionParameter[] = [
-      { name: consumeParam2, storage: null, type: null, capability: Capability.Let },
-      { name: yieldParam2, storage: null, type: null, capability: Capability.Let },
+      { label: null, name: consumeParam2, storage: null, type: null, capability: Capability.Let },
+      { label: null, name: yieldParam2, storage: null, type: null, capability: Capability.Let },
       // TODO: Support passing null values, otherwise this doesn't work, so I had to make them typeArgs
       // { name: startIden, storage: null, type: null },
       // { name: endIden, storage: null, type: null },
@@ -448,14 +448,14 @@ const createIteratorSliceLoop = (token: Token, selector: ExpansionSelector) => {
 
   const fnBody2 = new ParseStatements(createAnonymousToken(''), [closureCall])
   const fnParams2: ParserFunctionParameter[] = [
-    { name: consumeParam2, storage: null, type: null, capability: Capability.Let }, 
-    { name: yieldParam2, storage: null, type: null, capability: Capability.Let }]
+    { label: null, name: consumeParam2, storage: null, type: null, capability: Capability.Let }, 
+    { label: null, name: yieldParam2, storage: null, type: null, capability: Capability.Let }]
   return createAnonymousParserFunctionDecl(`array_iterator_slice_loop`, createAnonymousToken(''), fnParams2, fnBody2)
 }
 
 const createIteratorSliceIterator = (token: Token, subCompilerState: SubCompilerState, selector: ExpansionSelector, iterator: CompilerCallable) => {
   const yieldParam = new ParseFreshIden(token, new FreshBindingToken('yield'))
-  const params: ParserFunctionParameter[] = [{ name: yieldParam, type: null, storage: null, capability: Capability.Let }]
+  const params: ParserFunctionParameter[] = [{ label: null, name: yieldParam, type: null, storage: null, capability: Capability.Let }]
 
   // TODO: Can this be implemented as a higher-order function that takes a closure
   // and converts it to a iterleave generator?
@@ -663,7 +663,7 @@ const compileExpansionToParseNode = (out: BytecodeWriter, expansion: ExpansionCo
 
   let loopNode: ParseNode
   if (zips.length === 1 && !expansion.setterSelector) {
-    const declParams: ParserFunctionParameter[] = [{ name: zips[0].elemIden, storage: null, type: null, capability: Capability.Let }]
+    const declParams: ParserFunctionParameter[] = [{ label: null, name: zips[0].elemIden, storage: null, type: null, capability: Capability.Let }]
     const decl1 = createAnonymousParserFunctionDecl(`${expansion.debugName}_consume`, createAnonymousToken(''), declParams, expansion.loopBodyNode)
     const consume = new ParseFunction(node.token, decl1)
     const consumer = new ParseFreshIden(node.token, new FreshBindingToken('consumer'))
@@ -690,9 +690,9 @@ const compileExpansionToParseNode = (out: BytecodeWriter, expansion: ExpansionCo
 
 const generatorHelper = (debugName: string, consumeParam: ParseFreshIden, consumer: ParseNode, produceParam: ParseFreshIden, producer: ParseNode) => {
   const token = createAnonymousToken('')
-  const bparams: ParserFunctionParameter[] = [{ name: consumeParam, type: null, storage: null, capability: Capability.Let }]
+  const bparams: ParserFunctionParameter[] = [{ label: null, name: consumeParam, type: null, storage: null, capability: Capability.Let }]
   const consumerFn = createAnonymousParserFunctionDecl(`${debugName}_consumer`, token, bparams, consumer)
-  const cparams: ParserFunctionParameter[] = [{ name: produceParam, type: null, storage: null, capability: Capability.Let }]
+  const cparams: ParserFunctionParameter[] = [{ label: null, name: produceParam, type: null, storage: null, capability: Capability.Let }]
   const producerFn = createAnonymousParserFunctionDecl(`${debugName}_producer`, token, cparams, producer)
 
   const callArgs = [new ParseFunction(token, consumerFn), new ParseFunction(token, producerFn)]
@@ -757,7 +757,7 @@ export const expandIteratorSugar = (out: BytecodeWriter, iteratorNode: ParseIter
     const expansionParseNode = compileExpansionToParseNode(out, expansion, node)
 
     const func = createAnonymousParserFunctionDecl("iterate", 
-      createAnonymousToken(''), [{ name: param, type: null, storage: null, capability: Capability.Let }], expansionParseNode)
+      createAnonymousToken(''), [{ label: null, name: param, type: null, storage: null, capability: Capability.Let }], expansionParseNode)
 
     nodes.push(new ParseFunction(token, func))
   }
@@ -801,7 +801,7 @@ export const expandFuncConcatSugar = (out: BytecodeWriter, noteNode: ParseNote, 
     const expansionParseNode = compileExpansionToParseNode(out, expansion, node)
 
     const func = createAnonymousParserFunctionDecl("iterate", 
-      createAnonymousToken(''), [{ name: param, type: null, storage: null, capability: Capability.Let }], expansionParseNode)
+      createAnonymousToken(''), [{ label: null, name: param, type: null, storage: null, capability: Capability.Let }], expansionParseNode)
 
     nodes.push(new ParseFunction(token, func))
   }
@@ -814,7 +814,7 @@ export const concat = new ExternalFunction("concat", VoidType, (ctx, values_) =>
 
   const token = createAnonymousToken('')
   const yieldParam = new ParseFreshIden(token, new FreshBindingToken('yield'))
-  const params: ParserFunctionParameter[] = [{ name: yieldParam, type: null, storage: null, capability: Capability.Let }]
+  const params: ParserFunctionParameter[] = [{ label: null, name: yieldParam, type: null, storage: null, capability: Capability.Let }]
 
   const consumeParam1 = new ParseFreshIden(token, new FreshBindingToken('consume'))
   const produceParam1 = new ParseFreshIden(token, new FreshBindingToken('produce'))

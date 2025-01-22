@@ -1,4 +1,4 @@
-fn transduce(iterable) @inline {
+fn transduce(_ iterable) @inline {
   let acc = 1
   for x in iterable {
     let zzz = 1

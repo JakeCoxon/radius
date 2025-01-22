@@ -33,13 +33,13 @@ fn foo_list!(E)(a: MyList!E) {
 
 
 fn foo(x: int, y: float) -> Thing {
-  Thing(x, y)
+  Thing(x: x, y: y)
 }
 
 
 fn create_thing() -> MyList!Thing {
-  var foo = foo(1, float(2))
-  MyList!Thing(foo&)
+  var foo = foo(x: 1, y: float(2))
+  MyList!Thing(elem: foo&)
 }
 
 
@@ -51,19 +51,19 @@ fn main() {
 
   var my_list: MyList!int
   my_list.elem = 32
-  foo_list!int(my_list)
+  foo_list!int(a: my_list)
 
   var thing: Thing
   print(thing.x + 32)
-  foothing(thing)
+  foothing(a: thing)
 
-  fam!2(1)
-  fam!(1 + 1)(2)
+  fam!2(a: 1)
+  fam!(1 + 1)(a: 2)
 
-  famz!int(200)
-  famz!bool(true)
+  famz!int(a: 200)
+  famz!bool(a: true)
 
-  let thing2 = Thing(1, float(2))
+  let thing2 = Thing(x: 1, y: float(2))
 
   let ret_val = create_thing()
   print(ret_val)

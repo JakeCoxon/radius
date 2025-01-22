@@ -1,6 +1,6 @@
 import compiler for Option, Some, None, assert, unsafe_enum_cast, is_enum_variant
 
-fn is_some!(T)(x: Option!T) -> bool @inline {
+fn is_some!(T)(_ x: Option!T) -> bool @inline {
   return is_enum_variant!('Some)(x)
 }
 

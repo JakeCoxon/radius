@@ -4,10 +4,10 @@ import my_module
 import my_module as mm
 
 fn main() {
-  foo(200)
-  foo2(210)
-  foop(210)
+  foo(x: 200)
+  foo2(x: 210)
+  foop(x: 210)
 
-  mm.foo(2)
-  my_module.foo(12)
+  mm.foo(x: 2)
+  my_module.foo(x: 12)
 }

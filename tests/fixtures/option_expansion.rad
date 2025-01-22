@@ -1,6 +1,6 @@
 import compiler for Option, Some, None, assert, is_enum_variant, unsafe_enum_cast
 
-fn filter_some(iterable) @inline { {|yield|
+fn filter_some(_ iterable) @inline { {|yield|
   for x in iterable {
     if let .Some(y) = x {
       yield(y)
@@ -10,7 +10,7 @@ fn filter_some(iterable) @inline { {|yield|
 } }
 
 
-fn sum(iterable) @inline {
+fn sum(_ iterable) @inline {
   (fold(0) + iterable[:] ...)
 }
 
@@ -26,7 +26,7 @@ fn sum(iterable) @inline {
 // fn max2!(T)(iterable) @inline: 
 //   max_by_opt(fold(None!T()), iterable[:]) ...
 
-fn max2!(T)(iterable) @inline {
+fn max2!(T)(_ iterable) @inline {
   var m = None!T()
   for it in iterable {
     if it > m.orelse(0) {

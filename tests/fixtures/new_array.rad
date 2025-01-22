@@ -1,9 +1,9 @@
 import compiler
 
-fn malloc_or_exit(size: int) -> rawptr {
+fn malloc_or_exit(size_bytes size: int) -> rawptr {
   var ptr = malloc(size)
   if ptr == rawptr(0) {
-    exit(1)
+    exit(status: 1)
   }
   print("Malloc", size, ptr)
   ptr
@@ -18,20 +18,20 @@ define Foo @struct {
 }
 
 
-fn subscript_foo(arr: Foo, idx: int, f) @subscript {
+fn subscript_foo(_ arr: Foo, _ idx: int, _ f) @subscript {
   let x = 123 + idx * 10
   f(x)
 }
 
 
-fn subscript_inout_foo(arr: inout Foo, idx: int, f) @subscript {
+fn subscript_inout_foo(_ arr: inout Foo, _ idx: int, _ f) @subscript {
   var x = 123 + idx * 10
   f(x)
   print("Subscript inout", x)
 }
 
 
-fn memset(ptr: inout rawptr, value: u8, size: int) {
+fn memset(pointer ptr: inout rawptr, value: u8, size_bytes size: int) {
   var i = 0
   while i < size {
     compiler.unsafe_set_subscript(ptr, i, value)
@@ -51,22 +51,22 @@ define Buffer @struct {
 }
 
 
-fn buffer_alloc(buf: inout Buffer, size: int) {
+fn buffer_alloc(_ buf: inout Buffer, _ size: int) {
   print("Alloc size", size)
   buf.size = size
-  buf.data = malloc_or_exit(size)
-  memset(buf.data&, u8(0), size)
+  buf.data = malloc_or_exit(size_bytes: size)
+  memset(pointer: buf.data&, value: u8(0), size_bytes: size)
 }
 
 
-fn copy_buffer(dst: set Buffer, buf: Buffer) {
+fn copy_buffer(_ dst: set Buffer, _ buf: Buffer) {
   print("Copy buffer")
   dst.size = buf.size
-  dst.data = malloc_or_exit(buf.size)
+  dst.data = malloc_or_exit(size_bytes: buf.size)
 }
 
 
-fn move_init_buffer(dst: set Buffer, src: sink Buffer) {
+fn move_init_buffer(_ dst: set Buffer, _ src: sink Buffer) {
   print("Move init buffer", dst as rawptr, src as rawptr)
   print("Source size", src.size)
   dst.size = src.size&
@@ -75,7 +75,7 @@ fn move_init_buffer(dst: set Buffer, src: sink Buffer) {
 }
 
 
-fn move_assign_buffer(dst: inout Buffer, src: sink Buffer) {
+fn move_assign_buffer(_ dst: inout Buffer, _ src: sink Buffer) {
   print("Move assign buffer", dst as rawptr, src as rawptr, rawptr(dst) == rawptr(src))
   deinit_buffer(dst&)
   dst.size = src.size&
@@ -85,7 +85,7 @@ fn move_assign_buffer(dst: inout Buffer, src: sink Buffer) {
 }
 
 
-fn deinit_buffer(buf: sink Buffer) {
+fn deinit_buffer(_ buf: sink Buffer) {
   print("Deinit buffer")
   if buf.data != rawptr(0) {
 
@@ -110,7 +110,7 @@ define Array!(T) @struct {
 }
 
 
-fn init_array!(T)(arr: inout Array!T, len: int) {
+fn init_array!(T)(_ arr: inout Array!T, initial_length len: int) {
   print("init array")
   arr.len = len
   print("meta T.sizeof", (meta T.sizeof))
@@ -121,41 +121,41 @@ fn init_array!(T)(arr: inout Array!T, len: int) {
 }
 
 
-fn reserve_array!(T)(arr: inout Array!T, len: int) {
+fn reserve_array!(T)(_ arr: inout Array!T, _ len: int) {
   if len > arr.len {
     print("Reserve array", len, arr.len)
     arr.len = len
     let size_bytes = len * (meta T.sizeof)
-    arr.data&.buffer_alloc(size_bytes)
+    arr.data&.buffer_alloc(size_bytes: size_bytes)
   }
 }
 
 
-fn get_array!(T)(arr: Array!T, index: int, f) @subscript {
+fn get_array!(T)(_ arr: Array!T, _ index: int, _ f) @subscript {
   // if true:
   //   print("Not allocated")
   //   exit(1)
   if arr.data.data == rawptr(0) {
     print("Not allocated")
-    exit(1)
+    exit(status: 1)
   }
   if index < 0 or index >= arr.len {
     print("Bounds check failed")
-    exit(1)
+    exit(status: 1)
   }
   f(compiler.unsafe_subscript!T(arr.data.data, index))
   // f(3)
 }
 
 
-fn copy_array!(T)(dst: set Array!T, src: Array!T) {
+fn copy_array!(T)(_ dst: set Array!T, _ src: Array!T) {
   print("Copy")
   print("T.sizeof", (meta T.sizeof))
   print("src.len", src.len)
   print("alloc_size", src.len * (meta T.sizeof))
   
   dst.len = src.len
-  dst.data = Buffer(0, rawptr(0))
+  dst.data = Buffer(size: 0, data: rawptr(0))
   // // print("Copy", src.len)
   dst.data&.buffer_alloc(src.len * (meta T.sizeof))
 
@@ -172,26 +172,26 @@ fn copy_array!(T)(dst: set Array!T, src: Array!T) {
 }
 
 
-fn move_init_array!(T)(dst: set Array!T, src: sink Array!T) {
+fn move_init_array!(T)(_ dst: set Array!T, _ src: sink Array!T) {
   print("Move init array")
   dst.len = src.len&
   dst.data = src.data&
-  src.data = Buffer(0, rawptr(0))
+  src.data = Buffer(size: 0, data: rawptr(0))
   print("Move init array done")
 }
 
 
-fn move_assign_array!(T)(dst: inout Array!T, src: sink Array!T) {
+fn move_assign_array!(T)(_ dst: inout Array!T, _ src: sink Array!T) {
   print("Move assign array")
   deinit_array(dst&)
   dst.len = src.len&
   dst.data = src.data&
-  src.data = Buffer(0, rawptr(0))
+  src.data = Buffer(size: 0, data: rawptr(0))
   print("Move assign array done")
 }
 
 
-fn deinit_array!(T)(arr: sink Array!T) {
+fn deinit_array!(T)(_ arr: sink Array!T) {
   print("Deinit array")
   if arr.data.data != rawptr(0) {
     var i = 0
@@ -205,21 +205,12 @@ fn deinit_array!(T)(arr: sink Array!T) {
 }
 
 
-fn bar(x: inout int) {
-  x += 1
-}
-
-
-fn baz(foo: inout Foo) {
-  foo.x += 1
-}
-
 
 fn test_array1() {
 
-  var buffer = Buffer(0, rawptr(0))
-  var arr = Array!int(0, buffer&)
-  arr&.init_array(5)
+  var buffer = Buffer(size: 0, data: rawptr(0))
+  var arr = Array!int(len: 0, data: buffer&)
+  arr&.init_array(initial_length: 5)
 
   arr[0] = 10
   arr[1] = 20
@@ -236,38 +227,8 @@ fn test_array1() {
   // compiler.assert(arr2[0] == 10)
 }
 
-// fn test_array2():
 
-//   var buffer = Buffer(0, rawptr(0))
-//   var arr = Array!Foo(0, buffer&)
-//   arr&.init_array(10)
-
-//   arr[0] = Foo(3, 2.0)
-//   arr[1] = Foo(4, 3.0)
-
-//   arr[0].x += 1
-//   print(arr[0].x)
-
-//   var arr2 = arr&
-//   let el = arr2[0]
-
-//   print(el.x)
-//   arr2[0].x += 1
-//   print(arr2[0].x)
-//   // // print(arr[0].x)
-//   // print(arr2[0].x)
-
-//   var arr3 = arr2.copy
-//   print(arr3[0].x)
-
-//   subscript_1(arr3, 0, {|foo|
-//     foo.x = 42
-//   })
-
-//   print(arr3[0].x)
-
-
-fn subscript_inout!(T)(arr: inout Array!T, idx: int, f) @subscript {
+fn subscript_inout!(T)(_ arr: inout Array!T, _ idx: int, _ f) @subscript {
   // var ref input = compiler.unsafe_subscript!T(arr.data.data, idx)
   // var x = 32 + idx
   var ref input = compiler.unsafe_subscript!T(arr.data.data, idx)&
@@ -276,13 +237,13 @@ fn subscript_inout!(T)(arr: inout Array!T, idx: int, f) @subscript {
 }
 
 
-fn subscript_sink!(T)(arr: sink Array!T, idx: int, f) @subscript {
+fn subscript_sink!(T)(_ arr: sink Array!T, _ idx: int, _ f) @subscript {
   var input = compiler.unsafe_subscript!T(arr.data.data, idx)&
   f(input)
 }
 
 
-fn subscript_let!(T)(arr: Array!T, idx: int, f) @subscript {
+fn subscript_let!(T)(_ arr: Array!T, _ idx: int, _ f) @subscript {
   let input = compiler.unsafe_subscript!T(arr.data.data, idx)
   f(input)
 }
@@ -290,13 +251,13 @@ fn subscript_let!(T)(arr: Array!T, idx: int, f) @subscript {
 
 fn test_array3() {
 
-  var buffer = Buffer(0, rawptr(0))
-  var arr = Array!Array!Foo(0, buffer&)
+  var buffer = Buffer(size: 0, data: rawptr(0))
+  var arr = Array!Array!Foo(len: 0, data: buffer&)
   print("Init arr")
-  arr&.init_array(10)
+  arr&.init_array(initial_length: 10)
 
   print("Init arr[0]")
-  arr[0]&.init_array(10)
+  arr[0]&.init_array(initial_length: 10)
   print("arr[0].len", arr[0].len)
   print("arr[0].data", arr[0].data)
 
@@ -333,16 +294,16 @@ fn test_array3() {
 
 
 fn test_move() {
-  var buffer = Buffer(0, rawptr(0))
-  var arr = Array!Array!Foo(0, buffer&)
-  arr&.init_array(10)
+  var buffer = Buffer(size: 0, data: rawptr(0))
+  var arr = Array!Array!Foo(len: 0, data: buffer&)
+  arr&.init_array(initial_length: 10)
 
   var moved = arr&
   print(moved)
   
 
-  var buffer2 = Buffer(0, rawptr(0))
-  var arr2 = Array!Array!Foo(0, buffer2&)
+  var buffer2 = Buffer(size: 0, data: rawptr(0))
+  var arr2 = Array!Array!Foo(len: 0, data: buffer2&)
 
   moved = arr2&
 
@@ -352,9 +313,9 @@ fn test_move() {
 
 fn test_project() {
 
-  var buffer = Buffer(0, rawptr(0))
-  var arr = Array!Foo(0, buffer&)
-  arr&.init_array(10)
+  var buffer = Buffer(size: 0, data: rawptr(0))
+  var arr = Array!Foo(len: 0, data: buffer&)
+  arr&.init_array(initial_length: 10)
 
   // arr[0] = Foo(3, 2.0)
 
@@ -386,11 +347,11 @@ fn test_project() {
 
 
 fn test_basic_project() {
-  var f = Foo(1, 2.0)
+  var f = Foo(x: 1, y: 2.0)
 
   print(f[0])
   print(f[10])
-  foo(f[0]&)
+  foo(foo: f[0]&)
 }
 
 
@@ -433,18 +394,18 @@ fn foo(foo: inout int) {
 //   print(foo)
 
 fn test_set() {
-  var buffer = Buffer(0, rawptr(0))
-  var arr = Array!Foo(0, buffer&)
-  arr&.init_array(10)
+  var buffer = Buffer(size: 0, data: rawptr(0))
+  var arr = Array!Foo(len: 0, data: buffer&)
+  arr&.init_array(initial_length: 10)
 
-  arr[0] = Foo(1, 2.0)
+  arr[0] = Foo(x: 1, y: 2.0)
   print("Set", arr[0])
 }
 
 
 fn test_loop() {
 
-  var foo = Foo(1, 2.0)
+  var foo = Foo(x: 1, y: 2.0)
   var i = 0
   while i < 10 {
     print(foo[i])
@@ -455,7 +416,7 @@ fn test_loop() {
 
 
 fn test_basic_pointers() {
-  var thing = malloc_or_exit(20)
+  var thing = malloc_or_exit(size_bytes: 20)
 
   compiler.unsafe_set_subscript(thing, 0, 23)
   

@@ -4,7 +4,7 @@ define Range {
   const __iterate = range_iterate
 }
 
-fn range_iterate!(f)(range: Range) -> void @inline {
+fn range_iterate!(f)(_ range: Range) -> void @inline {
   var i = range.start.copy
   while i < range.end {
     f(i)
@@ -12,4 +12,4 @@ fn range_iterate!(f)(range: Range) -> void @inline {
   }
 }
 
-let ints = Range(0, 2147483647)
+let ints = Range(start: 0, end: 2147483647)

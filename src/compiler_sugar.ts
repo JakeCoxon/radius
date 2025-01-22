@@ -73,6 +73,7 @@ export const VecTypeMetaClass = new ExternalFunction('VecType', VoidType, (ctx, 
       new ValueFieldAst(field.fieldType, ctx.location, bindingAst, [field]),
     ])
   })
+  compiledClass.metaobject["positional_contructor_params"] = true
   compiledClass.metaobject["static_subscript"] = operatorFunc
   compiledClass.metaobject["static_length"] = compiledClass.fields.length
 
@@ -104,9 +105,11 @@ export const defaultMetaFunction = (subCompilerState: SubCompilerState, compiled
 
   // if (compiledClass.classDefinition.keywords.includes('struct'))
   compiledClass.type.typeInfo.isReferenceType = false // Always false for now
+  const positionalConstructorParams = !!compiledClass.metaobject['positional_contructor_params']
 
-  const fnParams: ParserFunctionParameter[] = compiledClass.fields.map(x => 
-    ({ name: new ParseIdentifier(createAnonymousToken(x.name)), storage: null,
+  const fnParams: ParserFunctionParameter[] = compiledClass.fields.map(x => ({ 
+    label: positionalConstructorParams ? null : new ParseIdentifier(createAnonymousToken(x.name)), 
+    name: new ParseIdentifier(createAnonymousToken(x.name)), storage: null,
     type: new ParseValue(createAnonymousToken(''), x.fieldType), capability: Capability.Sink}) satisfies ParserFunctionParameter)
   const constructorBody = new ParseConstructor(
     createAnonymousToken(''), 
@@ -298,7 +301,7 @@ export const generatePrintFunction = (type: Type, binding: Binding) => {
 
   const paramBinding = new Binding('param', type);
   argBindings.push(paramBinding);
-  funcParams.push(createParameter(paramBinding, Capability.Let));
+  funcParams.push(createParameter(null, paramBinding, Capability.Let));
   concreteTypes.push(type);
 
   const location = SourceLocation.anon
@@ -865,8 +868,8 @@ const isEnumVariantFn = (() => {
   const testTypeIden = new ParseFreshIden(token, new FreshBindingToken('type'))
 
   const fnParams: ParserFunctionParameter[] = [
-    { name: subjectIden, storage: null, capability: Capability.Let, type: null },
-    { name: testTypeIden, storage: null, capability: Capability.Let, type: null },
+    { label: null, name: subjectIden, storage: null, capability: Capability.Let, type: null },
+    { label: null, name: testTypeIden, storage: null, capability: Capability.Let, type: null },
   ]
 
   const indexIden = new ParseFreshIden(token, new FreshBindingToken('index'))
@@ -888,9 +891,9 @@ const asEnumVariantFn = (() => {
   const newNameIden = new ParseFreshIden(token, new FreshBindingToken('iden'))
 
   const fnParams: ParserFunctionParameter[] = [
-    { name: subjectIden, storage: null, capability: Capability.Let, type: null },
-    { name: testTypeIden, storage: null, capability: Capability.Let, type: null },
-    { name: newNameIden, storage: null, capability: Capability.Let, type: null },
+    { label: null, name: subjectIden, storage: null, capability: Capability.Let, type: null },
+    { label: null, name: testTypeIden, storage: null, capability: Capability.Let, type: null },
+    { label: null, name: newNameIden, storage: null, capability: Capability.Let, type: null },
   ]
 
   const indexIden = new ParseFreshIden(token, new FreshBindingToken('index'))

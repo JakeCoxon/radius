@@ -74,6 +74,7 @@ export const createToken = (source: Source, value: any, type = "NONE"): Token =>
 export const createAnonymousToken = (value: any, type = "NONE"): Token => Object.assign(Object.create(TokenRoot), { value, type, location: new SourceLocation(-1, -1, null!) });
 
 export type ParserFunctionParameter = {
+  label: ParseIdentifier | ParseFreshIden | null, // Outward facing label for the parameter
   name: ParseIdentifier | ParseFreshIden,
   type: ParseNode | null,
   storage: 'ref' | null
@@ -373,6 +374,7 @@ export class CompiledFunction {
 
 export class FunctionParameter {
   constructor(
+    public label: string | null,
     public binding: Binding,
     public type: Type,
     public reference: boolean,

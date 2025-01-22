@@ -170,17 +170,17 @@ const interleave_infinite = |iterator_a, iterator_b|
 //   })()
 
 const foo = |yield|
-  for i in Range(0, 10) {
+  for i in Range(start: 0, end: 10) {
     yield(i)
   }
 
 const bar = |yield|
-  for i in Range(1, 9) {
+  for i in Range(start: 1, end: 9) {
     yield(i * i)
   }
 
 const bamp = |yield|
-  for i in Range(1, 9) {
+  for i in Range(start: 1, end: 9) {
     yield(i * i * i)
   }
 
@@ -242,10 +242,10 @@ fn test_concat2() {
   
 fn test_normal_concat() {
   var num = 0
-  for i in Range(0, 10) {
+  for i in Range(start: 0, end: 10) {
     num += i
   }
-  for i in Range(1, 9) {
+  for i in Range(start: 1, end: 9) {
     num += i * i
   }
   assert(num == 249)

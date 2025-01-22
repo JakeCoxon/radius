@@ -16,14 +16,14 @@ export const generateConstructor = (structName: string, structType: Type, bindin
 
   const setArgBinding = new Binding('param', structType);
   argBindings.push(setArgBinding);
-  funcParams.push(new FunctionParameter(setArgBinding, structType, true, RawPointerType, Capability.Set));
+  funcParams.push(new FunctionParameter(null, setArgBinding, structType, true, RawPointerType, Capability.Set));
   concreteTypes.push(structType);
 
   const fields = structType.typeInfo.fields;
   fields.forEach((f, i) => {
     const type = f.fieldType;
     const argBinding = new Binding(f.name, type);
-    funcParams.push(createParameter(argBinding, Capability.Sink));
+    funcParams.push(createParameter(null, argBinding, Capability.Sink));
     argBindings.push(argBinding);
     concreteTypes.push(type);
   });
@@ -49,7 +49,7 @@ export const generateDestructor = (structName: string, structType: Type, binding
 
   const setArgBinding = new Binding('param', structType);
   argBindings.push(setArgBinding);
-  funcParams.push(new FunctionParameter(setArgBinding, structType, true, RawPointerType, Capability.Sink));
+  funcParams.push(new FunctionParameter(null, setArgBinding, structType, true, RawPointerType, Capability.Sink));
   concreteTypes.push(structType);
 
   // An empty function is enough because later passes will insert the
@@ -67,12 +67,12 @@ export const generateMoveFunction = (structType: Type, fnName: string, destCapab
 
   const setArgBinding = new Binding('dst', structType);
   argBindings.push(setArgBinding);
-  funcParams.push(new FunctionParameter(setArgBinding, structType, true, RawPointerType, destCapability));
+  funcParams.push(new FunctionParameter(null, setArgBinding, structType, true, RawPointerType, destCapability));
   concreteTypes.push(structType);
 
   const srcArgBinding = new Binding('src', structType);
   argBindings.push(srcArgBinding);
-  funcParams.push(new FunctionParameter(srcArgBinding, structType, true, RawPointerType, sourceCapability));
+  funcParams.push(new FunctionParameter(null, srcArgBinding, structType, true, RawPointerType, sourceCapability));
   concreteTypes.push(structType);
 
   const constructorBinding = structType.typeInfo.metaobject.constructorBinding
@@ -96,10 +96,10 @@ export const generateMoveFunction = (structType: Type, fnName: string, destCapab
   return new CompiledFunction(binding, { debugName: fnName } as any, VoidType, concreteTypes, body, argBindings, funcParams, [], 0);
 }
 
-export const createParameter = (binding: Binding, capability: Capability) => {
+export const createParameter = (identifier: string | null, binding: Binding, capability: Capability) => {
   // @ParameterPassing
   const reference = !((capability === Capability.Let || capability === Capability.Sink)
     && binding.type instanceof PrimitiveType);
   const passingType = reference ? RawPointerType : binding.type;
-  return new FunctionParameter(binding, binding.type, reference, passingType, capability);
+  return new FunctionParameter(identifier, binding, binding.type, reference, passingType, capability);
 }

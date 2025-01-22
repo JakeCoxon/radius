@@ -408,11 +408,14 @@ export const makeParser = (input: string, debugName: string) => {
   };
   const parseExpr = parseDots;
 
-  const expectCapability = () => match("let") ? Capability.Let : match("inout") ? Capability.Inout : match("sink") ? Capability.Sink : match("set") ? Capability.Set : Capability.Let
+  const matchOptionalCapability = () => match("let") ? Capability.Let : match("inout") ? Capability.Inout : match("sink") ? Capability.Sink : match("set") ? Capability.Set : Capability.Let
   const parseFunctionParam = (): ParserFunctionParameter => {
-    const name = expectIdentifier()
-    if (match(":")) return { name, storage: match('ref') ? 'ref' : null, capability: expectCapability(), type: parseExpr() };
-    return { name, storage: null, capability: Capability.Let, type: null };
+    let label = expectIdentifier()
+    const param: ParserFunctionParameter = { label, name: label, storage: null, capability: Capability.Let, type: null };
+    if (label?.token.value === "_") param.label = null;
+    if (token?.type === "IDENTIFIER") param.name = expectIdentifier();
+    if (match(":")) Object.assign(param, { capability: matchOptionalCapability(), type: parseExpr() });
+    return param
   };
   const parseFunctionParamList = (final: string = ")") => {
     if (match(final)) return [];
@@ -710,6 +713,9 @@ const createNamedFunc = (state: any, token: Token, functionMetaName: ParseIdenti
 }
 
 const createAnonymousFunc = (state: any, token: Token, params: ParserFunctionParameter[], keywords: ParseNode[], returnType: ParseNode | null, body: ParseStatements) => {
+  params.forEach(p => {
+    if (p.label === p.name) p.label = null
+  })
   const decl: ParserFunctionDecl = {
     debugName: `<anonymous line ${token.location.line}>`,
     token: token, functionMetaName: null, name: null, typeParams: [], params,

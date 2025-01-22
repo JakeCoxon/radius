@@ -464,7 +464,7 @@ const writeSyntaxFunction = (bytecodeWriter: LlvmWriter, func: CompiledFunction)
     if (i !== 0) format(funcWriter, ", ")
     const storageType = binding.storage === 'ref' ? RawPointerType : binding.type
     generateName(bytecodeWriter, binding)
-
+    compilerAssert(func.parameters[i].capability, "No parameter", { binding, func, param: func.parameters[i] })
     const cap = func.parameters[i].capability
     const capString = cap === Capability.Let ? '' : `${cap.toLocaleLowerCase()} `
   

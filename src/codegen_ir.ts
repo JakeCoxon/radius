@@ -143,7 +143,7 @@ export class FunctionCodeGenerator {
     fn.returnType = returnType
     this.irFunction = fn
     if (!(returnType instanceof PrimitiveType)) {
-      fn.returnParameter = new FunctionParameter(new Binding('return', returnType), returnType, false, RawPointerType, Capability.Set);
+      fn.returnParameter = new FunctionParameter(null, new Binding('return', returnType), returnType, false, RawPointerType, Capability.Set);
       const returnReg = this.newRegister();
       const variable = new Variable('return', RawPointerType, returnReg, Capability.Set, SourceLocation.anon);
       this.variableMap.set(fn.returnParameter.binding, variable)

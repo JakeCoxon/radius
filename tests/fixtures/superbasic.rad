@@ -21,7 +21,7 @@ fn foobar(b: Bar) {
 }
 
 fn createbar(x: int, y: int) {
-  Bar(x, y)
+  Bar(x: x, y: y)
 }
 
 fn do_thing() -> int {
@@ -47,11 +47,11 @@ fn my_bar(bar: inout Bar) {
 
 fn main() {
 
-  var bar = Bar(1, 2)
-  my_bar(bar&)
+  var bar = Bar(x: 1, y: 2)
+  my_bar(bar: bar&)
 
   if false {
-    exit(1)
+    exit(status: 1)
   }
 
   compiler.assert(bar.x == 200)

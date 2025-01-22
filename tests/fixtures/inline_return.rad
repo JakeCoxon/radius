@@ -1,7 +1,7 @@
 import compiler for assert
 import vec for vec3
 
-define Rect @struct {
+define Rect {
   top_left: vec3
   bottom_right: vec3
 }
@@ -21,7 +21,7 @@ fn foo(i: int) -> int @inline {
   
 fn baz(i: int) -> int @inline {
   if i > 3 {
-    return foo(i)
+    return foo(i: i)
   }
   32 // Implicit return must set breakExprBinding
 }
@@ -99,13 +99,13 @@ fn make_float() -> float {
 fn test_move() {
   var top_left = vec3(1, 2, 3)
   var bottom_right = vec3(4, 5, 6)
-  var rect1 = Rect(top_left&, bottom_right&)
+  var rect1 = Rect(top_left: top_left&, bottom_right: bottom_right&)
   rect1.top_left = rect1.top_left&
   assert(rect1.top_left.x == 1)
 
   rect1 = Rect(
-    rect1.bottom_right,
-    rect1.top_left&
+    top_left: rect1.bottom_right,
+    bottom_right: rect1.top_left&
   )
   assert(rect1.top_left.x == 4)
   assert(rect1.bottom_right.x == 1)
@@ -121,7 +121,7 @@ fn test_implicit_copy() {
   let top_left = vec3(1, 2, 3)
   var bottom_right = vec3(4, 5, 6)
   // var x = top_left.x
-  fooasd(top_left)
+  fooasd(bar: top_left)
 
   assert(bottom_right.x == 4)
 
@@ -147,8 +147,8 @@ fn test_basic() {
 
 fn test_params() {
 
-  var rect1 = Rect(make_vec3(), make_vec3())
-  rect_foo(rect1&, 23)
+  var rect1 = Rect(top_left: make_vec3(), bottom_right: make_vec3())
+  rect_foo(rect: rect1&, i: 23)
 
   assert(rect1.top_left.x == 55)
   print(rect1)
@@ -157,7 +157,7 @@ fn test_params() {
 
 
 fn test_return_value() {
-  var rect1 = Rect(make_vec3(), make_vec3())
+  var rect1 = Rect(top_left: make_vec3(), bottom_right: make_vec3())
   rect1.top_left = make_vec3()
   rect1.bottom_right.x = make_float()
 
