@@ -4,17 +4,17 @@ define Thing {
 }
 
 
-fn foo(tup: Tuple!(int, float, Thing)) {
+fn foo(_ tup: Tuple!(int, float, Thing)) {
   print(tup._1 + int(tup._2) + tup._3.x + tup._3.y)
 }
 
-fn foo2(tup: (int, float, Thing)) {
+fn foo2(_ tup: (int, float, Thing)) {
   print(tup._1 + int(tup._2) + tup._3.x + tup._3.y)
 }
 
 
 fn main() {
-  var thing = Thing(4, 3)
+  var thing = Thing(x: 4, y: 3)
 
   var tup = (1, float(2), thing&)
 

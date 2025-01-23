@@ -1,6 +1,6 @@
 import compiler for assert
 
-fn foo(z: int) {
+fn foo(_ z: int) {
   if 2 > 0 {
     return
   }

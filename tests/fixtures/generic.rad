@@ -11,5 +11,5 @@ fn main() {
 
   let x : Thing!int
 
-  foo(x)
+  foo(thing: x)
 }

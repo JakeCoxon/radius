@@ -13,11 +13,11 @@ fn bar!(T)() -> int {
 fn main() {
   let x = 1 + 3
   let y = 32
-  bamp(x)
-  bamp(y)
-  bamp(y)
-  foop!int(y)
-  foop!int(y)
+  bamp(x: x)
+  bamp(x: y)
+  bamp(x: y)
+  foop!int(x: y)
+  foop!int(x: y)
 
   bar!(123)()
 }

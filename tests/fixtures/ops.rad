@@ -3,7 +3,7 @@ define Thing @struct {
 }
 
 fn main() {
-  var thing = Thing(3)
+  var thing = Thing(x: 3)
 
   thing.x += 1
   thing.x *= 2

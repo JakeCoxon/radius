@@ -59,7 +59,7 @@ export function compileAndExecuteFunctionHeaderTask(ctx: TaskContext, { func, ar
   ;(subCompilerState as any).location = func.name?.token.location
   subCompilerState.functionCompiler = subCompilerState
 
-  const namedParams = func.params.map(x => x.label !== null ? x.label.token.value : x.name.token.value)
+  const namedParams = func.params.map(x => x.label !== null ? x.label.token.value : '')
 
   const sortedArgs: Ast[] = []
   args.forEach((arg, i) => {

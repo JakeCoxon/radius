@@ -12,12 +12,12 @@ define Foo @struct {
 }
 
 
-fn subscript_foo(arr: Foo, idx: int, f) @subscript {
+fn subscript_foo(_ arr: Foo, _ idx: int, _ f) @subscript {
   let x = 123 + idx * 10
   f(x)
 }
 
-fn subscript_inout_foo(arr: inout Foo, idx: int, f) @subscript {
+fn subscript_inout_foo(_ arr: inout Foo, _ idx: int, _ f) @subscript {
   var x = 123 + idx * 10
   f(x)
   print("Subscript inout", x)
@@ -37,7 +37,7 @@ fn baz(foo: inout Foo) {
 
 fn test_array1() {
 
-  var arr = array_create!int(0)
+  var arr = array_create!int(initial_length: 0)
 
   arr&.append(123)
   arr&.append(456)
@@ -54,14 +54,14 @@ fn test_array1() {
 
 
 fn test_move() {
-  var arr = array_create!Array!Foo(0)
+  var arr = array_create!Array!Foo(initial_length: 0)
 
-  arr&.append(array_create!Foo(0))
+  arr&.append(array_create!Foo(initial_length: 0))
 
   var moved = arr&
   print(moved)
   
-  var arr2 = array_create!Array!Foo(0)
+  var arr2 = array_create!Array!Foo(initial_length: 0)
 
   moved = arr2&
 
@@ -71,8 +71,8 @@ fn test_move() {
 
 fn test_project() {
 
-  var arr = array_create!Foo(0)
-  arr&.append(Foo(1, 2.0))
+  var arr = array_create!Foo(initial_length: 0)
+  arr&.append(Foo(x: 1, y: 2.0))
 
   var ref foo = arr[0]&
   foo.x += 1
@@ -86,8 +86,8 @@ fn test_project() {
 
   
 fn test_sink_elem() {
-  var arr = array_create!Foo(0)
-  arr&.append(Foo(1, 2.0))
+  var arr = array_create!Foo(initial_length: 0)
+  arr&.append(Foo(x: 1, y: 2.0))
 
   var moved = arr[0]&
   print("Moved", moved)
@@ -99,11 +99,11 @@ fn test_sink_elem() {
 
 
 fn test_basic_project() {
-  var f = Foo(1, 2.0)
+  var f = Foo(x: 1, y: 2.0)
 
   print(f[0])
   print(f[10])
-  foo(f[0]&)
+  foo(foo: f[0]&)
 }
 
 
@@ -113,9 +113,9 @@ fn foo(foo: inout int) {
 
 
 fn test_set() {
-  var arr = array_create!Foo(0)
-  arr&.append(Foo(1, 2.0))
-  arr[0] = Foo(3, 13.0)
+  var arr = array_create!Foo(initial_length: 0)
+  arr&.append(Foo(x: 1, y: 2.0))
+  arr[0] = Foo(x: 3, y: 13.0)
 
   print("Set", arr[0])
   assert(arr[0].x == 3)
@@ -125,7 +125,7 @@ fn test_set() {
 
 fn test_loop() {
 
-  var foo = Foo(1, 2.0)
+  var foo = Foo(x: 1, y: 2.0)
   var i = 0
   while i < 10 {
     print(foo[i])

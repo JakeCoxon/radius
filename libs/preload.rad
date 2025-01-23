@@ -1,8 +1,8 @@
 import compiler for rawptr, overloaded, never
 
-fn malloc(_ size_bytes: int) -> rawptr @external
-fn realloc(_ ptr: rawptr, new_size_bytes: int) -> rawptr @external
-fn free(_ ptr: rawptr) @external
+fn malloc(size_bytes: int) -> rawptr @external
+fn realloc(pointer: rawptr, new_size_bytes: int) -> rawptr @external
+fn free(pointer: rawptr) @external
 fn sizeof!(T)() @external
 fn printInt(v: int) @external
 fn printFloat(v: float) @external
@@ -49,13 +49,13 @@ fn sqrt_float(t: float) -> float {
 }
 const sqrt = overloaded([sqrt_double, sqrt_float])
 
-fn min!(T)(a: T, b: T) -> T @inline {
+fn min!(T)(_ a: T, _ b: T) -> T @inline {
   ifx a <= b { a.copy } else { b.copy }
 }
-fn max!(T)(a: T, b: T) -> T @inline {
+fn max!(T)(_ a: T, _ b: T) -> T @inline {
   ifx a >= b { a.copy } else { b.copy }
 }
-fn clamp!(T)(v: inout T, min: T, max: T) @inline {
+fn clamp!(T)(_ v: inout T, min: T, max: T) @inline {
   v = ifx v < min { min.copy } else if v > max { max.copy } else { v.copy }
 }
 

@@ -1,7 +1,7 @@
 import compiler
 
 fn malloc_or_exit(size_bytes size: int) -> rawptr {
-  var ptr = malloc(size)
+  var ptr = malloc(size_bytes: size)
   if ptr == rawptr(0) {
     exit(status: 1)
   }

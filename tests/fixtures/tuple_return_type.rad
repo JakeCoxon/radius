@@ -1,5 +1,5 @@
 
-fn foo(x: int, y: float) -> int, float {
+fn foo(_ x: int, _ y: float) -> int, float {
   (x, y)
 }
 

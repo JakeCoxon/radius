@@ -54,7 +54,7 @@ fn move_assign_buffer(_ dst: inout Buffer, _ src: sink Buffer) {
 
 fn deinit_buffer(_ buf: sink Buffer) {
   if buf.data != rawptr(0) {
-    free(buf.data)
+    free(pointer: buf.data)
     buf.data = rawptr(0)
   }
 }
@@ -96,7 +96,7 @@ fn array_length!(T)(arr: Array!T) -> int {
 
 
 // This will zero initialize the array. TOOD: Make this better
-fn array_create!(T)(_ initial_length: int) -> Array!T {
+fn array_create!(T)(initial_length: int) -> Array!T {
   var buffer = Buffer(size: 0, data: rawptr(0))
   var array = Array!T(length: 0, data: buffer&)
   array&.reserve_array(capacity: initial_length)

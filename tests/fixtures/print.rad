@@ -17,21 +17,21 @@ define Custom {
   const __print = print_custom
 }
 
-fn print_custom(c: Custom) {
+fn print_custom(_ c: Custom) {
   print("Custom<", c.x, c.y, ">")
 }
 
 fn test_foo() {
-  let foo = Foo(1, 2.0, Bar(3, 4.0))
+  let foo = Foo(x: 1, y: 2.0, bar: Bar(f: 3, g: 4.0))
   print(true)
   print(123)
   print(123.0)
 
-  let x = (Bar(3, 4.0), 2)
+  let x = (Bar(f: 3, g: 4.0), 2)
   print(x)
   print("Foo is", foo)
 
-  print(Custom(1, 2))
+  print(Custom(x: 1, y: 2))
 }
 
 

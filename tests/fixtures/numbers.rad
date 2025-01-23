@@ -1,4 +1,4 @@
-fn foo(x: int, y: float) {
+fn foo(_ x: int, _ y: float) {
   print(x)
 }
 

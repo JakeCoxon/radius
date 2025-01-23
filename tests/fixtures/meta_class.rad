@@ -17,7 +17,7 @@ define Bar < custom_metaclass {
 fn main() {
   var bar = Bar(x: 1)
   var foo = Foo(x: 1)
-  var thing = Thing(x: 1) + Thing(x: 10)
+  var thing = Thing(1) + Thing(10)
   print(thing)
   print(foo)
   print("Hello, world!")

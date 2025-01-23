@@ -22,7 +22,7 @@ define vec3 < VecType @struct {
   z: float
 }
 
-fn magnitude!(T)(vec: T) -> float {
+fn magnitude!(T)(_ vec: T) -> float {
   var magnitude = 0.0
   meta var index = 0
   meta while index < static_length(vec) {

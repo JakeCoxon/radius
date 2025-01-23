@@ -5,8 +5,12 @@ define vec2 @struct {
   y: float
 }
 
-fn named_func(_ baz: int, _ foo: int, _ bar: int) -> int {
+fn named_func(baz: int, foo: int, bar: int) -> int {
   foo * 32 + baz * 16 + bar
+}
+
+fn mixed_named(_ baz: int, _ foo: int, bar: int) -> int {
+  foo * 32 + bar
 }
 
 fn error_not_enough() {
@@ -14,7 +18,7 @@ fn error_not_enough() {
 }
 
 fn error_duplicated_positional() {
-  named_func(2, baz: 1, foo: 1)
+  named_func(baz: 2, baz: 1, foo: 1)
 }
 
 fn error_duplicated_name() {
@@ -22,7 +26,7 @@ fn error_duplicated_name() {
 }
 
 fn error_named_in_middle() {
-  named_func(4, bar: 1, 2)
+  mixed_named(4, bar: 1, 2)
 }
 
 fn main() {
@@ -33,7 +37,7 @@ fn main() {
 
   // TODO: Test side effects order
   assert(named_func(bar: 1, foo: 2, baz: 0) == 65) // Reversed order
-  assert(named_func(4, bar: 1, foo: 2) == 129) // Unnamed
+  assert(mixed_named(4, 2, bar: 1) == 65) // Mixed
   
 
   assert(vec2(y: 2, x: 1).x == 1) // constructor

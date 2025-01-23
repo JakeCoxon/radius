@@ -5,7 +5,7 @@ define Thing {
   y : float
 }
 
-fn foothing(a: inout Thing) {
+fn foothing(_ a: inout Thing) {
   print(a.x)
   // print(a)
   a.x = 64
@@ -15,7 +15,7 @@ fn foothing(a: inout Thing) {
 fn main() {
 
   var thing: Thing
-  thing = Thing(32, float(100))
+  thing = Thing(x: 32, y: float(100))
 
   print(thing.x)
   print(thing.y)

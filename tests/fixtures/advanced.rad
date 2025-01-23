@@ -3,24 +3,24 @@ define Person {
   age : int
 }
 
-define MyVec @struct {
+define MyVec {
   x : int
   y : int
 }
 
-fn foo(tup: (int, float, Person, MyVec)) {
+fn foo(_ tup: (int, float, Person, MyVec)) {
   print(tup._1 + int(tup._2) + tup._3.age + tup._4.x + tup._4.y)
 }
 
-fn modify_tuple(tup: inout (int, float, Person, MyVec)) {
+fn modify_tuple(_ tup: inout (int, float, Person, MyVec)) {
   tup._3.age = 31
   tup._4.x = 12
   tup._4.y = 10
 }
 
 fn main() {
-  var vec = MyVec(4, 3) // value type
-  var person = Person("Jake", 300) // reference type
+  var vec = MyVec(x: 4, y: 3)
+  var person = Person(name: "Jake", age: 300)
 
   var tup = (1, float(2), person&, vec&)
 
@@ -28,8 +28,8 @@ fn main() {
 
   foo(tup)
 
-  var new_vec = MyVec(30, 40)
-  var new_person = Person("Another Person", 100)
+  var new_vec = MyVec(x: 30, y: 40)
+  var new_person = Person(name: "Another Person", age: 100)
   var new_person2 = new_person.copy
   // overwrite tup
   tup = (23, float(67), new_person&, new_vec&)
@@ -38,22 +38,22 @@ fn main() {
   foo(tup)
   print(tup)
 
-  let list = [MyVec(30, 40), MyVec(1, 2), MyVec(3, 6)]
+  let list = [MyVec(x: 30, y: 40), MyVec(x: 1, y: 2), MyVec(x: 3, y: 6)]
 
   let x = list[0].x + list[1].y
   print(x)
 
   let list2 = [
-    Person("Person1", 101), 
-    Person("Person2", 102), 
-    Person("Person3", 103)]
+    Person(name: "Person1", age: 101), 
+    Person(name: "Person2", age: 102), 
+    Person(name: "Person3", age: 103)]
 
   print(list2[0].age)
 
   let list3 = [
-    ("A", 23, float(67), new_person2.copy, MyVec(124, 53)), 
-    ("B", 13, float(12), new_person2.copy, MyVec(123, 40)), 
-    ("C", 51, float(67), new_person2.copy, MyVec(312, 23))]
+    ("A", 23, float(67), new_person2.copy, MyVec(x: 124, y: 53)), 
+    ("B", 13, float(12), new_person2.copy, MyVec(x: 123, y: 40)), 
+    ("C", 51, float(67), new_person2.copy, MyVec(x: 312, y: 23))]
 
   print(list3[:]) ...
 

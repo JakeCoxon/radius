@@ -10,7 +10,7 @@ fn foo() {
     }
 
     print("nope")
-    exit(1)
+    exit(status: 1)
   }
 
   let foo = block cool_block2 {
@@ -20,7 +20,7 @@ fn foo() {
     }
 
     print("Never get here")
-    exit(1)
+    exit(status: 1)
     2
   }
   print(foo)
