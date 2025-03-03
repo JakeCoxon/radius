@@ -15,22 +15,28 @@
 </div>
 
 
-```python
+```rust
 
-fn main():
-  my_list := [1, 2, 3, 2, 1]
-  for x in my_list:
+fn main() {
+  let my_list = [1, 2, 3, 2, 1]
+  for x in my_list {
     print(foo(x))
+  }
+}
 
-fn foo(x: int) -> int:
+fn foo(x: int) -> int {
   x * 32
+}
 ```
 
 ## Current features
 
-* No external dependencies (except bun runtime) and less than 5000 lines of code.
+** Very work-in-progress - do not use **
+
+* No external dependencies (except bun runtime)
 * Static typing with generics - Sizes of structs are known at compile time so can compile to efficient staticly typed bytecode. One-way type inference, no automatic type conversions (except number literals)
-* Currently compiles to custom statically typed VM bytecode but in the future other backends will hopefully be supported.
+* [Memory safety](docs/memory.md) with no garbage collection, no pointers, no manual memory management using compile-time exclusivity checking (similar to Rust borrow-checking but without the lifetime annotations)
+* Compiles to LLVM IR textual format which can then be compiled to various format - Web Assembly, native code etc
 * Dynamic arrays and strings with size field and bounds checks
 * Functions are templated and monomorphise to independent functions like C++ templates (rather than Java generics)
 * Out of order compilation - implemented using a custom task system and queue where tasks can be paused and resumed
@@ -43,9 +49,6 @@ fn foo(x: int) -> int:
 * [Built in windowing and graphics library](docs/graphics.md)
 * Shorthand array operations - syntax sugar for mapping, zipping and reducing without higher order functions
 
-
-<div align=center style="background:white"><img src="./docs/files.png" width=400></div>
-<div align=center><small>Dependency graph and line count of each file - total = 4836</small></div>
 
 
 ## Future goals / ideas
@@ -76,30 +79,21 @@ Why is compile time evaluation so important? It can replace many features from o
 
 These things are written in the same language as regular code, so can they can use the same standard library functions that regular code uses
 
-## Non-traditional syntax
-
-Let binding is done with `:=` with optional type in between
-
-```python
-foo := 2 + 3
-bar : float = 3.1
-```
-
 ---
 
 Number literals have a special literal type that can be coerced to whatever type is needed
 
-```python
-foo := 2 + 3 # int
-bar : float = 2 + 3 # float
-baz := 3.1 + 1.2 # float
+```rust
+let foo = 2 + 3 // int
+let bar: float = 2 + 3 // float
+let baz = 3.1 + 1.2 // float
 ```
 
 But non-literals must be cast manually
 
-```python
-foo : int = 2
-bar : float = float(foo) + 2.1
+```rust
+let foo: int = 2
+let bar: float = float(foo) + 2.1
 ```
 
 This gives the best of both worlds where all types are checked, implicit conversions don't mess you up, and literals don't need to be annotated.
@@ -108,29 +102,34 @@ This gives the best of both worlds where all types are checked, implicit convers
 
 Function type parameters are defined using exclamation point
 
-```python
-fn my_function!(T)(param: T):
+```rust
+fn my_function!(T)(param: T) {
   ...
+}
 
-fn my_other_function!(A, B)():
+fn my_other_function!(A, B)() {
   ...
+}
 
-fn main():
-  my_function(100) # template params are inferred
+fn main() {
+  my_function(100) // template params are inferred
 
-  # If one type argument is passed then it doens't need a parenthesis
+  // If one type argument is passed then it doens't need a parenthesis
   my_function!int(100) 
-  my_other_function!(f, 200)() # any compile time values can be passed
+  my_other_function!(f, 200)() // any compile time values can be passed
+}
 ```
 
 The same goes for type parameters
 
-```python
-type MyThing!(T):
-  foo: T
+```rust
+define MyThing!(T) {
+  var foo: T
+}
 
-fn main():
-  thing := MyThing!int(123)
+fn main() {
+  let thing = MyThing!int(123)
+}
 ```
 
 ---
@@ -139,19 +138,22 @@ In Radius the type checking rules are kept extremely simple to keep implementati
 
 The solution to that is an `ifx` keyword that enforces two branches that resolve to the same type. This can be used normally as multi line, or single line expression
 
-```python
-fn main():
-  # Regular if statement doesn't need an else branch
-  if something():
+```rust
+fn main() {
+  // Regular if statement doesn't need an else branch
+  if something() {
     print("OK")
+  }
 
-  foo := ifx something(): 2 else: 3
-  bar := ifx something():
-    x := 3
-    y := 8
+  let foo = ifx something() { 2 } else { 3 }
+  let bar = ifx something() {
+    let x = 3
+    let y = 8
     something_complicated(x, y)
-  else:
+  } else {
     something_else()
+  }
+}
 ```
 
 ## Development

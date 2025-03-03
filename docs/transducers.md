@@ -1,5 +1,7 @@
 # Compile-time Transducers
 
+** This page is using an old syntax **
+
 The compiletime blocks and internal iterators features combine together and allow you to construct something I'm calling compile-time transducers which I've never seen done before. They enable something like Python for-comprehension but better. They a way to compose together small units of processing an run through iterables like lists or dictionaries. They work with iterators so they are general for any iterable including infinite ones.
 
 * They don't create intermediate arrays when composing together

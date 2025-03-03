@@ -11,39 +11,50 @@ Here is an example of a custom iterator over a 2d grid. The break and continue t
 The `__iterate` is a special constant that the default [metaclass](./metaclasses.md) looks for.
 
 ```python
-type Range2d:
+define Range2d {
   w: int
   h: int
 
   # This tells the compiler what function to use for iteration
-  __iterate :: range2d_iterate
+  const __iterate = range2d_iterate
+}
 
 # the loop body is passed as a template parameter 'f'. and the function must be marked @inline
-fn range2d_iterate!(f)(range: Range2d) void @inline:
-  for j in Range(0, range.h):
-    for i in Range(0, range.w):
+fn range2d_iterate!(f)(range: Range2d) void @inline {
+  for j in Range(0, range.h) {
+    for i in Range(0, range.w) {
       f(vec2i(i, j))
+    }
+  }
+}
 
-type Range:
+define Range {
   start: int
   end: int
-  __iterate :: range_iterate
+  const __iterate = range_iterate
+}
 
-fn range_iterate!(f)(range: Range) void @inline:
+fn range_iterate!(f)(range: Range) void @inline {
   i := range.start
-  while i < range.end:
+  while i < range.end {
     f(i)
     i += 1
+  }
+}
 
-type vec2i:
+define vec2i {
   x: int
   y: int
+}
 
-fn main():
-  range := Range2d(32, 64)
-  for vec in range:
-    if vec.x * vec.y > 256:
+fn main() {
+  let range = Range2d(32, 64)
+  for vec in range {
+    if vec.x * vec.y > 256 {
       continue # continue does the right thing
+    }
     print(vec.x, vec.y)
+  }
+}
 
 ```

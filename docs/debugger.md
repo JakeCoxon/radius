@@ -4,4 +4,6 @@ There is an experimental interface that runs in the browser. The idea is that yo
 
 The input tab allows you to edit the code and recompile. The timeline view shows every task and its dependency graph with the x-axis being time. Clicking any task allows you to inspect it and its values. All compiler data structures appear in blue can be clicked to inspect. The ASTs, internal VM bytecode and output bytecode are all available to be inspected
 
+** This screenshot is using an older version of the compiler with a different syntax **
+
 ![Debugger](debugger.png)
